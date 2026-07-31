@@ -10,15 +10,24 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { formatPeso, weightLineTotal } from "@/lib/money";
 import { SignOutButton } from "@/components/SignOutButton";
+import PrinterSettingsModal from "@/components/pos/PrinterSettings";
 import {
   buildOrderNo,
   enqueueOrder,
   flushOutbox,
+  getDeviceId,
   loadCachedCatalog,
   pendingCount,
   saveCatalogCache,
   watchPending,
 } from "@/lib/offline";
+import {
+  getPrinter,
+  loadPrinterSettings,
+  savePrinterSettings,
+  type PrinterSettings,
+} from "@/lib/printer";
+import { buildReceipt } from "@/lib/receipt";
 
 type Product = {
   id: string;
@@ -58,6 +67,15 @@ const MAX_PARKED = 10;
 
 const round = (n: number) => Math.round(n);
 
+type ProfileData = {
+  id: string;
+  org_id: string;
+  store_id: string | null;
+  store_name: string | null;
+  full_name: string | null;
+  role: "admin" | "manager" | "cashier" | null;
+};
+
 function branchPrefix(storeName: string | null): string {
   const words = (storeName ?? "").trim().split(/\s+/).filter(Boolean);
   const letters = words.map((w) => w[0]?.toUpperCase() ?? "").join("").slice(0, 3);
@@ -67,12 +85,7 @@ function branchPrefix(storeName: string | null): string {
 export default function SellScreen() {
   const supabase = useMemo(() => createClient(), []);
 
-  const [profile, setProfile] = useState<{
-    id: string;
-    org_id: string;
-    store_id: string | null;
-    store_name: string | null;
-  } | null>(null);
+  const [profile, setProfile] = useState<ProfileData | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,20 +102,20 @@ export default function SellScreen() {
   const [parked, setParked] = useState<ParkedOrder[]>([]);
   const [trayOpen, setTrayOpen] = useState(false);
   const [success, setSuccess] = useState<{ orderNo: string; change: number | null } | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; retry?: boolean } | null>(null);
   const [offline, setOffline] = useState(false);
   const [pending, setPending] = useState(0);
+  const [printerSettings, setPrinterSettings] = useState<PrinterSettings>(() =>
+    loadPrinterSettings(),
+  );
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const lastReceipt = useRef<Uint8Array | null>(null);
 
   // ── Catalog: network first, cached fallback (P2) ─────────────────────
   // NOTE: postgrest-js THROWS on network failures (fetch rejects) and only
   // resolves `{error}` for HTTP errors — both must be treated as offline.
   const refreshCatalog = useCallback(async () => {
-    let profileData: {
-      id: string;
-      org_id: string;
-      store_id: string | null;
-      store_name: string | null;
-    } | null = null;
+    let profileData: ProfileData | null = null;
 
     try {
       const {
@@ -111,7 +124,7 @@ export default function SellScreen() {
       if (session) {
         const { data: prof } = await supabase
           .from("profiles")
-          .select("id, org_id, store_id, stores(name)")
+          .select("id, org_id, store_id, stores(name), full_name, role")
           .eq("id", session.user.id)
           .single();
         if (prof) {
@@ -120,6 +133,8 @@ export default function SellScreen() {
             org_id: prof.org_id,
             store_id: prof.store_id,
             store_name: (prof.stores as { name?: string } | null)?.name ?? null,
+            full_name: (prof.full_name as string | null) ?? null,
+            role: (prof.role as ProfileData["role"]) ?? null,
           };
         }
       }
@@ -238,7 +253,8 @@ export default function SellScreen() {
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 4000);
+    // Retry toasts need time to act on; plain notices can go quickly.
+    const t = setTimeout(() => setToast(null), toast.retry ? 15000 : 4000);
     return () => clearTimeout(t);
   }, [toast]);
 
@@ -312,7 +328,7 @@ export default function SellScreen() {
   const holdOrder = () => {
     if (cart.length === 0) return;
     if (parked.length >= MAX_PARKED) {
-      setToast(`Hold tray full (${MAX_PARKED}) — resume or clear one first.`);
+      setToast({ msg: `Hold tray full (${MAX_PARKED}) — resume or clear one first.` });
       return;
     }
     setParked((prev) => [...prev, { at: Date.now(), lines: cart, note, discount }]);
@@ -337,6 +353,11 @@ export default function SellScreen() {
     const orderNo = buildOrderNo(branchPrefix(profile.store_name));
     const isScPwd = discount.type === "senior" || discount.type === "pwd";
 
+    // VAT split (P3): prices are VAT-inclusive; SC/PWD sales are VAT-exempt.
+    const vatExempt = isScPwd;
+    const vatAmount = vatExempt ? 0 : Math.round((total * 12) / 112);
+    const vatableSale = total - vatAmount;
+
     const p_items = cart.map((l) => ({
       product_id: l.product.id,
       name_snapshot: l.product.name,
@@ -358,9 +379,9 @@ export default function SellScreen() {
       discount_type: discount.type,
       discount_amount: discountAmount,
       discount_ref: isScPwd ? `${discount.name} — ${discount.id}` : null,
-      vatable_sale: total, // P1 placeholder: full total; VAT split lands with receipts (P3)
-      vat_amount: 0,
-      vat_exempt_sale: 0,
+      vatable_sale: vatableSale,
+      vat_amount: vatAmount,
+      vat_exempt_sale: vatExempt ? total : 0,
       total,
       payment_method: method,
       payment_ref: payRef || null,
@@ -373,7 +394,7 @@ export default function SellScreen() {
     try {
       await enqueueOrder(p_order, p_items);
     } catch {
-      setToast("Couldn't save order on this device — please try again.");
+      setToast({ msg: "Couldn't save order on this device — please try again." });
       return;
     }
     setPayOpen(false);
@@ -389,6 +410,135 @@ export default function SellScreen() {
     setDiscount(NO_DISCOUNT);
     retryMs.current = 2000; // sync immediately; back off only on failures
     void flush();
+
+    // Print the receipt (fire-and-forget; failure shows a retry toast).
+    const receipt = buildReceipt({
+      storeName: profile.store_name ?? "Lechon POS",
+      orderNo,
+      cashier: profile.full_name ?? "",
+      createdAt: now,
+      items: cart.map((l) => ({
+        name: l.product.name,
+        qty: l.qty,
+        weightKg: l.weightKg,
+        lineTotal: l.lineTotal,
+      })),
+      subtotal,
+      discountAmount,
+      discountRef: isScPwd ? `${discount.name} — ${discount.id}` : null,
+      vatableSale,
+      vatAmount,
+      vatExemptSale: vatExempt ? total : 0,
+      total,
+      paymentMethod: method,
+      paymentRef: payRef || null,
+      amountTendered: method === "cash" ? tendered : null,
+      changeDue: method === "cash" && tendered !== null ? tendered - total : null,
+      paperWidth: printerSettings.paperWidth,
+    });
+    void doPrint(receipt);
+  };
+
+  // ── Printing (P3) ────────────────────────────────────────────────────
+  const doPrint = useCallback(
+    async (bytes: Uint8Array, label = "receipt") => {
+      lastReceipt.current = bytes;
+      try {
+        const printer = await getPrinter(printerSettings);
+        await printer.print(bytes);
+      } catch (e) {
+        setToast({
+          msg: `Couldn't print ${label} — ${(e as Error).message ?? e}`,
+          retry: true,
+        });
+      }
+    },
+    [printerSettings],
+  );
+
+  const reprintLast = async () => {
+    if (!profile) return;
+    try {
+      const { data: order, error: orderErr } = await supabase
+        .from("orders")
+        .select(
+          "id, order_no, cashier_id, profiles(full_name), subtotal, discount_type, discount_amount, discount_ref, vatable_sale, vat_amount, vat_exempt_sale, total, payment_method, payment_ref, amount_tendered, change_due, created_at_device",
+        )
+        .eq("store_id", profile.store_id)
+        .order("created_at_device", { ascending: false })
+        .limit(1)
+        .single();
+      if (orderErr || !order) {
+        setToast({ msg: "No orders to reprint yet." });
+        return;
+      }
+      const { data: items } = await supabase
+        .from("order_items")
+        .select("name_snapshot, qty, weight_kg, line_total")
+        .eq("order_id", order.id);
+      const receipt = buildReceipt({
+        storeName: profile.store_name ?? "Lechon POS",
+        orderNo: order.order_no,
+        cashier: (order.profiles as { full_name?: string } | null)?.full_name ?? "",
+        createdAt: new Date(order.created_at_device),
+        items: (items ?? []).map((i) => ({
+          name: i.name_snapshot,
+          qty: Number(i.qty),
+          weightKg: i.weight_kg != null ? Number(i.weight_kg) : null,
+          lineTotal: Number(i.line_total),
+        })),
+        subtotal: order.subtotal,
+        discountAmount: order.discount_amount,
+        discountRef: order.discount_ref,
+        vatableSale: order.vatable_sale,
+        vatAmount: order.vat_amount,
+        vatExemptSale: order.vat_exempt_sale,
+        total: order.total,
+        paymentMethod: order.payment_method,
+        paymentRef: order.payment_ref,
+        amountTendered: order.amount_tendered,
+        changeDue: order.change_due,
+        paperWidth: printerSettings.paperWidth,
+      });
+      await doPrint(receipt, "reprint");
+      await supabase.from("audit_logs").insert({
+        org_id: profile.org_id,
+        store_id: profile.store_id,
+        actor_id: profile.id,
+        action: "order.reprint",
+        entity: "orders",
+        entity_id: order.id,
+        after: { order_no: order.order_no },
+      });
+    } catch {
+      setToast({ msg: "Couldn't load the last order for reprint." });
+    }
+  };
+
+  const savePrinter = async (s: PrinterSettings) => {
+    savePrinterSettings(s);
+    setPrinterSettings(s);
+    // Admins also persist the row to the devices table (follows the tablet).
+    if (profile?.role === "admin" && profile.store_id) {
+      const deviceId = getDeviceId();
+      const { error } = await supabase.from("devices").upsert(
+        {
+          org_id: profile.org_id,
+          store_id: profile.store_id,
+          name: `Tablet ${deviceId}`,
+          device_prefix: deviceId,
+          printer_transport: s.transport,
+          printer_config: {
+            ip: s.ip,
+            port: s.port,
+            paper_width: s.paperWidth,
+            bridge_host: s.bridgeHost,
+          },
+        },
+        { onConflict: "store_id,device_prefix" },
+      );
+      if (error) throw error;
+    }
   };
 
   useEffect(() => {
@@ -437,6 +587,19 @@ export default function SellScreen() {
             Sync now
           </button>
         )}
+        <button
+          onClick={() => void reprintLast()}
+          className="rounded-btn bg-secondary px-3 py-1.5 text-sm font-semibold text-ink"
+        >
+          Reprint
+        </button>
+        <button
+          onClick={() => setSettingsOpen(true)}
+          className="rounded-btn bg-secondary px-3 py-1.5 text-sm font-semibold text-ink"
+          title="Printer settings"
+        >
+          🖨
+        </button>
         <button
           onClick={() => setTrayOpen((v) => !v)}
           disabled={parked.length === 0}
@@ -653,6 +816,17 @@ export default function SellScreen() {
         />
       )}
 
+      {/* Printer settings */}
+      {settingsOpen && (
+        <PrinterSettingsModal
+          initial={printerSettings}
+          storeName={profile?.store_name ?? "Lechon POS"}
+          onSave={savePrinter}
+          onClose={() => setSettingsOpen(false)}
+          onToast={(msg) => setToast({ msg })}
+        />
+      )}
+
       {/* Success overlay */}
       {success && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg/95">
@@ -672,8 +846,16 @@ export default function SellScreen() {
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-pill bg-ink px-4 py-2 text-sm font-semibold text-bg shadow-[var(--shadow-pop)]">
-          {toast}
+        <div className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-pill bg-ink px-4 py-2 text-sm font-semibold text-bg shadow-[var(--shadow-pop)]">
+          <span>{toast.msg}</span>
+          {toast.retry && lastReceipt.current && (
+            <button
+              onClick={() => void doPrint(lastReceipt.current!)}
+              className="rounded-pill bg-accent px-3 py-0.5 text-xs font-bold text-accent-fg"
+            >
+              Retry print
+            </button>
+          )}
         </div>
       )}
     </main>

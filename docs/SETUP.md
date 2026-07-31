@@ -76,7 +76,14 @@ node scripts/rls-fixture.mjs   # creates the 6 fixture users + profiles, asserts
 ```
 Fixture users: `admin-a|cashier-a1|cashier-a2@fixture.test` (Org Alpha) and `admin-b|cashier-b1|cashier-b2@fixture.test` (Org Beta), password `fixture123`. Admins are org-wide; cashiers are per-branch (matches the RLS model).
 
-## 7. Build & deploy
+## 7. Printing (P3)
+Browsers can't open raw TCP sockets, so LAN printing goes through a tiny local bridge:
+```bash
+node scripts/printer-bridge.mjs   # run on any always-on device on the printer's network (port 8787)
+```
+Then in the app: **🖨 → Network → printer IP + port 9100 → Bridge host → Test**. Receipts print automatically after each sale (58/80mm); failures show a non-blocking **Retry print** toast and never block the sale. Bluetooth (Web Bluetooth) and USB (WebUSB) transports are also implemented for Chrome/Android and Chrome/Edge respectively. Sale receipts include the VAT split (VAT-inclusive prices; SC/PWD sales VAT-exempt) and "THIS IS NOT AN OFFICIAL RECEIPT" until BIR registration.
+
+## 8. Build & deploy
 ```bash
 npm run build     # production build (also typechecks)
 npm run start     # run the production build locally
