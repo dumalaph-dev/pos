@@ -9,7 +9,7 @@
 
 | Phase | Name | Status | Progress | Gate |
 |---|---|:--:|:--:|---|
-| **P0** | Foundation & infra | ⬜ Not started | 0 / 9 | Schema + auth must exist before any feature |
+| **P0** | Foundation & infra | 🟡 In progress | 5 / 9 | Schema + auth must exist before any feature |
 | **P1** | POS core (online) | ⬜ Not started | 0 / 8 | — |
 | **P2** | Offline layer | ⬜ Not started | 0 / 7 | Needs P1 sell flow |
 | **P3** | Printing | ⬜ Not started | 0 / 7 | **Blocked on printer purchase (PRD §6.4)** |
@@ -23,21 +23,21 @@
 **Status legend:** ⬜ Not started · 🟡 In progress · ✅ Done · 🔴 Blocked
 **First shippable slice:** P0 → P3 (sell + print offline, one branch). **Full MVP:** P0 → P9.
 
-**Foundational docs (write-before-code):** ✅ [PRD](POS_PRD.md) · ✅ [MVP](MVP.md) · ✅ [DESIGN_SYSTEM](DESIGN_SYSTEM.md) · ✅ [SCHEMA](SCHEMA.md) · ✅ [ARCHITECTURE](ARCHITECTURE.md) · ✅ [INTERFACES](INTERFACES.md) · ✅ [UI_SPEC](UI_SPEC.md) · ✅ [TEST_PLAN](TEST_PLAN.md) · ⬜ SETUP/runbook (at P0) · 🟡 Seed data (menu/branding — owner input)
+**Foundational docs (write-before-code):** ✅ [PRD](POS_PRD.md) · ✅ [MVP](MVP.md) · ✅ [DESIGN_SYSTEM](DESIGN_SYSTEM.md) · ✅ [SCHEMA](SCHEMA.md) · ✅ [ARCHITECTURE](ARCHITECTURE.md) · ✅ [INTERFACES](INTERFACES.md) · ✅ [UI_SPEC](UI_SPEC.md) · ✅ [TEST_PLAN](TEST_PLAN.md) · ✅ [SETUP](SETUP.md) · 🟡 Seed data (menu/branding — owner input)
 
 ---
 
 ## P0 — Foundation & Infrastructure
 *Goal: an empty app that logs in, knows roles/branches, and has a locked-down schema.*
 
-- [ ] Create GitHub repo; scaffold Next.js (App Router) + TypeScript + Tailwind + shadcn/ui.
-- [ ] Create Supabase project; set up local `.env` and Vercel project (link repo, set env vars).
-- [ ] Write the schema from PRD §10 (`organizations`, `stores`, `devices`, `profiles`, `categories`, `products`, `stock_movements`, `orders`, `order_items`, `shifts`, `audit_logs`) as SQL migrations.
-- [ ] Enable **RLS on every table**; write policies: admins scoped by `org_id`, cashiers to their `store_id`; `audit_logs`/`stock_movements` append-only. Add a two-branch test fixture.
-- [ ] Supabase Auth: email+password login page at root; `profiles` row created on invite with `org_id`, `store_id`, `role`.
-- [ ] Protected routing: `/pos` (cashier+admin), `/admin` (admin/manager), `/display` (paired); redirect + audit-log on violation.
+- [x] Scaffold Next.js 16 (App Router) + TypeScript + Tailwind v4. *(shadcn/ui deferred to P1 when first components land.)*
+- [ ] Create Supabase project; set up local `.env` and Vercel project (link repo, set env vars). *(env template + clients ready; needs your accounts — see SETUP.md.)*
+- [x] Write the schema (`organizations`, `stores`, `devices`, `profiles`, `categories`, `products`, `stock_movements`, `orders`, `order_items`, `shifts`, `audit_logs`) as SQL migrations. → `supabase/migrations/0001_schema.sql` *(✅ applied + verified on local stack 2026-07-31)*
+- [x] Enable **RLS on every table**; policies (admins by `org_id`, cashiers by `store_id`; append-only audit/stock + triggers). → `0002_rls.sql`. *(Two-branch test fixture still TODO — TEST_PLAN §1.)* *(✅ applied + verified on local stack 2026-07-31: 11 tables RLS-on, 29 policies, 4 triggers)*
+- [ ] Supabase Auth: email+password login page at root; `profiles` row created on invite. *(Client/server helpers ready; login UI pending.)*
+- [x] Protected routing skeleton via Next 16 `proxy.ts`: guards `/pos` `/admin`, cashier→`/pos`. *(Audit-log-on-violation TODO.)*
 - [ ] Device binding: on first setup, bind tablet to a branch; persist locally; seed `devices` row.
-- [ ] Design tokens: colors, one accent, tabular-figure font (Inter/Geist), spacing scale, tap-target rules.
+- [x] Design tokens wired to Tailwind v4 from `ui.png` (globals.css `@theme` + Plus Jakarta Sans + `money.ts`). Smoke page verifies render; `npm run build` green.
 - [ ] CI: lint + typecheck on PR; Vercel preview deploys per branch.
 
 ## P1 — POS Core (Online)
