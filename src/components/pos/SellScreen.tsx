@@ -1,14 +1,24 @@
 "use client";
 
 /**
- * POS Sell Screen (P1). Catalog grid + cart + weight keypad + discounts +
+ * POS Sell Screen (P1+P2). Catalog grid + cart + weight keypad + discounts +
  * charge flow + park/hold tray. Money is integer centavos (money.ts).
- * Orders are written atomically via the `place_order` RPC (RLS-enforced).
+ * Orders are written to the local outbox FIRST (offline.ts), then synced via
+ * the idempotent `place_order` RPC — the UI never awaits the network.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { formatPeso, weightLineTotal } from "@/lib/money";
 import { SignOutButton } from "@/components/SignOutButton";
+import {
+  buildOrderNo,
+  enqueueOrder,
+  flushOutbox,
+  loadCachedCatalog,
+  pendingCount,
+  saveCatalogCache,
+  watchPending,
+} from "@/lib/offline";
 
 type Product = {
   id: string;
@@ -79,32 +89,63 @@ export default function SellScreen() {
   const [parked, setParked] = useState<ParkedOrder[]>([]);
   const [trayOpen, setTrayOpen] = useState(false);
   const [success, setSuccess] = useState<{ orderNo: string; change: number | null } | null>(null);
-  const [placing, setPlacing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [offline, setOffline] = useState(false);
+  const [pending, setPending] = useState(0);
 
-  // ── Load catalog ──────────────────────────────────────────────────────
-  useEffect(() => {
-    (async () => {
+  // ── Catalog: network first, cached fallback (P2) ─────────────────────
+  // NOTE: postgrest-js THROWS on network failures (fetch rejects) and only
+  // resolves `{error}` for HTTP errors — both must be treated as offline.
+  const refreshCatalog = useCallback(async () => {
+    let profileData: {
+      id: string;
+      org_id: string;
+      store_id: string | null;
+      store_name: string | null;
+    } | null = null;
+
+    try {
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("id, org_id, store_id, stores(name)")
-        .eq("id", user.id)
-        .single();
-      if (!prof) return;
-      setProfile({
-        id: prof.id,
-        org_id: prof.org_id,
-        store_id: prof.store_id,
-        store_name: (prof.stores as { name?: string } | null)?.name ?? null,
-      });
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("id, org_id, store_id, stores(name)")
+          .eq("id", session.user.id)
+          .single();
+        if (prof) {
+          profileData = {
+            id: prof.id,
+            org_id: prof.org_id,
+            store_id: prof.store_id,
+            store_name: (prof.stores as { name?: string } | null)?.name ?? null,
+          };
+        }
+      }
+    } catch {
+      /* offline — fall through to the cache */
+    }
 
-      const scope = prof.store_id
-        ? { column: "store_id", value: prof.store_id }
-        : { column: "org_id", value: prof.org_id };
+    // Offline (session refresh or profile fetch failed): serve the cache.
+    if (!profileData) {
+      const cached = await loadCachedCatalog();
+      if (cached) {
+        profileData = cached.profile as typeof profileData;
+        setProfile(profileData);
+        setCategories(cached.categories as Category[]);
+        setProducts(cached.products as Product[]);
+      }
+      setOffline(true);
+      setLoading(false);
+      return;
+    }
+    setProfile(profileData);
+
+    try {
+      const scope = profileData.store_id
+        ? { column: "store_id", value: profileData.store_id }
+        : { column: "org_id", value: profileData.org_id };
       const [catRes, prodRes] = await Promise.all([
         supabase
           .from("categories")
@@ -119,11 +160,64 @@ export default function SellScreen() {
           .eq("is_active", true)
           .order("sort_order"),
       ]);
+      if (catRes.error || prodRes.error) throw catRes.error || prodRes.error;
       setCategories((catRes.data ?? []) as Category[]);
       setProducts((prodRes.data ?? []) as Product[]);
-      setLoading(false);
-    })();
+      await saveCatalogCache(prodRes.data ?? [], catRes.data ?? [], profileData);
+      setOffline(false);
+    } catch {
+      const cached = await loadCachedCatalog();
+      if (cached) {
+        setProfile(cached.profile as typeof profileData);
+        setCategories(cached.categories as Category[]);
+        setProducts(cached.products as Product[]);
+      }
+      setOffline(true);
+    }
+    setLoading(false);
   }, [supabase]);
+
+  useEffect(() => {
+    void refreshCatalog();
+  }, [refreshCatalog]);
+
+  // ── Offline sync: pending counter, retry with backoff (P2) ───────────
+  useEffect(() => watchPending(setPending), []);
+
+  const retryMs = useRef(2000);
+  const flush = useCallback(async () => {
+    if (!navigator.onLine) return;
+    const synced = await flushOutbox(supabase);
+    if (synced > 0) {
+      // Network is back — refresh catalog + flip the pill back to Online.
+      retryMs.current = 2000;
+      void refreshCatalog();
+    } else {
+      retryMs.current =
+        (await pendingCount()) === 0 ? 2000 : Math.min(60000, retryMs.current * 2);
+    }
+  }, [supabase, refreshCatalog]);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = () => {
+      void flush().then(() => {
+        timer = setTimeout(tick, retryMs.current);
+      });
+    };
+    tick();
+    const onOnline = () => {
+      retryMs.current = 2000;
+      setOffline(false);
+      void refreshCatalog();
+      void flush();
+    };
+    window.addEventListener("online", onOnline);
+    return () => {
+      if (timer) clearTimeout(timer);
+      window.removeEventListener("online", onOnline);
+    };
+  }, [flush, refreshCatalog]);
 
   // ── Park tray persistence ─────────────────────────────────────────────
   useEffect(() => {
@@ -236,14 +330,11 @@ export default function SellScreen() {
     setTrayOpen(false);
   };
 
-  // ── Order placement ───────────────────────────────────────────────────
+  // ── Order placement: local-first, sync in background (P2) ────────────
   const placeOrder = async (method: string, tendered: number | null, payRef: string) => {
     if (!profile || cart.length === 0) return;
-    setPlacing(true);
     const now = new Date();
-    const yymmdd = now.toISOString().slice(2, 10).replace(/-/g, "");
-    const hhmmss = now.toTimeString().slice(0, 8).replace(/:/g, "");
-    const orderNo = `${branchPrefix(profile.store_name)}-${yymmdd}-${hhmmss}`;
+    const orderNo = buildOrderNo(branchPrefix(profile.store_name));
     const isScPwd = discount.type === "senior" || discount.type === "pwd";
 
     const p_items = cart.map((l) => ({
@@ -279,10 +370,10 @@ export default function SellScreen() {
       created_at_device: now.toISOString(),
     };
 
-    const { error } = await supabase.rpc("place_order", { p_order, p_items });
-    setPlacing(false);
-    if (error) {
-      setToast(`Couldn't save order: ${error.message}`);
+    try {
+      await enqueueOrder(p_order, p_items);
+    } catch {
+      setToast("Couldn't save order on this device — please try again.");
       return;
     }
     setPayOpen(false);
@@ -296,6 +387,8 @@ export default function SellScreen() {
     setCart([]);
     setNote("");
     setDiscount(NO_DISCOUNT);
+    retryMs.current = 2000; // sync immediately; back off only on failures
+    void flush();
   };
 
   useEffect(() => {
@@ -327,6 +420,23 @@ export default function SellScreen() {
           placeholder="Search products…"
           className="w-52 rounded-btn border border-line-strong bg-raised px-3 py-1.5 text-sm text-ink outline-none focus:border-primary"
         />
+        <div
+          className={`flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-bold ${
+            offline ? "border border-line bg-surface text-ink-muted" : "bg-secondary text-ink"
+          }`}
+        >
+          <span className={`h-2 w-2 rounded-full ${offline ? "bg-warning" : "bg-success"}`} />
+          {offline ? "Offline" : "Online"}
+          {pending > 0 && <span className="tnums">· {pending} pending</span>}
+        </div>
+        {pending > 0 && (
+          <button
+            onClick={() => void flush()}
+            className="rounded-btn bg-primary px-3 py-1.5 text-xs font-bold text-primary-fg"
+          >
+            Sync now
+          </button>
+        )}
         <button
           onClick={() => setTrayOpen((v) => !v)}
           disabled={parked.length === 0}
@@ -538,7 +648,6 @@ export default function SellScreen() {
       {payOpen && (
         <ChargeModal
           total={total}
-          placing={placing}
           onConfirm={placeOrder}
           onClose={() => setPayOpen(false)}
         />
@@ -550,6 +659,7 @@ export default function SellScreen() {
           <div className="text-center">
             <p className="text-4xl font-extrabold text-success">✓ Order saved</p>
             <p className="tnums mt-2 text-lg font-semibold text-ink">{success.orderNo}</p>
+            <p className="mt-1 text-sm text-ink-muted">Saved on this device · syncs automatically</p>
             {success.change !== null && (
               <p className="tnums mt-4 text-6xl font-extrabold text-success">
                 {formatPeso(success.change)}
@@ -738,12 +848,10 @@ function DiscountModal({
 /* ── Payment / charge modal ────────────────────────────────────────────── */
 function ChargeModal({
   total,
-  placing,
   onConfirm,
   onClose,
 }: {
   total: number;
-  placing: boolean;
   onConfirm: (method: string, tendered: number | null, payRef: string) => void;
   onClose: () => void;
 }) {
@@ -756,7 +864,7 @@ function ChargeModal({
   const change = tenderedCents - total;
   const cashOk = method !== "cash" || (tenderedCents >= total && tenderedPesos > 0);
   const refOk = method === "cash" || (method === "card" ? /^\d{4}$/.test(ref) : ref.trim().length >= 4);
-  const canConfirm = cashOk && refOk && !placing;
+  const canConfirm = cashOk && refOk;
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink/40 p-4" onClick={onClose}>
@@ -824,7 +932,7 @@ function ChargeModal({
             disabled={!canConfirm}
             className="rounded-btn bg-accent py-3 font-bold text-accent-fg disabled:opacity-40"
           >
-            {placing ? "Saving…" : "Confirm"}
+            Confirm
           </button>
         </div>
       </div>

@@ -31,15 +31,24 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user: { id: string } | null = null;
+  let checked = false;
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    user = data.user;
+    // A resolved error means the auth service was unreachable (offline):
+    // let the request through — client-side session checks decide. Never
+    // lock staff out of the POS because the network dropped.
+    checked = !error;
+  } catch {
+    // same as above
+  }
 
   const path = request.nextUrl.pathname;
   const isProtected = path.startsWith("/pos") || path.startsWith("/admin");
 
-  // Unauthenticated → login
-  if (!user && isProtected) {
+  // Unauthenticated → login (only when we could actually check).
+  if (checked && !user && isProtected) {
     const redirect = request.nextUrl.clone();
     redirect.pathname = "/";
     return NextResponse.redirect(redirect);
