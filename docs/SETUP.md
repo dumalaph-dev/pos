@@ -39,6 +39,14 @@ SQL lives in `supabase/migrations/` (run in order):
 - **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push`
 - **Dashboard:** SQL Editor → paste each file in order → Run
 
+**Connect the hosted project** (this project: ref `uzavkjftwcuixidxyopr`):
+```bash
+npx supabase login                                  # one-time browser flow
+npx supabase link --project-ref uzavkjftwcuixidxyopr  # prompts for the DB password
+npx supabase db push                                # applies 0001–0003 in order
+```
+> `supabase db push` runs **migrations only** — never `seed.sql` (local-dev fixture data stays local). Never run `supabase db reset` against a hosted project.
+
 **Validate locally first (no account needed):** the CLI applies `supabase/migrations/` automatically when the local stack starts:
 ```bash
 npx --yes supabase@latest start --exclude logflare,vector,storage-api,imgproxy,postgres-meta,studio
