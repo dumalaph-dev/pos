@@ -21,6 +21,8 @@ Fixture: **2 orgs**, each with **2 branches**, each branch with an admin + a cas
 | 1.6 | Price edit on Branch A | I | Branch B unchanged |
 | 1.7 | Admin "All branches" query | I | returns own org's branches only |
 
+✅ **Implemented** in `supabase/seed.sql` + `scripts/rls-fixture.mjs` — 18/18 assertions pass on the local stack (2026-07-31). The fixture is idempotent; rerun anytime with `node scripts/rls-fixture.mjs`.
+
 ## 2. Offline-first & sync 🔴 (PRD §6.3)
 
 | # | Test | Type | Pass |

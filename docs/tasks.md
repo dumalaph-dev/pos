@@ -145,5 +145,5 @@
 ## Cross-cutting (do continuously, not a phase)
 - [ ] Audit-logging on every sensitive action as features land (don't retrofit).
 - [ ] Accessibility & tap-target sizing on every POS screen.
-- [ ] Test data: keep a two-branch, multi-cashier fixture for every RLS/scope test.
+- [x] Test data: keep a two-branch, multi-cashier fixture for every RLS/scope test. *(✅ `supabase/seed.sql` + `scripts/rls-fixture.mjs`, 18/18 §1 assertions green 2026-07-31)*
 - [ ] Update [MVP.md](MVP.md) done-criteria and this tracker as phases complete.

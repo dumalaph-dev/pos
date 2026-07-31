@@ -62,6 +62,12 @@ Auth users are created through Supabase Auth (not raw SQL). Minimum to log in:
 ## 6. RLS test fixture (do before building features — TEST_PLAN §1)
 Create **2 orgs × 2 branches × {admin, cashier}** and assert isolation (see [TEST_PLAN.md](TEST_PLAN.md)). Run assertions as each user via the Supabase client with that user's JWT — not as the service role (which bypasses RLS).
 
+**Automated** (local dev): `supabase/seed.sql` seeds 2 orgs × 2 branches, devices, and a per-branch menu (auto-applied on `supabase start` / `db reset`). Then:
+```bash
+node scripts/rls-fixture.mjs   # creates the 6 fixture users + profiles, asserts §1 (18 checks)
+```
+Fixture users: `admin-a|cashier-a1|cashier-a2@fixture.test` (Org Alpha) and `admin-b|cashier-b1|cashier-b2@fixture.test` (Org Beta), password `fixture123`. Admins are org-wide; cashiers are per-branch (matches the RLS model).
+
 ## 7. Build & deploy
 ```bash
 npm run build     # production build (also typechecks)
@@ -84,6 +90,7 @@ ui.png            design reference (color source for DESIGN_SYSTEM)
 ```
 
 ## 9. Troubleshooting
+- **`supabase db reset` → auth returns `502 An invalid response was received from the upstream server`:** the reset restarts the auth container but kong keeps the old container IP. Fix: `docker restart supabase_kong_pos` (then rerun the fixture).
 - **`supabase start` exits with `container is not ready: unhealthy` (analytics/storage/studio) on Windows:** those containers need the Docker daemon exposed on `tcp://localhost:2375`. Either enable that in Docker Desktop → Settings → General → "Expose daemon on tcp://localhost:2375 without TLS" (then restart Docker Desktop), or just run with the excludes above — the DB, auth, and REST API are all you need for local dev.
 - **App runs but auth does nothing:** env vars unset — middleware no-ops by design until Supabase is configured (see `src/lib/supabase/middleware.ts`).
 - **`permission denied for table ...`:** the `authenticated` grants in `0002_rls.sql` didn't run, or you're querying a table with no matching policy for that user.
