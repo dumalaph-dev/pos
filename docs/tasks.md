@@ -43,14 +43,14 @@
 ## P1 — POS Core (Online)
 *Goal: ring up a real sale online and write it to the DB.*
 
-- [ ] Sell-screen layout: **slim category rail (~12%) · product grid (hero) · cart (right ~36%)**.
-- [ ] Product grid from catalog; category rail filters; `/kg` badge for weight items.
-- [ ] Fixed-price tap = add/increment; weight item = keypad modal (kg, 2 decimals, live line total).
-- [ ] Cart: edit qty/weight, remove line, order note field, running total (tabular figures).
-- [ ] Discounts: None / Senior / PWD (name + ID capture, 20%) / Custom % (Admin PIN above threshold).
-- [ ] Charge flow: Cash (tendered → change, quick-tender chips), GCash/Maya (ref), Card (last 4).
-- [ ] Hold/park orders (tray, max 10); branch label in header.
-- [ ] Write order + `order_items` with price snapshots; success state → fresh order. Audit-log the sale.
+- [x] Sell-screen layout: **slim category rail (~12%) · product grid (hero) · cart (right ~36%)**. *(✅ e2e-verified on local stack 2026-07-31)*
+- [x] Product grid from catalog; category rail filters; `/kg` badge for weight items.
+- [x] Fixed-price tap = add/increment; weight item = keypad modal (kg, 2 decimals, live line total). *(✅ 1.35kg × ₱850 → ₱1,147.50)*
+- [x] Cart: edit qty/weight, remove line, order note field, running total (tabular figures).
+- [x] Discounts: None / Senior / PWD (name + ID capture, 20%) / Custom % (Admin PIN above threshold). *(PIN threshold deferred to P6 settings)*
+- [x] Charge flow: Cash (tendered → change, quick-tender chips), GCash/Maya (ref), Card (last 4). *(✅ ₱4,097.50 sale / ₱5,000 tendered → ₱902.50 change)*
+- [x] Hold/park orders (tray, max 10); branch label in header.
+- [x] Write order + `order_items` with price snapshots; success state → fresh order. Audit-log the sale. *(✅ atomic `place_order` RPC — order AB1-260731-012528: 2 items + audit row verified in DB)*
 
 ## P2 — Offline Layer
 *Goal: never lose a sale, never block on the network.*
