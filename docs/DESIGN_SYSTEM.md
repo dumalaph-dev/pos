@@ -96,7 +96,7 @@ Line-height: 1.2 for numbers/headings, 1.4–1.5 for body.
 
 ```
 ┌───────────────────────────────────────────────────────────────────────┐
-│ TOP BAR  logo · [ POS | ORDERS ] · Search Hold Receipts More · Admin ▾  │  64px
+│ TOP BAR  RICO'S POS · Ready to sell · Open navigation                     │  62px
 ├──────────┬──────────────────────────────────────────┬───────────────────┤
 │ CATEGORY │  🔍 Search products...                    │  Current Order  ▾ │
 │  RAIL    │                                          │  ─────────────    │
@@ -113,9 +113,9 @@ Line-height: 1.2 for numbers/headings, 1.4–1.5 for body.
    ~14%                  ~50% (main event)                    ~36%
 ```
 
-- **Top bar** (`--surface`): circular logo (store asset) left; centered segmented **POS / ORDERS** toggle (active = `--primary` fill, `--primary-fg` text; inactive = transparent, `--text-muted`); right utility icons with labels (Search, Hold, Receipts, More) as line icons; profile chip with avatar + name + caret.
+- **Top bar** (`--surface`): a compact 62px cashier strip is the default state so the catalog gets the first viewport. The strip is one large keyboard-accessible button with the compact store mark, online/offline state, and `Open navigation`. Clicking it reveals an 88px bar with the circular brand lockup, centered segmented **POS / ORDERS** toggle (active = `--primary` fill, `--primary-fg` text; inactive = transparent, `--text-muted`), right utility icons with labels (Search, Hold, Receipts, More), profile chip, sign-out, and a `Hide` control. On mobile the expanded bar wraps utility actions below the primary row.
 - **Category rail** (`--sidebar`): vertical list, each row = line icon + label. **Active** = `--primary` fill, `--primary-fg`, radius 12. **Inactive** = transparent, `--text` label, `--text-muted` icon; hover = `--primary-soft`. Rail stays slim (≤15% width) — products get the pixels. A decorative **footer card** ("FRESHLY ROASTED EVERYDAY · Thank you!") sits pinned at the bottom (`--surface`, dashed/soft border, small pig mark + heart).
-- **Product area:** pill **search input** (`--surface-raised`, full radius, search icon) spanning the grid; **3-column product grid** of tiles; **Grid/List** segmented toggle bottom-left (active = `--primary`).
+- **Product area:** raised **search input** (`--surface-raised`, 54px, search icon) spanning the grid; **4-column product grid** of compact image-led tiles on desktop, with 2 columns on narrow mobile; **Grid/List** segmented toggle bottom-left (active = `--primary`).
 - **Order panel** (`--surface-panel`, receipt-scallop top): header "Current Order" + order-type dropdown ("Dine In") + trash (danger) icon; scrollable line rows; totals block; **SAVE** (secondary tan) + **CHARGE** (accent brick-red) side by side, CHARGE emphasized.
 
 ---
@@ -207,7 +207,7 @@ Same palette, **billboard scale** — read from 1.5m away.
 
 The reference shell is now implemented in `src/components/pos/SellScreen.tsx` and `src/app/globals.css`.
 
-- The live desktop proportions are a 112px top bar, a ~202px category rail, a three-column catalog, and a right order panel with a 410px minimum width.
+- The live desktop proportions are a 62px compact top bar (88px while expanded), a ~202px category rail, a four-column catalog, and a right order panel with a 410px minimum width.
 - The product grid uses local offline-safe placeholder photography from `public/food/`. Generated photos should be treated as replaceable catalog content, not brand assets.
 - A fresh local install falls back to a preview catalog with the reference order seeded so the UI can be reviewed before Supabase has a cached menu. Real catalog data replaces it when available.
 - Product-card hover lift, press scale, search focus, popover entry, toast entry, success confirmation, and reduced-motion behavior are part of the approved interaction language.

@@ -8,10 +8,10 @@ Warm, artisanal, calm, and operational. The screen should feel like a well-run l
 
 ## Layout contract
 
-- Top bar: approximately 112px high. Brand lockup at left, centered `POS / ORDERS` segmented control, then utility actions (`Search`, `Hold`, `Receipts`, `More`) and the cashier profile.
+- Top bar: compact 62px cashier strip by default. Clicking the strip expands an 88px navigation bar with the brand lockup, centered `POS / ORDERS` segmented control, utility actions (`Search`, `Hold`, `Receipts`, `More`), cashier profile, and a clear Hide control.
 - Main body: three zones — category rail (~202px), product catalog (largest area), order panel (~34vw / 410px minimum).
 - Category rail: warm sidebar fill, line icons, 53px rows, active roast-brown pill, pinned thank-you card at the bottom.
-- Catalog: 58px search field, three-column image-led product cards, scrollable content, `Grid / List` toggle pinned to the bottom.
+- Catalog: compact 54px search field, four-column image-led product cards on desktop, scrollable content, `Grid / List` toggle pinned to the bottom. Collapse to two columns on narrow mobile widths.
 - Order panel: receipt-paper cream surface with a scalloped top edge, `Current Order` header, order type control, quantity steppers, customer/discount row, totals, and `SAVE / CHARGE` actions.
 - On narrow screens, the category rail becomes a horizontal scroller, the catalog stays above the order panel, and the order panel becomes a full-width section.
 
@@ -44,7 +44,7 @@ Typography is Plus Jakarta Sans. Use tabular numerals for money and quantities. 
 
 ## Motion and interaction
 
-- Use 150–180ms ease transitions for buttons, tabs, cards, hover lift, and search focus.
+- Use 150–180ms ease transitions for buttons, tabs, cards, hover lift, and search focus. The compact header expands with a short 220ms translate/fade so the catalog gains space without making the navigation feel lost.
 - Use 180–260ms for popovers and modal entry; use a soft scale/translate combination instead of a hard fade alone.
 - Use a short success pop for saved orders and a restrained toast slide for feedback.
 - Never delay repeated cashier actions with animation. Provide `:focus-visible`, keyboard-operable controls, disabled states, and a `prefers-reduced-motion` fallback.
