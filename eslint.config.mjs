@@ -14,6 +14,9 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Supabase CLI output is a generated, minified runtime bundle.
     "supabase/.temp/**",
+    // OpenNext output is generated during the deployment build.
+    ".open-next/**",
+    "dist/**",
   ]),
 ]);
 

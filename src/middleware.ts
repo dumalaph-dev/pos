@@ -1,8 +1,9 @@
 import { type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
-// Next.js 16 "proxy" convention (replaces the old `middleware` file).
-export async function proxy(request: NextRequest) {
+// Keep the session guard on the edge-compatible middleware convention so the
+// same auth behavior works with the OpenNext Cloudflare adapter.
+export async function middleware(request: NextRequest) {
   return updateSession(request);
 }
 
