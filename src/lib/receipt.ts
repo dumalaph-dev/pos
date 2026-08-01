@@ -88,10 +88,6 @@ function wrap(text: string, width: number): string[] {
 const ESC = 0x1b;
 const GS = 0x1d;
 
-function cmd(bytes: number[]): number[] {
-  return bytes;
-}
-
 export function buildReceipt(data: ReceiptData): Uint8Array {
   const width = COLUMNS[data.paperWidth ?? 58];
   const out: number[] = [];

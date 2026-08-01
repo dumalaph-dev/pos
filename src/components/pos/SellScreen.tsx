@@ -7,6 +7,7 @@
  * the idempotent `place_order` RPC — the UI never awaits the network.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { formatPeso, weightLineTotal } from "@/lib/money";
 import { SignOutButton } from "@/components/SignOutButton";
@@ -36,6 +37,7 @@ type Product = {
   price: number; // centavos
   unit: string;
   category_id: string | null;
+  image_url?: string | null;
 };
 type Category = { id: string; name: string; icon: string | null };
 
@@ -66,6 +68,7 @@ const PARK_KEY = "pos.parked.v1";
 const MAX_PARKED = 10;
 
 const round = (n: number) => Math.round(n);
+const displayPeso = (cents: number) => formatPeso(cents).replace(/\.00$/, "");
 
 type ProfileData = {
   id: string;
@@ -82,6 +85,130 @@ function branchPrefix(storeName: string | null): string {
   return letters || "POS";
 }
 
+const DEMO_PROFILE: ProfileData = {
+  id: "00000000-0000-0000-0000-000000000001",
+  org_id: "00000000-0000-0000-0000-000000000002",
+  store_id: "00000000-0000-0000-0000-000000000003",
+  store_name: "Rico's Lechon House",
+  full_name: "Admin",
+  role: "admin",
+};
+
+const DEMO_CATEGORIES: Category[] = [
+  { id: "all", name: "All Items", icon: "grid" },
+  { id: "whole-lechon", name: "Whole Lechon", icon: "pig" },
+  { id: "lechon-belly", name: "Lechon Belly", icon: "belly" },
+  { id: "lechon-paksiw", name: "Lechon Paksiw", icon: "bowl" },
+  { id: "lechon-kawali", name: "Lechon Kawali", icon: "kawali" },
+  { id: "rice-sides", name: "Rice & Sides", icon: "rice" },
+  { id: "drinks", name: "Drinks", icon: "drink" },
+  { id: "extras", name: "Extras", icon: "extras" },
+  { id: "packages", name: "Packages", icon: "package" },
+  { id: "sauces", name: "Sauces", icon: "sauce" },
+];
+
+const DEMO_PRODUCTS: Product[] = [
+  { id: "demo-whole-small", name: "Whole Lechon (Small)", pricing_mode: "fixed", price: 550000, unit: "pcs", category_id: "whole-lechon" },
+  { id: "demo-whole-medium", name: "Whole Lechon (Medium)", pricing_mode: "fixed", price: 650000, unit: "pcs", category_id: "whole-lechon" },
+  { id: "demo-whole-large", name: "Whole Lechon (Large)", pricing_mode: "fixed", price: 750000, unit: "pcs", category_id: "whole-lechon" },
+  { id: "demo-belly-half", name: "Lechon Belly (1/2kg)", pricing_mode: "fixed", price: 28000, unit: "tray", category_id: "lechon-belly" },
+  { id: "demo-belly-one", name: "Lechon Belly (1kg)", pricing_mode: "fixed", price: 52000, unit: "tray", category_id: "lechon-belly" },
+  { id: "demo-paksiw", name: "Lechon Paksiw (1/2kg)", pricing_mode: "fixed", price: 25000, unit: "tray", category_id: "lechon-paksiw" },
+  { id: "demo-kawali", name: "Lechon Kawali (1/2kg)", pricing_mode: "fixed", price: 23000, unit: "tray", category_id: "lechon-kawali" },
+  { id: "demo-rice", name: "Java Rice", pricing_mode: "fixed", price: 5000, unit: "cup", category_id: "rice-sides" },
+  { id: "demo-sauce", name: "Mang Tomas (Small)", pricing_mode: "fixed", price: 2000, unit: "bottle", category_id: "sauces" },
+];
+
+const DEMO_CART: CartLine[] = [
+  { key: "demo-whole-medium", product: DEMO_PRODUCTS[1], qty: 1, weightKg: null, lineTotal: 650000 },
+  { key: "demo-belly-half", product: DEMO_PRODUCTS[3], qty: 1, weightKg: null, lineTotal: 28000 },
+  { key: "demo-rice", product: DEMO_PRODUCTS[7], qty: 2, weightKg: null, lineTotal: 10000 },
+  { key: "demo-sauce", product: DEMO_PRODUCTS[8], qty: 2, weightKg: null, lineTotal: 4000 },
+];
+
+const PRODUCT_IMAGES: Record<string, string> = {
+  "whole lechon (small)": "/food/whole-lechon-small.png",
+  "whole lechon (medium)": "/food/whole-lechon-medium.png",
+  "whole lechon (large)": "/food/whole-lechon-medium.png",
+  "lechon belly (1/2kg)": "/food/lechon-belly-half.png",
+  "lechon belly (1kg)": "/food/lechon-belly-one.png",
+  "lechon paksiw (1/2kg)": "/food/lechon-paksiw.png",
+  "lechon kawali (1/2kg)": "/food/lechon-kawali.png",
+  "java rice": "/food/java-rice.png",
+  "mang tomas (small)": "/food/mang-tomas.png",
+};
+
+type IconName =
+  | "search"
+  | "hold"
+  | "receipt"
+  | "more"
+  | "chevron"
+  | "grid"
+  | "list"
+  | "trash"
+  | "person"
+  | "arrow"
+  | "pig"
+  | "belly"
+  | "bowl"
+  | "kawali"
+  | "rice"
+  | "drink"
+  | "extras"
+  | "package"
+  | "sauce"
+  | "sparkle"
+  | "heart"
+  | "close"
+  | "printer";
+
+function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
+  const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
+  const paths: Record<IconName, React.ReactNode> = {
+    search: <><circle cx="11" cy="11" r="6.8" /><path d="m16 16 4.3 4.3" /></>,
+    hold: <><path d="M7 4v16M17 4v16" /><path d="M9 7h6M9 17h6" /></>,
+    receipt: <><path d="M6 3.5h12v17l-2.5-1.6-2.5 1.6-2.5-1.6L8 20.5 6 19z" /><path d="M9 8h6M9 12h6M9 16h3" /></>,
+    more: <><circle cx="5" cy="12" r="1.2" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1.2" fill="currentColor" stroke="none" /></>,
+    chevron: <path d="m7 9 5 5 5-5" />,
+    grid: <><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></>,
+    list: <><path d="M8 6h12M8 12h12M8 18h12" /><circle cx="4" cy="6" r="1" fill="currentColor" stroke="none" /><circle cx="4" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="4" cy="18" r="1" fill="currentColor" stroke="none" /></>,
+    trash: <><path d="M4 7h16M10 11v5M14 11v5" /><path d="M6.5 7 8 20h8l1.5-13M9 7V4h6v3" /></>,
+    person: <><circle cx="12" cy="8" r="3.2" /><path d="M5 20c.8-3.5 3-5.3 7-5.3s6.2 1.8 7 5.3" /><path d="M19 5v4M17 7h4" /></>,
+    arrow: <><path d="M5 12h14" /><path d="m14 7 5 5-5 5" /></>,
+    pig: <><path d="M5.2 13.6c0-3.5 3.1-6.2 7.6-6.2 2 0 3.8.6 5.1 1.7l2.1-.7.5 2.1-1.6 1.1c.1.5.2 1 .2 1.6 0 3.5-3.2 5.8-7.5 5.8H8.2l-2.2 1.1.3-2.8c-.7-.7-1.1-1.6-1.1-2.7Z" /><circle cx="15.8" cy="11.2" r=".7" fill="currentColor" stroke="none" /><path d="M7.1 12.3H5.4a1.6 1.6 0 1 1 .5-3" /></>,
+    belly: <><ellipse cx="12" cy="12" rx="8" ry="7" /><path d="M8 9.5c1.2-1.2 2.8-1.2 4 0s2.8 1.2 4 0M8 14.5c1.2-1.2 2.8-1.2 4 0s2.8 1.2 4 0" /></>,
+    bowl: <><path d="M4 10.5h16c-.5 5-3.2 8-8 8s-7.5-3-8-8Z" /><path d="M7 7.5c1.4-1.7 3.2-2.5 5-2.5s3.6.8 5 2.5M3 10.5h18" /></>,
+    kawali: <><path d="M5 9h14l-1 9H6z" /><path d="M8 9V6h8v3M4 20h16" /><circle cx="9" cy="13" r=".6" fill="currentColor" stroke="none" /><circle cx="13" cy="15" r=".6" fill="currentColor" stroke="none" /><circle cx="16" cy="12" r=".6" fill="currentColor" stroke="none" /></>,
+    rice: <><path d="M5 11h14c-.4 5.2-3 8-7 8s-6.6-2.8-7-8Z" /><path d="M8 8c.6-1.8 1.9-3 4-3s3.4 1.2 4 3" /><path d="M4 11h16" /></>,
+    drink: <><path d="M8 5h8l-1 15H9L8 5Z" /><path d="M9 9h6M10 2h4" /><path d="M10 2v3" /></>,
+    extras: <><path d="M12 4c1.5 1.7 3.2 2.8 3.2 5.1A3.2 3.2 0 1 1 8.8 9.1C8.8 7 10.5 5.7 12 4Z" /><path d="M5 15c1-1.2 2.1-1.5 3.3-.7M19 15c-1-1.2-2.1-1.5-3.3-.7" /></>,
+    package: <><path d="m4 8 8-4 8 4-8 4-8-4Z" /><path d="M4 8v8l8 4 8-4V8M12 12v8" /><path d="m8 6 8 4" /></>,
+    sauce: <><path d="M10 4h4v3h-4zM9 7h6l1 13H8L9 7Z" /><path d="M9 12h6" /></>,
+    sparkle: <><path d="m12 3 1.2 5.8L19 10l-5.8 1.2L12 17l-1.2-5.8L5 10l5.8-1.2L12 3ZM19 16l.5 2.5L22 19l-2.5.5L19 22l-.5-2.5L16 19l2.5-.5L19 16Z" /></>,
+    heart: <path d="M20.8 8.6c0 4.8-8.8 10.3-8.8 10.3S3.2 13.4 3.2 8.6A4.5 4.5 0 0 1 12 6.5a4.5 4.5 0 0 1 8.8 2.1Z" />,
+    close: <><path d="m7 7 10 10M17 7 7 17" /></>,
+    printer: <><path d="M6 9V4h12v5M6 17H4V9h16v8h-2" /><path d="M7 14h10v6H7z" /><path d="M17 11h.1" /></>,
+  };
+  return <svg {...common}>{paths[name]}</svg>;
+}
+
+function productImage(product: Product) {
+  const localImage = PRODUCT_IMAGES[product.name.trim().toLowerCase()];
+  return product.image_url?.startsWith("/") ? product.image_url : localImage ?? "/food/whole-lechon-small.png";
+}
+
+function categoryIcon(name: string): IconName {
+  const value = name.toLowerCase();
+  if (value.includes("whole") || value.includes("lechon")) return value.includes("belly") ? "belly" : value.includes("paksiw") ? "bowl" : value.includes("kawali") ? "kawali" : "pig";
+  if (value.includes("rice") || value.includes("side")) return "rice";
+  if (value.includes("drink")) return "drink";
+  if (value.includes("extra")) return "extras";
+  if (value.includes("package")) return "package";
+  if (value.includes("sauce")) return "sauce";
+  return "grid";
+}
+
 export default function SellScreen() {
   const supabase = useMemo(() => createClient(), []);
 
@@ -92,6 +219,8 @@ export default function SellScreen() {
 
   const [activeCat, setActiveCat] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [orderType, setOrderType] = useState("Dine In");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [note, setNote] = useState("");
   const [discount, setDiscount] = useState<DiscountState>(NO_DISCOUNT);
@@ -109,7 +238,10 @@ export default function SellScreen() {
     loadPrinterSettings(),
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const lastReceipt = useRef<Uint8Array | null>(null);
+  const [hasReceipt, setHasReceipt] = useState(false);
+  const demoSeeded = useRef(false);
 
   // ── Catalog: network first, cached fallback (P2) ─────────────────────
   // NOTE: postgrest-js THROWS on network failures (fetch rejects) and only
@@ -150,6 +282,16 @@ export default function SellScreen() {
         setProfile(profileData);
         setCategories(cached.categories as Category[]);
         setProducts(cached.products as Product[]);
+      } else {
+        // Keep the shell inspectable in a fresh local install. Once the first
+        // real catalog is cached, the demo never replaces it.
+        setProfile(DEMO_PROFILE);
+        setCategories(DEMO_CATEGORIES);
+        setProducts(DEMO_PRODUCTS);
+        if (!demoSeeded.current) {
+          setCart(DEMO_CART);
+          demoSeeded.current = true;
+        }
       }
       setOffline(true);
       setLoading(false);
@@ -170,7 +312,7 @@ export default function SellScreen() {
           .order("sort_order"),
         supabase
           .from("products")
-          .select("id, name, pricing_mode, price, unit, category_id")
+          .select("id, name, pricing_mode, price, unit, category_id, image_url")
           .eq(scope.column, scope.value)
           .eq("is_active", true)
           .order("sort_order"),
@@ -186,6 +328,14 @@ export default function SellScreen() {
         setProfile(cached.profile as typeof profileData);
         setCategories(cached.categories as Category[]);
         setProducts(cached.products as Product[]);
+      } else {
+        setProfile(DEMO_PROFILE);
+        setCategories(DEMO_CATEGORIES);
+        setProducts(DEMO_PRODUCTS);
+        if (!demoSeeded.current) {
+          setCart(DEMO_CART);
+          demoSeeded.current = true;
+        }
       }
       setOffline(true);
     }
@@ -193,6 +343,7 @@ export default function SellScreen() {
   }, [supabase]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- catalog hydration is the external cache/network boundary.
     void refreshCatalog();
   }, [refreshCatalog]);
 
@@ -238,7 +389,10 @@ export default function SellScreen() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(PARK_KEY);
-      if (raw) setParked(JSON.parse(raw));
+      if (raw) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate the browser-owned hold tray once.
+        setParked(JSON.parse(raw));
+      }
     } catch {
       /* ignore corrupt tray */
     }
@@ -443,6 +597,7 @@ export default function SellScreen() {
   const doPrint = useCallback(
     async (bytes: Uint8Array, label = "receipt") => {
       lastReceipt.current = bytes;
+      setHasReceipt(true);
       try {
         const printer = await getPrinter(printerSettings);
         await printer.print(bytes);
@@ -546,6 +701,346 @@ export default function SellScreen() {
     const t = setTimeout(() => setSuccess(null), 3000);
     return () => clearTimeout(t);
   }, [success]);
+
+  if (!loading) {
+    const isDemo = profile?.id === DEMO_PROFILE.id;
+    const displayName = profile?.full_name?.split(/\s+/)[0] ?? "Admin";
+    const initials = displayName.slice(0, 1).toUpperCase();
+    const discountLabel =
+      discount.type === "none"
+        ? "Discount"
+        : discount.type === "custom"
+          ? discount.pct + "%"
+          : discount.type === "senior"
+            ? "Senior"
+            : "PWD";
+    const categoryOptions = categories.some((category) => category.id === "all")
+      ? categories
+      : [{ id: "all", name: "All Items", icon: "grid" }, ...categories];
+
+    return (
+      <main className="pos-app">
+        <header className="pos-topbar">
+          <div className="pos-topbar__brand">
+            <div className="brand-lockup" aria-label="Rico&apos;s Lechon House">
+              <div className="brand-lockup__arc">RICO&apos;S</div>
+              <div className="brand-lockup__mark"><Icon name="pig" size={38} /></div>
+              <div className="brand-lockup__name">LECHON<br />HOUSE</div>
+            </div>
+          </div>
+
+          <div className="pos-mode-tabs" role="tablist" aria-label="Main navigation">
+            <button type="button" role="tab" aria-selected="true" className="pos-mode-tab is-active">POS</button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected="false"
+              className="pos-mode-tab"
+              onClick={() => setToast({ msg: "Order history is available from More → Receipts." })}
+            >
+              ORDERS
+            </button>
+          </div>
+
+          <div className="pos-toolbar">
+            <button type="button" className="pos-tool" onClick={() => searchInputRef.current?.focus()}>
+              <Icon name="search" size={24} />
+              <span>Search</span>
+            </button>
+            <button type="button" className={"pos-tool" + (trayOpen ? " is-active" : "")} onClick={() => setTrayOpen((value) => !value)}>
+              <span className="pos-tool__icon-wrap"><Icon name="hold" size={24} />{parked.length > 0 && <b>{parked.length}</b>}</span>
+              <span>Hold</span>
+            </button>
+            <button type="button" className="pos-tool" onClick={() => void reprintLast()}>
+              <Icon name="receipt" size={24} />
+              <span>Receipts</span>
+            </button>
+            <button type="button" className="pos-tool" onClick={() => setSettingsOpen(true)}>
+              <Icon name="more" size={24} />
+              <span>More</span>
+            </button>
+          </div>
+
+          <div className="pos-topbar__account">
+            <div className="profile-avatar" aria-hidden="true">{initials}</div>
+            <span className="profile-name">{displayName}</span>
+            <Icon name="chevron" size={16} />
+          </div>
+          <SignOutButton className="pos-signout" />
+
+          {(offline || pending > 0) && (
+            <div className={"sync-pill" + (offline ? " is-offline" : "")}>
+              <span className="sync-pill__dot" />
+              {offline ? "Offline" : "Online"}{pending > 0 ? " · " + pending + " pending" : ""}
+              {pending > 0 && (
+                <button type="button" onClick={() => void flush()} className="sync-pill__action">Sync</button>
+              )}
+            </div>
+          )}
+
+          {trayOpen && (
+            <div className="hold-popover">
+              <div className="hold-popover__header">
+                <strong>Held orders</strong>
+                <span>{parked.length}/{MAX_PARKED}</span>
+              </div>
+              {parked.length === 0 && <p className="hold-popover__empty">No parked orders yet.</p>}
+              {parked.map((parkedOrder, index) => (
+                <div key={parkedOrder.at} className="hold-popover__row">
+                  <div>
+                    <strong>{parkedOrder.lines.length} item{parkedOrder.lines.length === 1 ? "" : "s"} · {displayPeso(parkedOrder.lines.reduce((sum, line) => sum + line.lineTotal, 0))}</strong>
+                    <span>{new Date(parkedOrder.at).toLocaleTimeString()}</span>
+                  </div>
+                  <button type="button" onClick={() => resumeOrder(index)} className="button button--primary button--small">Resume</button>
+                  <button type="button" onClick={() => setParked((prev) => prev.filter((_, itemIndex) => itemIndex !== index))} className="icon-button icon-button--danger" aria-label="Remove held order">
+                    <Icon name="close" size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </header>
+
+        <div className="pos-body">
+          <nav className="category-rail" aria-label="Product categories">
+            <div className="category-rail__items">
+              {categoryOptions.map((category) => (
+                <button
+                  type="button"
+                  key={category.id}
+                  onClick={() => setActiveCat(category.id)}
+                  className={"category-item" + (activeCat === category.id ? " is-active" : "")}
+                >
+                  <Icon name={category.id === "all" ? "grid" : categoryIcon(category.name)} size={22} />
+                  <span>{category.name}</span>
+                </button>
+              ))}
+            </div>
+            <div className="rail-footer-card">
+              <div className="rail-footer-card__pig"><Icon name="pig" size={42} /></div>
+              <strong>FRESHLY ROASTED<br />EVERYDAY</strong>
+              <em>Thank you!</em>
+              <span className="rail-footer-card__heart">♥</span>
+            </div>
+          </nav>
+
+          <section className="catalog-panel" aria-label="Product catalog">
+            <div className="catalog-search">
+              <Icon name="search" size={25} />
+              <input
+                ref={searchInputRef}
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search products…"
+                aria-label="Search products"
+              />
+              {search && (
+                <button type="button" className="catalog-search__clear" onClick={() => setSearch("")} aria-label="Clear search">
+                  <Icon name="close" size={18} />
+                </button>
+              )}
+            </div>
+
+            <div className="catalog-scroll">
+              {visibleProducts.length === 0 ? (
+                <div className="catalog-empty">
+                  <div className="catalog-empty__icon"><Icon name="search" size={28} /></div>
+                  <strong>{products.length === 0 ? "No products yet" : "No items found"}</strong>
+                  <p>{products.length === 0 ? "Seed the menu or connect a catalog to get started." : "Try another search or category."}</p>
+                </div>
+              ) : (
+                <div className={"product-grid" + (viewMode === "list" ? " product-grid--list" : "")}>
+                  {visibleProducts.map((product, index) => (
+                    <button
+                      type="button"
+                      key={product.id}
+                      onClick={() => (product.pricing_mode === "per_kg" ? setKeypad({ product }) : addFixed(product))}
+                      className="product-card"
+                      aria-label={"Add " + product.name}
+                    >
+                      <div className="product-card__image">
+                        <Image
+                          src={productImage(product)}
+                          alt=""
+                          fill
+                          loading="eager"
+                          sizes="(max-width: 1100px) 33vw, 220px"
+                          className="product-card__image-media"
+                        />
+                        <span className="product-card__badge">
+                          <Icon name={index === 1 ? "sparkle" : "heart"} size={15} />
+                        </span>
+                        {product.pricing_mode === "per_kg" && <span className="product-card__weight">/kg</span>}
+                      </div>
+                      <div className="product-card__body">
+                        <strong>{product.name}</strong>
+                        <span className="tnums">{displayPeso(product.price)}{product.pricing_mode === "per_kg" ? " / kg" : ""}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="catalog-footer">
+              <div className="view-toggle" role="group" aria-label="Catalog view">
+                <button type="button" onClick={() => setViewMode("grid")} className={viewMode === "grid" ? "is-active" : ""} aria-pressed={viewMode === "grid"}>
+                  <Icon name="grid" size={19} /> Grid
+                </button>
+                <button type="button" onClick={() => setViewMode("list")} className={viewMode === "list" ? "is-active" : ""} aria-pressed={viewMode === "list"}>
+                  <Icon name="list" size={19} /> List
+                </button>
+              </div>
+              {isDemo && <span className="preview-note">Preview menu · offline ready</span>}
+            </div>
+          </section>
+
+          <aside className="order-panel" aria-label="Current order">
+            <div className="order-panel__inner">
+              <div className="order-header">
+                <div>
+                  <h1>Current Order</h1>
+                  <p>{cart.length === 0 ? "Ready for a new sale" : cart.length + " line" + (cart.length === 1 ? "" : "s")}</p>
+                </div>
+                <div className="order-header__actions">
+                  <select value={orderType} onChange={(event) => setOrderType(event.target.value)} className="order-type-select" aria-label="Order type">
+                    <option>Dine In</option>
+                    <option>Takeout</option>
+                  </select>
+                  <button type="button" className="icon-button icon-button--soft" onClick={() => setCart([])} disabled={cart.length === 0} aria-label="Clear current order">
+                    <Icon name="trash" size={20} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="order-divider" />
+
+              <div className="order-items">
+                {cart.length === 0 ? (
+                  <div className="order-empty">
+                    <div className="order-empty__mark"><Icon name="pig" size={30} /></div>
+                    <strong>Your order is waiting</strong>
+                    <span>Tap a menu item to add it here.</span>
+                  </div>
+                ) : (
+                  <ul>
+                    {cart.map((line) => (
+                      <li key={line.key} className="order-line">
+                        <div className="stepper" aria-label={"Quantity for " + line.product.name}>
+                          <button type="button" onClick={() => line.weightKg === null ? bump(line.key, -1) : setKeypad({ product: line.product, lineKey: line.key })} aria-label="Decrease quantity">−</button>
+                          <button type="button" className="stepper__value" onClick={() => line.weightKg !== null && setKeypad({ product: line.product, lineKey: line.key })} aria-label={line.weightKg !== null ? "Edit weight" : "Quantity"}>
+                            {line.weightKg !== null ? line.weightKg.toFixed(2) : line.qty}
+                          </button>
+                          <button type="button" onClick={() => line.weightKg === null ? bump(line.key, 1) : setKeypad({ product: line.product, lineKey: line.key })} aria-label="Increase quantity">+</button>
+                        </div>
+                        <div className="order-line__detail">
+                          <strong>{line.product.name}</strong>
+                          <span>{line.weightKg !== null ? line.weightKg.toFixed(2) + " kg" : "x" + line.qty}</span>
+                        </div>
+                        <strong className="order-line__total tnums">{displayPeso(line.lineTotal)}</strong>
+                        <button type="button" className="order-line__remove" onClick={() => removeLine(line.key)} aria-label={"Remove " + line.product.name}>
+                          <Icon name="close" size={17} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <button type="button" className="customer-row" onClick={() => setDiscountOpen(true)}>
+                <Icon name="person" size={24} />
+                <span><strong>Add Customer</strong><small>{discount.type === "none" ? "Add discount or customer details" : discountLabel + " discount applied"}</small></span>
+                <Icon name="arrow" size={22} />
+              </button>
+
+              <div className="order-note-row">
+                <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add order note (optional)" aria-label="Order note" />
+                {discount.type !== "none" && <span className="order-note-row__badge">{discountLabel}</span>}
+              </div>
+
+              <div className="order-summary">
+                <div><span>Subtotal</span><strong className="tnums">{displayPeso(subtotal)}</strong></div>
+                <div><span>Discount</span><strong className="tnums">{discountAmount > 0 ? "−" : ""}{displayPeso(discountAmount)}</strong></div>
+                <div className="order-summary__total"><span>TOTAL</span><strong className="tnums">{displayPeso(total)}</strong></div>
+              </div>
+
+              <div className="order-actions">
+                <button type="button" className="button button--save" onClick={holdOrder} disabled={cart.length === 0 || parked.length >= MAX_PARKED}>SAVE</button>
+                <button type="button" className="button button--charge" onClick={() => setPayOpen(true)} disabled={cart.length === 0 || total <= 0}>CHARGE</button>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        {keypad && (
+          <KeypadModal
+            product={keypad.product}
+            initialKg={cart.find((line) => line.key === keypad.lineKey)?.weightKg ?? null}
+            onConfirm={(kg) => {
+              applyWeight(keypad.product, kg, keypad.lineKey);
+              setKeypad(null);
+            }}
+            onClose={() => setKeypad(null)}
+          />
+        )}
+
+        {discountOpen && (
+          <DiscountModal
+            value={discount}
+            onChange={setDiscount}
+            onClose={() => setDiscountOpen(false)}
+          />
+        )}
+
+        {payOpen && (
+          <ChargeModal
+            total={total}
+            onConfirm={placeOrder}
+            onClose={() => setPayOpen(false)}
+          />
+        )}
+
+        {settingsOpen && (
+          <PrinterSettingsModal
+            initial={printerSettings}
+            storeName={profile?.store_name ?? "Lechon POS"}
+            onSave={savePrinter}
+            onClose={() => setSettingsOpen(false)}
+            onToast={(msg) => setToast({ msg })}
+          />
+        )}
+
+        {success && (
+          <div className="pos-success-overlay">
+            <div className="pos-success-card">
+              <div className="pos-success-card__check">✓</div>
+              <p className="pos-success-card__eyebrow">Order saved</p>
+              <strong className="tnums">{success.orderNo}</strong>
+              <span>Saved on this device · syncs automatically</span>
+              {success.change !== null && (
+                <>
+                  <strong className="pos-success-card__change tnums">{displayPeso(success.change)}</strong>
+                  <span>Change due</span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {toast && (
+          <div className="pos-toast" role="status">
+            <span>{toast.msg}</span>
+            {toast.retry && hasReceipt && (
+              <button type="button" onClick={() => void doPrint(lastReceipt.current!)} className="pos-toast__action">
+                Retry print
+              </button>
+            )}
+          </div>
+        )}
+      </main>
+    );
+  }
+
 
   if (loading) {
     return (
@@ -848,7 +1343,7 @@ export default function SellScreen() {
       {toast && (
         <div className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-pill bg-ink px-4 py-2 text-sm font-semibold text-bg shadow-[var(--shadow-pop)]">
           <span>{toast.msg}</span>
-          {toast.retry && lastReceipt.current && (
+          {toast.retry && hasReceipt && (
             <button
               onClick={() => void doPrint(lastReceipt.current!)}
               className="rounded-pill bg-accent px-3 py-0.5 text-xs font-bold text-accent-fg"

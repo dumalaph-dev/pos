@@ -200,3 +200,16 @@ Same palette, **billboard scale** — read from 1.5m away.
 **Motion:** transitions ≤150ms ease-out; only for state changes (press, tab switch, add-to-cart). No decorative animation on the sell screen (PRD §9).
 
 **Dark theme:** deferred (P1). When built, keep the warmth — dark espresso canvas (`#241A13`), cream text, same brick-red accent — not a cold grey dark mode.
+
+---
+
+## 9. Current implementation notes (2026-08)
+
+The reference shell is now implemented in `src/components/pos/SellScreen.tsx` and `src/app/globals.css`.
+
+- The live desktop proportions are a 112px top bar, a ~202px category rail, a three-column catalog, and a right order panel with a 410px minimum width.
+- The product grid uses local offline-safe placeholder photography from `public/food/`. Generated photos should be treated as replaceable catalog content, not brand assets.
+- A fresh local install falls back to a preview catalog with the reference order seeded so the UI can be reviewed before Supabase has a cached menu. Real catalog data replaces it when available.
+- Product-card hover lift, press scale, search focus, popover entry, toast entry, success confirmation, and reduced-motion behavior are part of the approved interaction language.
+- `SAVE` keeps the existing hold/park behavior. `Add Customer` opens the existing Senior/PWD/custom discount capture flow. `Receipts` calls the existing reprint flow. `More` opens printer settings.
+- Keep the screenshot's visual hierarchy when adding future screens: product imagery first, quiet controls second, one dominant action and one dominant number per surface.

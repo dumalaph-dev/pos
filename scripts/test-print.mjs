@@ -7,7 +7,7 @@
  *   node -e "require('net').createServer(s=>s.on('data',d=>require('fs').appendFileSync('mock-printer.bin',d))).listen(9100)"
  *   node --experimental-strip-types scripts/test-print.mjs
  */
-import { writeFileSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { buildReceipt } from "../src/lib/receipt.ts";
 import { getPrinter } from "../src/lib/printer.ts";
 

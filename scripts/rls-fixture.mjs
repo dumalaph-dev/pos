@@ -107,7 +107,7 @@ async function clientFor(email) {
   const c = createClient(url, anonKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-  const { data, error } = await c.auth.signInWithPassword({ email, password: PASSWORD });
+  const { error } = await c.auth.signInWithPassword({ email, password: PASSWORD });
   if (error) throw new Error(`sign-in failed for ${email}: ${error.message}`);
   return c;
 }
@@ -188,7 +188,7 @@ async function main() {
 
   // 1.5 Positive control: cashier inserts a valid order into own store.
   const orderNo = `A1-${new Date().toISOString().slice(2, 10).replace(/-/g, "")}-0001`;
-  const { data: okOrder, error: okErr } = await as.cashierA1
+  const { error: okErr } = await as.cashierA1
     .from("orders").insert({
       local_uuid: randomUUID(),
       org_id: ORG_A,
