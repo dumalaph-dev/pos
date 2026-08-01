@@ -1,7 +1,7 @@
 # Lechon POS — Design System
 
 **Companion to:** [POS_PRD.md](POS_PRD.md) · [MVP.md](MVP.md)
-**Reference:** the "Rico's Lechon House" POS mockup ([../ui.png](../ui.png)) — warm cream + roast-brown + brick-red. This document is the **canonical theme** — every screen matches it. The brand name/logo shown in the mockup is *store data*; the tokens below are the *product theme*.
+**Reference:** the supplied POS mockup ([../ui.png](../ui.png)), now branded for Mario's Lechon House — warm cream + roast-brown + brick-red. This document is the **canonical theme** — every screen matches it. The brand name/logo is *store data*; the tokens below are the *product theme*.
 
 > **Palette provenance:** the hex values below were **color-picked directly from `ui.png`** (dominant-color sampling of flat fills; glyph sampling for text). They are exact, not estimates.
 
@@ -96,14 +96,14 @@ Line-height: 1.2 for numbers/headings, 1.4–1.5 for body.
 
 ```
 ┌───────────────────────────────────────────────────────────────────────┐
-│ TOP BAR  RICO'S POS · Ready to sell · Open navigation                     │  62px
+│ TOP BAR  MARIO'S POS · Ready to sell · Open navigation                    │  62px
 ├──────────┬──────────────────────────────────────────┬───────────────────┤
 │ CATEGORY │  🔍 Search products...                    │  Current Order  ▾ │
 │  RAIL    │                                          │  ─────────────    │
 │  ~200px  │  ┌─────┐ ┌─────┐ ┌─────┐                 │  − 1 + item  ₱..   │
 │  All Items│  │ img │ │ img │ │ img │   PRODUCT GRID   │  − 2 + item  ₱..   │
 │  Whole… │  │name │ │name │ │name │   (3 cols, hero) │                   │
-│  Belly  │  │ ₱   │ │ ₱   │ │ ₱   │                 │  Add Customer  →  │
+│  Belly  │  │ ₱   │ │ ₱   │ │ ₱   │                 │  Dine In  Discount │
 │  …      │  └─────┘ └─────┘ └─────┘                 │  Subtotal   ₱..   │
 │          │                                          │  Discount   ₱0    │
 │ [footer  │  ┌─────┐ ┌─────┐ ┌─────┐                 │  ══════════════   │
@@ -114,9 +114,9 @@ Line-height: 1.2 for numbers/headings, 1.4–1.5 for body.
 ```
 
 - **Top bar** (`--surface`): a compact 62px cashier strip is the default state so the catalog gets the first viewport. The strip is one large keyboard-accessible button with the compact store mark, online/offline state, and `Open navigation`. Clicking it reveals an 88px bar with the circular brand lockup, centered segmented **POS / ORDERS** toggle (active = `--primary` fill, `--primary-fg` text; inactive = transparent, `--text-muted`), right utility icons with labels (Search, Hold, Receipts, More), profile chip, sign-out, and a `Hide` control. On mobile the expanded bar wraps utility actions below the primary row.
-- **Category rail** (`--sidebar`): vertical list, each row = line icon + label. **Active** = `--primary` fill, `--primary-fg`, radius 12. **Inactive** = transparent, `--text` label, `--text-muted` icon; hover = `--primary-soft`. Rail stays slim (≤15% width) — products get the pixels. A decorative **footer card** ("FRESHLY ROASTED EVERYDAY · Thank you!") sits pinned at the bottom (`--surface`, dashed/soft border, small pig mark + heart).
+- **Category rail** (`--sidebar`): vertical list, each row = line icon + label. **Active** = `--primary` fill, `--primary-fg`, radius 12. **Inactive** = transparent, `--text` label, `--text-muted` icon; hover = `--primary-soft`. Rail stays slim (≤15% width) — products get the pixels.
 - **Product area:** raised **search input** (`--surface-raised`, 54px, search icon) spanning the grid; **4-column product grid** of compact image-led tiles on desktop, with 2 columns on narrow mobile; **Grid/List** segmented toggle bottom-left (active = `--primary`).
-- **Order panel** (`--surface-panel`, receipt-scallop top): header "Current Order" + order-type dropdown ("Dine In") + trash (danger) icon; scrollable line rows; totals block; **SAVE** (secondary tan) + **CHARGE** (accent brick-red) side by side, CHARGE emphasized.
+- **Order panel** (`--surface-panel`, receipt-scallop top): header "Current Order" + adjacent "Dine In" and "Discount" controls + trash (danger) icon; only the line-item list scrolls; totals block; **SAVE** (secondary tan) + **CHARGE** (accent brick-red) side by side, CHARGE emphasized.
 
 ---
 
@@ -157,7 +157,7 @@ The mockup shows a couple of controls that touch functional scope — keep the *
 | In mockup | Visual: keep | Function: per PRD |
 |---|---|---|
 | **"Dine In" dropdown** | Yes — order-type pill in the order header | PRD is walk-in/takeout only. Either hide it, or repurpose as **order note/type** (`Takeout` default). Not a dine-in service flow in v1. |
-| **"Add Customer"** | Yes — the `+ Add Customer →` row style | Maps to **Senior/PWD & discount capture** (name + ID), *not* a customer directory (PRD §4). Relabel to "Discount / Senior-PWD" or keep "Add Customer" but wire to discount capture. |
+| **"Discount"** | Yes — compact control beside the order type | Opens **Senior/PWD & discount capture** (name + ID), *not* a customer directory (PRD §4). |
 | **ORDERS tab** | Yes — segmented toggle | The POS order history / reprint list (PRD §6.4, §6.6). |
 | **Hold / Receipts / More** | Yes | Hold = park order (max 10); Receipts = reprint; More = shift, sync, settings. |
 
@@ -211,6 +211,6 @@ The reference shell is now implemented in `src/components/pos/SellScreen.tsx` an
 - The product grid uses local offline-safe placeholder photography from `public/food/`. Generated photos should be treated as replaceable catalog content, not brand assets.
 - A fresh local install falls back to a preview catalog with the reference order seeded so the UI can be reviewed before Supabase has a cached menu. Real catalog data replaces it when available.
 - Product-card hover lift, press scale, search focus, popover entry, toast entry, success confirmation, and reduced-motion behavior are part of the approved interaction language.
-- `SAVE` keeps the existing hold/park behavior. `Add Customer` opens the existing Senior/PWD/custom discount capture flow. `Receipts` calls the existing reprint flow. `More` opens printer settings.
-- The Current Order panel is a receipt ticket: centered Rico’s masthead, order-ticket metadata, `QTY / ITEM / AMOUNT` column labels, dashed line-item rules, receipt-style summary separators, and a small thank-you footer. On short viewports the paper scrolls instead of collapsing the cart rows.
+- `SAVE` keeps the existing hold/park behavior. `Discount` opens the existing Senior/PWD/custom discount capture flow. `Receipts` calls the existing reprint flow. `More` opens printer settings.
+- The Current Order panel is a receipt ticket: `QTY / ITEM / AMOUNT` column labels, dashed line-item rules, and receipt-style summary separators. The line-item list owns the only scrollbar; the order summary and `SAVE / CHARGE` actions remain fixed. `Discount` opens the discount capture flow and the optional `Order note` field.
 - Keep the screenshot's visual hierarchy when adding future screens: product imagery first, quiet controls second, one dominant action and one dominant number per surface.

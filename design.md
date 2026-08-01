@@ -1,4 +1,4 @@
-# Rico's Lechon House POS UI reference
+# Mario's Lechon House POS UI reference
 
 This is the working visual reference for future POS screens. The source of truth is the supplied [UI reference image](ui.png), with the more detailed token inventory in [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md).
 
@@ -10,9 +10,9 @@ Warm, artisanal, calm, and operational. The screen should feel like a well-run l
 
 - Top bar: compact 62px cashier strip by default. Clicking the strip expands an 88px navigation bar with the brand lockup, centered `POS / ORDERS` segmented control, utility actions (`Search`, `Hold`, `Receipts`, `More`), cashier profile, and a clear Hide control.
 - Main body: three zones — category rail (~202px), product catalog (largest area), order panel (~34vw / 410px minimum).
-- Category rail: warm sidebar fill, line icons, 53px rows, active roast-brown pill, pinned thank-you card at the bottom.
+- Category rail: warm sidebar fill, line icons, and 53px rows with an active roast-brown pill.
 - Catalog: compact 54px search field, four-column image-led product cards on desktop, scrollable content, `Grid / List` toggle pinned to the bottom. Collapse to two columns on narrow mobile widths.
-- Order panel: receipt-paper cream surface with a scalloped top edge, `Current Order` header, order type control, quantity steppers, customer/discount row, totals, and `SAVE / CHARGE` actions.
+- Order panel: receipt-paper cream surface with a scalloped top edge, `Current Order` header, adjacent `Dine In` and `Discount` controls, quantity steppers, totals, and `SAVE / CHARGE` actions. Only the line-item list may scroll; the summary and actions stay fixed. The optional order note is captured inside the Discount sheet.
 - On narrow screens, the category rail becomes a horizontal scroller, the catalog stays above the order panel, and the order panel becomes a full-width section.
 
 ## Visual tokens
@@ -31,7 +31,7 @@ Use the existing CSS variables in `src/app/globals.css` and do not introduce a c
 | Secondary fill | `--secondary-btn` | `#ebdcc9` |
 | Success | `--success` | `#3f7d53` |
 
-Typography is Plus Jakarta Sans. Use tabular numerals for money and quantities. Keep headings bold and friendly; avoid condensed or display type for UI copy. The vintage serif treatment belongs only to the brand lockup and thank-you card.
+Typography is Plus Jakarta Sans. Use tabular numerals for money and quantities. Keep headings bold and friendly; avoid condensed or display type for UI copy. The vintage serif treatment belongs only to the brand lockup.
 
 ## Component rules
 
@@ -40,7 +40,7 @@ Typography is Plus Jakarta Sans. Use tabular numerals for money and quantities. 
 - Primary action is always brick red with cream text. Secondary action is tan with roast-brown text. Destructive actions use brick red iconography on transparent or pale red hover surfaces.
 - Inputs are warm raised cream, 12–14px radius, and a soft roast-brown focus ring. Search fields are the largest and calmest input on the screen.
 - The order panel should feel like a paper ticket: quiet borders, dashed summary divider, generous whitespace, and one visually dominant total.
-- The Current Order ticket uses a centered store masthead, compact `QTY / ITEM / AMOUNT` labels, dashed item rules, receipt-aligned totals, and a restrained thank-you footer. Keep quantity controls visible and thumb-friendly inside the paper treatment.
+- The Current Order ticket uses compact `QTY / ITEM / AMOUNT` labels, dashed item rules, and receipt-aligned totals. Keep quantity controls visible and thumb-friendly inside the paper treatment; place the optional order note inside the Discount sheet rather than on the ticket.
 
 ## Motion and interaction
 

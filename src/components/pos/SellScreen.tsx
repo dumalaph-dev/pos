@@ -66,6 +66,7 @@ type ParkedOrder = {
 
 const PARK_KEY = "pos.parked.v1";
 const MAX_PARKED = 10;
+const DEFAULT_STORE_NAME = "Mario's Lechon House";
 
 const round = (n: number) => Math.round(n);
 const displayPeso = (cents: number) => formatPeso(cents).replace(/\.00$/, "");
@@ -89,7 +90,7 @@ const DEMO_PROFILE: ProfileData = {
   id: "00000000-0000-0000-0000-000000000001",
   org_id: "00000000-0000-0000-0000-000000000002",
   store_id: "00000000-0000-0000-0000-000000000003",
-  store_name: "Rico's Lechon House",
+  store_name: DEFAULT_STORE_NAME,
   full_name: "Admin",
   role: "admin",
 };
@@ -216,6 +217,7 @@ export default function SellScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const storeName = profile?.store_name ?? DEFAULT_STORE_NAME;
 
   const [activeCat, setActiveCat] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -571,7 +573,7 @@ export default function SellScreen() {
 
     // Print the receipt (fire-and-forget; failure shows a retry toast).
     const receipt = buildReceipt({
-      storeName: profile.store_name ?? "Lechon POS",
+       storeName: profile.store_name ?? DEFAULT_STORE_NAME,
       orderNo,
       cashier: profile.full_name ?? "",
       createdAt: now,
@@ -636,7 +638,7 @@ export default function SellScreen() {
         .select("name_snapshot, qty, weight_kg, line_total")
         .eq("order_id", order.id);
       const receipt = buildReceipt({
-        storeName: profile.store_name ?? "Lechon POS",
+         storeName: profile.store_name ?? DEFAULT_STORE_NAME,
         orderNo: order.order_no,
         cashier: (order.profiles as { full_name?: string } | null)?.full_name ?? "",
         createdAt: new Date(order.created_at_device),
@@ -726,6 +728,7 @@ export default function SellScreen() {
 
   if (!loading) {
     const isDemo = profile?.id === DEMO_PROFILE.id;
+    const brandName = storeName.replace(/\s+lechon\s+house$/i, "").trim() || storeName;
     const displayName = profile?.full_name?.split(/\s+/)[0] ?? "Admin";
     const initials = displayName.slice(0, 1).toUpperCase();
     const discountLabel =
@@ -755,7 +758,7 @@ export default function SellScreen() {
               <span className="pos-topbar__collapsed-brand">
                 <span className="pos-topbar__collapsed-mark"><Icon name="pig" size={22} /></span>
                 <span className="pos-topbar__collapsed-copy">
-                  <strong>RICO&apos;S LECHON HOUSE</strong>
+                  <strong>{storeName}</strong>
                   <small>POS TERMINAL</small>
                 </span>
               </span>
@@ -772,8 +775,8 @@ export default function SellScreen() {
           ) : (
             <div className="pos-topbar__expanded" id="pos-header-nav">
               <div className="pos-topbar__brand">
-                <div className="brand-lockup" aria-label="Rico&apos;s Lechon House">
-                  <div className="brand-lockup__arc">RICO&apos;S</div>
+                <div className="brand-lockup" aria-label={storeName}>
+                  <div className="brand-lockup__arc">{brandName.toUpperCase()}</div>
                   <div className="brand-lockup__mark"><Icon name="pig" size={38} /></div>
                   <div className="brand-lockup__name">LECHON<br />HOUSE</div>
                 </div>
@@ -881,12 +884,6 @@ export default function SellScreen() {
                 </button>
               ))}
             </div>
-            <div className="rail-footer-card">
-              <div className="rail-footer-card__pig"><Icon name="pig" size={42} /></div>
-              <strong>FRESHLY ROASTED<br />EVERYDAY</strong>
-              <em>Thank you!</em>
-              <span className="rail-footer-card__heart">♥</span>
-            </div>
           </nav>
 
           <section className="catalog-panel" aria-label="Product catalog">
@@ -962,12 +959,6 @@ export default function SellScreen() {
 
           <aside className="order-panel" aria-label="Current order">
             <div className="order-panel__inner">
-              <div className="receipt-masthead" aria-hidden="true">
-                <strong>RICO&apos;S LECHON HOUSE</strong>
-                <span>• • •</span>
-                <small>ORDER TICKET · POS</small>
-              </div>
-
               <div className="order-header">
                 <div>
                   <h1>Current Order</h1>
@@ -978,6 +969,16 @@ export default function SellScreen() {
                     <option>Dine In</option>
                     <option>Takeout</option>
                   </select>
+                  <button
+                    type="button"
+                    className={"order-discount-button" + (discount.type !== "none" ? " is-active" : "")}
+                    onClick={() => setDiscountOpen(true)}
+                    aria-label={discount.type === "none" ? "Add discount" : "Edit discount"}
+                  >
+                    <Icon name="sparkle" size={15} />
+                    <span>Discount</span>
+                    {discount.type !== "none" && <small>{discountLabel}</small>}
+                  </button>
                   <button type="button" className="icon-button icon-button--soft" onClick={() => setCart([])} disabled={cart.length === 0} aria-label="Clear current order">
                     <Icon name="trash" size={20} />
                   </button>
@@ -1025,26 +1026,10 @@ export default function SellScreen() {
                 )}
               </div>
 
-              <button type="button" className="customer-row" onClick={() => setDiscountOpen(true)}>
-                <Icon name="person" size={24} />
-                <span><strong>Add Customer</strong><small>{discount.type === "none" ? "Add discount or customer details" : discountLabel + " discount applied"}</small></span>
-                <Icon name="arrow" size={22} />
-              </button>
-
-              <div className="order-note-row">
-                <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add order note (optional)" aria-label="Order note" />
-                {discount.type !== "none" && <span className="order-note-row__badge">{discountLabel}</span>}
-              </div>
-
               <div className="order-summary">
                 <div><span>Subtotal</span><strong className="tnums">{displayPeso(subtotal)}</strong></div>
                 <div><span>Discount</span><strong className="tnums">{discountAmount > 0 ? "−" : ""}{displayPeso(discountAmount)}</strong></div>
                 <div className="order-summary__total"><span>TOTAL</span><strong className="tnums">{displayPeso(total)}</strong></div>
-              </div>
-
-              <div className="receipt-footer" aria-hidden="true">
-                <span>THANK YOU FOR YOUR ORDER</span>
-                <small>FRESHLY ROASTED · EVERYDAY</small>
               </div>
 
               <div className="order-actions">
@@ -1071,6 +1056,8 @@ export default function SellScreen() {
           <DiscountModal
             value={discount}
             onChange={setDiscount}
+            note={note}
+            onNoteChange={setNote}
             onClose={() => setDiscountOpen(false)}
           />
         )}
@@ -1086,7 +1073,7 @@ export default function SellScreen() {
         {settingsOpen && (
           <PrinterSettingsModal
             initial={printerSettings}
-            storeName={profile?.store_name ?? "Lechon POS"}
+            storeName={storeName}
             onSave={savePrinter}
             onClose={() => setSettingsOpen(false)}
             onToast={(msg) => setToast({ msg })}
@@ -1139,7 +1126,7 @@ export default function SellScreen() {
       <header className="relative flex items-center gap-3 border-b border-line bg-surface px-4 py-2.5">
         <div className="mr-auto">
           <p className="text-xs font-bold uppercase tracking-wide text-ink-muted">
-            Lechon POS · <span className="text-ink">{profile?.store_name ?? "—"}</span>
+            Lechon POS · <span className="text-ink">{storeName}</span>
           </p>
         </div>
         <input
@@ -1311,13 +1298,7 @@ export default function SellScreen() {
           </div>
 
           <div className="border-t border-line p-4">
-            <div className="flex items-center gap-2">
-              <input
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="Order note…"
-                className="min-w-0 flex-1 rounded-btn border border-line-strong bg-raised px-3 py-2 text-sm text-ink outline-none focus:border-primary"
-              />
+            <div className="flex justify-end">
               <button
                 onClick={() => setDiscountOpen(true)}
                 className="rounded-btn bg-secondary px-3 py-2 text-sm font-bold text-ink"
@@ -1381,6 +1362,8 @@ export default function SellScreen() {
         <DiscountModal
           value={discount}
           onChange={setDiscount}
+          note={note}
+          onNoteChange={setNote}
           onClose={() => setDiscountOpen(false)}
         />
       )}
@@ -1398,7 +1381,7 @@ export default function SellScreen() {
       {settingsOpen && (
         <PrinterSettingsModal
           initial={printerSettings}
-          storeName={profile?.store_name ?? "Lechon POS"}
+          storeName={storeName}
           onSave={savePrinter}
           onClose={() => setSettingsOpen(false)}
           onToast={(msg) => setToast({ msg })}
@@ -1511,10 +1494,14 @@ function KeypadModal({
 function DiscountModal({
   value,
   onChange,
+  note,
+  onNoteChange,
   onClose,
 }: {
   value: DiscountState;
   onChange: (d: DiscountState) => void;
+  note: string;
+  onNoteChange: (note: string) => void;
   onClose: () => void;
 }) {
   const [selType, setSelType] = useState(value.type);
@@ -1587,6 +1574,17 @@ function DiscountModal({
             <p className="mt-1 text-xs text-ink-muted">Admin-PIN threshold comes with backoffice settings (P6).</p>
           </div>
         )}
+
+        <label className="mt-4 block text-xs font-bold uppercase tracking-wide text-ink-muted">
+          Order note
+          <textarea
+            value={note}
+            onChange={(e) => onNoteChange(e.target.value)}
+            placeholder="Add an order note (optional)"
+            rows={3}
+            className="mt-1 w-full resize-none rounded-btn border border-line-strong bg-raised px-3 py-2 text-sm font-normal normal-case tracking-normal text-ink outline-none focus:border-primary"
+          />
+        </label>
 
         <div className="mt-4 grid grid-cols-2 gap-2">
           <button onClick={() => { onChange(NO_DISCOUNT); onClose(); }} className="rounded-btn bg-secondary py-3 font-bold text-ink">
