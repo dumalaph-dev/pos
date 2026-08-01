@@ -40,6 +40,7 @@ Typography is Plus Jakarta Sans. Use tabular numerals for money and quantities. 
 - Primary action is always brick red with cream text. Secondary action is tan with roast-brown text. Destructive actions use brick red iconography on transparent or pale red hover surfaces.
 - Inputs are warm raised cream, 12–14px radius, and a soft roast-brown focus ring. Search fields are the largest and calmest input on the screen.
 - The order panel should feel like a paper ticket: quiet borders, dashed summary divider, generous whitespace, and one visually dominant total.
+- The Current Order ticket uses a centered store masthead, compact `QTY / ITEM / AMOUNT` labels, dashed item rules, receipt-aligned totals, and a restrained thank-you footer. Keep quantity controls visible and thumb-friendly inside the paper treatment.
 
 ## Motion and interaction
 

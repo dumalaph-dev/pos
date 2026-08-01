@@ -897,6 +897,12 @@ export default function SellScreen() {
 
           <aside className="order-panel" aria-label="Current order">
             <div className="order-panel__inner">
+              <div className="receipt-masthead" aria-hidden="true">
+                <strong>RICO&apos;S LECHON HOUSE</strong>
+                <span>• • •</span>
+                <small>ORDER TICKET · POS</small>
+              </div>
+
               <div className="order-header">
                 <div>
                   <h1>Current Order</h1>
@@ -914,6 +920,13 @@ export default function SellScreen() {
               </div>
 
               <div className="order-divider" />
+
+              <div className="receipt-columns" aria-hidden="true">
+                <span>QTY</span>
+                <span>ITEM</span>
+                <span>AMOUNT</span>
+                <span />
+              </div>
 
               <div className="order-items">
                 {cart.length === 0 ? (
@@ -962,6 +975,11 @@ export default function SellScreen() {
                 <div><span>Subtotal</span><strong className="tnums">{displayPeso(subtotal)}</strong></div>
                 <div><span>Discount</span><strong className="tnums">{discountAmount > 0 ? "−" : ""}{displayPeso(discountAmount)}</strong></div>
                 <div className="order-summary__total"><span>TOTAL</span><strong className="tnums">{displayPeso(total)}</strong></div>
+              </div>
+
+              <div className="receipt-footer" aria-hidden="true">
+                <span>THANK YOU FOR YOUR ORDER</span>
+                <small>FRESHLY ROASTED · EVERYDAY</small>
               </div>
 
               <div className="order-actions">

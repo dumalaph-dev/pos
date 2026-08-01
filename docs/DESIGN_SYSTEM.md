@@ -212,4 +212,5 @@ The reference shell is now implemented in `src/components/pos/SellScreen.tsx` an
 - A fresh local install falls back to a preview catalog with the reference order seeded so the UI can be reviewed before Supabase has a cached menu. Real catalog data replaces it when available.
 - Product-card hover lift, press scale, search focus, popover entry, toast entry, success confirmation, and reduced-motion behavior are part of the approved interaction language.
 - `SAVE` keeps the existing hold/park behavior. `Add Customer` opens the existing Senior/PWD/custom discount capture flow. `Receipts` calls the existing reprint flow. `More` opens printer settings.
+- The Current Order panel is a receipt ticket: centered Rico’s masthead, order-ticket metadata, `QTY / ITEM / AMOUNT` column labels, dashed line-item rules, receipt-style summary separators, and a small thank-you footer. On short viewports the paper scrolls instead of collapsing the cart rows.
 - Keep the screenshot's visual hierarchy when adding future screens: product imagery first, quiet controls second, one dominant action and one dominant number per surface.
