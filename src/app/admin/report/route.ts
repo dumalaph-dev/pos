@@ -37,17 +37,22 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  const days = url.searchParams.get("range") === "30d" ? 30 : 7;
+  const requestedRange = url.searchParams.get("range");
   const end = singaporeStart();
+  const days = requestedRange === "today" ? 1 : requestedRange === "30d" ? 30 : requestedRange === "90d" ? 90 : 7;
   const start = new Date(end.getTime() - DAY_MS * (days - 1));
-  const { data, error } = await supabase
+  let ordersQuery = supabase
     .from("orders")
     .select("order_no, status, payment_method, subtotal, discount_amount, vat_amount, total, created_at")
     .eq("org_id", profile.org_id)
-    .gte("created_at", start.toISOString())
-    .lt("created_at", new Date(end.getTime() + DAY_MS).toISOString())
     .order("created_at", { ascending: false })
     .limit(5000);
+  if (requestedRange !== "all") {
+    ordersQuery = ordersQuery.gte("created_at", start.toISOString()).lt("created_at", new Date(end.getTime() + DAY_MS).toISOString());
+  }
+  const branchFilter = url.searchParams.get("branch");
+  if (branchFilter) ordersQuery = ordersQuery.eq("store_id", branchFilter);
+  const { data, error } = await ordersQuery;
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
