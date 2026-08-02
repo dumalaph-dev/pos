@@ -23,16 +23,19 @@ type ProfileRecord = {
 type BranchRecord = {
   id: string;
   name: string;
-  address: string | null;
   is_active: boolean;
+};
+
+type CategoryRecord = {
+  id: string;
+  name: string;
 };
 
 type ProductRecord = {
   id: string;
   name: string;
-  price: number;
+  category_id: string | null;
   unit: string;
-  is_active: boolean;
   store_id: string;
   image_url: string | null;
   track_stock: boolean;
@@ -42,9 +45,7 @@ type OrderRecord = {
   id: string;
   order_no: string;
   store_id: string;
-  cashier_id: string;
   status: OrderStatus;
-  subtotal: number;
   discount_amount: number;
   vat_amount: number;
   total: number;
@@ -54,6 +55,7 @@ type OrderRecord = {
 
 type OrderItemRecord = {
   order_id: string;
+  product_id: string;
   name_snapshot: string;
   qty: number;
   line_total: number;
@@ -66,8 +68,18 @@ type MovementRecord = {
   qty: number;
 };
 
+type DeviceRecord = {
+  is_active: boolean;
+};
+
 const DEFAULT_STORE_NAME = "Mario's Lechon House";
 const DAY_MS = 24 * 60 * 60 * 1000;
+const SINGAPORE_DAY_FORMATTER = new Intl.DateTimeFormat("en-CA", {
+  day: "2-digit",
+  month: "2-digit",
+  timeZone: "Asia/Singapore",
+  year: "numeric",
+});
 const LOCAL_PRODUCT_IMAGES: Record<string, string> = {
   "whole lechon (small)": "/food/whole-lechon-small.png",
   "whole lechon (medium)": "/food/whole-lechon-medium.png",
@@ -92,12 +104,7 @@ function getSingaporeDayBounds() {
 }
 
 function dayKey(value: Date) {
-  return new Intl.DateTimeFormat("en-CA", {
-    day: "2-digit",
-    month: "2-digit",
-    timeZone: "Asia/Singapore",
-    year: "numeric",
-  }).format(value);
+  return SINGAPORE_DAY_FORMATTER.format(value);
 }
 
 function dayLabel(value: Date) {
@@ -172,21 +179,27 @@ export default async function AdminPage() {
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile) return <AdminProfileMissing />;
 
-  const [branchesResult, productsResult, ordersResult, movementsResult] = await Promise.all([
+  const [branchesResult, productsResult, categoriesResult, ordersResult, movementsResult, devicesResult] = await Promise.all([
     supabase
       .from("stores")
-      .select("id, name, address, is_active")
+      .select("id, name, is_active")
       .eq("org_id", profile.org_id)
       .order("name"),
     supabase
       .from("products")
-      .select("id, name, price, unit, is_active, store_id, image_url, track_stock")
+      .select("id, name, category_id, unit, store_id, image_url, track_stock")
       .eq("org_id", profile.org_id)
       .order("name")
       .limit(1000),
     supabase
+      .from("categories")
+      .select("id, name")
+      .eq("org_id", profile.org_id)
+      .order("sort_order")
+      .order("name"),
+    supabase
       .from("orders")
-      .select("id, order_no, store_id, cashier_id, status, subtotal, discount_amount, vat_amount, total, payment_method, created_at")
+      .select("id, order_no, store_id, status, discount_amount, vat_amount, total, payment_method, created_at")
       .eq("org_id", profile.org_id)
       .gte("created_at", weekStart.toISOString())
       .lt("created_at", end.toISOString())
@@ -197,12 +210,19 @@ export default async function AdminPage() {
       .select("store_id, product_id, type, qty")
       .eq("org_id", profile.org_id)
       .limit(5000),
+    supabase
+      .from("devices")
+      .select("is_active")
+      .eq("org_id", profile.org_id)
+      .limit(100),
   ]);
 
   const branches = (branchesResult.data ?? []) as BranchRecord[];
   const products = (productsResult.data ?? []) as ProductRecord[];
+  const categories = (categoriesResult.data ?? []) as CategoryRecord[];
   const allOrders = (ordersResult.data ?? []) as OrderRecord[];
   const movements = (movementsResult.data ?? []) as MovementRecord[];
+  const devices = (devicesResult.data ?? []) as DeviceRecord[];
   const todayOrders = allOrders.filter((order) => {
     const timestamp = new Date(order.created_at).getTime();
     return timestamp >= start.getTime() && timestamp < end.getTime();
@@ -214,29 +234,38 @@ export default async function AdminPage() {
   if (orderIds.length > 0) {
     const { data, error } = await supabase
       .from("order_items")
-      .select("order_id, name_snapshot, qty, line_total")
+      .select("order_id, product_id, name_snapshot, qty, line_total")
       .in("order_id", orderIds);
     orderItems = (data ?? []) as OrderItemRecord[];
     orderItemsError = Boolean(error);
   }
 
   const queryWarning = Boolean(
-    branchesResult.error || productsResult.error || ordersResult.error || movementsResult.error || orderItemsError,
+    branchesResult.error || productsResult.error || categoriesResult.error || ordersResult.error || movementsResult.error || devicesResult.error || orderItemsError,
   );
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
+  const categoryById = new Map(categories.map((category) => [category.id, category]));
+  const productById = new Map(products.map((product) => [product.id, product]));
   const completedOrders = todayOrders.filter((order) => order.status === "completed");
   const totalSales = completedOrders.reduce((sum, order) => sum + Number(order.total), 0);
   const averageTicket = completedOrders.length ? Math.round(totalSales / completedOrders.length) : 0;
   const activeBranches = branches.filter((branch) => branch.is_active).length;
+  const activeDevices = devices.filter((device) => device.is_active).length;
 
   const stockByKey = new Map<string, number>();
   for (const movement of movements) {
     const key = `${movement.store_id}:${movement.product_id}`;
     stockByKey.set(key, (stockByKey.get(key) ?? 0) + stockMovementDelta(movement.type, Number(movement.qty)));
   }
+  const trackedProductsByStore = new Map<string, ProductRecord[]>();
+  for (const product of products) {
+    if (!product.track_stock) continue;
+    const storeProducts = trackedProductsByStore.get(product.store_id) ?? [];
+    storeProducts.push(product);
+    trackedProductsByStore.set(product.store_id, storeProducts);
+  }
   const stockRows = branches.flatMap((branch) =>
-    products
-      .filter((product) => product.store_id === branch.id && product.track_stock)
+    (trackedProductsByStore.get(branch.id) ?? [])
       .map((product) => {
         const onHand = stockByKey.get(`${branch.id}:${product.id}`) ?? 0;
         return { branch, product, onHand, status: stockStatus(onHand) };
@@ -248,54 +277,63 @@ export default async function AdminPage() {
     .slice(0, 5);
   const lowStockCount = stockRows.filter((row) => row.status === "low").length;
   const outOfStockCount = stockRows.filter((row) => row.status === "out").length;
-
-  const paymentTotals = (['cash', 'gcash', 'maya', 'card'] as PaymentMethod[]).map((method) => ({
-    method,
-    value: completedOrders
-      .filter((order) => order.payment_method === method)
-      .reduce((sum, order) => sum + Number(order.total), 0),
-  }));
-  const paymentColors = ["#6a3b0e", "#4f9661", "#f39a2d", "#8064a7"];
-  let paymentCursor = 0;
-  const paymentStops = paymentTotals.map((payment, index) => {
-    const startPercent = paymentCursor;
-    paymentCursor += (payment.value / Math.max(totalSales, 1)) * 100;
-    return `${paymentColors[index]} ${startPercent}% ${paymentCursor}%`;
-  });
-  const paymentGradient = totalSales ? `conic-gradient(${paymentStops.join(", ")})` : "#eadac6";
+  const inventoryAlertCount = lowStockCount + outOfStockCount;
 
   const completedOrderIds = new Set(completedOrders.map((order) => order.id));
-  const topItems = Array.from(
-    orderItems
-      .filter((item) => completedOrderIds.has(item.order_id))
-      .reduce((items, item) => {
-        const current = items.get(item.name_snapshot) ?? { name: item.name_snapshot, qty: 0, total: 0 };
-        current.qty += Number(item.qty);
-        current.total += Number(item.line_total);
-        items.set(item.name_snapshot, current);
-        return items;
-      }, new Map<string, { name: string; qty: number; total: number }>()),
-  )
-    .map(([, item]) => item)
+  const topItemsByName = new Map<string, { name: string; qty: number; total: number }>();
+  const categorySalesById = new Map<string, { id: string; name: string; qty: number; total: number }>();
+  let itemsSold = 0;
+  for (const item of orderItems) {
+    if (!completedOrderIds.has(item.order_id)) continue;
+    const topItem = topItemsByName.get(item.name_snapshot) ?? { name: item.name_snapshot, qty: 0, total: 0 };
+    topItem.qty += Number(item.qty);
+    topItem.total += Number(item.line_total);
+    topItemsByName.set(item.name_snapshot, topItem);
+
+    const product = productById.get(item.product_id);
+    const category = product?.category_id ? categoryById.get(product.category_id) : null;
+    const categoryKey = category?.id ?? "uncategorized";
+    const categoryItem = categorySalesById.get(categoryKey) ?? { id: categoryKey, name: category?.name ?? "Uncategorized", qty: 0, total: 0 };
+    categoryItem.qty += Number(item.qty);
+    categoryItem.total += Number(item.line_total);
+    categorySalesById.set(categoryKey, categoryItem);
+    itemsSold += Number(item.qty);
+  }
+
+  const topItems = Array.from(topItemsByName.values())
     .sort((a, b) => b.qty - a.qty || b.total - a.total)
     .slice(0, 5);
+  const categorySales = Array.from(categorySalesById.values())
+    .sort((a, b) => b.total - a.total || b.qty - a.qty)
+    .slice(0, 5);
+  const largestCategorySale = Math.max(...categorySales.map((category) => category.total), 1);
 
+  const salesByDay = new Map<string, number>();
+  for (const order of allOrders) {
+    if (order.status !== "completed") continue;
+    const key = dayKey(new Date(order.created_at));
+    salesByDay.set(key, (salesByDay.get(key) ?? 0) + Number(order.total));
+  }
   const weekSeries = Array.from({ length: 7 }, (_, index) => {
     const date = new Date(weekStart.getTime() + DAY_MS * index);
-    const value = allOrders
-      .filter((order) => order.status === "completed" && dayKey(new Date(order.created_at)) === dayKey(date))
-      .reduce((sum, order) => sum + Number(order.total), 0);
+    const value = salesByDay.get(dayKey(date)) ?? 0;
     return { label: dayLabel(date), value };
   });
+  const weekPeak = Math.max(...weekSeries.map((point) => point.value), 1);
 
-  const itemsSold = orderItems.reduce((sum, item) => sum + Number(item.qty), 0);
   const discountsGiven = completedOrders.reduce((sum, order) => sum + Number(order.discount_amount), 0);
   const taxCollected = completedOrders.reduce((sum, order) => sum + Number(order.vat_amount), 0);
   const returnsAndVoids = todayOrders.filter((order) => order.status !== "completed").reduce((sum, order) => sum + Number(order.total), 0);
+  const branchTotalsById = new Map<string, { orderCount: number; sales: number }>();
+  for (const order of completedOrders) {
+    const branch = branchTotalsById.get(order.store_id) ?? { orderCount: 0, sales: 0 };
+    branch.orderCount += 1;
+    branch.sales += Number(order.total);
+    branchTotalsById.set(order.store_id, branch);
+  }
   const branchStats = branches.map((branch) => {
-    const branchOrders = completedOrders.filter((order) => order.store_id === branch.id);
-    const sales = branchOrders.reduce((sum, order) => sum + Number(order.total), 0);
-    return { ...branch, orderCount: branchOrders.length, sales, average: branchOrders.length ? Math.round(sales / branchOrders.length) : 0 };
+    const totals = branchTotalsById.get(branch.id) ?? { orderCount: 0, sales: 0 };
+    return { ...branch, ...totals, average: totals.orderCount ? Math.round(totals.sales / totals.orderCount) : 0 };
   });
   const currentBranchName = profile.store_id ? branchById.get(profile.store_id)?.name ?? DEFAULT_STORE_NAME : "All branches";
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
@@ -312,8 +350,11 @@ export default async function AdminPage() {
               <span className="admin-brand__mark"><AdminIcon name="pig" size={20} /></span>
               <span className="admin-brand__copy"><strong>Mario&apos;s</strong><small>LECHON HOUSE</small></span>
             </Link>
-            <Link href="/admin/catalog" className="admin-icon-button" aria-label="Search products"><AdminIcon name="search" size={19} /></Link>
-            <Link href="/admin/inventory" className="admin-icon-button admin-icon-button--alert" aria-label="View inventory alerts"><AdminIcon name="bell" size={19} /></Link>
+            <Link href="/admin/catalog" className="admin-icon-button" aria-label="Open product catalog"><AdminIcon name="box" size={19} /></Link>
+            <Link href="/admin/inventory" className="admin-icon-button admin-icon-button--alert" aria-label={inventoryAlertCount ? `View ${inventoryAlertCount} inventory alerts` : "View inventory status"}>
+              <AdminIcon name="bell" size={19} />
+              {inventoryAlertCount > 0 && <span className="admin-icon-button__badge" aria-hidden="true">{inventoryAlertCount > 9 ? "9+" : inventoryAlertCount}</span>}
+            </Link>
             <Link href="#system-status" className="admin-icon-button admin-icon-button--help" aria-label="View system status"><AdminIcon name="help" size={19} /></Link>
             <div className="admin-user-chip">
               <span className="admin-user-chip__avatar" aria-hidden="true">{userInitial}</span>
@@ -329,8 +370,8 @@ export default async function AdminPage() {
               <p className="mt-1 text-sm text-ink-muted">Here&apos;s what&apos;s happening with your business today.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="flex h-10 items-center gap-2 rounded-btn border border-line bg-surface px-3 text-xs font-semibold text-ink"><AdminIcon name="calendar" size={15} />{formatToday()} <AdminIcon name="chevron" size={14} /></span>
-              <span className="flex h-10 items-center gap-2 rounded-btn border border-line bg-surface px-3 text-xs font-semibold text-ink">Today <AdminIcon name="chevron" size={14} /></span>
+              <Link href="/admin/reports?range=7d" className="flex h-10 items-center gap-2 rounded-btn border border-line bg-surface px-3 text-xs font-semibold text-ink transition hover:border-line-strong hover:bg-primary-soft" aria-label="Open the last 7 days report"><AdminIcon name="calendar" size={15} />{formatToday()} <AdminIcon name="arrow" size={14} /></Link>
+              <Link href="/admin/orders?range=today" className="flex h-10 items-center gap-2 rounded-btn border border-line bg-surface px-3 text-xs font-semibold text-ink transition hover:border-line-strong hover:bg-primary-soft">Today&apos;s orders <AdminIcon name="arrow" size={14} /></Link>
               <Link href="/admin/report?range=7d" className="flex h-10 items-center rounded-btn bg-primary px-4 text-xs font-extrabold text-primary-fg transition hover:bg-primary-hover">Export report</Link>
             </div>
           </div>
@@ -339,9 +380,9 @@ export default async function AdminPage() {
 
           <section aria-label="Key performance indicators" className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
             <KpiCard label="Total sales" value={displayPeso(totalSales)} detail={completedOrders.length ? `${completedOrders.length} completed orders` : "No sales yet"} trend={weekSeries[6].value > weekSeries[5].value ? "Today is up" : undefined} icon="wallet" tone="brown" spark={weekSeries.map((point) => point.value)} />
-            <KpiCard label="Orders" value={String(completedOrders.length)} detail={todayOrders.length ? "Completed today" : "No orders yet"} trend={todayOrders.length ? "Live from orders" : undefined} icon="bag" tone="orange" spark={weekSeries.map((point) => point.value ? point.value / Math.max(...weekSeries.map((item) => item.value), 1) : 0)} />
+            <KpiCard label="Orders" value={String(completedOrders.length)} detail={todayOrders.length ? "Completed today" : "No orders yet"} trend={todayOrders.length ? "Live from orders" : undefined} icon="bag" tone="orange" spark={weekSeries.map((point) => point.value ? point.value / weekPeak : 0)} />
             <KpiCard label="Net revenue" value={displayPeso(totalSales)} detail="Completed order total" trend={completedOrders.length ? "After discounts" : undefined} icon="wallet" tone="green" spark={weekSeries.map((point) => point.value)} />
-            <KpiCard label="Avg. order value" value={displayPeso(averageTicket)} detail={completedOrders.length ? "Per completed order" : "After first sale"} trend={completedOrders.length ? "Healthy ticket size" : undefined} icon="chart" tone="purple" spark={weekSeries.map((point) => point.value ? point.value / Math.max(completedOrders.length, 1) : 0)} />
+            <KpiCard label="Avg. order value" value={displayPeso(averageTicket)} detail={completedOrders.length ? "Per completed order" : "After first sale"} icon="chart" tone="purple" spark={weekSeries.map((point) => point.value ? point.value / Math.max(completedOrders.length, 1) : 0)} />
             <KpiCard label="Low stock items" value={String(lowStockCount)} detail="Needs restocking" icon="box" tone="yellow" href="/admin/inventory" />
             <KpiCard label="Out of stock" value={String(outOfStockCount)} detail="Needs attention" icon="box" tone="red" href="/admin/inventory" />
           </section>
@@ -350,20 +391,23 @@ export default async function AdminPage() {
             <section id="sales-summary" aria-labelledby="sales-summary-heading" className="admin-panel p-5">
               <div className="admin-panel__header">
                 <div><h2 id="sales-summary-heading" className="admin-panel__title">Sales Summary</h2><p className="admin-panel__subtitle">Daily sales for the last 7 days</p></div>
-                <span className="flex h-9 items-center gap-2 rounded-btn border border-line bg-surface px-3 text-xs font-semibold text-ink">7 Days <AdminIcon name="chevron" size={14} /></span>
+                <Link href="/admin/reports?range=7d" className="flex h-9 items-center gap-2 rounded-btn border border-line bg-surface px-3 text-xs font-semibold text-ink transition hover:border-line-strong hover:bg-primary-soft">Open 7-day report <AdminIcon name="arrow" size={14} /></Link>
               </div>
               <SalesChart series={weekSeries} />
             </section>
 
-            <section aria-labelledby="payment-heading" className="admin-panel p-5">
-              <div className="admin-panel__header"><div><h2 id="payment-heading" className="admin-panel__title">Payment Breakdown</h2><p className="admin-panel__subtitle">Total sales by payment method</p></div></div>
-              <div className="mt-5 flex flex-wrap items-center justify-center gap-5">
-                <div className="admin-donut" style={{ background: paymentGradient }}><span className="admin-donut__label">{displayPeso(totalSales)}<small>Total</small></span></div>
-                <div className="admin-legend">
-                  {paymentTotals.map((payment, index) => <div key={payment.method} className="admin-legend__item"><i className="admin-legend__dot" style={{ background: paymentColors[index] }} /><span>{paymentLabel(payment.method)}</span><strong>{displayPeso(payment.value)} ({totalSales ? Math.round((payment.value / totalSales) * 100) : 0}%)</strong></div>)}
-                </div>
+            <section aria-labelledby="category-performance-heading" className="admin-panel p-5">
+              <div className="admin-panel__header">
+                <div><h2 id="category-performance-heading" className="admin-panel__title">Sales by Category</h2><p className="admin-panel__subtitle">Where today&apos;s revenue is coming from</p></div>
+                <Link href="/admin/catalog" className="admin-kpi-card__link mt-0">Manage <AdminIcon name="arrow" size={14} /></Link>
               </div>
-              <Link href="/admin/report?range=7d" className="admin-kpi-card__link mt-5">Export full report <AdminIcon name="arrow" size={14} /></Link>
+              <div className="admin-category-bars mt-5">
+                {categorySales.length === 0 ? <EmptyState title="No category sales yet" detail="Completed orders will show which parts of your menu drive revenue." /> : categorySales.map((category, index) => <div key={category.id} className="admin-category-bar">
+                  <div className="admin-category-bar__meta"><span><i className={`admin-category-bar__rank ${index === 0 ? "is-top" : ""}`}>{index + 1}</i><strong>{category.name}</strong></span><span className="tnums">{displayPeso(category.total)}</span></div>
+                  <div className="admin-category-bar__track"><span style={{ width: `${Math.max(7, Math.round((category.total / largestCategorySale) * 100))}%` }} /></div>
+                  <div className="admin-category-bar__detail"><span>{category.qty} item{category.qty === 1 ? "" : "s"} sold</span><span>{totalSales ? Math.round((category.total / totalSales) * 100) : 0}% of today&apos;s sales</span></div>
+                </div>)}
+              </div>
             </section>
 
             <section aria-labelledby="best-selling-heading" className="admin-panel p-5">
@@ -377,7 +421,7 @@ export default async function AdminPage() {
 
           <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.12fr)_minmax(0,1fr)_minmax(260px,0.86fr)]">
             <section id="recent-transactions" aria-labelledby="recent-heading" className="admin-panel min-w-0 p-5">
-              <div className="admin-panel__header"><div><h2 id="recent-heading" className="admin-panel__title">Recent Transactions</h2><p className="admin-panel__subtitle">Latest completed transactions</p></div><Link href="/admin#recent-transactions" className="admin-kpi-card__link mt-0">View all</Link></div>
+              <div className="admin-panel__header"><div><h2 id="recent-heading" className="admin-panel__title">Recent Transactions</h2><p className="admin-panel__subtitle">Latest completed transactions</p></div><Link href="/admin/orders?range=today" className="admin-kpi-card__link mt-0">View all</Link></div>
               <div className="mt-3 overflow-x-auto"><table className="admin-list-table min-w-[500px]"><thead><tr><th>Time</th><th>Invoice</th><th>Customer</th><th>Method</th><th>Amount</th></tr></thead><tbody>{completedOrders.slice(0, 5).length === 0 ? <tr><td colSpan={5}><EmptyState title="No transactions today" detail="Completed sales will appear here." /></td></tr> : completedOrders.slice(0, 5).map((order) => <tr key={order.id}><td className="whitespace-nowrap text-ink-muted">{formatDateTime(order.created_at)}</td><td className="whitespace-nowrap">{order.order_no}</td><td>Walk-in customer</td><td>{paymentLabel(order.payment_method)}</td><td className="tnums whitespace-nowrap text-right font-extrabold text-success">{displayPeso(order.total)}</td></tr>)}</tbody></table></div>
             </section>
 
@@ -401,16 +445,16 @@ export default async function AdminPage() {
           <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.8fr)]">
             <section aria-labelledby="branch-performance-heading" className="admin-panel min-w-0 p-5">
               <div className="admin-panel__header"><div><h2 id="branch-performance-heading" className="admin-panel__title">Branch Performance</h2><p className="admin-panel__subtitle">Latest comparison across branches</p></div><span className="text-xs font-bold text-ink-muted">{activeBranches} active</span></div>
-              <div className="mt-3 overflow-x-auto"><table className="admin-list-table min-w-[620px]"><thead><tr><th>Branch</th><th>Total sales</th><th>Orders</th><th>Avg. order value</th><th>Growth</th></tr></thead><tbody>{branchStats.length === 0 ? <tr><td colSpan={5}><EmptyState title="No branches found" detail="Create a branch to start comparing performance." /></td></tr> : branchStats.map((branch) => <tr key={branch.id}><td><strong>{branch.name}</strong><small className="mt-1 block text-[10px] text-ink-muted">{branch.is_active ? "Active" : "Inactive"}</small></td><td className="tnums font-extrabold">{displayPeso(branch.sales)}</td><td className="tnums">{branch.orderCount}</td><td className="tnums">{displayPeso(branch.average)}</td><td className="font-extrabold text-success">{branch.orderCount ? "▲ Live" : "—"}</td></tr>)}</tbody></table></div>
+              <div className="mt-3 overflow-x-auto"><table className="admin-list-table min-w-[620px]"><thead><tr><th>Branch</th><th>Total sales</th><th>Orders</th><th>Avg. order value</th><th>Sales share</th></tr></thead><tbody>{branchStats.length === 0 ? <tr><td colSpan={5}><EmptyState title="No branches found" detail="Create a branch to start comparing performance." /></td></tr> : branchStats.map((branch) => <tr key={branch.id}><td><strong>{branch.name}</strong><small className="mt-1 block text-[10px] text-ink-muted">{branch.is_active ? "Active" : "Inactive"}</small></td><td className="tnums font-extrabold">{displayPeso(branch.sales)}</td><td className="tnums">{branch.orderCount}</td><td className="tnums">{displayPeso(branch.average)}</td><td className="tnums font-extrabold text-primary">{totalSales ? `${Math.round((branch.sales / totalSales) * 100)}%` : "—"}</td></tr>)}</tbody></table></div>
             </section>
 
             <section id="system-status" aria-labelledby="system-status-heading" className="admin-panel p-5">
-              <div className="admin-panel__header"><div><h2 id="system-status-heading" className="admin-panel__title">System Status</h2><p className="admin-panel__subtitle">All business systems are being monitored</p></div></div>
+              <div className="admin-panel__header"><div><h2 id="system-status-heading" className="admin-panel__title">System Status</h2><p className="admin-panel__subtitle">Live checks from this session</p></div></div>
               <div className="admin-status-grid mt-5">
-                <SystemStatus name="POS terminal" status="Ready" />
+                <SystemStatus name="POS terminals" status={devicesResult.error ? "Unavailable" : devices.length ? `${activeDevices} active` : "Not registered"} warning={Boolean(devicesResult.error || devices.length === 0)} />
                 <SystemStatus name="Database" status={queryWarning ? "Check" : "Online"} warning={queryWarning} />
                 <SystemStatus name="Inventory" status={movementsResult.error ? "Check" : "Online"} warning={Boolean(movementsResult.error)} />
-                <SystemStatus name="Security" status="RLS active" />
+                <SystemStatus name="Access scope" status={profile.role === "admin" ? "Org-wide" : "Branch-only"} />
               </div>
             </section>
           </div>

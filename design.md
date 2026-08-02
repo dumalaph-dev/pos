@@ -74,8 +74,13 @@ The `/admin/catalog` workspace is the owner-facing source of truth for the POS m
 The supplied admin reference image defines the backoffice shell used by `/admin`, `/admin/catalog`, and `/admin/inventory`:
 
 - Use a pale paper canvas with a quiet 220–238px left rail, circular house mark, branch context, grouped navigation, and a warm quick-actions card at the bottom.
-- The dashboard hierarchy is `greeting → date/report controls → six KPI cards → sales/payment/best-sellers → transactions/stock/today → branch/system status`.
+- The dashboard hierarchy is `greeting → date/report controls → six KPI cards → sales/category/best-sellers → transactions/stock/today → branch/system status`.
 - KPI cards are compact white-paper panels with one colored circular icon, a large tabular value, restrained supporting copy, and optional thin sparkline. Use roast brown, orange, green, purple, yellow, and red only as semantic accents.
-- Charts are quiet and data-first: warm grid lines, brown line/area sales trend, a segmented payment donut, and short ranked/list panels. Empty and partial-data states must remain useful and human-readable.
+- Charts are quiet and data-first: warm grid lines, brown line/area sales trend, horizontal category revenue bars, and short ranked/list panels. Empty and partial-data states must remain useful and human-readable.
 - Tables use small uppercase column labels, generous row spacing, warm one-pixel dividers, and horizontal overflow only when the columns require it.
+- Operations pages should keep the same paper-panel language: filter controls stay compact, summary metrics use semantic accent colors, and selected records open a receipt-style detail view without losing the active filters.
+- The Employees page uses the same directory rhythm: identity first, role and branch controls in the middle, active status and a clear save action at the edge. Access changes must be explicit, protected, and never use placeholder staff data.
+- Reports should feel analytical but calm: use compact period controls, paper panels, tabular figures, restrained bars, and direct CSV export. Keep payment totals as a readable comparison table rather than a decorative chart.
+- Settings are split into organization, branch, and device sections. Organization identity is shared; receipt/tax fields belong to branches; printer transport and terminal prefixes belong to physical devices. Keep manager access read-only and make admin saves explicit.
+- Promotions currently reports the POS discount types already supported by the order model. Use impact metrics, a calm daily discount bar chart, offer-mix cards, and an audit table; do not imply persistent campaign scheduling until a promotions table exists.
 - Header controls should remain compact: search, inventory alerts, help/status, current user, and report export. Every visible action must link to a working route or be clearly marked as coming next.
