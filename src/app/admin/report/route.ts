@@ -52,6 +52,14 @@ export async function GET(request: Request) {
   }
   const branchFilter = url.searchParams.get("branch");
   if (branchFilter) ordersQuery = ordersQuery.eq("store_id", branchFilter);
+  const statusFilter = url.searchParams.get("status");
+  if (statusFilter === "completed" || statusFilter === "voided" || statusFilter === "refunded") {
+    ordersQuery = ordersQuery.eq("status", statusFilter);
+  }
+  const paymentFilter = url.searchParams.get("payment");
+  if (paymentFilter === "cash" || paymentFilter === "gcash" || paymentFilter === "maya" || paymentFilter === "card") {
+    ordersQuery = ordersQuery.eq("payment_method", paymentFilter);
+  }
   const { data, error } = await ordersQuery;
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
