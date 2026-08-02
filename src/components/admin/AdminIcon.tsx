@@ -21,6 +21,7 @@ export type AdminIconName =
   | "wallet"
   | "box"
   | "chart"
+  | "eye"
   | "pig";
 
 export function AdminIcon({ name, size = 18 }: { name: AdminIconName; size?: number }) {
@@ -81,6 +82,8 @@ export function AdminIcon({ name, size = 18 }: { name: AdminIconName; size?: num
       return <svg {...common}><path d="m4 7 8-4 8 4v10l-8 4-8-4V7Z" /><path d="m4 7 8 4 8-4M12 11v10" /></svg>;
     case "chart":
       return <svg {...common}><path d="M4 19V5M4 19h17" /><path d="m7 15 4-4 3 2 5-6" /><path d="M16 7h3v3" /></svg>;
+    case "eye":
+      return <svg {...common}><path d="M2.5 12s3.4-5 9.5-5 9.5 5 9.5 5-3.4 5-9.5 5-9.5-5-9.5-5Z" /><circle cx="12" cy="12" r="2.2" /></svg>;
     case "pig":
       return <svg {...common}><path d="M5 13c0-4 3-7 8-7 2 0 4 .7 5.3 2.1 1.4 0 2.7.6 3.7 1.9l-1.5 1.4.3 2.6-2 .2c-.8 2.2-2.8 3.8-5.8 3.8H9l-2 2H5l1-3.2c-.7-1-1-2.3-1-3.8Z" /><circle cx="17" cy="10" r=".7" /><path d="M19 14h2M8 12h.01" /></svg>;
   }

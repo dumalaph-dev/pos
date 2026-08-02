@@ -444,9 +444,27 @@ export default async function SalesPage({
         <AdminSidebar branchName={currentBranchName} active="sales" />
 
         <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
-          <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line/70 pb-5 pt-2">
+          <header className="flex flex-wrap items-center justify-between gap-4 border-b border-line/70 pb-5 pt-2">
             <div><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Performance workspace · {branchLabel}</p><h1 className="mt-2 text-3xl font-extrabold tracking-[-0.05em] text-ink sm:text-4xl">Sales</h1><p className="mt-1 text-sm text-ink-muted">Track your sales performance and grow your business, {firstName}.</p></div>
-            <div className="flex flex-wrap items-center justify-end gap-2"><form action="/admin/sales" method="get" className="flex flex-wrap items-center gap-2"><label className="sr-only" htmlFor="sales-range">Sales period</label><select id="sales-range" name="range" defaultValue={range} className="inventory-input min-h-10 w-auto min-w-[148px] bg-surface text-xs font-bold"><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option><option value="90d">Last 90 days</option></select><label className="sr-only" htmlFor="sales-branch">Sales branch</label><select id="sales-branch" name="branch" defaultValue={branchFilter} className="inventory-input min-h-10 w-auto min-w-[142px] bg-surface text-xs font-bold"><option value="">All branches</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.is_active ? "" : " · inactive"}</option>)}</select><button type="submit" className="min-h-10 rounded-btn bg-primary px-4 text-xs font-extrabold text-primary-fg transition hover:bg-primary-hover">Apply</button></form><Link href={exportHref} className="inline-flex min-h-10 items-center gap-2 rounded-btn bg-primary px-4 text-xs font-extrabold text-primary-fg transition hover:bg-primary-hover"><span aria-hidden="true">↓</span> Export CSV</Link><Link href="/pos" className="hidden rounded-btn bg-secondary px-4 py-2.5 text-xs font-extrabold text-primary transition hover:bg-secondary-hover xl:inline-flex">New sale</Link><SignOutButton className="px-3 py-2 text-xs" /></div>
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
+              <form action="/admin/sales" method="get" className="flex flex-wrap items-center gap-1.5">
+                <label className="sr-only" htmlFor="sales-range">Sales period</label>
+                <select id="sales-range" name="range" defaultValue={range} className="inventory-input min-h-10 w-[122px] min-w-0 shrink-0 bg-surface px-2 text-xs font-bold">
+                  <option value="7d">Last 7 days</option>
+                  <option value="30d">Last 30 days</option>
+                  <option value="90d">Last 90 days</option>
+                </select>
+                <label className="sr-only" htmlFor="sales-branch">Sales branch</label>
+                <select id="sales-branch" name="branch" defaultValue={branchFilter} className="inventory-input min-h-10 w-[116px] min-w-0 shrink-0 bg-surface px-2 text-xs font-bold">
+                  <option value="">All branches</option>
+                  {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.is_active ? "" : " · inactive"}</option>)}
+                </select>
+                <button type="submit" className="min-h-10 whitespace-nowrap rounded-btn bg-primary px-3 text-xs font-extrabold text-primary-fg transition hover:bg-primary-hover">Apply</button>
+              </form>
+              <Link href={exportHref} className="inline-flex min-h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-btn bg-primary px-3 text-xs font-extrabold text-primary-fg transition hover:bg-primary-hover"><span aria-hidden="true">↓</span> Export CSV</Link>
+              <Link href="/pos" className="hidden min-h-10 items-center whitespace-nowrap rounded-btn bg-secondary px-3 py-2.5 text-xs font-extrabold text-primary transition hover:bg-secondary-hover xl:inline-flex">New sale</Link>
+              <SignOutButton className="min-h-10 whitespace-nowrap px-3 py-2 text-xs" />
+            </div>
           </header>
 
           {queryWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink">Some Sales data could not refresh. The page is showing the records that were available; check the Supabase connection and RLS scope if totals look incomplete.</div>}
