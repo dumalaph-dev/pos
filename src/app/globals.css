@@ -98,6 +98,36 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.inventory-input {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface-raised);
+  font-size: 13px;
+  font-weight: 600;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+
+textarea.inventory-input {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.inventory-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(91, 42, 10, 0.09);
+}
+
+.inventory-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 /* -------------------------------------------------------------------------- */
 /* POS reference shell                                                        */
 /* -------------------------------------------------------------------------- */
@@ -930,6 +960,37 @@ select:focus-visible {
   color: var(--text);
   font-size: 14px;
   font-weight: 800;
+}
+
+.product-card__stock {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  overflow: hidden;
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--primary-soft);
+  font-size: 10px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-card__stock--low {
+  color: var(--warning);
+  background: rgba(192, 138, 46, 0.13);
+}
+
+.product-card__stock--out {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.product-card__stock--unknown {
+  color: var(--text-muted);
+  background: rgba(232, 220, 201, 0.6);
 }
 
 .product-grid--list {

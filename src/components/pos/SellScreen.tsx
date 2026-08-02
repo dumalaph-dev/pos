@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { formatPeso, weightLineTotal } from "@/lib/money";
+import { formatStockQuantity, stockMovementDelta, stockStatus } from "@/lib/inventory";
 import { SignOutButton } from "@/components/SignOutButton";
 import PrinterSettingsModal from "@/components/pos/PrinterSettings";
 import {
@@ -38,6 +39,7 @@ type Product = {
   unit: string;
   category_id: string | null;
   image_url?: string | null;
+  track_stock?: boolean;
 };
 type Category = { id: string; name: string; icon: string | null };
 
@@ -216,6 +218,7 @@ export default function SellScreen() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [stockByProductId, setStockByProductId] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const storeName = profile?.store_name ?? DEFAULT_STORE_NAME;
 
@@ -288,12 +291,14 @@ export default function SellScreen() {
         setProfile(profileData);
         setCategories(cached.categories as Category[]);
         setProducts(cached.products as Product[]);
+        setStockByProductId(cached.stock ?? {});
       } else {
         // Keep the shell inspectable in a fresh local install. Once the first
         // real catalog is cached, the demo never replaces it.
         setProfile(DEMO_PROFILE);
         setCategories(DEMO_CATEGORIES);
         setProducts(DEMO_PRODUCTS);
+        setStockByProductId({});
         if (!demoSeeded.current) {
           setCart(DEMO_CART);
           demoSeeded.current = true;
@@ -318,15 +323,36 @@ export default function SellScreen() {
           .order("sort_order"),
         supabase
           .from("products")
-          .select("id, name, pricing_mode, price, unit, category_id, image_url")
+          .select("id, name, pricing_mode, price, unit, category_id, image_url, track_stock")
           .eq(scope.column, scope.value)
           .eq("is_active", true)
           .order("sort_order"),
       ]);
       if (catRes.error || prodRes.error) throw catRes.error || prodRes.error;
+      const stockRes = profileData.store_id
+        ? await supabase
+            .from("stock_movements")
+            .select("product_id, type, qty")
+            .eq("store_id", profileData.store_id)
+            .limit(5000)
+        : { data: [], error: null };
+      const nextStock: Record<string, number> = {};
+      for (const movement of stockRes.data ?? []) {
+        nextStock[movement.product_id] =
+          (nextStock[movement.product_id] ?? 0) +
+          stockMovementDelta(movement.type, Number(movement.qty));
+      }
       setCategories((catRes.data ?? []) as Category[]);
       setProducts((prodRes.data ?? []) as Product[]);
-      await saveCatalogCache(prodRes.data ?? [], catRes.data ?? [], profileData);
+      if (stockRes.error) {
+        // A catalog can still be useful when the ledger query is unavailable;
+        // keep tracked tiles in the unknown state instead of falsely showing 0.
+        setStockByProductId({});
+        await saveCatalogCache(prodRes.data ?? [], catRes.data ?? [], profileData);
+      } else {
+        setStockByProductId(nextStock);
+        await saveCatalogCache(prodRes.data ?? [], catRes.data ?? [], profileData, nextStock);
+      }
       setOffline(false);
     } catch {
       const cached = await loadCachedCatalog();
@@ -334,10 +360,12 @@ export default function SellScreen() {
         setProfile(cached.profile as typeof profileData);
         setCategories(cached.categories as Category[]);
         setProducts(cached.products as Product[]);
+        setStockByProductId(cached.stock ?? {});
       } else {
         setProfile(DEMO_PROFILE);
         setCategories(DEMO_CATEGORIES);
         setProducts(DEMO_PRODUCTS);
+        setStockByProductId({});
         if (!demoSeeded.current) {
           setCart(DEMO_CART);
           demoSeeded.current = true;
@@ -434,6 +462,17 @@ export default function SellScreen() {
   }, [products, activeCat, search]);
 
   // ── Cart ops ──────────────────────────────────────────────────────────
+  const notifyStock = useCallback((product: Product) => {
+    if (!product.track_stock) return;
+    const available = stockByProductId[product.id];
+    const status = stockStatus(available);
+    if (status === "out") {
+      setToast({ msg: `${product.name} is out of recorded stock. The sale can still continue.` });
+    } else if (status === "low") {
+      setToast({ msg: `${product.name} is low: ${formatStockQuantity(available ?? 0)} ${product.unit} recorded.` });
+    }
+  }, [stockByProductId]);
+
   const addFixed = useCallback((product: Product) => {
     setCart((prev) => {
       const hit = prev.find((l) => l.key === product.id);
@@ -450,6 +489,12 @@ export default function SellScreen() {
       ];
     });
   }, []);
+
+  const chooseProduct = useCallback((product: Product) => {
+    notifyStock(product);
+    if (product.pricing_mode === "per_kg") setKeypad({ product });
+    else addFixed(product);
+  }, [addFixed, notifyStock]);
 
   const bump = (key: string, delta: number) => {
     setCart((prev) =>
@@ -551,12 +596,27 @@ export default function SellScreen() {
       created_at_device: now.toISOString(),
     };
 
+    const outOfRecordedStock = cart.filter(
+      (line) => line.product.track_stock && stockStatus(stockByProductId[line.product.id]) === "out",
+    );
+    if (outOfRecordedStock.length > 0) {
+      setToast({ msg: `${outOfRecordedStock.map((line) => line.product.name).join(", ")} has no recorded stock. The sale will still be saved.` });
+    }
+
     try {
       await enqueueOrder(p_order, p_items);
     } catch {
       setToast({ msg: "Couldn't save order on this device — please try again." });
       return;
     }
+    setStockByProductId((previous) => {
+      const next = { ...previous };
+      for (const line of cart) {
+        if (!line.product.track_stock || typeof next[line.product.id] !== "number") continue;
+        next[line.product.id] -= line.weightKg ?? line.qty;
+      }
+      return next;
+    });
     setPayOpen(false);
     setSuccess({
       orderNo,
@@ -916,7 +976,7 @@ export default function SellScreen() {
                     <button
                       type="button"
                       key={product.id}
-                      onClick={() => (product.pricing_mode === "per_kg" ? setKeypad({ product }) : addFixed(product))}
+                      onClick={() => chooseProduct(product)}
                       className="product-card"
                       aria-label={"Add " + product.name}
                     >
@@ -937,6 +997,11 @@ export default function SellScreen() {
                       <div className="product-card__body">
                         <strong>{product.name}</strong>
                         <span className="tnums">{displayPeso(product.price)}{product.pricing_mode === "per_kg" ? " / kg" : ""}</span>
+                        {product.track_stock && (() => {
+                          const available = stockByProductId[product.id];
+                          const status = stockStatus(available);
+                          return <small className={`product-card__stock product-card__stock--${status}`}>{status === "unknown" ? "Stock pending" : status === "out" ? "Out of stock" : `${formatStockQuantity(available ?? 0)} ${product.unit} left`}</small>;
+                        })()}
                       </div>
                     </button>
                   ))}

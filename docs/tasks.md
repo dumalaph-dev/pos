@@ -100,7 +100,7 @@
 *Goal: enough tooling to run the business from a phone.*
 
 - [ ] Backoffice shell: responsive layout, branch switcher, nav, auth guards.
-- [ ] Dashboard: today's sales, orders, avg ticket, cash vs. e-wallet, top items, kg sold, low-stock alerts (per branch + consolidated).
+- [ ] Dashboard: today's sales, orders, avg ticket, cash vs. e-wallet, top items, kg sold, low-stock alerts (per branch + consolidated). *(Overview slice implemented: live sales, payment mix, top items, branch pulse, and recent orders; kg and inventory alerts remain pending.)*
 - [ ] Products CRUD (per branch): pricing mode, price, image, active/track-stock toggles; copy to another branch; price changes versioned in audit.
 - [ ] Orders: filterable list (branch/date/cashier/method/status), detail drawer, void/refund (admin, reason), reprint.
 - [ ] Staff: invite/create, assign branch + role, set/reset PIN, deactivate.
@@ -111,11 +111,11 @@
 ## P7 — Inventory
 *Goal: perishable stock reconciles per branch.*
 
-- [ ] Stock model on `stock_movements` (on-hand always derived from the ledger, per branch).
-- [ ] Stock In (whole lechon: units + gross kg + cost; packaged goods).
-- [ ] Yield entry (whole → chopped kg + waste kg).
-- [ ] Wastage/spoilage entry (reason) + stock adjustment (mandatory reason).
-- [ ] Low-stock alerts wired to dashboard; sell-with-zero-stock warns, never blocks.
+- [x] Stock model on `stock_movements` (on-hand always derived from the ledger, per branch). *(✅ `/admin/inventory` derives balances from the append-only ledger.)*
+- [x] Stock In (whole lechon: units + gross kg + cost; packaged goods). *(✅ first movement form supports branch, unit quantity, unit cost, and reference.)*
+- [ ] Yield entry (whole → chopped kg + waste kg). *(Yield in/out movement types are available; a guided whole-to-yield workflow remains for a later slice.)*
+- [x] Wastage/spoilage entry (reason) + stock adjustment (mandatory reason). *(✅ audited `record_stock_movement` RPC.)*
+- [ ] Low-stock alerts wired to dashboard; sell-with-zero-stock warns, never blocks. *(POS stock badges/toasts and the inventory low/out view are live; configurable thresholds and dashboard cards remain next.)*
 - [ ] End-of-day variance view: opening + received − sold − wasted = expected vs. counted.
 
 ## P8 — Shifts & Reports

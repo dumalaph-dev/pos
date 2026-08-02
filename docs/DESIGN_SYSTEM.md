@@ -214,3 +214,23 @@ The reference shell is now implemented in `src/components/pos/SellScreen.tsx` an
 - `SAVE` keeps the existing hold/park behavior. `Discount` opens the existing Senior/PWD/custom discount capture flow. `Receipts` calls the existing reprint flow. `More` opens printer settings.
 - The Current Order panel is a receipt ticket: `QTY / ITEM / AMOUNT` column labels, dashed line-item rules, and receipt-style summary separators. The line-item list owns the only scrollbar; the order summary and `SAVE / CHARGE` actions remain fixed. `Discount` opens the discount capture flow and the optional `Order note` field.
 - Keep the screenshot's visual hierarchy when adding future screens: product imagery first, quiet controls second, one dominant action and one dominant number per surface.
+
+## 10. Admin backoffice overview
+
+The first backoffice surface is a responsive operations dashboard at `/admin`. It keeps the same warm cream canvas, roast-brown structure, and brick-red emphasis as the POS while shifting the hierarchy toward scanning and comparison:
+
+- **Shell:** desktop sidebar with the active Overview state, current branch scope, and a direct Open POS action; compact top bar and the same sign-out treatment on smaller screens.
+- **Summary cards:** today's sales, average ticket, active products, and team/branch context. Use tabular numerals and short supporting context rather than decorative charts.
+- **Operations cards:** payment mix uses restrained horizontal bars; branch pulse shows active state, completed orders, and sales; recent orders use a horizontally scrollable semantic table; top items use a ranked list.
+- **Data states:** every dashboard collection has loading, empty, partial-data warning, and route-level error treatments. Admin data remains server-rendered and follows Supabase RLS scope.
+- **Motion:** 150ms card lift and width transitions are allowed for feedback; no auto-rotating charts or motion that delays a management task.
+
+## 11. Admin inventory workspace
+
+The first inventory surface is `/admin/inventory`, using the same warm backoffice shell with a ledger-first hierarchy:
+
+- **Balance table:** branch + tracked product rows show derived on-hand quantity, unit, and a quiet Healthy / Low / Out state. The current low-stock signal is `≤ 2` units until per-product thresholds exist.
+- **Movement form:** one focused action card records Stock in, Yield in, Yield out, Waste / spoilage, and signed Adjustment entries. Waste and adjustment require a reason; POS sales are never manually entered.
+- **Audit trail:** recent movement rows keep the movement type, signed delta, unit cost, branch, product, time, and reason visible. Avoid hiding the ledger behind a modal when a direct table is more useful.
+- **POS connection:** tracked product tiles show the cached/live balance and warn on low or out-of-recorded-stock taps. The sale remains tappable, matching the PRD rule that stock never blocks a sale.
+- **Motion:** use the existing 150ms transitions for status, form focus, and table state. Avoid animated count-ups or motion that makes a stock count harder to verify.

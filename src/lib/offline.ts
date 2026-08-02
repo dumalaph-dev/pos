@@ -133,19 +133,23 @@ type CachedCatalog = {
   products: unknown[];
   categories: unknown[];
   profile: unknown;
+  stock?: Record<string, number>;
 };
 
 export async function saveCatalogCache(
   products: unknown[],
   categories: unknown[],
   profile: unknown,
+  stock?: Record<string, number>,
 ): Promise<void> {
   const db = getDb();
-  await db.catalog.bulkPut([
+  const rows = [
     { key: "products", json: JSON.stringify(products) },
     { key: "categories", json: JSON.stringify(categories) },
     { key: "profile", json: JSON.stringify(profile) },
-  ]);
+  ];
+  if (stock) rows.push({ key: "stock", json: JSON.stringify(stock) });
+  await db.catalog.bulkPut(rows);
 }
 
 export async function loadCachedCatalog(): Promise<CachedCatalog | null> {
@@ -156,5 +160,6 @@ export async function loadCachedCatalog(): Promise<CachedCatalog | null> {
     products: JSON.parse(rows[0].json),
     categories: JSON.parse(rows[1].json),
     profile: JSON.parse(rows[2].json),
+    stock: rows[3]?.json ? JSON.parse(rows[3].json) : undefined,
   };
 }
