@@ -1,0 +1,87 @@
+export type AdminIconName =
+  | "dashboard"
+  | "sales"
+  | "pos"
+  | "orders"
+  | "inventory"
+  | "customers"
+  | "suppliers"
+  | "expenses"
+  | "reports"
+  | "employees"
+  | "promotions"
+  | "settings"
+  | "search"
+  | "bell"
+  | "help"
+  | "calendar"
+  | "chevron"
+  | "arrow"
+  | "bag"
+  | "wallet"
+  | "box"
+  | "chart"
+  | "pig";
+
+export function AdminIcon({ name, size = 18 }: { name: AdminIconName; size?: number }) {
+  const common = {
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.7,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+
+  switch (name) {
+    case "dashboard":
+      return <svg {...common}><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>;
+    case "sales":
+      return <svg {...common}><path d="M5 8.5h14l-1 11H6l-1-11Z" /><path d="M8 8.5V7a4 4 0 0 1 8 0v1.5" /><path d="M9 12h.01M15 12h.01" /></svg>;
+    case "pos":
+      return <svg {...common}><rect x="4" y="4" width="16" height="13" rx="2" /><path d="M7 20h10M8 8h8M8 12h2M12 12h2M16 12h.01M8 15h8" /></svg>;
+    case "orders":
+      return <svg {...common}><path d="M6 3h12v18H6z" /><path d="M9 7h6M9 11h6M9 15h4" /><path d="m9 19 1.2 1.2L13 17.5" /></svg>;
+    case "inventory":
+      return <svg {...common}><path d="m4 7 8-4 8 4-8 4-8-4Z" /><path d="M4 7v10l8 4 8-4V7M12 11v10" /></svg>;
+    case "customers":
+      return <svg {...common}><circle cx="9" cy="8" r="3" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0M17 8a2.5 2.5 0 0 1 0 5M16 15.5a4.5 4.5 0 0 1 4.5 3.5" /></svg>;
+    case "suppliers":
+      return <svg {...common}><path d="M3 7h11v10H3zM14 10h3l4 4v3h-7z" /><circle cx="7" cy="19" r="1.7" /><circle cx="17" cy="19" r="1.7" /></svg>;
+    case "expenses":
+      return <svg {...common}><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 7h8M8 11h8M8 15h3M15 15h1" /></svg>;
+    case "reports":
+      return <svg {...common}><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>;
+    case "employees":
+      return <svg {...common}><circle cx="9" cy="8" r="3" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0M17 5v6M14 8h6" /></svg>;
+    case "promotions":
+      return <svg {...common}><path d="M20 13 13 20l-9-9V4h7l9 9Z" /><circle cx="8" cy="8" r="1" /><path d="m13 7 4 4" /></svg>;
+    case "settings":
+      return <svg {...common}><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" /><circle cx="12" cy="12" r="4" /></svg>;
+    case "search":
+      return <svg {...common}><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></svg>;
+    case "bell":
+      return <svg {...common}><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>;
+    case "help":
+      return <svg {...common}><circle cx="12" cy="12" r="9" /><path d="M9.8 9a2.4 2.4 0 1 1 4.2 1.6c-1.2 1.1-2 1.5-2 3M12 17h.01" /></svg>;
+    case "calendar":
+      return <svg {...common}><rect x="3" y="4.5" width="18" height="16" rx="2" /><path d="M7 3v3M17 3v3M3 9h18M8 13h.01M12 13h.01M16 13h.01M8 17h.01M12 17h.01" /></svg>;
+    case "chevron":
+      return <svg {...common}><path d="m8 10 4 4 4-4" /></svg>;
+    case "arrow":
+      return <svg {...common}><path d="M5 12h14M13 6l6 6-6 6" /></svg>;
+    case "bag":
+      return <svg {...common}><path d="M5 8h14l-1 12H6L5 8Z" /><path d="M9 8V6a3 3 0 0 1 6 0v2" /></svg>;
+    case "wallet":
+      return <svg {...common}><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H19v16H6.5A2.5 2.5 0 0 1 4 17.5v-11Z" /><path d="M4 8h15M16 13h3" /><circle cx="16" cy="13" r=".6" fill="currentColor" stroke="none" /></svg>;
+    case "box":
+      return <svg {...common}><path d="m4 7 8-4 8 4v10l-8 4-8-4V7Z" /><path d="m4 7 8 4 8-4M12 11v10" /></svg>;
+    case "chart":
+      return <svg {...common}><path d="M4 19V5M4 19h17" /><path d="m7 15 4-4 3 2 5-6" /><path d="M16 7h3v3" /></svg>;
+    case "pig":
+      return <svg {...common}><path d="M5 13c0-4 3-7 8-7 2 0 4 .7 5.3 2.1 1.4 0 2.7.6 3.7 1.9l-1.5 1.4.3 2.6-2 .2c-.8 2.2-2.8 3.8-5.8 3.8H9l-2 2H5l1-3.2c-.7-1-1-2.3-1-3.8Z" /><circle cx="17" cy="10" r=".7" /><path d="M19 14h2M8 12h.01" /></svg>;
+  }
+}

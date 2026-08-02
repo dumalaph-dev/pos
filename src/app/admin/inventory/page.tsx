@@ -104,7 +104,7 @@ export default async function InventoryPage({
 
   const { data: profileData } = await supabase
     .from("profiles")
-    .select("full_name, role, org_id, store_id, organizations(name)")
+    .select("full_name, role, org_id, store_id, organizations!profiles_org_id_fkey(name)")
     .eq("id", user.id)
     .single();
   const profile = profileData as ProfileRecord | null;
@@ -166,12 +166,12 @@ export default async function InventoryPage({
   const formProducts = trackedProducts.filter((product) => product.is_active);
 
   return (
-    <main className="min-h-screen bg-bg text-ink">
+    <main className="admin-page text-ink">
       <div className="mx-auto grid min-h-screen max-w-[1680px] lg:grid-cols-[238px_minmax(0,1fr)]">
         <AdminSidebar branchName={currentBranchName} active="inventory" />
 
-        <div className="min-w-0 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
-          <header className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-3 shadow-[var(--shadow-card)] sm:px-5">
+        <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
+          <header className="admin-reference-header flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-3 shadow-[var(--shadow-card)] sm:px-5">
             <Link href="/admin" className="flex min-w-0 items-center gap-3 lg:hidden">
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-primary/25 bg-primary-soft text-lg text-primary" aria-hidden="true">◉</span>
               <span className="min-w-0">

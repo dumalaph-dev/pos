@@ -1,8 +1,12 @@
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { formatPeso } from "@/lib/money";
-import { createClient } from "@/lib/supabase/server";
+import { AdminIcon } from "@/components/admin/AdminIcon";
+import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { SignOutButton } from "@/components/SignOutButton";
+import { formatPeso } from "@/lib/money";
+import { stockMovementDelta, stockStatus, formatStockQuantity, LOW_STOCK_THRESHOLD, type StockMovementType } from "@/lib/inventory";
+import { createClient } from "@/lib/supabase/server";
 
 type AdminRole = "admin" | "manager" | "cashier";
 type OrderStatus = "completed" | "voided" | "refunded";
@@ -27,16 +31,11 @@ type ProductRecord = {
   id: string;
   name: string;
   price: number;
+  unit: string;
   is_active: boolean;
   store_id: string;
-};
-
-type StaffRecord = {
-  id: string;
-  full_name: string;
-  role: AdminRole;
-  store_id: string | null;
-  is_active: boolean;
+  image_url: string | null;
+  track_stock: boolean;
 };
 
 type OrderRecord = {
@@ -45,6 +44,9 @@ type OrderRecord = {
   store_id: string;
   cashier_id: string;
   status: OrderStatus;
+  subtotal: number;
+  discount_amount: number;
+  vat_amount: number;
   total: number;
   payment_method: PaymentMethod;
   created_at: string;
@@ -57,7 +59,26 @@ type OrderItemRecord = {
   line_total: number;
 };
 
+type MovementRecord = {
+  store_id: string;
+  product_id: string;
+  type: StockMovementType;
+  qty: number;
+};
+
 const DEFAULT_STORE_NAME = "Mario's Lechon House";
+const DAY_MS = 24 * 60 * 60 * 1000;
+const LOCAL_PRODUCT_IMAGES: Record<string, string> = {
+  "whole lechon (small)": "/food/whole-lechon-small.png",
+  "whole lechon (medium)": "/food/whole-lechon-medium.png",
+  "whole lechon (large)": "/food/whole-lechon-medium.png",
+  "lechon belly (1/2kg)": "/food/lechon-belly-half.png",
+  "lechon belly (1kg)": "/food/lechon-belly-one.png",
+  "lechon paksiw (1/2kg)": "/food/lechon-paksiw.png",
+  "lechon kawali (1/2kg)": "/food/lechon-kawali.png",
+  "java rice": "/food/java-rice.png",
+  "mang tomas (small)": "/food/mang-tomas.png",
+};
 
 function getSingaporeDayBounds() {
   const date = new Intl.DateTimeFormat("en-CA", {
@@ -67,7 +88,24 @@ function getSingaporeDayBounds() {
     year: "numeric",
   }).format(new Date());
   const start = new Date(`${date}T00:00:00+08:00`);
-  return { start, end: new Date(start.getTime() + 24 * 60 * 60 * 1000) };
+  return { start, end: new Date(start.getTime() + DAY_MS) };
+}
+
+function dayKey(value: Date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+  }).format(value);
+}
+
+function dayLabel(value: Date) {
+  return new Intl.DateTimeFormat("en-PH", {
+    day: "numeric",
+    month: "short",
+    timeZone: "Asia/Singapore",
+  }).format(value);
 }
 
 function formatDateTime(value: string) {
@@ -91,6 +129,16 @@ function shortName(name: string | null, fallback: string) {
   return name?.trim().split(/\s+/)[0] || fallback;
 }
 
+function displayPeso(value: number) {
+  return formatPeso(Number(value)).replace(/\.00$/, "");
+}
+
+function compactPeso(value: number) {
+  const peso = Number(value) / 100;
+  if (peso >= 1000) return `₱${(peso / 1000).toFixed(peso >= 10000 ? 0 : 1)}K`;
+  return `₱${Math.round(peso)}`;
+}
+
 function paymentLabel(method: PaymentMethod) {
   if (method === "gcash") return "GCash";
   if (method === "maya") return "Maya";
@@ -98,14 +146,10 @@ function paymentLabel(method: PaymentMethod) {
   return "Cash";
 }
 
-function statusLabel(status: OrderStatus) {
-  return status.charAt(0).toUpperCase() + status.slice(1);
-}
-
-function statusClass(status: OrderStatus) {
-  if (status === "completed") return "bg-success/10 text-success";
-  if (status === "refunded") return "bg-warning/15 text-warning";
-  return "bg-danger-soft text-danger";
+function productImage(product: { name: string; image_url?: string | null }) {
+  return product.image_url?.startsWith("/")
+    ? product.image_url
+    : LOCAL_PRODUCT_IMAGES[product.name.trim().toLowerCase()] ?? "/food/whole-lechon-small.png";
 }
 
 export default async function AdminPage() {
@@ -116,23 +160,19 @@ export default async function AdminPage() {
 
   if (!user) redirect("/");
 
+  const { start, end } = getSingaporeDayBounds();
+  const weekStart = new Date(start.getTime() - DAY_MS * 6);
   const { data: profileData } = await supabase
     .from("profiles")
-    .select("full_name, role, org_id, store_id, organizations(name)")
+    .select("full_name, role, org_id, store_id, organizations!profiles_org_id_fkey(name)")
     .eq("id", user.id)
     .single();
-
   const profile = profileData as ProfileRecord | null;
 
-  // Proxy already blocks cashiers; defense in depth here too.
   if (profile?.role === "cashier") redirect("/pos");
+  if (!profile) return <AdminProfileMissing />;
 
-  if (!profile) {
-    return <AdminProfileMissing />;
-  }
-
-  const { start, end } = getSingaporeDayBounds();
-  const [branchesResult, productsResult, staffResult, ordersResult] = await Promise.all([
+  const [branchesResult, productsResult, ordersResult, movementsResult] = await Promise.all([
     supabase
       .from("stores")
       .select("id, name, address, is_active")
@@ -140,30 +180,33 @@ export default async function AdminPage() {
       .order("name"),
     supabase
       .from("products")
-      .select("id, name, price, is_active, store_id")
+      .select("id, name, price, unit, is_active, store_id, image_url, track_stock")
       .eq("org_id", profile.org_id)
       .order("name")
       .limit(1000),
     supabase
-      .from("profiles")
-      .select("id, full_name, role, store_id, is_active")
-      .eq("org_id", profile.org_id)
-      .order("full_name")
-      .limit(1000),
-    supabase
       .from("orders")
-      .select("id, order_no, store_id, cashier_id, status, total, payment_method, created_at")
+      .select("id, order_no, store_id, cashier_id, status, subtotal, discount_amount, vat_amount, total, payment_method, created_at")
       .eq("org_id", profile.org_id)
-      .gte("created_at", start.toISOString())
+      .gte("created_at", weekStart.toISOString())
       .lt("created_at", end.toISOString())
       .order("created_at", { ascending: false })
-      .limit(1000),
+      .limit(2000),
+    supabase
+      .from("stock_movements")
+      .select("store_id, product_id, type, qty")
+      .eq("org_id", profile.org_id)
+      .limit(5000),
   ]);
 
   const branches = (branchesResult.data ?? []) as BranchRecord[];
   const products = (productsResult.data ?? []) as ProductRecord[];
-  const staff = (staffResult.data ?? []) as StaffRecord[];
-  const todayOrders = (ordersResult.data ?? []) as OrderRecord[];
+  const allOrders = (ordersResult.data ?? []) as OrderRecord[];
+  const movements = (movementsResult.data ?? []) as MovementRecord[];
+  const todayOrders = allOrders.filter((order) => {
+    const timestamp = new Date(order.created_at).getTime();
+    return timestamp >= start.getTime() && timestamp < end.getTime();
+  });
   const orderIds = todayOrders.map((order) => order.id);
 
   let orderItems: OrderItemRecord[] = [];
@@ -178,28 +221,48 @@ export default async function AdminPage() {
   }
 
   const queryWarning = Boolean(
-    branchesResult.error ||
-      productsResult.error ||
-      staffResult.error ||
-      ordersResult.error ||
-      orderItemsError,
+    branchesResult.error || productsResult.error || ordersResult.error || movementsResult.error || orderItemsError,
   );
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
-  const staffById = new Map(staff.map((member) => [member.id, member]));
   const completedOrders = todayOrders.filter((order) => order.status === "completed");
   const totalSales = completedOrders.reduce((sum, order) => sum + Number(order.total), 0);
   const averageTicket = completedOrders.length ? Math.round(totalSales / completedOrders.length) : 0;
-  const activeProducts = products.filter((product) => product.is_active).length;
   const activeBranches = branches.filter((branch) => branch.is_active).length;
-  const activeStaff = staff.filter((member) => member.is_active).length;
 
-  const paymentTotals = (["cash", "gcash", "maya", "card"] as PaymentMethod[]).map((method) => ({
+  const stockByKey = new Map<string, number>();
+  for (const movement of movements) {
+    const key = `${movement.store_id}:${movement.product_id}`;
+    stockByKey.set(key, (stockByKey.get(key) ?? 0) + stockMovementDelta(movement.type, Number(movement.qty)));
+  }
+  const stockRows = branches.flatMap((branch) =>
+    products
+      .filter((product) => product.store_id === branch.id && product.track_stock)
+      .map((product) => {
+        const onHand = stockByKey.get(`${branch.id}:${product.id}`) ?? 0;
+        return { branch, product, onHand, status: stockStatus(onHand) };
+      }),
+  );
+  const lowStockRows = stockRows
+    .filter((row) => row.status === "low" || row.status === "out")
+    .sort((a, b) => a.onHand - b.onHand)
+    .slice(0, 5);
+  const lowStockCount = stockRows.filter((row) => row.status === "low").length;
+  const outOfStockCount = stockRows.filter((row) => row.status === "out").length;
+
+  const paymentTotals = (['cash', 'gcash', 'maya', 'card'] as PaymentMethod[]).map((method) => ({
     method,
     value: completedOrders
       .filter((order) => order.payment_method === method)
       .reduce((sum, order) => sum + Number(order.total), 0),
   }));
-  const largestPayment = Math.max(...paymentTotals.map((payment) => payment.value), 1);
+  const paymentColors = ["#6a3b0e", "#4f9661", "#f39a2d", "#8064a7"];
+  let paymentCursor = 0;
+  const paymentStops = paymentTotals.map((payment, index) => {
+    const startPercent = paymentCursor;
+    paymentCursor += (payment.value / Math.max(totalSales, 1)) * 100;
+    return `${paymentColors[index]} ${startPercent}% ${paymentCursor}%`;
+  });
+  const paymentGradient = totalSales ? `conic-gradient(${paymentStops.join(", ")})` : "#eadac6";
 
   const completedOrderIds = new Set(completedOrders.map((order) => order.id));
   const topItems = Array.from(
@@ -217,311 +280,199 @@ export default async function AdminPage() {
     .sort((a, b) => b.qty - a.qty || b.total - a.total)
     .slice(0, 5);
 
-  const branchStats = branches.map((branch) => {
-    const branchOrders = completedOrders.filter((order) => order.store_id === branch.id);
-    return {
-      ...branch,
-      orderCount: branchOrders.length,
-      sales: branchOrders.reduce((sum, order) => sum + Number(order.total), 0),
-    };
+  const weekSeries = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(weekStart.getTime() + DAY_MS * index);
+    const value = allOrders
+      .filter((order) => order.status === "completed" && dayKey(new Date(order.created_at)) === dayKey(date))
+      .reduce((sum, order) => sum + Number(order.total), 0);
+    return { label: dayLabel(date), value };
   });
 
-  const orgName =
-    (profile.organizations as { name?: string } | null)?.name ?? "Mario's Lechon House";
-  const currentBranchName = profile.store_id
-    ? branchById.get(profile.store_id)?.name ?? DEFAULT_STORE_NAME
-    : "All branches";
+  const itemsSold = orderItems.reduce((sum, item) => sum + Number(item.qty), 0);
+  const discountsGiven = completedOrders.reduce((sum, order) => sum + Number(order.discount_amount), 0);
+  const taxCollected = completedOrders.reduce((sum, order) => sum + Number(order.vat_amount), 0);
+  const returnsAndVoids = todayOrders.filter((order) => order.status !== "completed").reduce((sum, order) => sum + Number(order.total), 0);
+  const branchStats = branches.map((branch) => {
+    const branchOrders = completedOrders.filter((order) => order.store_id === branch.id);
+    const sales = branchOrders.reduce((sum, order) => sum + Number(order.total), 0);
+    return { ...branch, orderCount: branchOrders.length, sales, average: branchOrders.length ? Math.round(sales / branchOrders.length) : 0 };
+  });
+  const currentBranchName = profile.store_id ? branchById.get(profile.store_id)?.name ?? DEFAULT_STORE_NAME : "All branches";
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
-
-  const metrics = [
-    {
-      label: "Today's sales",
-      value: formatPeso(totalSales),
-      detail: completedOrders.length ? `${completedOrders.length} completed orders` : "No completed sales yet",
-      icon: "₱",
-      tone: "bg-accent text-accent-fg",
-    },
-    {
-      label: "Average ticket",
-      value: formatPeso(averageTicket),
-      detail: completedOrders.length ? "Per completed order" : "Will appear after the first sale",
-      icon: "↗",
-      tone: "bg-primary text-primary-fg",
-    },
-    {
-      label: "Active products",
-      value: String(activeProducts),
-      detail: `${products.length - activeProducts} hidden from POS`,
-      icon: "▦",
-      tone: "bg-secondary text-primary",
-    },
-    {
-      label: "Team on file",
-      value: String(activeStaff),
-      detail: `${activeBranches} active branch${activeBranches === 1 ? "" : "es"}`,
-      icon: "•",
-      tone: "bg-primary-soft text-primary",
-    },
-  ];
+  const userInitial = firstName.charAt(0).toUpperCase();
 
   return (
-    <main className="min-h-screen bg-bg text-ink">
-      <div className="mx-auto grid min-h-screen max-w-[1680px] lg:grid-cols-[238px_minmax(0,1fr)]">
-        <AdminSidebar branchName={currentBranchName} />
+    <main className="admin-page text-ink">
+      <div className="mx-auto grid min-h-screen max-w-[1700px] lg:grid-cols-[238px_minmax(0,1fr)]">
+        <AdminSidebar branchName={currentBranchName} active="overview" />
 
-        <div className="min-w-0 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
-          <header className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-3 shadow-[var(--shadow-card)] sm:px-5">
-            <Link href="/admin" className="flex min-w-0 items-center gap-3 lg:hidden">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-primary/25 bg-primary-soft text-lg text-primary" aria-hidden="true">
-                ◉
-              </span>
-              <span className="min-w-0">
-                <strong className="block truncate text-sm font-extrabold text-primary">Mario&apos;s Lechon House</strong>
-                <small className="block text-[10px] font-extrabold uppercase tracking-[0.16em] text-ink-muted">Admin backoffice</small>
-              </span>
+        <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
+          <header className="admin-topbar">
+            <Link href="/admin" className="admin-mobile-brand" aria-label="Admin dashboard">
+              <span className="admin-brand__mark"><AdminIcon name="pig" size={20} /></span>
+              <span className="admin-brand__copy"><strong>Mario&apos;s</strong><small>LECHON HOUSE</small></span>
             </Link>
-            <div className="ml-auto flex items-center gap-2">
-              <Link href="/pos" className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover focus-visible:outline-none">
-                Open POS
-              </Link>
-              <SignOutButton className="px-3 py-2 text-xs" />
+            <Link href="/admin/catalog" className="admin-icon-button" aria-label="Search products"><AdminIcon name="search" size={19} /></Link>
+            <Link href="/admin/inventory" className="admin-icon-button admin-icon-button--alert" aria-label="View inventory alerts"><AdminIcon name="bell" size={19} /></Link>
+            <Link href="#system-status" className="admin-icon-button admin-icon-button--help" aria-label="View system status"><AdminIcon name="help" size={19} /></Link>
+            <div className="admin-user-chip">
+              <span className="admin-user-chip__avatar" aria-hidden="true">{userInitial}</span>
+              <span className="admin-user-chip__copy"><strong>{firstName}</strong><small>{profile.role === "manager" ? "Manager" : "Admin"}⌄</small></span>
             </div>
+            <SignOutButton className="px-2 py-2 text-[10px]" />
           </header>
 
-          <div className="mt-6 flex flex-wrap items-end justify-between gap-4">
+          <div className="flex flex-wrap items-end justify-between gap-5 pt-2">
             <div>
-              <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Operations overview · {currentBranchName}</p>
-              <h1 className="mt-2 text-3xl font-extrabold tracking-[-0.04em] text-ink sm:text-4xl">Good morning, {firstName}.</h1>
-              <p className="mt-2 text-sm text-ink-muted">Here is the pulse of {orgName} for today.</p>
+              <p className="text-sm font-semibold text-ink">Good morning, {firstName}! <span aria-hidden="true">👋</span></p>
+              <h1 className="mt-1 text-3xl font-extrabold tracking-[-0.05em] text-ink sm:text-[34px]">Dashboard Overview</h1>
+              <p className="mt-1 text-sm text-ink-muted">Here&apos;s what&apos;s happening with your business today.</p>
             </div>
-            <p className="rounded-pill border border-line bg-surface px-3 py-2 text-xs font-bold text-ink-muted">{formatToday()}</p>
-          </div>
-
-          {queryWarning && (
-            <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink">
-              Some metrics could not refresh. The dashboard is showing the data that was available; the POS remains available for sales.
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="flex h-10 items-center gap-2 rounded-btn border border-line bg-surface px-3 text-xs font-semibold text-ink"><AdminIcon name="calendar" size={15} />{formatToday()} <AdminIcon name="chevron" size={14} /></span>
+              <span className="flex h-10 items-center gap-2 rounded-btn border border-line bg-surface px-3 text-xs font-semibold text-ink">Today <AdminIcon name="chevron" size={14} /></span>
+              <Link href="/admin/report?range=7d" className="flex h-10 items-center rounded-btn bg-primary px-4 text-xs font-extrabold text-primary-fg transition hover:bg-primary-hover">Export report</Link>
             </div>
-          )}
-
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {metrics.map((metric) => (
-              <article key={metric.label} className="rounded-card border border-line bg-surface p-4 shadow-[var(--shadow-card)] transition-transform duration-150 hover:-translate-y-0.5">
-                <div className="flex items-start justify-between gap-3">
-                  <p className="text-xs font-extrabold uppercase tracking-[0.13em] text-ink-muted">{metric.label}</p>
-                  <span className={`grid h-9 w-9 place-items-center rounded-btn text-sm font-extrabold ${metric.tone}`} aria-hidden="true">{metric.icon}</span>
-                </div>
-                <p className="tnums mt-5 text-2xl font-extrabold tracking-[-0.04em] text-ink">{metric.value}</p>
-                <p className="mt-1 text-xs font-semibold text-ink-muted">{metric.detail}</p>
-              </article>
-            ))}
           </div>
 
-          <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.85fr)]">
-            <section aria-labelledby="sales-heading" className="rounded-card border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-ink-muted">Today</p>
-                  <h2 id="sales-heading" className="mt-1 text-xl font-extrabold text-ink">Sales pulse</h2>
-                </div>
-                <span className="rounded-pill bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary">Live from orders</span>
-              </div>
-              <div className="mt-6 grid gap-6 md:grid-cols-[1fr_1fr]">
-                <div className="rounded-btn bg-surface-panel p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.13em] text-ink-muted">Completed revenue</p>
-                  <p className="tnums mt-2 text-3xl font-extrabold tracking-[-0.05em] text-accent">{formatPeso(totalSales)}</p>
-                  <div className="mt-5 h-2 overflow-hidden rounded-pill bg-primary-soft">
-                    <div className="h-full w-full rounded-pill bg-accent transition-[width] duration-500" />
-                  </div>
-                  <p className="mt-2 text-xs text-ink-muted">{completedOrders.length ? "All completed orders for this branch scope." : "Complete a sale to start the daily pulse."}</p>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold uppercase tracking-[0.13em] text-ink-muted">Payment mix</p>
-                    <span className="text-xs font-semibold text-ink-muted">{completedOrders.length} orders</span>
-                  </div>
-                  <div className="mt-4 space-y-3">
-                    {paymentTotals.map((payment) => (
-                      <div key={payment.method}>
-                        <div className="mb-1 flex items-center justify-between text-xs font-bold text-ink">
-                          <span>{paymentLabel(payment.method)}</span>
-                          <span className="tnums text-ink-muted">{formatPeso(payment.value)}</span>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-pill bg-primary-soft">
-                          <div className="h-full rounded-pill bg-primary transition-[width] duration-500" style={{ width: `${Math.max(0, Math.round((payment.value / largestPayment) * 100))}%` }} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </section>
+          {queryWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink">Some data could not refresh. The dashboard is showing the data that was available; the POS remains available.</div>}
 
-            <section aria-labelledby="branches-heading" className="rounded-card border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-ink-muted">Branches</p>
-                  <h2 id="branches-heading" className="mt-1 text-xl font-extrabold text-ink">Branch pulse</h2>
-                </div>
-                <span className="rounded-pill bg-secondary px-3 py-1.5 text-xs font-extrabold text-primary">{branches.length} total</span>
-              </div>
-              <div className="mt-5 space-y-2">
-                {branchStats.length === 0 ? (
-                  <EmptyState title="No branches found" detail="Create a branch to start organizing the backoffice." />
-                ) : (
-                  branchStats.map((branch) => (
-                    <div key={branch.id} className="flex items-center gap-3 rounded-btn border border-line bg-surface-raised px-3 py-3">
-                      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${branch.is_active ? "bg-success" : "bg-ink-subtle"}`} aria-hidden="true" />
-                      <div className="min-w-0 flex-1">
-                        <strong className="block truncate text-sm font-extrabold text-ink">{branch.name}</strong>
-                        <span className="text-xs text-ink-muted">{branch.orderCount} completed order{branch.orderCount === 1 ? "" : "s"} today</span>
-                      </div>
-                      <strong className="tnums text-sm font-extrabold text-accent">{formatPeso(branch.sales)}</strong>
-                    </div>
-                  ))
-                )}
-              </div>
-            </section>
-          </div>
-
-          <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.85fr)]">
-            <section aria-labelledby="orders-heading" className="min-w-0 rounded-card border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-ink-muted">Activity</p>
-                  <h2 id="orders-heading" className="mt-1 text-xl font-extrabold text-ink">Recent orders</h2>
-                </div>
-                <span className="rounded-pill border border-line bg-surface-raised px-3 py-1.5 text-xs font-bold text-ink-muted">Today</span>
-              </div>
-              {todayOrders.length === 0 ? (
-                <EmptyState title="No orders today" detail="Completed sales will appear here as the team uses the POS." />
-              ) : (
-                <div className="mt-4 overflow-x-auto">
-                  <table className="w-full min-w-[620px] border-collapse text-left">
-                    <thead>
-                      <tr className="border-b border-line text-[10px] font-extrabold uppercase tracking-[0.14em] text-ink-muted">
-                        <th className="px-2 py-3">Order</th>
-                        <th className="px-2 py-3">Branch</th>
-                        <th className="px-2 py-3">Cashier</th>
-                        <th className="px-2 py-3">Payment</th>
-                        <th className="px-2 py-3 text-right">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {todayOrders.slice(0, 8).map((order) => (
-                        <tr key={order.id} className="border-b border-line/70 last:border-0">
-                          <td className="px-2 py-3">
-                            <strong className="block text-sm font-extrabold text-ink">{order.order_no}</strong>
-                            <span className="text-xs text-ink-muted">{formatDateTime(order.created_at)}</span>
-                          </td>
-                          <td className="px-2 py-3 text-sm font-semibold text-ink-muted">{branchById.get(order.store_id)?.name ?? "Unknown branch"}</td>
-                          <td className="px-2 py-3 text-sm font-semibold text-ink-muted">{staffById.get(order.cashier_id)?.full_name ?? "Unknown cashier"}</td>
-                          <td className="px-2 py-3">
-                            <span className={`inline-flex rounded-pill px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${statusClass(order.status)}`}>{statusLabel(order.status)}</span>
-                            <span className="mt-1 block text-xs font-semibold text-ink-muted">{paymentLabel(order.payment_method)}</span>
-                          </td>
-                          <td className="tnums px-2 py-3 text-right text-sm font-extrabold text-accent">{formatPeso(Number(order.total))}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-
-            <section aria-labelledby="top-items-heading" className="rounded-card border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-ink-muted">Menu performance</p>
-                  <h2 id="top-items-heading" className="mt-1 text-xl font-extrabold text-ink">Top items</h2>
-                </div>
-                <span className="rounded-pill bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary">By quantity</span>
-              </div>
-              {topItems.length === 0 ? (
-                <EmptyState title="No item data yet" detail="Product performance appears after the first completed order." />
-              ) : (
-                <ol className="mt-4 space-y-3">
-                  {topItems.map((item, index) => (
-                    <li key={item.name} className="flex items-center gap-3">
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-btn bg-secondary text-xs font-extrabold text-primary">{String(index + 1).padStart(2, "0")}</span>
-                      <div className="min-w-0 flex-1">
-                        <strong className="block truncate text-sm font-extrabold text-ink">{item.name}</strong>
-                        <span className="text-xs font-semibold text-ink-muted">{item.qty} sold</span>
-                      </div>
-                      <strong className="tnums text-sm font-extrabold text-accent">{formatPeso(item.total)}</strong>
-                    </li>
-                  ))}
-                </ol>
-              )}
-              {orderItemsError && <p className="mt-4 text-xs font-semibold text-warning">Item breakdown is waiting for the order-items query.</p>}
-            </section>
-          </div>
-
-          <section aria-labelledby="next-heading" className="mt-4 rounded-card border border-primary/15 bg-primary p-5 text-primary-fg shadow-[var(--shadow-pop)] sm:flex sm:items-center sm:justify-between sm:gap-5">
-            <div>
-              <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-primary-fg/70">Next workspace</p>
-              <h2 id="next-heading" className="mt-1 text-lg font-extrabold">Inventory is now connected to the POS.</h2>
-              <p className="mt-1 max-w-2xl text-sm text-primary-fg/75">Record branch stock movements, then let completed POS sales flow into the same append-only ledger for reliable on-hand counts.</p>
-            </div>
-            <Link href="/admin/inventory" className="mt-4 inline-flex shrink-0 items-center justify-center rounded-btn bg-accent px-4 py-3 text-sm font-extrabold uppercase tracking-wide text-accent-fg transition hover:bg-accent-hover sm:mt-0">
-              Open inventory
-            </Link>
+          <section aria-label="Key performance indicators" className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <KpiCard label="Total sales" value={displayPeso(totalSales)} detail={completedOrders.length ? `${completedOrders.length} completed orders` : "No sales yet"} trend={weekSeries[6].value > weekSeries[5].value ? "Today is up" : undefined} icon="wallet" tone="brown" spark={weekSeries.map((point) => point.value)} />
+            <KpiCard label="Orders" value={String(completedOrders.length)} detail={todayOrders.length ? "Completed today" : "No orders yet"} trend={todayOrders.length ? "Live from orders" : undefined} icon="bag" tone="orange" spark={weekSeries.map((point) => point.value ? point.value / Math.max(...weekSeries.map((item) => item.value), 1) : 0)} />
+            <KpiCard label="Net revenue" value={displayPeso(totalSales)} detail="Completed order total" trend={completedOrders.length ? "After discounts" : undefined} icon="wallet" tone="green" spark={weekSeries.map((point) => point.value)} />
+            <KpiCard label="Avg. order value" value={displayPeso(averageTicket)} detail={completedOrders.length ? "Per completed order" : "After first sale"} trend={completedOrders.length ? "Healthy ticket size" : undefined} icon="chart" tone="purple" spark={weekSeries.map((point) => point.value ? point.value / Math.max(completedOrders.length, 1) : 0)} />
+            <KpiCard label="Low stock items" value={String(lowStockCount)} detail="Needs restocking" icon="box" tone="yellow" href="/admin/inventory" />
+            <KpiCard label="Out of stock" value={String(outOfStockCount)} detail="Needs attention" icon="box" tone="red" href="/admin/inventory" />
           </section>
+
+          <div className="admin-chart-grid mt-5">
+            <section id="sales-summary" aria-labelledby="sales-summary-heading" className="admin-panel p-5">
+              <div className="admin-panel__header">
+                <div><h2 id="sales-summary-heading" className="admin-panel__title">Sales Summary</h2><p className="admin-panel__subtitle">Daily sales for the last 7 days</p></div>
+                <span className="flex h-9 items-center gap-2 rounded-btn border border-line bg-surface px-3 text-xs font-semibold text-ink">7 Days <AdminIcon name="chevron" size={14} /></span>
+              </div>
+              <SalesChart series={weekSeries} />
+            </section>
+
+            <section aria-labelledby="payment-heading" className="admin-panel p-5">
+              <div className="admin-panel__header"><div><h2 id="payment-heading" className="admin-panel__title">Payment Breakdown</h2><p className="admin-panel__subtitle">Total sales by payment method</p></div></div>
+              <div className="mt-5 flex flex-wrap items-center justify-center gap-5">
+                <div className="admin-donut" style={{ background: paymentGradient }}><span className="admin-donut__label">{displayPeso(totalSales)}<small>Total</small></span></div>
+                <div className="admin-legend">
+                  {paymentTotals.map((payment, index) => <div key={payment.method} className="admin-legend__item"><i className="admin-legend__dot" style={{ background: paymentColors[index] }} /><span>{paymentLabel(payment.method)}</span><strong>{displayPeso(payment.value)} ({totalSales ? Math.round((payment.value / totalSales) * 100) : 0}%)</strong></div>)}
+                </div>
+              </div>
+              <Link href="/admin/report?range=7d" className="admin-kpi-card__link mt-5">Export full report <AdminIcon name="arrow" size={14} /></Link>
+            </section>
+
+            <section aria-labelledby="best-selling-heading" className="admin-panel p-5">
+              <div className="admin-panel__header"><div><h2 id="best-selling-heading" className="admin-panel__title">Best Selling Items</h2><p className="admin-panel__subtitle">Top 5 items by quantity sold</p></div></div>
+              <div className="admin-ranking">
+                {topItems.length === 0 ? <EmptyState title="No sales yet" detail="Best sellers will appear after the first completed order." /> : topItems.map((item, index) => <div key={item.name} className="admin-ranking__item"><span className="admin-ranking__rank">{index + 1}</span><span className="admin-ranking__image"><Image src={productImage({ name: item.name })} alt="" width={34} height={34} /></span><span className="admin-ranking__copy"><strong>{item.name}</strong><small>{item.qty} sold</small></span><strong className="admin-ranking__total">{displayPeso(item.total)}</strong></div>)}
+              </div>
+              <Link href="/admin/catalog" className="admin-kpi-card__link mt-4">View all items <AdminIcon name="arrow" size={14} /></Link>
+            </section>
+          </div>
+
+          <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.12fr)_minmax(0,1fr)_minmax(260px,0.86fr)]">
+            <section id="recent-transactions" aria-labelledby="recent-heading" className="admin-panel min-w-0 p-5">
+              <div className="admin-panel__header"><div><h2 id="recent-heading" className="admin-panel__title">Recent Transactions</h2><p className="admin-panel__subtitle">Latest completed transactions</p></div><Link href="/admin#recent-transactions" className="admin-kpi-card__link mt-0">View all</Link></div>
+              <div className="mt-3 overflow-x-auto"><table className="admin-list-table min-w-[500px]"><thead><tr><th>Time</th><th>Invoice</th><th>Customer</th><th>Method</th><th>Amount</th></tr></thead><tbody>{completedOrders.slice(0, 5).length === 0 ? <tr><td colSpan={5}><EmptyState title="No transactions today" detail="Completed sales will appear here." /></td></tr> : completedOrders.slice(0, 5).map((order) => <tr key={order.id}><td className="whitespace-nowrap text-ink-muted">{formatDateTime(order.created_at)}</td><td className="whitespace-nowrap">{order.order_no}</td><td>Walk-in customer</td><td>{paymentLabel(order.payment_method)}</td><td className="tnums whitespace-nowrap text-right font-extrabold text-success">{displayPeso(order.total)}</td></tr>)}</tbody></table></div>
+            </section>
+
+            <section id="low-stock-alerts" aria-labelledby="low-stock-heading" className="admin-panel min-w-0 p-5">
+              <div className="admin-panel__header"><div><h2 id="low-stock-heading" className="admin-panel__title">Low Stock Alerts</h2><p className="admin-panel__subtitle">Items that need to be restocked</p></div><Link href="/admin/inventory" className="admin-kpi-card__link mt-0">View all</Link></div>
+              <div className="mt-3">{lowStockRows.length === 0 ? <EmptyState title="Stock levels look good" detail="Tracked products will appear here when they reach the low threshold." /> : lowStockRows.map((row) => <StockAlert key={`${row.branch.id}:${row.product.id}`} name={row.product.name} detail={`${row.branch.name} · Stock: ${formatStockQuantity(row.onHand)} ${row.product.unit}`} minimum={`Min: ${LOW_STOCK_THRESHOLD} ${row.product.unit}`} onHand={row.onHand} image={productImage(row.product)} danger={row.status === "out"} />)}</div>
+            </section>
+
+            <section aria-labelledby="today-heading" className="admin-panel min-w-0 p-5">
+              <div className="admin-panel__header"><div><h2 id="today-heading" className="admin-panel__title">Today&apos;s Overview</h2><p className="admin-panel__subtitle">Key business metrics at a glance</p></div></div>
+              <div className="mt-4 grid gap-2">
+                <OverviewMetric icon="chart" label="Average order value" value={displayPeso(averageTicket)} />
+                <OverviewMetric icon="bag" label="Items sold" value={String(itemsSold)} />
+                <OverviewMetric icon="promotions" label="Discounts given" value={displayPeso(discountsGiven)} />
+                <OverviewMetric icon="orders" label="Returns & voids" value={displayPeso(returnsAndVoids)} />
+                <OverviewMetric icon="wallet" label="Tax collected" value={displayPeso(taxCollected)} />
+              </div>
+            </section>
+          </div>
+
+          <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.8fr)]">
+            <section aria-labelledby="branch-performance-heading" className="admin-panel min-w-0 p-5">
+              <div className="admin-panel__header"><div><h2 id="branch-performance-heading" className="admin-panel__title">Branch Performance</h2><p className="admin-panel__subtitle">Latest comparison across branches</p></div><span className="text-xs font-bold text-ink-muted">{activeBranches} active</span></div>
+              <div className="mt-3 overflow-x-auto"><table className="admin-list-table min-w-[620px]"><thead><tr><th>Branch</th><th>Total sales</th><th>Orders</th><th>Avg. order value</th><th>Growth</th></tr></thead><tbody>{branchStats.length === 0 ? <tr><td colSpan={5}><EmptyState title="No branches found" detail="Create a branch to start comparing performance." /></td></tr> : branchStats.map((branch) => <tr key={branch.id}><td><strong>{branch.name}</strong><small className="mt-1 block text-[10px] text-ink-muted">{branch.is_active ? "Active" : "Inactive"}</small></td><td className="tnums font-extrabold">{displayPeso(branch.sales)}</td><td className="tnums">{branch.orderCount}</td><td className="tnums">{displayPeso(branch.average)}</td><td className="font-extrabold text-success">{branch.orderCount ? "▲ Live" : "—"}</td></tr>)}</tbody></table></div>
+            </section>
+
+            <section id="system-status" aria-labelledby="system-status-heading" className="admin-panel p-5">
+              <div className="admin-panel__header"><div><h2 id="system-status-heading" className="admin-panel__title">System Status</h2><p className="admin-panel__subtitle">All business systems are being monitored</p></div></div>
+              <div className="admin-status-grid mt-5">
+                <SystemStatus name="POS terminal" status="Ready" />
+                <SystemStatus name="Database" status={queryWarning ? "Check" : "Online"} warning={queryWarning} />
+                <SystemStatus name="Inventory" status={movementsResult.error ? "Check" : "Online"} warning={Boolean(movementsResult.error)} />
+                <SystemStatus name="Security" status="RLS active" />
+              </div>
+            </section>
+          </div>
         </div>
       </div>
     </main>
   );
 }
 
-function AdminSidebar({ branchName }: { branchName: string }) {
-  const upcoming = ["Branches", "Products", "Orders", "Staff"];
-
+function KpiCard({ label, value, detail, trend, icon, tone, spark, href }: { label: string; value: string; detail: string; trend?: string; icon: "wallet" | "bag" | "chart" | "box"; tone: "brown" | "orange" | "green" | "purple" | "yellow" | "red"; spark?: number[]; href?: string }) {
+  const toneClass = { brown: "bg-primary text-primary-fg", orange: "bg-[#f3972e] text-white", green: "bg-[#4f9661] text-white", purple: "bg-[#8064a7] text-white", yellow: "bg-[#f2ad32] text-white", red: "bg-[#e64646] text-white" }[tone];
   return (
-    <aside className="hidden border-r border-line bg-sidebar lg:block">
-      <div className="sticky top-0 flex h-screen flex-col p-5">
-        <Link href="/admin" className="flex items-center gap-3 rounded-btn p-2 transition hover:bg-primary-soft">
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-primary/25 bg-primary-soft text-xl text-primary" aria-hidden="true">◉</span>
-          <span className="min-w-0">
-            <strong className="block truncate text-sm font-extrabold tracking-tight text-primary">Mario&apos;s Lechon</strong>
-            <small className="block text-[10px] font-extrabold uppercase tracking-[0.16em] text-ink-muted">House · Backoffice</small>
-          </span>
-        </Link>
-
-        <p className="mt-10 px-2 text-[10px] font-extrabold uppercase tracking-[0.16em] text-ink-subtle">Workspace</p>
-        <nav aria-label="Admin navigation" className="mt-3 space-y-1">
-          <Link href="/admin" aria-current="page" className="flex items-center gap-3 rounded-btn bg-primary px-3 py-3 text-sm font-extrabold text-primary-fg shadow-[var(--shadow-card)]">
-            <span className="grid h-6 w-6 place-items-center rounded-lg bg-primary-fg/15 text-xs" aria-hidden="true">▦</span>
-            Overview
-          </Link>
-          <Link href="/admin/inventory" className="flex items-center gap-3 rounded-btn px-3 py-3 text-sm font-extrabold text-ink-muted transition hover:bg-primary-soft hover:text-primary">
-            <span className="grid h-6 w-6 place-items-center rounded-lg border border-line text-xs text-ink-subtle" aria-hidden="true">▦</span>
-            Inventory
-          </Link>
-          {upcoming.map((item) => (
-            <div key={item} className="flex items-center justify-between rounded-btn px-3 py-3 text-sm font-bold text-ink-muted">
-              <span className="flex items-center gap-3"><span className="grid h-6 w-6 place-items-center rounded-lg border border-line text-[10px] text-ink-subtle" aria-hidden="true">·</span>{item}</span>
-              <small className="rounded-pill bg-secondary px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-primary">Next</small>
-            </div>
-          ))}
-        </nav>
-
-        <div className="mt-auto rounded-card border border-line bg-surface p-4">
-          <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-ink-muted">Current scope</p>
-          <strong className="mt-2 block truncate text-sm font-extrabold text-ink">{branchName}</strong>
-          <span className="mt-1 block text-xs text-ink-muted">Data is protected by Supabase RLS.</span>
-          <Link href="/pos" className="mt-4 flex items-center justify-center rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Open POS</Link>
-        </div>
+    <article className="admin-kpi-card">
+      <div className="admin-kpi-card__inner">
+        <div className="admin-kpi-card__top"><span className="admin-kpi-card__label">{label}</span><span className={`admin-kpi-card__icon ${toneClass}`}><AdminIcon name={icon} size={18} /></span></div>
+        <p className="admin-kpi-card__value tnums">{value}</p>
+        {href ? <Link href={href} className="admin-kpi-card__link">View items <AdminIcon name="arrow" size={13} /></Link> : <p className="admin-kpi-card__trend">{trend && <strong>▲</strong>} {trend ?? detail}</p>}
       </div>
-    </aside>
+      {spark && <Sparkline values={spark} />}
+    </article>
   );
 }
 
-function EmptyState({ title, detail }: { title: string; detail: string }) {
+function Sparkline({ values }: { values: number[] }) {
+  const max = Math.max(...values, 1);
+  const points = values.map((value, index) => `${(index / Math.max(values.length - 1, 1)) * 100},${28 - (value / max) * 23}`).join(" ");
+  return <svg className="admin-sparkline" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true"><polyline points={points} /></svg>;
+}
+
+function SalesChart({ series }: { series: Array<{ label: string; value: number }> }) {
+  const max = Math.max(...series.map((point) => point.value), 1);
+  const points = series.map((point, index) => {
+    const x = 34 + (index / Math.max(series.length - 1, 1)) * 540;
+    const y = 165 - (point.value / max) * 126;
+    return `${x},${y}`;
+  }).join(" ");
+  const areaPoints = `34,165 ${points} 574,165`;
   return (
-    <div className="mt-5 rounded-btn border border-dashed border-line-strong bg-surface-raised px-4 py-6 text-center">
-      <p className="text-sm font-extrabold text-ink">{title}</p>
-      <p className="mt-1 text-xs text-ink-muted">{detail}</p>
+    <div className="mt-4">
+      <div className="flex gap-3">
+        <div className="flex h-[190px] flex-col justify-between py-1 text-[9px] font-semibold text-ink-muted"><span>{compactPeso(max)}</span><span>{compactPeso(max * 0.75)}</span><span>{compactPeso(max * 0.5)}</span><span>{compactPeso(max * 0.25)}</span><span>₱0</span></div>
+        <div className="min-w-0 flex-1"><svg viewBox="0 0 608 190" className="h-[190px] w-full" role="img" aria-label="Sales summary for the last seven days"><g stroke="#eee4d7" strokeWidth="1"><path d="M32 26H582M32 61H582M32 96H582M32 131H582M32 166H582" /></g><polygon points={areaPoints} fill="#eadac6" fillOpacity=".58" /><polyline points={points} fill="none" stroke="#8b4c16" strokeWidth="2.2" /><g fill="#8b4c16" stroke="#fffdf9" strokeWidth="2">{series.map((point, index) => { const x = 34 + (index / Math.max(series.length - 1, 1)) * 540; const y = 165 - (point.value / max) * 126; return <circle key={point.label} cx={x} cy={y} r="4" />; })}</g></svg><div className="flex justify-between pl-1 text-[9px] font-semibold text-ink-muted">{series.map((point) => <span key={point.label}>{point.label}</span>)}</div></div>
+      </div>
     </div>
   );
+}
+
+function StockAlert({ name, detail, minimum, onHand, image, danger }: { name: string; detail: string; minimum: string; onHand: number; image: string; danger: boolean }) {
+  const percentage = Math.max(8, Math.min(100, (onHand / Math.max(LOW_STOCK_THRESHOLD, 1)) * 100));
+  return <div className="admin-stock-alert"><span className="admin-stock-alert__image"><Image src={image} alt="" width={38} height={38} /></span><span className="admin-stock-alert__copy"><strong>{name}</strong><small>{detail}</small></span><span className="admin-stock-alert__bar"><small>{minimum}</small><div><span className={danger ? "is-danger" : ""} style={{ width: `${percentage}%` }} /></div></span></div>;
+}
+
+function OverviewMetric({ icon, label, value }: { icon: "chart" | "bag" | "promotions" | "orders" | "wallet"; label: string; value: string }) {
+  return <div className="flex items-center gap-2 rounded-btn border border-[#f0e8dc] bg-[#fffdf9] px-3 py-2.5"><span className="grid h-7 w-7 place-items-center rounded-full bg-primary-soft text-primary"><AdminIcon name={icon} size={14} /></span><span className="min-w-0 flex-1 text-[10px] font-semibold text-ink-muted">{label}</span><strong className="tnums text-[11px] font-extrabold text-ink">{value}</strong></div>;
+}
+
+function SystemStatus({ name, status, warning = false }: { name: string; status: string; warning?: boolean }) {
+  return <div className="admin-status-card"><span className="admin-status-card__name"><i className="admin-status-card__dot" style={warning ? { background: "var(--warning)" } : undefined} />{name}</span><small style={warning ? { color: "var(--warning)" } : undefined}>{status}</small></div>;
+}
+
+function EmptyState({ title, detail }: { title: string; detail: string }) {
+  return <div className="py-5 text-center"><p className="text-sm font-extrabold text-ink">{title}</p><p className="mt-1 text-xs text-ink-muted">{detail}</p></div>;
 }
 
 function AdminProfileMissing() {
@@ -531,10 +482,7 @@ function AdminProfileMissing() {
         <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Backoffice setup</p>
         <h1 className="mt-2 text-2xl font-extrabold">Your admin profile is not ready.</h1>
         <p className="mt-3 text-sm leading-6 text-ink-muted">Ask an organization admin to finish the profile and branch assignment, then sign in again.</p>
-        <div className="mt-6 flex justify-center gap-2">
-          <Link href="/pos" className="rounded-btn bg-secondary px-4 py-3 text-sm font-extrabold uppercase text-primary">Open POS</Link>
-          <SignOutButton />
-        </div>
+        <div className="mt-6 flex justify-center gap-2"><Link href="/pos" className="rounded-btn bg-secondary px-4 py-3 text-sm font-extrabold uppercase text-primary">Open POS</Link><SignOutButton /></div>
       </div>
     </main>
   );

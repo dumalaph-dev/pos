@@ -57,3 +57,25 @@ Product imagery is local and offline-safe under `public/food/`. The current plac
 ## Avoid
 
 Cold enterprise blue, purple gradients, glassmorphism, heavy shadows, tiny tap targets, text-only catalog tiles, arbitrary icon styles, dense tables in the selling flow, and motion that makes a cashier wait.
+
+## Admin catalog workspace
+
+The `/admin/catalog` workspace is the owner-facing source of truth for the POS menu:
+
+- Keep the same cream canvas, roast-brown structure, brick-red primary action, warm borders, and tabular money treatment as the POS and inventory screens.
+- Organize the screen as `catalog metrics → add product / categories → editable product table`. The product table may scroll horizontally; the page itself should remain easy to scan.
+- Product editing must make branch, category, price, unit, pricing mode, local image path, stock tracking, POS visibility, and sort order explicit.
+- Category controls stay branch-specific. Disabled products and categories remain visible to admins so accidental removal is reversible.
+- Managers can review the catalog but only organization admins can mutate it. Success and error states should return to the workspace with a short, human-readable message.
+- Catalog changes refresh the POS and inventory routes; never block a cashier sale with a decorative transition or a stock-management workflow.
+
+## Admin dashboard reference
+
+The supplied admin reference image defines the backoffice shell used by `/admin`, `/admin/catalog`, and `/admin/inventory`:
+
+- Use a pale paper canvas with a quiet 220–238px left rail, circular house mark, branch context, grouped navigation, and a warm quick-actions card at the bottom.
+- The dashboard hierarchy is `greeting → date/report controls → six KPI cards → sales/payment/best-sellers → transactions/stock/today → branch/system status`.
+- KPI cards are compact white-paper panels with one colored circular icon, a large tabular value, restrained supporting copy, and optional thin sparkline. Use roast brown, orange, green, purple, yellow, and red only as semantic accents.
+- Charts are quiet and data-first: warm grid lines, brown line/area sales trend, a segmented payment donut, and short ranked/list panels. Empty and partial-data states must remain useful and human-readable.
+- Tables use small uppercase column labels, generous row spacing, warm one-pixel dividers, and horizontal overflow only when the columns require it.
+- Header controls should remain compact: search, inventory alerts, help/status, current user, and report export. Every visible action must link to a working route or be clearly marked as coming next.

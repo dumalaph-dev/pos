@@ -1,58 +1,92 @@
 import Link from "next/link";
+import { AdminIcon, type AdminIconName } from "./AdminIcon";
 
-export type AdminSection = "overview" | "inventory";
+export type AdminSection = "overview" | "inventory" | "catalog";
 
-export function AdminSidebar({
-  branchName,
-  active,
-}: {
-  branchName: string;
-  active: AdminSection;
-}) {
-  const upcoming = ["Branches", "Products", "Orders", "Staff"];
+type NavItem = {
+  label: string;
+  href?: string;
+  icon: AdminIconName;
+  active?: AdminSection;
+  next?: boolean;
+};
 
+const primaryNav: NavItem[] = [
+  { label: "Dashboard", href: "/admin", icon: "dashboard", active: "overview" },
+  { label: "Sales", href: "/admin#sales-summary", icon: "sales" },
+  { label: "POS", href: "/pos", icon: "pos" },
+  { label: "Orders", href: "/admin#recent-transactions", icon: "orders" },
+  { label: "Inventory", href: "/admin/inventory", icon: "inventory", active: "inventory" },
+  { label: "Products", href: "/admin/catalog", icon: "box", active: "catalog" },
+];
+
+const comingSoonNav: NavItem[] = [
+  { label: "Customers", icon: "customers", next: true },
+  { label: "Suppliers", icon: "suppliers", next: true },
+  { label: "Expenses", icon: "expenses", next: true },
+  { label: "Reports", icon: "reports", next: true },
+  { label: "Employees", icon: "employees", next: true },
+  { label: "Promotions", icon: "promotions", next: true },
+  { label: "Settings", icon: "settings", next: true },
+];
+
+export function AdminSidebar({ branchName, active }: { branchName: string; active: AdminSection }) {
   return (
-    <aside className="hidden border-r border-line bg-sidebar lg:block">
-      <div className="sticky top-0 flex h-screen flex-col p-5">
-        <Link href="/admin" className="flex items-center gap-3 rounded-btn p-2 transition hover:bg-primary-soft">
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-primary/25 bg-primary-soft text-xl text-primary" aria-hidden="true">◉</span>
-          <span className="min-w-0">
-            <strong className="block truncate text-sm font-extrabold tracking-tight text-primary">Mario&apos;s Lechon</strong>
-            <small className="block text-[10px] font-extrabold uppercase tracking-[0.16em] text-ink-muted">House · Backoffice</small>
+    <aside className="admin-sidebar hidden lg:flex">
+      <div className="admin-sidebar__inner">
+        <Link href="/admin" className="admin-brand" aria-label="Mario's Lechon House dashboard">
+          <span className="admin-brand__mark"><AdminIcon name="pig" size={27} /></span>
+          <span className="admin-brand__copy">
+            <strong>Mario&apos;s</strong>
+            <small>LECHON HOUSE</small>
           </span>
         </Link>
 
-        <p className="mt-10 px-2 text-[10px] font-extrabold uppercase tracking-[0.16em] text-ink-subtle">Workspace</p>
-        <nav aria-label="Admin navigation" className="mt-3 space-y-1">
-          <Link
-            href="/admin"
-            aria-current={active === "overview" ? "page" : undefined}
-            className={`flex items-center gap-3 rounded-btn px-3 py-3 text-sm font-extrabold transition ${active === "overview" ? "bg-primary text-primary-fg shadow-[var(--shadow-card)]" : "text-ink-muted hover:bg-primary-soft hover:text-primary"}`}
-          >
-            <span className={`grid h-6 w-6 place-items-center rounded-lg text-xs ${active === "overview" ? "bg-primary-fg/15" : "border border-line text-ink-subtle"}`} aria-hidden="true">▪</span>
-            Overview
-          </Link>
-          <Link
-            href="/admin/inventory"
-            aria-current={active === "inventory" ? "page" : undefined}
-            className={`flex items-center gap-3 rounded-btn px-3 py-3 text-sm font-extrabold transition ${active === "inventory" ? "bg-primary text-primary-fg shadow-[var(--shadow-card)]" : "text-ink-muted hover:bg-primary-soft hover:text-primary"}`}
-          >
-            <span className={`grid h-6 w-6 place-items-center rounded-lg text-xs ${active === "inventory" ? "bg-primary-fg/15" : "border border-line text-ink-subtle"}`} aria-hidden="true">▦</span>
-            Inventory
-          </Link>
-          {upcoming.map((item) => (
-            <div key={item} className="flex items-center justify-between rounded-btn px-3 py-3 text-sm font-bold text-ink-muted">
-              <span className="flex items-center gap-3"><span className="grid h-6 w-6 place-items-center rounded-lg border border-line text-[10px] text-ink-subtle" aria-hidden="true">·</span>{item}</span>
-              <small className="rounded-pill bg-secondary px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-primary">Next</small>
-            </div>
-          ))}
+        <div className="admin-branch-switcher" aria-label={`Current branch: ${branchName}`}>
+          <span className="admin-branch-switcher__label">Branch</span>
+          <strong>{branchName}</strong>
+          <AdminIcon name="chevron" size={15} />
+        </div>
+
+        <nav aria-label="Admin navigation" className="admin-nav">
+          <p className="admin-nav__label">Main menu</p>
+          <div className="admin-nav__group">
+            {primaryNav.map((item) => item.href ? (
+              <Link
+                key={item.label}
+                href={item.href}
+                aria-current={item.active === active ? "page" : undefined}
+                className={`admin-nav__item ${item.active === active ? "is-active" : ""}`}
+              >
+                <AdminIcon name={item.icon} size={18} />
+                <span>{item.label}</span>
+                {item.label === "Sales" && <AdminIcon name="chevron" size={14} />}
+              </Link>
+            ) : null)}
+          </div>
+
+          <p className="admin-nav__label admin-nav__label--secondary">Manage</p>
+          <div className="admin-nav__group">
+            {comingSoonNav.map((item) => (
+              <span key={item.label} className="admin-nav__item is-disabled" aria-disabled="true">
+                <AdminIcon name={item.icon} size={18} />
+                <span>{item.label}</span>
+                {item.next && <small>Next</small>}
+              </span>
+            ))}
+          </div>
         </nav>
 
-        <div className="mt-auto rounded-card border border-line bg-surface p-4">
-          <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-ink-muted">Current scope</p>
-          <strong className="mt-2 block truncate text-sm font-extrabold text-ink">{branchName}</strong>
-          <span className="mt-1 block text-xs text-ink-muted">Data is protected by Supabase RLS.</span>
-          <Link href="/pos" className="mt-4 flex items-center justify-center rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Open POS</Link>
+        <div className="admin-quick-actions">
+          <p>Quick actions</p>
+          <Link href="/pos"><AdminIcon name="bag" size={17} />New sale</Link>
+          <Link href="/admin/catalog"><AdminIcon name="box" size={17} />Add product</Link>
+          <Link href="/admin/inventory"><AdminIcon name="inventory" size={17} />Stock count</Link>
+        </div>
+
+        <div className="admin-sidebar__footer">
+          <span className="admin-sidebar__status-dot" aria-hidden="true" />
+          <span><strong>System online</strong><small>Supabase connected</small></span>
         </div>
       </div>
     </aside>
