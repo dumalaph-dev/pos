@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { AdminIcon, type AdminIconName } from "./AdminIcon";
+import { AdminLink as Link } from "./AdminLink";
 
-export type AdminSection = "overview" | "orders" | "inventory" | "catalog" | "employees" | "reports" | "settings" | "promotions";
+export type AdminSection = "overview" | "orders" | "inventory" | "catalog" | "customers" | "suppliers" | "expenses" | "employees" | "reports" | "settings" | "promotions";
 
 type NavItem = {
   label: string;
@@ -13,7 +13,7 @@ type NavItem = {
 
 const primaryNav: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: "dashboard", active: "overview" },
-  { label: "Sales", href: "/admin/reports?range=7d", icon: "sales" },
+  { label: "Sales", href: "/admin/orders?range=7d", icon: "sales" },
   { label: "POS", href: "/pos", icon: "pos" },
   { label: "Orders", href: "/admin/orders", icon: "orders", active: "orders" },
   { label: "Inventory", href: "/admin/inventory", icon: "inventory", active: "inventory" },
@@ -21,9 +21,9 @@ const primaryNav: NavItem[] = [
 ];
 
 const comingSoonNav: NavItem[] = [
-  { label: "Customers", icon: "customers", next: true },
-  { label: "Suppliers", icon: "suppliers", next: true },
-  { label: "Expenses", icon: "expenses", next: true },
+  { label: "Customers", href: "/admin/customers", icon: "customers", active: "customers" },
+  { label: "Suppliers", href: "/admin/suppliers", icon: "suppliers", active: "suppliers" },
+  { label: "Expenses", href: "/admin/expenses", icon: "expenses", active: "expenses" },
   { label: "Reports", href: "/admin/reports", icon: "reports", active: "reports" },
   { label: "Employees", href: "/admin/employees", icon: "employees", active: "employees" },
   { label: "Promotions", href: "/admin/promotions", icon: "promotions", active: "promotions" },

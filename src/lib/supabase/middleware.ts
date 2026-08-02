@@ -54,20 +54,9 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(redirect);
   }
 
-  // Cashiers may not reach /admin (role lives in profiles).
-  if (user && path.startsWith("/admin")) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-    if (profile && profile.role === "cashier") {
-      const redirect = request.nextUrl.clone();
-      redirect.pathname = "/pos";
-      return NextResponse.redirect(redirect);
-      // NOTE: the denied attempt should also be written to audit_logs (P0.5).
-    }
-  }
+  // Role checks stay in the Admin server pages and server actions. Avoid a
+  // second profiles query here on every tab transition; middleware already
+  // verified the session and the page-level check still redirects cashiers.
 
   return response;
 }

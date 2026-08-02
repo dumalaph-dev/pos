@@ -1,12 +1,12 @@
 import Image from "next/image";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
+import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import { stockMovementDelta, stockStatus, formatStockQuantity, LOW_STOCK_THRESHOLD, type StockMovementType } from "@/lib/inventory";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 
 type AdminRole = "admin" | "manager" | "cashier";
 type OrderStatus = "completed" | "voided" | "refunded";
@@ -161,9 +161,7 @@ function productImage(product: { name: string; image_url?: string | null }) {
 
 export default async function AdminPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthenticatedUser(supabase);
 
   if (!user) redirect("/");
 
