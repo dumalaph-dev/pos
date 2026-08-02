@@ -144,10 +144,15 @@ export default async function InventoryPage({
     const key = `${movement.store_id}:${movement.product_id}`;
     stockByKey.set(key, (stockByKey.get(key) ?? 0) + stockMovementDelta(movement.type, Number(movement.qty)));
   }
+  const trackedProductsByStore = new Map<string, ProductRecord[]>();
+  for (const product of trackedProducts) {
+    const storeProducts = trackedProductsByStore.get(product.store_id) ?? [];
+    storeProducts.push(product);
+    trackedProductsByStore.set(product.store_id, storeProducts);
+  }
 
   const inventoryRows = branches.flatMap((branch) =>
-    trackedProducts
-      .filter((product) => product.store_id === branch.id)
+    (trackedProductsByStore.get(branch.id) ?? [])
       .map((product) => {
         const onHand = stockByKey.get(`${branch.id}:${product.id}`) ?? 0;
         return { branch, product, onHand, status: stockStatus(onHand) };
