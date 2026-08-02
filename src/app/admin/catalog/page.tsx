@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { createCategory, createProduct, updateCategory, updateProduct } from "./actions";
 
 type AdminRole = "admin" | "manager" | "cashier";
@@ -55,9 +55,7 @@ export default async function CatalogPage({
 }) {
   const params = await searchParams;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthenticatedUser(supabase);
 
   if (!user) redirect("/");
 

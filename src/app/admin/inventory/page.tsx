@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
+import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import {
@@ -10,7 +10,7 @@ import {
   stockStatus,
   type StockMovementType,
 } from "@/lib/inventory";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { recordStockMovement } from "./actions";
 
 type AdminRole = "admin" | "manager" | "cashier";
@@ -96,9 +96,7 @@ export default async function InventoryPage({
   searchParams: Promise<{ error?: string; saved?: string }>;
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthenticatedUser(supabase);
 
   if (!user) redirect("/");
 

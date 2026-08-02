@@ -26,3 +26,20 @@ export async function createClient() {
     },
   );
 }
+
+/**
+ * Verify the access token locally when the project uses asymmetric JWTs.
+ * Middleware already performs the authoritative session refresh and route
+ * guard; Admin pages can reuse the verified claims and, with asymmetric JWTs,
+ * avoid another Auth API request before loading their page data.
+ */
+export async function getAuthenticatedUser(supabase: Awaited<ReturnType<typeof createClient>>) {
+  const { data, error } = await supabase.auth.getClaims();
+  const claims = data?.claims;
+  if (error || !claims || typeof claims.sub !== "string") return null;
+
+  return {
+    id: claims.sub,
+    email: typeof claims.email === "string" ? claims.email : null,
+  };
+}
