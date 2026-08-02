@@ -1,7 +1,7 @@
 import { AdminIcon, type AdminIconName } from "./AdminIcon";
 import { AdminLink as Link } from "./AdminLink";
 
-export type AdminSection = "overview" | "orders" | "inventory" | "catalog" | "customers" | "suppliers" | "expenses" | "employees" | "reports" | "settings" | "promotions";
+export type AdminSection = "overview" | "sales" | "orders" | "inventory" | "catalog" | "customers" | "suppliers" | "expenses" | "employees" | "reports" | "settings" | "promotions";
 
 type NavItem = {
   label: string;
@@ -13,7 +13,7 @@ type NavItem = {
 
 const primaryNav: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: "dashboard", active: "overview" },
-  { label: "Sales", href: "/admin/orders?range=7d", icon: "sales" },
+  { label: "Sales", href: "/admin/sales", icon: "sales", active: "sales" },
   { label: "POS", href: "/pos", icon: "pos" },
   { label: "Orders", href: "/admin/orders", icon: "orders", active: "orders" },
   { label: "Inventory", href: "/admin/inventory", icon: "inventory", active: "inventory" },
@@ -90,6 +90,7 @@ export function AdminSidebar({ branchName, active }: { branchName: string; activ
           <Link href="/pos"><AdminIcon name="bag" size={17} />New sale</Link>
           <Link href="/admin/catalog"><AdminIcon name="box" size={17} />Add product</Link>
           <Link href="/admin/inventory"><AdminIcon name="inventory" size={17} />Stock count</Link>
+          <Link href="/admin/reports"><AdminIcon name="reports" size={17} />View reports</Link>
         </div>
 
         <Link href="/admin/settings#devices" className="admin-sidebar__footer" aria-label="Open terminal settings">
