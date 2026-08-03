@@ -91,6 +91,12 @@ type MovementRecord = {
   qty: number;
 };
 
+type StockRecord = {
+  store_id: string;
+  product_id: string;
+  qty: number;
+};
+
 type DeviceRecord = { is_active: boolean; last_seen_at: string | null };
 
 type ProductRow = {
@@ -360,6 +366,7 @@ export default async function ProductsPage({
     .from("orders")
     .select("id, total, status, created_at")
     .eq("org_id", profile.org_id)
+    .eq("status", "completed")
     .gte("created_at", currentStart.toISOString())
     .lt("created_at", todayEnd.toISOString())
     .order("created_at", { ascending: false })
@@ -368,19 +375,27 @@ export default async function ProductsPage({
     .from("orders")
     .select("id, total, status, created_at")
     .eq("org_id", profile.org_id)
+    .eq("status", "completed")
     .gte("created_at", previousStart.toISOString())
     .lt("created_at", currentStart.toISOString())
     .limit(5000);
 
-  const [branchesResult, categoriesResult, productsResult, suppliersResult, movementsResult, devicesResult, currentOrdersResult, previousOrdersResult] = await Promise.all([
+  const [branchesResult, categoriesResult, productsResult, suppliersResult, stockResult, devicesResult, currentOrdersResult, previousOrdersResult, orderItemsResult] = await Promise.all([
     supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name"),
     supabase.from("categories").select("id, store_id, name, icon, sort_order, is_active").eq("org_id", profile.org_id).order("sort_order").order("name"),
     supabase.from("products").select("id, store_id, category_id, name, sku, barcode, pricing_mode, price, cost_price, min_stock, unit, supplier_id, track_stock, image_url, is_active, sort_order").eq("org_id", profile.org_id).order("sort_order").order("name").limit(1000),
     supabase.from("suppliers").select("id, name, is_active").eq("org_id", profile.org_id).order("name").limit(1000),
-    supabase.from("stock_movements").select("store_id, product_id, type, qty").eq("org_id", profile.org_id).limit(10000),
+    supabase.rpc("current_stock", { p_org_id: profile.org_id }),
     supabase.from("devices").select("is_active, last_seen_at").eq("org_id", profile.org_id).limit(100),
     currentOrdersQuery,
     previousOrdersQuery,
+    supabase
+      .from("order_items")
+      .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status)")
+      .eq("orders.org_id", profile.org_id)
+      .eq("orders.status", "completed")
+      .gte("orders.created_at", currentStart.toISOString())
+      .lt("orders.created_at", todayEnd.toISOString()),
   ]);
 
   const branches = (branchesResult.data ?? []) as BranchRecord[];
@@ -403,30 +418,38 @@ export default async function ProductsPage({
   }
 
   const suppliers = (suppliersResult.data ?? []) as SupplierRecord[];
-  const movements = (movementsResult.data ?? []) as MovementRecord[];
+  let fallbackMovements: MovementRecord[] = [];
+  let stockFallbackError = false;
+  if (stockResult.error) {
+    const fallbackMovementsResult = await supabase
+      .from("stock_movements")
+      .select("store_id, product_id, type, qty")
+      .eq("org_id", profile.org_id)
+      .limit(10000);
+    fallbackMovements = (fallbackMovementsResult.data ?? []) as MovementRecord[];
+    stockFallbackError = Boolean(fallbackMovementsResult.error);
+  }
   const currentOrders = (currentOrdersResult.data ?? []) as OrderRecord[];
   const previousOrders = (previousOrdersResult.data ?? []) as OrderRecord[];
   const devices = (devicesResult.data ?? []) as DeviceRecord[];
-  let orderItems: OrderItemRecord[] = [];
-  let orderItemsError = false;
-  const currentOrderIds = currentOrders.map((order) => order.id);
-  if (currentOrderIds.length > 0) {
-    const orderItemsResult = await supabase
-      .from("order_items")
-      .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total")
-      .in("order_id", currentOrderIds);
-    orderItems = (orderItemsResult.data ?? []) as OrderItemRecord[];
-    orderItemsError = Boolean(orderItemsResult.error);
-  }
+  const orderItems = (orderItemsResult.data ?? []) as OrderItemRecord[];
+  const orderItemsError = Boolean(orderItemsResult.error);
 
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
   const categoryById = new Map(categories.map((category) => [category.id, category]));
   const productById = new Map(products.map((product) => [product.id, product]));
   const supplierById = new Map(suppliers.map((supplier) => [supplier.id, supplier]));
   const stockByKey = new Map<string, number>();
-  for (const movement of movements) {
-    const key = `${movement.store_id}:${movement.product_id}`;
-    stockByKey.set(key, (stockByKey.get(key) ?? 0) + stockMovementDelta(movement.type, Number(movement.qty)));
+  if (stockResult.error) {
+    for (const movement of fallbackMovements) {
+      const key = `${movement.store_id}:${movement.product_id}`;
+      stockByKey.set(key, (stockByKey.get(key) ?? 0) + stockMovementDelta(movement.type, Number(movement.qty)));
+    }
+  } else {
+    for (const stock of (stockResult.data ?? []) as StockRecord[]) {
+      const key = `${stock.store_id}:${stock.product_id}`;
+      stockByKey.set(key, Number(stock.qty));
+    }
   }
 
   const productRows: ProductRow[] = products.map((product) => {
@@ -498,7 +521,7 @@ export default async function ProductsPage({
   const latestDevice = devices.filter((device) => device.last_seen_at).sort((a, b) => new Date(b.last_seen_at ?? 0).getTime() - new Date(a.last_seen_at ?? 0).getTime())[0];
   const connected = !devicesResult.error && devices.some((device) => device.is_active);
   const dataWarning = Boolean(
-    branchesResult.error || categoriesResult.error || Boolean(productsResult.error && !productsSchemaWarning) || fallbackProductsError || (suppliersResult.error && !suppliersSchemaWarning) || movementsResult.error || devicesResult.error || currentOrdersResult.error || previousOrdersResult.error || orderItemsError,
+    branchesResult.error || categoriesResult.error || Boolean(productsResult.error && !productsSchemaWarning) || fallbackProductsError || (suppliersResult.error && !suppliersSchemaWarning) || stockFallbackError || devicesResult.error || currentOrdersResult.error || previousOrdersResult.error || orderItemsError,
   );
   const canWrite = profile.role === "admin";
   const selectedProduct = selectedProductId ? productById.get(selectedProductId) : undefined;

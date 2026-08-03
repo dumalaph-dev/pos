@@ -92,6 +92,8 @@ const paymentOptions: Array<{ value: PaymentFilter; label: string }> = [
   { value: "maya", label: "Maya" },
   { value: "card", label: "Card" },
 ];
+const ORDER_LIST_FIELDS = "id, order_no, store_id, cashier_id, status, discount_amount, total, payment_method, created_at";
+const ORDER_DETAIL_FIELDS = "id, order_no, store_id, cashier_id, status, subtotal, discount_type, discount_amount, discount_ref, vat_amount, total, payment_method, payment_ref, amount_tendered, change_due, note, created_at, created_at_device";
 const singaporeDateFormatter = new Intl.DateTimeFormat("en-US", {
   day: "2-digit",
   month: "2-digit",
@@ -320,13 +322,13 @@ export default async function OrdersPage({
 
   let ordersQuery = supabase
     .from("orders")
-    .select("id, order_no, store_id, cashier_id, status, subtotal, discount_type, discount_amount, discount_ref, vat_amount, total, payment_method, payment_ref, amount_tendered, change_due, note, created_at, created_at_device")
+    .select(ORDER_LIST_FIELDS)
     .eq("org_id", profile.org_id)
     .order("created_at", { ascending: false })
     .limit(1000);
   let previousOrdersQuery = supabase
     .from("orders")
-    .select("id, order_no, store_id, cashier_id, status, subtotal, discount_type, discount_amount, discount_ref, vat_amount, total, payment_method, payment_ref, amount_tendered, change_due, note, created_at, created_at_device")
+    .select(ORDER_LIST_FIELDS)
     .eq("org_id", profile.org_id)
     .order("created_at", { ascending: false })
     .limit(1000);
@@ -360,14 +362,18 @@ export default async function OrdersPage({
   if (itemsQuery && status !== "all") itemsQuery = itemsQuery.eq("orders.status", status);
   if (itemsQuery && payment !== "all") itemsQuery = itemsQuery.eq("orders.payment_method", payment);
   if (itemsQuery && branchFilter) itemsQuery = itemsQuery.eq("orders.store_id", branchFilter);
+  const selectedOrderQuery = selectedOrderId
+    ? supabase.from("orders").select(ORDER_DETAIL_FIELDS).eq("org_id", profile.org_id).eq("id", selectedOrderId).maybeSingle()
+    : null;
 
-  const [branchesResult, cashiersResult, productsResult, ordersResult, previousOrdersResult, itemsResult] = await Promise.all([
+  const [branchesResult, cashiersResult, productsResult, ordersResult, previousOrdersResult, itemsResult, selectedOrderResult] = await Promise.all([
     supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name"),
     supabase.from("profiles").select("id, full_name, role").eq("org_id", profile.org_id).order("full_name").limit(200),
     supabase.from("products").select("id, image_url, unit").eq("org_id", profile.org_id).limit(1000),
     ordersQuery,
     previousOrdersPromise,
     itemsQuery,
+    selectedOrderQuery,
   ]);
 
   const branches = (branchesResult.data ?? []) as BranchRecord[];
@@ -386,19 +392,25 @@ export default async function OrdersPage({
     const cashierName = cashierById.get(order.cashier_id)?.full_name ?? "";
     return [order.order_no, branchName, cashierName].some((value) => value.toLowerCase().includes(normalizedQuery));
   });
-  const selectedOrder = selectedOrderId ? filteredOrders.find((order) => order.id === selectedOrderId) ?? null : null;
+  const selectedOrderFromList = selectedOrderId ? filteredOrders.find((order) => order.id === selectedOrderId) ?? null : null;
+  const selectedOrderDetails = selectedOrderResult?.data as OrderRecord | null;
+  const selectedOrder = selectedOrderFromList ? selectedOrderDetails ?? selectedOrderFromList : null;
+
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
+  const page = Math.min(requestedPage, totalPages);
+  const visibleOrderIds = new Set(filteredOrders.slice((page - 1) * pageSize, page * pageSize).map((order) => order.id));
+  if (selectedOrder?.id) visibleOrderIds.add(selectedOrder.id);
 
   let orderItems: OrderItemRecord[] = [];
   let orderItemsError = false;
-  const orderIds = orders.map((order) => order.id);
   if (itemsResult) {
     orderItems = (itemsResult.data ?? []) as OrderItemRecord[];
     orderItemsError = Boolean(itemsResult.error);
-  } else if (orderIds.length > 0) {
+  } else if (visibleOrderIds.size > 0) {
     const { data, error } = await supabase
       .from("order_items")
       .select("order_id, product_id, name_snapshot, qty, weight_kg, unit_price_snapshot, line_total")
-      .in("order_id", orderIds);
+      .in("order_id", [...visibleOrderIds]);
     orderItems = (data ?? []) as OrderItemRecord[];
     orderItemsError = Boolean(error);
   }
@@ -419,9 +431,7 @@ export default async function OrdersPage({
   const currentBranchName = profile.store_id ? branchById.get(profile.store_id)?.name ?? DEFAULT_STORE_NAME : "All branches";
   const branchLabel = branchFilter ? branchById.get(branchFilter)?.name ?? "Selected branch" : "All branches";
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
-  const queryWarning = Boolean(branchesResult.error || cashiersResult.error || productsResult.error || ordersResult.error || previousOrdersResult?.error || orderItemsError);
-  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
-  const page = Math.min(requestedPage, totalPages);
+  const queryWarning = Boolean(branchesResult.error || cashiersResult.error || productsResult.error || ordersResult.error || previousOrdersResult?.error || orderItemsError || selectedOrderResult?.error);
   const visibleOrders = filteredOrders.slice((page - 1) * pageSize, page * pageSize);
   const exportParams = new URLSearchParams({ range });
   if (branchFilter) exportParams.set("branch", branchFilter);

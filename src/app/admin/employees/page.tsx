@@ -266,9 +266,16 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   const today = todayInSingapore();
   const fallbackRange = weekRange(today);
   const range = selectedRange(params, fallbackRange);
+  const tab = readTab(readParam(params, "tab"));
   const attendanceDate = dateIsValid(readParam(params, "date")) ? readParam(params, "date") : today;
   const attendanceFetchStart = attendanceDate < range.start ? attendanceDate : range.start;
   const attendanceFetchEnd = attendanceDate > range.end ? attendanceDate : range.end;
+  const attendanceSelect = tab === "attendance"
+    ? "id, employee_id, work_date, status, check_in, check_out, notes"
+    : "work_date, status";
+  const payrollSelect = tab === "payroll"
+    ? "id, employee_id, period_start, period_end, regular_pay, overtime_pay, allowances, deductions, status, notes"
+    : "regular_pay, overtime_pay, allowances, deductions";
   const [
     branchesResult,
     employeesResult,
@@ -280,16 +287,16 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
     supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name"),
     supabase.from("employee_records").select("id, profile_id, role_id, store_id, employee_code, full_name, email, phone, role, job_title, hired_on, schedule_days, schedule_start, schedule_end, is_active, created_at").eq("org_id", profile.org_id).order("is_active", { ascending: false }).order("full_name").limit(1000),
     supabase.from("employee_roles").select("id, name, slug, description, color, permissions, is_active").eq("org_id", profile.org_id).order("is_active", { ascending: false }).order("name"),
-    supabase.from("attendance_logs").select("id, employee_id, work_date, status, check_in, check_out, notes").eq("org_id", profile.org_id).gte("work_date", attendanceFetchStart).lte("work_date", attendanceFetchEnd).order("work_date", { ascending: false }).limit(5000),
-    supabase.from("payroll_records").select("id, employee_id, period_start, period_end, regular_pay, overtime_pay, allowances, deductions, status, notes").eq("org_id", profile.org_id).lte("period_start", range.end).gte("period_end", range.start).order("period_start", { ascending: false }).limit(1000),
+    supabase.from("attendance_logs").select(attendanceSelect).eq("org_id", profile.org_id).gte("work_date", attendanceFetchStart).lte("work_date", attendanceFetchEnd).order("work_date", { ascending: false }).limit(5000),
+    supabase.from("payroll_records").select(payrollSelect).eq("org_id", profile.org_id).lte("period_start", range.end).gte("period_end", range.start).order("period_start", { ascending: false }).limit(1000),
     supabase.from("leave_requests").select("id, employee_id, leave_type, start_date, end_date, reason, status, created_at").eq("org_id", profile.org_id).order("created_at", { ascending: false }).limit(1000),
   ]);
 
   const branches = (branchesResult.data ?? []) as BranchRecord[];
   const employees = (employeesResult.data ?? []) as EmployeeRecord[];
   const roles = (rolesResult.data ?? []) as RoleRecord[];
-  const attendanceLogs = (attendanceResult.data ?? []) as AttendanceRecord[];
-  const payrollRecords = (payrollResult.data ?? []) as PayrollRecord[];
+  const attendanceLogs = (attendanceResult.data ?? []) as unknown as AttendanceRecord[];
+  const payrollRecords = (payrollResult.data ?? []) as unknown as PayrollRecord[];
   const leaveRequests = (leaveResult.data ?? []) as LeaveRecord[];
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
   const roleById = new Map(roles.map((role) => [role.id, role]));
@@ -328,7 +335,6 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   const requestedPage = Number.parseInt(readParam(params, "page") || "1", 10);
   const currentPage = Number.isFinite(requestedPage) ? Math.min(Math.max(requestedPage, 1), totalPages) : 1;
   const visibleEmployees = filteredEmployees.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-  const tab = readTab(readParam(params, "tab"));
   const canWrite = profile.role === "admin";
   const currentBranchName = profile.store_id ? branchById.get(profile.store_id)?.name ?? DEFAULT_STORE_NAME : "All branches";
   const firstName = profile.full_name?.trim().split(/\s+/)[0] || user.email?.split("@")[0] || "Admin";

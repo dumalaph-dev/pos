@@ -329,7 +329,8 @@ export default async function InventoryPage({
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile) return <InventoryProfileMissing />;
 
-  const [branchesResult, categoriesResult, suppliersResult, productsResult, movementsResult, stockResult] = await Promise.all([
+  const { start: todayStart, end: todayEnd } = getSingaporeDayBounds();
+  const [branchesResult, categoriesResult, suppliersResult, productsResult, recentMovementsResult, stockResult, movedTodayResult, posSaleCountResult] = await Promise.all([
     supabase
       .from("stores")
       .select("id, name, is_active")
@@ -359,10 +360,22 @@ export default async function InventoryPage({
       .select("id, store_id, product_id, type, qty, unit, unit_cost, reason, ref_order_id, created_at")
       .eq("org_id", profile.org_id)
       .order("created_at", { ascending: false })
-      .limit(5000),
-    // On-hand totals come from the server-side ledger aggregation; the raw
-    // movements query above stays only for the movement history table.
+      .limit(100),
+    // On-hand totals come from the server-side ledger aggregation. The raw
+    // movement query is intentionally small for the history preview and is
+    // expanded only if the RPC is unavailable.
     supabase.rpc("current_stock", { p_org_id: profile.org_id }),
+    supabase
+      .from("stock_movements")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", profile.org_id)
+      .gte("created_at", todayStart.toISOString())
+      .lt("created_at", todayEnd.toISOString()),
+    supabase
+      .from("stock_movements")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", profile.org_id)
+      .eq("type", "sale"),
   ]);
 
   const branches = (branchesResult.data ?? []) as BranchRecord[];
@@ -393,7 +406,18 @@ export default async function InventoryPage({
     productsQueryWarning = true;
   }
 
-  const movements = (movementsResult.data ?? []) as MovementRecord[];
+  let movements = (recentMovementsResult.data ?? []) as MovementRecord[];
+  let movementQueryError = Boolean(recentMovementsResult.error);
+  if (stockResult.error) {
+    const fallbackMovementsResult = await supabase
+      .from("stock_movements")
+      .select("id, store_id, product_id, type, qty, unit, unit_cost, reason, ref_order_id, created_at")
+      .eq("org_id", profile.org_id)
+      .order("created_at", { ascending: false })
+      .limit(5000);
+    movements = (fallbackMovementsResult.data ?? []) as MovementRecord[];
+    movementQueryError = Boolean(fallbackMovementsResult.error);
+  }
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
   const categoryById = new Map(categories.map((category) => [category.id, category]));
   const supplierById = new Map(suppliers.map((supplier) => [supplier.id, supplier]));
@@ -459,20 +483,23 @@ export default async function InventoryPage({
   const firstRow = filteredRows.length === 0 ? 0 : (page - 1) * pageSize + 1;
   const lastRow = Math.min(page * pageSize, filteredRows.length);
 
-  const { start: todayStart, end: todayEnd } = getSingaporeDayBounds();
   const lowStockCount = allRows.filter((row) => row.status === "low").length;
   const outOfStockCount = allRows.filter((row) => row.status === "out").length;
-  const movedToday = movements.filter((movement) => {
-    const time = new Date(movement.created_at).getTime();
-    return time >= todayStart.getTime() && time < todayEnd.getTime();
-  }).length;
+  const movedToday = stockResult.error
+    ? movements.filter((movement) => {
+        const time = new Date(movement.created_at).getTime();
+        return time >= todayStart.getTime() && time < todayEnd.getTime();
+      }).length
+    : movedTodayResult.count ?? 0;
   const estimatedValue = allRows.reduce((sum, row) => sum + row.inventoryValue, 0);
   const estimatedValueItems = allRows.filter((row) => row.product.cost_price == null).length;
   const catalogFieldsWarning = productsSchemaWarning || isInventorySchemaError(suppliersResult.error);
   const queryWarning = Boolean(
     branchesResult.error
       || categoriesResult.error
-      || movementsResult.error
+      || movementQueryError
+      || movedTodayResult.error
+      || posSaleCountResult.error
       || (productsQueryWarning && !productsSchemaWarning)
       || (suppliersResult.error && !catalogFieldsWarning),
   );
@@ -502,7 +529,7 @@ export default async function InventoryPage({
   ];
   const savedMessage = readParam(params.saved) === "1" ? "Stock movement recorded. The ledger and POS balance are up to date." : "";
   const baseHref = { q: searchQuery, category, status, supplier, page, pageSize, columns: visibleColumns };
-  const posSaleCount = movements.filter((movement) => movement.type === "sale").length;
+  const posSaleCount = stockResult.error ? movements.filter((movement) => movement.type === "sale").length : posSaleCountResult.count ?? 0;
   const userInitial = firstName.slice(0, 1).toUpperCase();
   const inventoryAlertCount = lowStockCount + outOfStockCount;
   const activeFilterCount = [category !== "all", status !== "all", Boolean(supplier)].filter(Boolean).length;

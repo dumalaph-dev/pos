@@ -139,6 +139,7 @@ export default async function PromotionsPage({
     .from("orders")
     .select("id, order_no, store_id, status, discount_type, discount_amount, discount_ref, subtotal, total, created_at")
     .eq("org_id", profile.org_id)
+    .eq("status", "completed")
     .order("created_at", { ascending: false })
     .limit(5000);
   if (startDate) ordersQuery = ordersQuery.gte("created_at", startDate.toISOString()).lt("created_at", todayEnd.toISOString());

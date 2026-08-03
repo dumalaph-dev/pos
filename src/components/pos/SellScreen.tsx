@@ -45,6 +45,7 @@ type Product = {
   min_stock?: number | null;
 };
 type Category = { id: string; name: string; icon: string | null };
+type StockRow = { store_id: string; product_id: string; qty: number };
 
 type CartLine = {
   key: string; // product id — one line per product
@@ -333,22 +334,31 @@ export default function SellScreen() {
           .order("sort_order"),
       ]);
       if (catRes.error || prodRes.error) throw catRes.error || prodRes.error;
-      const stockRes = profileData.store_id
-        ? await supabase
+      const nextStock: Record<string, number> = {};
+      let stockError = false;
+      if (profileData.store_id) {
+        const stockRes = await supabase.rpc("current_stock", { p_org_id: profileData.org_id });
+        if (!stockRes.error) {
+          for (const stock of (stockRes.data ?? []) as StockRow[]) {
+            if (stock.store_id === profileData.store_id) nextStock[stock.product_id] = Number(stock.qty);
+          }
+        } else {
+          const fallbackStockRes = await supabase
             .from("stock_movements")
             .select("product_id, type, qty")
             .eq("store_id", profileData.store_id)
-            .limit(5000)
-        : { data: [], error: null };
-      const nextStock: Record<string, number> = {};
-      for (const movement of stockRes.data ?? []) {
-        nextStock[movement.product_id] =
-          (nextStock[movement.product_id] ?? 0) +
-          stockMovementDelta(movement.type, Number(movement.qty));
+            .limit(5000);
+          stockError = Boolean(fallbackStockRes.error);
+          for (const movement of fallbackStockRes.data ?? []) {
+            nextStock[movement.product_id] =
+              (nextStock[movement.product_id] ?? 0) +
+              stockMovementDelta(movement.type, Number(movement.qty));
+          }
+        }
       }
       setCategories((catRes.data ?? []) as Category[]);
       setProducts((prodRes.data ?? []) as Product[]);
-      if (stockRes.error) {
+      if (stockError) {
         // A catalog can still be useful when the ledger query is unavailable;
         // keep tracked tiles in the unknown state instead of falsely showing 0.
         setStockByProductId({});
