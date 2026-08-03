@@ -12,6 +12,10 @@ await mkdir(server, { recursive: true });
 await cp(source, server, { recursive: true });
 await cp(path.join(source, "assets"), path.join(dist, "assets"), { recursive: true });
 
+// Static assets are published from dist/assets; keeping the copied server
+// duplicate would make Cloudflare count the same images toward Worker size.
+await rm(path.join(server, "assets"), { recursive: true, force: true });
+
 // Next traces this 4 MiB metrics table even when the app does not use
 // next/font. Keeping the unused trace-only file would push the Cloudflare
 // Worker over its 10 MiB upload limit.
