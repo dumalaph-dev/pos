@@ -8,6 +8,7 @@ import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import {
   createEmployee,
   createLeaveRequest,
+  provisionEmployeeLogin,
   saveAttendance,
   savePayroll,
   saveRole,
@@ -246,6 +247,7 @@ function savedMessage(value: string) {
     "leave-created": "Leave request created.",
     "leave-approved": "Leave request approved.",
     "leave-rejected": "Leave request rejected.",
+    "login-provisioned": "Employee login is ready. Give the employee the common initial password; they will be required to create a new one on first sign-in.",
   };
   return messages[value] ?? "Changes saved.";
 }
@@ -393,7 +395,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
                   {TABS.map((item) => <Link key={item.key} href={employeeHref({ tab: item.key, q: readParam(params, "q"), role: requestedRole, status: requestedStatus, branch: branchFilter, start: range.start, end: range.end })} aria-current={tab === item.key ? "page" : undefined} className={tab === item.key ? "is-active" : ""}>{item.label}</Link>)}
                 </nav>
 
-                {tab === "list" && <EmployeeListTab employees={visibleEmployees} filteredCount={filteredEmployees.length} totalCount={employees.length} currentPage={currentPage} totalPages={totalPages} branches={branches} roleById={roleById} approvedLeaveToday={approvedLeaveToday} requestedRole={requestedRole} requestedStatus={requestedStatus} branchFilter={branchFilter} searchQuery={searchQuery} filtersOpen={filtersOpen} range={range} today={today} />}
+                {tab === "list" && <EmployeeListTab employees={visibleEmployees} filteredCount={filteredEmployees.length} totalCount={employees.length} currentPage={currentPage} totalPages={totalPages} branches={branches} roleById={roleById} approvedLeaveToday={approvedLeaveToday} requestedRole={requestedRole} requestedStatus={requestedStatus} branchFilter={branchFilter} searchQuery={searchQuery} filtersOpen={filtersOpen} range={range} today={today} canWrite={canWrite} />}
                 {tab === "roles" && <RolesTab roles={roles} employees={employees} roleById={roleById} canWrite={canWrite} showCreate={readParam(params, "create") === "role"} />}
                  {tab === "attendance" && <AttendanceTab employees={employees} logs={attendanceForDate} date={attendanceDate} selectedEmployeeId={selectedAttendanceEmployeeId} range={range} breakdown={selectedAttendanceBreakdown} canWrite={canWrite} />}
                 {tab === "payroll" && <PayrollTab employees={employees} records={payrollRecords} range={range} editing={editingPayroll} canWrite={canWrite} />}
@@ -435,7 +437,7 @@ function DateRangeMenu({ tab, range, searchQuery, requestedRole, requestedStatus
   </details>;
 }
 
-function EmployeeListTab({ employees, filteredCount, totalCount, currentPage, totalPages, branches, roleById, approvedLeaveToday, requestedRole, requestedStatus, branchFilter, searchQuery, filtersOpen, range, today }: { employees: EmployeeRecord[]; filteredCount: number; totalCount: number; currentPage: number; totalPages: number; branches: BranchRecord[]; roleById: Map<string, RoleRecord>; approvedLeaveToday: Set<string>; requestedRole: string; requestedStatus: string; branchFilter: string; searchQuery: string; filtersOpen: boolean; range: { start: string; end: string }; today: string }) {
+function EmployeeListTab({ employees, filteredCount, totalCount, currentPage, totalPages, branches, roleById, approvedLeaveToday, requestedRole, requestedStatus, branchFilter, searchQuery, filtersOpen, range, today, canWrite }: { employees: EmployeeRecord[]; filteredCount: number; totalCount: number; currentPage: number; totalPages: number; branches: BranchRecord[]; roleById: Map<string, RoleRecord>; approvedLeaveToday: Set<string>; requestedRole: string; requestedStatus: string; branchFilter: string; searchQuery: string; filtersOpen: boolean; range: { start: string; end: string }; today: string; canWrite: boolean }) {
   const exportHref = `/admin/employees/export?${new URLSearchParams({ ...(searchQuery ? { q: searchQuery } : {}), ...(requestedRole ? { role: requestedRole } : {}), ...(requestedStatus ? { status: requestedStatus } : {}), ...(branchFilter ? { branch: branchFilter } : {}) }).toString()}`;
   const listState = { q: searchQuery, role: requestedRole, status: requestedStatus, branch: branchFilter, start: range.start, end: range.end, filters: filtersOpen ? "1" : undefined };
   return <div className="employee-tab-content">
@@ -469,7 +471,7 @@ function EmployeeListTab({ employees, filteredCount, totalCount, currentPage, to
               <td><span className={`employee-status ${statusTone(status)}`}>{statusLabel(status)}</span></td>
               <td><div className="employee-contact"><strong>{employee.phone || "No phone"}</strong><small>{employee.email || "No email"}</small></div></td>
               <td className="tnums whitespace-nowrap">{formatDate(employee.hired_on)}</td>
-               <td><div className="employee-row-actions"><Link href={employeeHref({ ...listState, tab: "list", edit: employee.id })} className="employee-icon-button" aria-label={`Edit ${employee.full_name}`}><AdminIcon name="edit" size={15} /></Link><Link href={employeeHref({ ...listState, tab: "attendance", employee: employee.id, date: today })} className="employee-icon-button" aria-label={`Open attendance for ${employee.full_name}`}><AdminIcon name="more" size={16} /></Link></div></td>
+               <td><div className="employee-row-actions"><Link href={employeeHref({ ...listState, tab: "list", edit: employee.id })} className="employee-icon-button" aria-label={`Edit ${employee.full_name}`}><AdminIcon name="edit" size={15} /></Link><Link href={employeeHref({ ...listState, tab: "attendance", employee: employee.id, date: today })} className="employee-icon-button" aria-label={`Open attendance for ${employee.full_name}`}><AdminIcon name="more" size={16} /></Link>{canWrite && <form action={provisionEmployeeLogin} className="employee-login-action"><input type="hidden" name="employee_id" value={employee.id} />{Object.entries(listState).map(([key, value]) => value ? <input key={key} type="hidden" name={`return_${key}`} value={value} /> : null)}<button type="submit" className={`employee-login-button ${employee.profile_id ? "employee-login-button--ready" : ""}`}>{employee.profile_id ? "Reset login" : "Set up login"}</button></form>}</div></td>
             </tr>;
           })}
         </tbody>

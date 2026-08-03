@@ -130,6 +130,8 @@ The order is **immutable truth**. Server stock is decremented from synced orders
 
 ## 7. Security
 
+- **Employee sign-in:** Staff may use their `EMP-####` employee code instead of typing email. The server resolves the code to the Supabase Auth identity, provisions accounts with a server-only temporary password, and requires a password change before `/pos` or `/admin`.
+
 - **Auth:** Supabase email+password. After first online login, store a **device-bound unlock credential**; offline re-entry via 4–6 digit **PIN** (`profiles.pin_hash`, hashed server-side; PIN verify works offline against the cached credential). 5 wrong PINs → 60s lockout.
 - **Authorization:** RLS is the source of truth. App-layer role checks are UX only, never the security boundary.
 - **Append-only:** `audit_logs`, `stock_movements`, and order immutability enforced by absent UPDATE/DELETE policies + triggers (SCHEMA §4).

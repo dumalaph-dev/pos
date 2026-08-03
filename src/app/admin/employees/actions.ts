@@ -2,6 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import {
+  createAdminClient,
+  configuredEmployeeInitialPassword,
+  employeeInternalAuthEmail,
+} from "@/lib/employee-auth";
 import { toCentavos } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
 
@@ -153,6 +158,108 @@ function revalidateEmployees() {
   revalidatePath("/admin");
   revalidatePath("/admin/orders");
   revalidatePath("/pos");
+}
+
+export async function provisionEmployeeLogin(formData: FormData) {
+  const { supabase, userId, actor } = await getActor();
+  if (actor.role !== "admin") employeesRedirect("Only organization admins can set up employee logins.");
+
+  const employeeId = readText(formData, "employee_id");
+  const initialPassword = configuredEmployeeInitialPassword();
+  const admin = createAdminClient();
+  if (!employeeId) employeesRedirect("Choose an employee before setting up login access.");
+  if (!initialPassword || !admin) employeesRedirect("Employee login is not configured. Add the server-only Supabase service key and EMPLOYEE_INITIAL_PASSWORD first.");
+
+  const { data: employee, error: employeeError } = await supabase
+    .from("employee_records")
+    .select("id, org_id, profile_id, store_id, employee_code, full_name, role, is_active")
+    .eq("id", employeeId)
+    .eq("org_id", actor.org_id)
+    .maybeSingle();
+  if (employeeError || !employee) employeesRedirect("That employee record is not available.");
+  if (!employee.is_active) employeesRedirect("Activate the employee before setting up login access.");
+
+  let profileId = employee.profile_id as string | null;
+  let createdAuthUserId: string | null = null;
+  if (!profileId) {
+    const { data: createdUser, error: createUserError } = await admin.auth.admin.createUser({
+      email: employeeInternalAuthEmail(employee.employee_code, actor.org_id),
+      password: initialPassword,
+      email_confirm: true,
+      user_metadata: { employee_code: employee.employee_code, employee_name: employee.full_name },
+    });
+    if (createUserError || !createdUser.user) employeesRedirect(createUserError?.message || "The employee Auth account could not be created.");
+    profileId = createdUser.user.id;
+    createdAuthUserId = profileId;
+
+    const { error: profileInsertError } = await admin.from("profiles").insert({
+      id: profileId,
+      org_id: actor.org_id,
+      store_id: employee.store_id,
+      full_name: employee.full_name,
+      role: employee.role,
+      password_change_required: true,
+      is_active: true,
+    });
+    if (profileInsertError) {
+      await admin.auth.admin.deleteUser(profileId);
+      employeesRedirect(profileInsertError.message || "The employee profile could not be created.");
+    }
+
+    const { error: linkError } = await admin
+      .from("employee_records")
+      .update({ profile_id: profileId, updated_at: new Date().toISOString() })
+      .eq("id", employee.id)
+      .eq("org_id", actor.org_id)
+      .is("profile_id", null);
+    if (linkError) {
+      await admin.from("profiles").delete().eq("id", profileId);
+      await admin.auth.admin.deleteUser(profileId);
+      employeesRedirect(linkError.message || "The employee login could not be linked to the directory record.");
+    }
+  } else {
+    const { data: authUser, error: authLookupError } = await admin.auth.admin.getUserById(profileId);
+    if (authLookupError || !authUser.user) employeesRedirect("The linked Auth account could not be found. Ask an administrator to repair this employee record.");
+  }
+
+  const { error: authUpdateError } = await admin.auth.admin.updateUserById(profileId, {
+    password: initialPassword,
+    user_metadata: { employee_code: employee.employee_code, employee_name: employee.full_name },
+  });
+  if (authUpdateError) {
+    if (createdAuthUserId) {
+      await admin.from("employee_records").update({ profile_id: null, updated_at: new Date().toISOString() }).eq("id", employee.id).eq("org_id", actor.org_id);
+      await admin.from("profiles").delete().eq("id", createdAuthUserId);
+      await admin.auth.admin.deleteUser(createdAuthUserId);
+    }
+    employeesRedirect(authUpdateError.message || "The employee password could not be initialized.");
+  }
+
+  const { error: profileUpdateError } = await admin
+    .from("profiles")
+    .update({
+      full_name: employee.full_name,
+      store_id: employee.store_id,
+      role: employee.role,
+      is_active: true,
+      password_change_required: true,
+    })
+    .eq("id", profileId)
+    .eq("org_id", actor.org_id);
+  if (profileUpdateError) employeesRedirect(profileUpdateError.message || "The employee password-change requirement could not be saved.");
+
+  await admin.from("audit_logs").insert({
+    org_id: actor.org_id,
+    store_id: employee.store_id,
+    actor_id: userId,
+    action: "auth.employee.login_provisioned",
+    entity: "employee_records",
+    entity_id: employee.id,
+    after: { employee_code: employee.employee_code, profile_id: profileId, reset_to_initial_password: true },
+  });
+
+  revalidateEmployees();
+  employeesSaved("list", "login-provisioned", readReturnValues(formData));
 }
 
 export async function createEmployee(formData: FormData) {

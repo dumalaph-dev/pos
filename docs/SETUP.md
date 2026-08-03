@@ -29,6 +29,8 @@ Fill `.env.local` from Supabase → **Settings → API**:
 
 `.env.local` is gitignored. Set the same vars in Vercel (Project → Settings → Environment Variables) for preview + production.
 
+`EMPLOYEE_INITIAL_PASSWORD` is the common temporary password that the administrator gives to staff. It must be at least 8 characters and stays server-only; employees are forced to replace it after their first successful Employee ID login.
+
 ## 4. Database migrations
 SQL lives in `supabase/migrations/` (run in order):
 1. `0001_schema.sql` — tables, enums, indexes
@@ -41,6 +43,9 @@ SQL lives in `supabase/migrations/` (run in order):
 8. `0008_admin_query_indexes.sql` — backoffice query indexes
 9. `0009_admin_business_records.sql` — customers, suppliers, and expenses
 10. `0010_inventory_catalog_fields.sql` — SKU, barcode, cost, minimum-stock, and supplier fields; **must run after `0009`**
+
+11. `0011_employee_workspace.sql` - employee directory, roles, attendance, payroll, and leave records
+12. `0012_employee_id_login.sql` - first-login password-change flag and employee-code lookup index
 
 **Apply them** either way:
 - **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push`

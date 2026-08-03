@@ -6376,3 +6376,8 @@ select:focus-visible {
   .employee-leave-row { grid-template-columns: 31px minmax(0, 1fr) auto; }
   .employee-leave-actions { grid-column: 2 / -1; }
 }
+
+.employee-login-action { display: flex; }
+.employee-login-button { min-height: 34px; padding: 0 8px; border: 1px solid #c98b58; border-radius: 7px; color: #7a3c0c; background: #fff5ea; font-size: 9px; font-weight: 850; white-space: nowrap; }
+.employee-login-button:hover { border-color: #7a3c0c; background: #fbe6d0; }
+.employee-login-button--ready { border-color: #e8c6a9; color: #94613f; background: #fffaf4; }

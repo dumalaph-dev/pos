@@ -181,6 +181,15 @@
 - Hosted verification passed: linked migrations remain `0001` through `0011` in sync; `audit_logs` has the expected 11 columns, `audit_read` and `audit_insert` RLS policies, and the `no_mutate_audit` trigger. The live hosted table currently contains 0 audit events, so the route correctly renders an empty state until real order, inventory, or other audited activity is recorded; no fixture rows were left behind.
 - Code verification passed: `npx tsc --noEmit`, `npm run lint`, `git diff --check`, and `npm run build`. The build exposes `/admin/audit`; only the existing middleware/OpenNext-on-Windows/punycode warnings remain. An unauthenticated local request was redirected to the app auth entry point as expected. Protected browser interaction remains pending because the available in-app browser session is signed out.
 
+### Employee ID login implementation - 2026-08-03
+
+- Added an Employee ID sign-in path alongside the existing email sign-in path. Staff enter their `EMP-####` code and password; the server resolves the code to a Supabase Auth user without exposing the internal Auth email to the browser.
+- Added an admin-only Set up login / Reset login action on the Employees list. It creates a confirmed Supabase Auth user for new employee records, links the Auth user to `profiles` and `employee_records`, resets the configured common initial password when requested, and records an `auth.employee.login_provisioned` audit event without logging the password.
+- Added first-login password enforcement at `/account/password`. The required flag is checked by middleware before `/pos` and `/admin`, and the password-change action clears it server-side after Supabase Auth accepts the new password. The change is recorded as `auth.password.changed`.
+- Added migration `0012_employee_id_login.sql`; linked hosted verification passed with migrations `0001` through `0012` matching, `profiles.password_change_required` present with default `false`, the active employee-code lookup index present, and current hosted counts of 1 employee and 0 forced-password profiles.
+- Server configuration required before provisioning: set the real hosted `SUPABASE_SERVICE_ROLE_KEY` and a server-only `EMPLOYEE_INITIAL_PASSWORD` of at least 8 characters. The temporary password is never shipped to the client. Protected browser login/provisioning remains pending until those runtime values are configured and the in-app browser is signed in.
+- Code verification passed: `npx tsc --noEmit`, `npm run lint`, and `npm run build`. The build exposes `/account/password`; only the existing middleware/OpenNext-on-Windows/punycode warnings remain.
+
 ## Cross-cutting (do continuously, not a phase)
 - [ ] Audit-logging on every sensitive action as features land (don't retrofit).
 - [ ] Accessibility & tap-target sizing on every POS screen.
