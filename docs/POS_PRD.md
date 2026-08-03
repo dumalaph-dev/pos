@@ -329,7 +329,7 @@ The brief is "beautiful, simple, modern." Concretely, for a POS that's used 8 ho
 
 - **Light theme by default**, high contrast, no glassmorphism or low-contrast greys. Dark theme is a P1 nicety.
 - **One accent color**, used only for the primary action. Everything else is neutral. Semantic red/green reserved strictly for destructive/success.
-- **Type**: one geometric sans (Inter or Geist). Numbers in tabular figures — totals must not jitter as they change.
+- **Type**: one distinctive humanist sans (IBM Plex Sans). Numbers in tabular figures — totals must not jitter as they change.
 - **Density**: generous. Tap targets ≥ 48px, product tiles ≥ 96px. Whitespace is the "premium" signal.
 - **Products are the hero of the sell screen.** The category rail is a slim, quiet strip — navigation, not decoration. The product grid gets the width. The running total is the hero of the cart column.
 - **Motion**: ≤ 150ms, only for state transitions. No decorative animation on the sell screen.

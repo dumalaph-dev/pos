@@ -31,7 +31,7 @@ Use the existing CSS variables in `src/app/globals.css` and do not introduce a c
 | Secondary fill | `--secondary-btn` | `#ebdcc9` |
 | Success | `--success` | `#3f7d53` |
 
-Typography is Plus Jakarta Sans. Use tabular numerals for money and quantities. Keep headings bold and friendly; avoid condensed or display type for UI copy. The vintage serif treatment belongs only to the brand lockup.
+Typography is IBM Plex Sans. Use tabular numerals for money and quantities. Keep headings bold and friendly; avoid condensed or display type for UI copy. The vintage serif treatment belongs only to the brand lockup.
 
 ## Component rules
 

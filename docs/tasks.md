@@ -37,7 +37,7 @@
 - [x] Supabase Auth: email+password login page at root; `profiles` row created on invite. *(Client/server helpers ready; login UI pending.)* *(✅ first login verified on hosted 2026-07-31 — admin lands on /admin.)*
 - [x] Protected routing skeleton via Next 16 `proxy.ts`: guards `/pos` `/admin`, cashier→`/pos`. *(Audit-log-on-violation TODO.)*
 - [ ] Device binding: on first setup, bind tablet to a branch; persist locally; seed `devices` row.
-- [x] Design tokens wired to Tailwind v4 from `ui.png` (globals.css `@theme` + Plus Jakarta Sans + `money.ts`). Smoke page verifies render; `npm run build` green.
+- [x] Design tokens wired to Tailwind v4 from `ui.png` (globals.css `@theme` + IBM Plex Sans + `money.ts`). Smoke page verifies render; `npm run build` green.
 - [ ] CI: lint + typecheck on PR; Vercel preview deploys per branch.
 
 ## P1 — POS Core (Online)

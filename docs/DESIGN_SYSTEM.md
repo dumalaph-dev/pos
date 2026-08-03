@@ -63,7 +63,7 @@ Values are the canonical palette derived from the reference. Fine-tune with a co
 
 The reference reads as a warm humanist/geometric sans (rounded, friendly). Numbers are bold and tabular so totals don't jitter.
 
-- **UI font:** `Plus Jakarta Sans` (primary), fallback `Inter`, then system sans. Warm, modern, excellent at large weights.
+- **UI font:** `IBM Plex Sans` (primary), then the system sans fallback. It is self-hosted through `next/font`, readable at dashboard densities, and intentionally avoids the common AI-generated UI font defaults.
 - **Numeric / money:** same family with `font-variant-numeric: tabular-nums` **always** on prices, totals, qty, and change.
 - **Brand/logo:** a vintage display/serif is a *logo asset* (as in the mockup badge), not a UI font — do not use it for interface text.
 
@@ -195,7 +195,7 @@ Same palette, **billboard scale** — read from 1.5m away.
 }
 ```
 
-**Tailwind** (`tailwind.config` `theme.extend.colors`): map the same names (`bg`, `surface`, `primary`, `accent`, …) to the hexes above; set `fontFamily.sans = ['Plus Jakarta Sans','Inter','system-ui','sans-serif']`; enable tabular nums via a `.tnums { font-variant-numeric: tabular-nums; }` utility applied to all money/qty.
+**Tailwind** (`tailwind.config` `theme.extend.colors`): map the same names (`bg`, `surface`, `primary`, `accent`, …) to the hexes above; set `fontFamily.sans = ['IBM Plex Sans','ui-sans-serif','system-ui','sans-serif']`; enable tabular nums via a `.tnums { font-variant-numeric: tabular-nums; }` utility applied to all money/qty.
 
 **Motion:** transitions ≤150ms ease-out; only for state changes (press, tab switch, add-to-cart). No decorative animation on the sell screen (PRD §9).
 
