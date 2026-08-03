@@ -34,7 +34,8 @@ export type AdminIconName =
   | "download"
   | "edit"
   | "more"
-  | "refresh";
+  | "refresh"
+  | "history";
 
 export function AdminIcon({ name, size = 18 }: { name: AdminIconName; size?: number }) {
   const common = {
@@ -122,5 +123,7 @@ export function AdminIcon({ name, size = 18 }: { name: AdminIconName; size?: num
       return <svg {...common}><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" /></svg>;
     case "refresh":
       return <svg {...common}><path d="M20 7v5h-5M4 17v-5h5" /><path d="M6.2 9A7 7 0 0 1 18.6 7M17.8 15A7 7 0 0 1 5.4 17" /></svg>;
+    case "history":
+      return <svg {...common}><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5M12 7v5l3 2" /></svg>;
   }
 }

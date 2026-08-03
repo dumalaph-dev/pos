@@ -1,7 +1,7 @@
 import { AdminIcon, type AdminIconName } from "./AdminIcon";
 import { AdminLink as Link } from "./AdminLink";
 
-export type AdminSection = "overview" | "sales" | "orders" | "inventory" | "products" | "catalog" | "customers" | "suppliers" | "expenses" | "employees" | "reports" | "settings" | "promotions";
+export type AdminSection = "overview" | "sales" | "orders" | "inventory" | "products" | "catalog" | "customers" | "suppliers" | "expenses" | "employees" | "reports" | "audit" | "settings" | "promotions";
 
 type NavItem = {
   label: string;
@@ -32,10 +32,10 @@ const primaryNav: NavItem[] = [
 ];
 
 const comingSoonNav: NavItem[] = [
-  { label: "Customers", href: "/admin/customers", icon: "customers", active: "customers" },
   { label: "Suppliers", href: "/admin/suppliers", icon: "suppliers", active: "suppliers" },
   { label: "Expenses", href: "/admin/expenses", icon: "expenses", active: "expenses" },
   { label: "Reports", href: "/admin/reports", icon: "reports", active: "reports" },
+  { label: "Audit log", href: "/admin/audit", icon: "history", active: "audit" },
   { label: "Employees", href: "/admin/employees", icon: "employees", active: "employees" },
   { label: "Promotions", href: "/admin/promotions", icon: "promotions", active: "promotions" },
   { label: "Settings", href: "/admin/settings", icon: "settings", active: "settings" },
@@ -59,6 +59,14 @@ export function AdminSidebar({ branchName, active, connection }: { branchName: s
           { label: "Bulk update", href: "/products?bulk=1#bulk-update", icon: "refresh" },
           { label: "Reorder items", href: "/admin/inventory?status=low", icon: "inventory" },
         ]
+      : active === "employees"
+        ? [
+            { label: "Add Employee", href: "/admin/employees?tab=list&create=employee", icon: "plus" },
+            { label: "Add Role", href: "/admin/employees?tab=roles&create=role", icon: "employees" },
+            { label: "Attendance Log", href: "/admin/employees?tab=attendance", icon: "calendar" },
+            { label: "Process Payroll", href: "/admin/employees?tab=payroll", icon: "wallet" },
+            { label: "Leave Request", href: "/admin/employees?tab=leave&create=leave", icon: "calendar" },
+          ]
       : [
           { label: "New sale", href: "/pos", icon: "bag" },
           { label: "Add product", href: "/products?create=product#product-form", icon: "box" },

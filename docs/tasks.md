@@ -110,9 +110,18 @@
 - [ ] Products CRUD (per branch): pricing mode, price, image, active/track-stock toggles; copy to another branch; price changes versioned in audit.
 - [ ] Orders: filterable list (branch/date/cashier/method/status), detail drawer, void/refund (admin, reason), reprint.
 - [ ] Staff: invite/create, assign branch + role, set/reset PIN, deactivate.
-- [ ] Audit log viewer: append-only, filter by branch/actor/action/date.
+- [x] Employee workspace slice: reference-matched Employees dashboard with live employee KPIs, searchable/paginated directory, roles & permissions, attendance, payroll, leave requests, quick actions, and CSV export. *(Implemented 2026-08-03; employee records can exist before an auth invite, while linked profiles stay synchronized on edits.)*
+- [x] Audit log viewer: append-only, filter by branch/actor/action/date. *(Implemented 2026-08-03; reads the live append-only audit ledger with database pagination and read-only before/after payload details.)*
 - [ ] Settings split: **org** / **branch** / **device** (per PRD §6.6).
 - [ ] Empty/loading/error states + mobile pass (owner uses a phone).
+
+### Employee workspace implementation — 2026-08-03
+
+- Hosted migration `0011_employee_workspace.sql` applied successfully after the linked project reported `0001` through `0010` already applied. The CLI emitted only a local Docker Desktop cache warning while pushing; a follow-up migration list confirmed remote `0011`.
+- Hosted schema verification passed: `employee_roles`, `employee_records`, `attendance_logs`, `payroll_records`, and `leave_requests` exist; seed/backfill counts are 3 roles, 1 employee record, 0 attendance logs, 0 payroll records, and 0 leave requests.
+- The new Employees route is wired to those tables with RLS-scoped server actions for create/update employee, role permissions, attendance upsert, payroll upsert, leave creation, approval/rejection, and CSV export. Payroll/attendance/leave summaries intentionally show zero/empty values until real records exist.
+- Verification passed: `npx tsc --noEmit`, `npm run lint`, and `npm run build`. The build exposes `/admin/employees` and `/admin/employees/export` successfully; existing middleware/OpenNext-on-Windows warnings remain.
+- Authenticated browser save-flow verification is pending: the available in-app browser session opened the local sign-in page instead of the previously signed-in tab, so no protected form was submitted and no verification records were created.
 
 ## P7 — Inventory
 *Goal: perishable stock reconciles per branch.*
@@ -123,6 +132,14 @@
 - [x] Wastage/spoilage entry (reason) + stock adjustment (mandatory reason). *(✅ audited `record_stock_movement` RPC.)*
 - [ ] Low-stock alerts wired to dashboard; sell-with-zero-stock warns, never blocks. *(POS stock badges/toasts and the inventory low/out view are live; configurable thresholds and dashboard cards remain next.)*
 - [ ] End-of-day variance view: opening + received − sold − wasted = expected vs. counted.
+
+### Hosted Supabase migration and catalog verification — 2026-08-03
+
+- Linked project migration check: `npx --yes supabase@latest migration list --linked` reported local and remote `0001` through `0010` matching. `0009_admin_business_records.sql` and `0010_inventory_catalog_fields.sql` were already applied in the required order, so no hosted migration push was needed.
+- Hosted schema check passed: `suppliers` exists; `products.sku`, `products.barcode`, `products.cost_price`, `products.min_stock`, and `products.supplier_id` exist with the expected types/default; the two cost/minimum-stock checks and the three `0010` indexes are present.
+- Hosted SQL round-trip passed: a temporary supplier and product were inserted, the product was updated to `SKU=CODEX-MIG-VERIFY-SINGLE-UPDATED-20260803`, `cost_price=4321`, and `min_stock=7.250`, and a joined read returned the supplier name plus all updated fields. The temporary product and supplier were deleted afterward; no verification records remain.
+- Authenticated UI walkthrough passed at `http://127.0.0.1:3000`: the Products page loaded with no schema warning; a temporary supplier `Codex UI Supplier 20260803` and product `Codex UI Product 20260803` were created with SKU `CODEX-UI-20260803`, cost `₱42.50`, minimum stock `3.5`, and that supplier selected. The edit form loaded those values, then saved SKU `CODEX-UI-20260803-UPDATED`, cost `₱44.25`, minimum stock `4.25`, and the same supplier with the success message `Product saved. POS will use the updated catalog on its next refresh.`
+- Inventory then loaded the updated product with no schema warning and no inventory refresh warning; the row displayed the updated SKU, supplier, cost price `₱44.25`, and minimum stock `4.25`. The temporary product and supplier were deleted after verification and a final hosted count confirmed zero rows remain; a final Inventory reload remained warning-free.
 
 ## P8 — Shifts & Reports
 *Goal: trustworthy till + numbers the owner reads weekly.*
@@ -147,6 +164,22 @@
 - [ ] **Add branch #2** from the account as the real multi-branch validation; sign off against MVP success bars.
 
 ---
+
+### Employees implementation audit - 2026-08-03
+
+- Audited the Employees route, server actions, CSV export, sidebar quick actions, migration, and RLS surface for hardcoded reference values, dead links, lost filter/date state, and silent validation failures.
+- Fixed the date-range control so it submits real start/end dates; preserved search, role, status, branch, and selected period through filters, pagination, employee editing, attendance saves, and payroll saves; made employee-row attendance open the selected employee; and kept attendance summaries scoped to the displayed period.
+- Tightened server validation for access roles, branch/role ownership, schedule and attendance times, payroll amounts, role accent values, date ranges, and missing leave-review records. Export now returns an error response when its source queries fail instead of emitting a misleading empty CSV.
+- Hosted verification passed: linked migration ledger remains 0001-0011 in sync; all five employee tables exist with RLS enabled, authenticated/service-role grants, no anon grants, expected unique upsert keys, and the admin/manager policies. A rollback-safe hosted round-trip created, updated, read, and cleaned temporary role, employee, attendance, payroll, and leave rows; final counts remain 3 roles, 1 employee, 0 attendance logs, 0 payroll records, and 0 leave requests.
+- Final code verification passed: `npx tsc --noEmit`, `npm run lint`, `git diff --check`, and `npm run build`. The build exposes `/admin/employees` and `/admin/employees/export`; only the existing middleware/OpenNext-on-Windows warnings remain.
+- Browser verification is still pending for protected form submission: the local app opened successfully in the in-app browser, but its available session was signed out and showed the Sign in page. No protected UI writes or browser-created audit records were made.
+
+### Audit log viewer implementation - 2026-08-03
+
+- Added `/admin/audit` and the Admin navigation entry. The page queries `audit_logs` through the authenticated Supabase server client, applies organization/branch scope, paginates with an exact count, and derives available action filters from live rows rather than hardcoded event data.
+- Added working branch, actor, action, and Singapore-local date filters, plus reset/all-history links. Each row shows the timestamp, actor, action, entity, branch, device reference when present, and expandable read-only `before`/`after` JSON snapshots. There are no create, update, or delete controls because the ledger is append-only.
+- Hosted verification passed: linked migrations remain `0001` through `0011` in sync; `audit_logs` has the expected 11 columns, `audit_read` and `audit_insert` RLS policies, and the `no_mutate_audit` trigger. The live hosted table currently contains 0 audit events, so the route correctly renders an empty state until real order, inventory, or other audited activity is recorded; no fixture rows were left behind.
+- Code verification passed: `npx tsc --noEmit`, `npm run lint`, `git diff --check`, and `npm run build`. The build exposes `/admin/audit`; only the existing middleware/OpenNext-on-Windows/punycode warnings remain. An unauthenticated local request was redirected to the app auth entry point as expected. Protected browser interaction remains pending because the available in-app browser session is signed out.
 
 ## Cross-cutting (do continuously, not a phase)
 - [ ] Audit-logging on every sensitive action as features land (don't retrofit).

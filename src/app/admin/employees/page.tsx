@@ -1,294 +1,571 @@
-import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import { AdminIcon } from "@/components/admin/AdminIcon";
+import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { SignOutButton } from "@/components/SignOutButton";
+import { formatPeso } from "@/lib/money";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
-import { updateEmployee } from "./actions";
+import {
+  createEmployee,
+  createLeaveRequest,
+  saveAttendance,
+  savePayroll,
+  saveRole,
+  updateEmployee,
+  updateLeaveStatus,
+} from "./actions";
 
-type AdminRole = "admin" | "manager" | "cashier";
-type EmployeeRole = AdminRole;
-type RoleFilter = "all" | EmployeeRole;
-type StatusFilter = "all" | "active" | "inactive";
-
-type ProfileRecord = {
+type AccessRole = "admin" | "manager" | "cashier";
+type WorkspaceTab = "list" | "roles" | "attendance" | "payroll" | "leave";
+type EmployeeRecord = {
   id: string;
-  full_name: string;
-  role: EmployeeRole;
+  profile_id: string | null;
+  role_id: string | null;
   store_id: string | null;
+  employee_code: string;
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  role: AccessRole;
+  job_title: string | null;
+  hired_on: string;
+  schedule_days: string[];
+  schedule_start: string;
+  schedule_end: string;
   is_active: boolean;
   created_at: string;
 };
-
-type CurrentProfile = {
-  full_name: string | null;
-  role: AdminRole | null;
-  org_id: string;
-  store_id: string | null;
-};
-
-type BranchRecord = {
+type BranchRecord = { id: string; name: string; is_active: boolean };
+type RoleRecord = {
   id: string;
   name: string;
+  slug: string;
+  description: string | null;
+  color: string;
+  permissions: string[];
   is_active: boolean;
 };
+type AttendanceRecord = {
+  id: string;
+  employee_id: string;
+  work_date: string;
+  status: "present" | "absent" | "late" | "on_leave";
+  check_in: string | null;
+  check_out: string | null;
+  notes: string | null;
+};
+type PayrollRecord = {
+  id: string;
+  employee_id: string;
+  period_start: string;
+  period_end: string;
+  regular_pay: number;
+  overtime_pay: number;
+  allowances: number;
+  deductions: number;
+  status: "draft" | "processed" | "paid";
+  notes: string | null;
+};
+type LeaveRecord = {
+  id: string;
+  employee_id: string;
+  leave_type: string;
+  start_date: string;
+  end_date: string;
+  reason: string | null;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+};
+type CurrentProfile = { full_name: string | null; role: AccessRole | null; org_id: string; store_id: string | null };
+type SearchParams = Record<string, string | string[] | undefined>;
 
 const DEFAULT_STORE_NAME = "Mario's Lechon House";
-const roleOptions: Array<{ value: RoleFilter; label: string }> = [
-  { value: "all", label: "All roles" },
-  { value: "admin", label: "Admin" },
-  { value: "manager", label: "Manager" },
-  { value: "cashier", label: "Cashier" },
-];
-const statusOptions: Array<{ value: StatusFilter; label: string }> = [
-  { value: "all", label: "All statuses" },
-  { value: "active", label: "Active" },
-  { value: "inactive", label: "Inactive" },
+const PAGE_SIZE = 10;
+const DAYS = [
+  ["mon", "Mon"],
+  ["tue", "Tue"],
+  ["wed", "Wed"],
+  ["thu", "Thu"],
+  ["fri", "Fri"],
+  ["sat", "Sat"],
+  ["sun", "Sun"],
+] as const;
+const PERMISSIONS = [
+  ["dashboard.view", "View dashboard"],
+  ["sales.view", "View sales"],
+  ["pos.use", "Use POS"],
+  ["orders.manage", "Manage orders"],
+  ["orders.create", "Create orders"],
+  ["inventory.manage", "Manage inventory"],
+  ["products.manage", "Manage products"],
+  ["products.view", "View products"],
+  ["employees.manage", "Manage employees"],
+  ["employees.view", "View employees"],
+  ["reports.view", "View reports"],
+  ["settings.manage", "Manage settings"],
+] as const;
+const TABS: Array<{ key: WorkspaceTab; label: string }> = [
+  { key: "list", label: "Employee List" },
+  { key: "roles", label: "Roles & Permissions" },
+  { key: "attendance", label: "Attendance" },
+  { key: "payroll", label: "Payroll" },
+  { key: "leave", label: "Leave Requests" },
 ];
 
-function readParam(value: string | string[] | undefined) {
+function readParam(params: SearchParams, key: string) {
+  const value = params[key];
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
 }
 
-function isRoleFilter(value: string): value is RoleFilter {
-  return roleOptions.some((option) => option.value === value);
+function readTab(value: string): WorkspaceTab {
+  return TABS.some((tab) => tab.key === value) ? value as WorkspaceTab : "list";
 }
 
-function isStatusFilter(value: string): value is StatusFilter {
-  return statusOptions.some((option) => option.value === value);
+function dateIsValid(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T12:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
-function shortName(name: string | null, fallback: string) {
-  return name?.trim().split(/\s+/)[0] || fallback;
+function addDays(value: string, amount: number) {
+  const date = new Date(`${value}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + amount);
+  return date.toISOString().slice(0, 10);
 }
 
-function roleLabel(role: EmployeeRole) {
+function todayInSingapore() {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Singapore", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function weekRange(today: string) {
+  const weekday = new Date(`${today}T12:00:00Z`).getUTCDay();
+  const start = addDays(today, weekday === 0 ? -6 : 1 - weekday);
+  return { start, end: addDays(start, 6) };
+}
+
+function rangeScopeLabel(range: { start: string; end: string }) {
+  const current = weekRange(todayInSingapore());
+  return range.start === current.start && range.end === current.end ? "This week" : "Selected period";
+}
+
+function selectedRange(params: SearchParams, fallback: { start: string; end: string }) {
+  const start = readParam(params, "start");
+  const end = readParam(params, "end");
+  return dateIsValid(start) && dateIsValid(end) && end >= start ? { start, end } : fallback;
+}
+
+function employeeHref(values: Record<string, string | undefined>) {
+  const search = new URLSearchParams();
+  Object.entries(values).forEach(([key, value]) => {
+    if (value) search.set(key, value);
+  });
+  const query = search.toString();
+  return `/admin/employees${query ? `?${query}` : ""}`;
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("en-PH", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Singapore" }).format(new Date(`${value.slice(0, 10)}T12:00:00Z`));
+}
+
+function formatDateRange(start: string, end: string) {
+  const formatter = new Intl.DateTimeFormat("en-PH", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Singapore" });
+  return `${formatter.format(new Date(`${start}T12:00:00Z`))} – ${formatter.format(new Date(`${end}T12:00:00Z`))}`;
+}
+
+function formatTime(value: string | null | undefined) {
+  if (!value) return "—";
+  const parts = value.slice(0, 5).split(":").map(Number);
+  if (parts.length !== 2 || parts.some((part) => Number.isNaN(part))) return value;
+  return new Intl.DateTimeFormat("en-PH", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Singapore" }).format(new Date(Date.UTC(2020, 0, 1, parts[0], parts[1])));
+}
+
+function formatTimestampInput(value: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Singapore" }).format(date);
+}
+
+function formatCentsInput(value: number | null | undefined) {
+  return (Number(value ?? 0) / 100).toFixed(2);
+}
+
+function roleLabel(role: AccessRole) {
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
-function roleDetail(role: EmployeeRole) {
-  if (role === "admin") return "Full backoffice access";
-  if (role === "manager") return "Backoffice read access";
-  return "POS access and sales entry";
+function roleTone(value: string) {
+  if (value === "green" || value === "cashier") return "employee-role--green";
+  if (value === "amber" || value === "manager") return "employee-role--amber";
+  if (value === "blue") return "employee-role--blue";
+  return "employee-role--brown";
 }
 
-function roleClass(role: EmployeeRole) {
-  if (role === "admin") return "bg-primary-soft text-primary";
-  if (role === "manager") return "bg-warning/15 text-warning";
-  return "bg-success/10 text-success";
+function statusTone(status: string) {
+  if (status === "active" || status === "present" || status === "approved" || status === "paid") return "employee-status--green";
+  if (status === "on_leave" || status === "late" || status === "pending" || status === "processed") return "employee-status--amber";
+  if (status === "rejected" || status === "inactive" || status === "absent") return "employee-status--red";
+  return "employee-status--muted";
 }
 
-function formatJoined(value: string) {
-  return new Intl.DateTimeFormat("en-PH", {
-    day: "numeric",
-    month: "short",
-    timeZone: "Asia/Singapore",
-    year: "numeric",
-  }).format(new Date(value));
+function statusLabel(status: string) {
+  if (status === "on_leave") return "On Leave";
+  return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
-export default async function EmployeesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ role?: string | string[]; status?: string | string[]; branch?: string | string[]; q?: string | string[]; error?: string | string[]; saved?: string | string[] }>;
-}) {
+function scheduleLabel(employee: EmployeeRecord) {
+  const days = employee.schedule_days ?? [];
+  const dayText = days.length === 7 ? "Mon – Sun" : days.map((day) => DAYS.find(([key]) => key === day)?.[1] ?? day).join(" – ");
+  return `${dayText} · ${formatTime(employee.schedule_start)} – ${formatTime(employee.schedule_end)}`;
+}
+
+function initials(name: string) {
+  return name.trim().split(/\s+/).slice(0, 2).map((part) => part.charAt(0)).join("").toUpperCase() || "?";
+}
+
+function payrollTotal(record: Pick<PayrollRecord, "regular_pay" | "overtime_pay" | "allowances" | "deductions">) {
+  return Number(record.regular_pay ?? 0) + Number(record.overtime_pay ?? 0) + Number(record.allowances ?? 0) - Number(record.deductions ?? 0);
+}
+
+function permissionLabel(value: string) {
+  return PERMISSIONS.find(([key]) => key === value)?.[1] ?? value.replace(/[._]/g, " ");
+}
+
+function savedMessage(value: string) {
+  const messages: Record<string, string> = {
+    "1": "Employee access updated.",
+    "employee-created": "Employee record created.",
+    "employee-updated": "Employee record updated.",
+    "role-created": "Role created.",
+    "role-updated": "Role permissions updated.",
+    "attendance-saved": "Attendance log saved.",
+    "payroll-saved": "Payroll record saved.",
+    "leave-created": "Leave request created.",
+    "leave-approved": "Leave request approved.",
+    "leave-rejected": "Leave request rejected.",
+  };
+  return messages[value] ?? "Changes saved.";
+}
+
+export default async function EmployeesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
   const supabase = await createClient();
   const user = await getAuthenticatedUser(supabase);
-
   if (!user) redirect("/");
 
-  const { data: profileData } = await supabase
-    .from("profiles")
-    .select("full_name, role, org_id, store_id")
-    .eq("id", user.id)
-    .single();
+  const { data: profileData } = await supabase.from("profiles").select("full_name, role, org_id, store_id").eq("id", user.id).single();
   const profile = profileData as CurrentProfile | null;
-
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile) return <EmployeesProfileMissing />;
 
-  const [branchesResult, employeesResult] = await Promise.all([
-    supabase
-      .from("stores")
-      .select("id, name, is_active")
-      .eq("org_id", profile.org_id)
-      .order("name"),
-    supabase
-      .from("profiles")
-      .select("id, full_name, role, store_id, is_active, created_at")
-      .eq("org_id", profile.org_id)
-      .order("is_active", { ascending: false })
-      .order("full_name")
-      .limit(500),
+  const today = todayInSingapore();
+  const fallbackRange = weekRange(today);
+  const range = selectedRange(params, fallbackRange);
+  const attendanceDate = dateIsValid(readParam(params, "date")) ? readParam(params, "date") : today;
+  const attendanceFetchStart = attendanceDate < range.start ? attendanceDate : range.start;
+  const attendanceFetchEnd = attendanceDate > range.end ? attendanceDate : range.end;
+  const [
+    branchesResult,
+    employeesResult,
+    rolesResult,
+    attendanceResult,
+    payrollResult,
+    leaveResult,
+  ] = await Promise.all([
+    supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name"),
+    supabase.from("employee_records").select("id, profile_id, role_id, store_id, employee_code, full_name, email, phone, role, job_title, hired_on, schedule_days, schedule_start, schedule_end, is_active, created_at").eq("org_id", profile.org_id).order("is_active", { ascending: false }).order("full_name").limit(1000),
+    supabase.from("employee_roles").select("id, name, slug, description, color, permissions, is_active").eq("org_id", profile.org_id).order("is_active", { ascending: false }).order("name"),
+    supabase.from("attendance_logs").select("id, employee_id, work_date, status, check_in, check_out, notes").eq("org_id", profile.org_id).gte("work_date", attendanceFetchStart).lte("work_date", attendanceFetchEnd).order("work_date", { ascending: false }).limit(5000),
+    supabase.from("payroll_records").select("id, employee_id, period_start, period_end, regular_pay, overtime_pay, allowances, deductions, status, notes").eq("org_id", profile.org_id).lte("period_start", range.end).gte("period_end", range.start).order("period_start", { ascending: false }).limit(1000),
+    supabase.from("leave_requests").select("id, employee_id, leave_type, start_date, end_date, reason, status, created_at").eq("org_id", profile.org_id).order("created_at", { ascending: false }).limit(1000),
   ]);
 
   const branches = (branchesResult.data ?? []) as BranchRecord[];
-  const employees = (employeesResult.data ?? []) as ProfileRecord[];
+  const employees = (employeesResult.data ?? []) as EmployeeRecord[];
+  const roles = (rolesResult.data ?? []) as RoleRecord[];
+  const attendanceLogs = (attendanceResult.data ?? []) as AttendanceRecord[];
+  const payrollRecords = (payrollResult.data ?? []) as PayrollRecord[];
+  const leaveRequests = (leaveResult.data ?? []) as LeaveRecord[];
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
-  const requestedRole = readParam(params.role);
-  const requestedStatus = readParam(params.status);
-  const role: RoleFilter = isRoleFilter(requestedRole) ? requestedRole : "all";
-  const status: StatusFilter = isStatusFilter(requestedStatus) ? requestedStatus : "all";
-  const branchFilter = readParam(params.branch);
-  const searchQuery = readParam(params.q).trim().toLowerCase();
+  const roleById = new Map(roles.map((role) => [role.id, role]));
+  const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+  const selectedAttendanceEmployeeId = employeeById.has(readParam(params, "employee")) ? readParam(params, "employee") : "";
+  const approvedLeaveToday = new Set(leaveRequests.filter((request) => request.status === "approved" && request.start_date <= today && request.end_date >= today).map((request) => request.employee_id));
+  const requestedRole = readParam(params, "role");
+  const requestedStatus = readParam(params, "status");
+  const branchFilter = readParam(params, "branch");
+  const searchQuery = readParam(params, "q").trim().toLowerCase();
   const filteredEmployees = employees.filter((employee) => {
-    if (role !== "all" && employee.role !== role) return false;
-    if (status === "active" && !employee.is_active) return false;
-    if (status === "inactive" && employee.is_active) return false;
+    const status = approvedLeaveToday.has(employee.id) ? "on_leave" : employee.is_active ? "active" : "inactive";
+    if (requestedRole && requestedRole !== "all" && employee.role_id !== requestedRole && employee.role !== requestedRole) return false;
+    if (requestedStatus && requestedStatus !== "all" && status !== requestedStatus) return false;
     if (branchFilter === "unassigned" && employee.store_id) return false;
     if (branchFilter && branchFilter !== "unassigned" && employee.store_id !== branchFilter) return false;
-    if (searchQuery && !employee.full_name.toLowerCase().includes(searchQuery)) return false;
+    if (searchQuery && ![employee.full_name, employee.email ?? "", employee.phone ?? "", employee.employee_code].some((value) => value.toLowerCase().includes(searchQuery))) return false;
     return true;
   });
-  const activeEmployees = employees.filter((employee) => employee.is_active).length;
-  const cashierCount = employees.filter((employee) => employee.role === "cashier").length;
-  const unassignedCount = employees.filter((employee) => !employee.store_id).length;
-  const queryWarning = Boolean(branchesResult.error || employeesResult.error);
+  const activeCount = employees.filter((employee) => employee.is_active && !approvedLeaveToday.has(employee.id)).length;
+  const onLeaveCount = employees.filter((employee) => approvedLeaveToday.has(employee.id)).length;
+  const inactiveCount = employees.filter((employee) => !employee.is_active).length;
+  const payrollTotalThisWeek = payrollRecords.reduce((total, record) => total + payrollTotal(record), 0);
+  const payrollBreakdown = payrollRecords.reduce((totals, record) => ({
+    regular: totals.regular + Number(record.regular_pay ?? 0),
+    overtime: totals.overtime + Number(record.overtime_pay ?? 0),
+    allowances: totals.allowances + Number(record.allowances ?? 0),
+    deductions: totals.deductions + Number(record.deductions ?? 0),
+  }), { regular: 0, overtime: 0, allowances: 0, deductions: 0 });
+  const attendanceSummaryLogs = attendanceLogs.filter((log) => log.work_date >= range.start && log.work_date <= range.end);
+  const attendanceBreakdown = attendanceSummaryLogs.reduce((counts, log) => ({ ...counts, [log.status]: counts[log.status] + 1 }), { present: 0, absent: 0, late: 0, on_leave: 0 });
+  const attendanceTotal = Object.values(attendanceBreakdown).reduce((total, value) => total + value, 0);
+  const attendanceForDate = new Map(attendanceLogs.filter((log) => log.work_date === attendanceDate).map((log) => [log.employee_id, log]));
+  const selectedAttendanceBreakdown = [...attendanceForDate.values()].filter((log) => !selectedAttendanceEmployeeId || log.employee_id === selectedAttendanceEmployeeId).reduce((counts, log) => ({ ...counts, [log.status]: counts[log.status] + 1 }), { present: 0, absent: 0, late: 0, on_leave: 0 });
+  const totalPages = Math.max(1, Math.ceil(filteredEmployees.length / PAGE_SIZE));
+  const requestedPage = Number.parseInt(readParam(params, "page") || "1", 10);
+  const currentPage = Number.isFinite(requestedPage) ? Math.min(Math.max(requestedPage, 1), totalPages) : 1;
+  const visibleEmployees = filteredEmployees.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const tab = readTab(readParam(params, "tab"));
   const canWrite = profile.role === "admin";
   const currentBranchName = profile.store_id ? branchById.get(profile.store_id)?.name ?? DEFAULT_STORE_NAME : "All branches";
-  const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
-  const hasFilters = role !== "all" || status !== "all" || branchFilter || searchQuery;
+  const firstName = profile.full_name?.trim().split(/\s+/)[0] || user.email?.split("@")[0] || "Admin";
+  const editingEmployee = employeeById.get(readParam(params, "edit"));
+  const editingPayroll = payrollRecords.find((record) => record.id === readParam(params, "edit_payroll"));
+  const filtersOpen = readParam(params, "filters") === "1";
+  const queryWarning = Boolean(branchesResult.error || employeesResult.error || rolesResult.error || attendanceResult.error || payrollResult.error || leaveResult.error);
+  const periodLabel = rangeScopeLabel(range);
+  const employeeListState = { q: searchQuery, role: requestedRole, status: requestedStatus, branch: branchFilter, start: range.start, end: range.end, filters: filtersOpen ? "1" : undefined };
 
   return (
-    <main className="admin-page text-ink">
+    <main className="admin-page employee-page text-ink">
       <div className="mx-auto grid min-h-screen max-w-[1680px] lg:grid-cols-[238px_minmax(0,1fr)]">
         <AdminSidebar branchName={currentBranchName} active="employees" />
-
-        <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
-          <header className="admin-reference-header flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-3 shadow-[var(--shadow-card)] sm:px-5">
-            <div className="flex min-w-0 items-center gap-3">
-              <Link href="/admin" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-primary/25 bg-primary-soft text-primary" aria-label="Back to admin overview"><AdminIcon name="employees" size={20} /></Link>
-              <div className="min-w-0">
-                <p className="truncate text-[10px] font-extrabold uppercase tracking-[0.16em] text-ink-muted">Admin backoffice</p>
-                <h1 className="truncate text-lg font-extrabold text-primary">Employees</h1>
-              </div>
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              <Link href="/admin" className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Overview</Link>
-              <Link href="/pos" className="rounded-btn bg-primary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover">Open POS</Link>
-              <SignOutButton className="px-3 py-2 text-xs" />
+        <div className="min-w-0 px-4 pb-10 sm:px-6 lg:px-8">
+          <header className="employee-topbar">
+            <div className="employee-topbar__tools">
+              <DateRangeMenu tab={tab} range={range} searchQuery={searchQuery} requestedRole={requestedRole} requestedStatus={requestedStatus} branchFilter={branchFilter} filtersOpen={filtersOpen} />
+              <Link href={employeeHref({ tab, q: searchQuery, role: requestedRole, status: requestedStatus, branch: branchFilter, start: range.start, end: range.end, filters: filtersOpen ? undefined : "1" })} className="employee-tool-button"><AdminIcon name="filter" size={16} /> Filters</Link>
+              <details className="employee-add-menu">
+                <summary className="employee-primary-button"><AdminIcon name="plus" size={17} /> Add Employee <AdminIcon name="chevron" size={14} /></summary>
+                <div className="employee-add-menu__items">
+                  <Link href={employeeHref({ ...employeeListState, tab: "list", create: "employee" })}>New employee record</Link>
+                  <Link href={employeeHref({ tab: "roles", create: "role" })}>Add role</Link>
+                  <Link href={employeeHref({ tab: "attendance", date: today })}>Attendance log</Link>
+                  <Link href={employeeHref({ tab: "payroll", start: range.start, end: range.end })}>Process payroll</Link>
+                  <Link href={employeeHref({ tab: "leave", create: "leave" })}>Leave request</Link>
+                </div>
+              </details>
+              <div className="employee-user-menu"><span className="employee-user-menu__avatar">{initials(profile.full_name ?? firstName)}</span><span className="hidden sm:block">{firstName}</span><AdminIcon name="chevron" size={13} /></div>
+              <SignOutButton className="employee-signout" />
             </div>
           </header>
 
-          <div className="mt-6 flex flex-wrap items-end justify-between gap-4">
+          <div className="employee-heading">
             <div>
-              <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Team access &middot; {currentBranchName}</p>
-              <h2 className="mt-2 text-3xl font-extrabold tracking-[-0.04em] text-ink sm:text-4xl">Keep the right people in the right place.</h2>
-              <p className="mt-2 max-w-2xl text-sm text-ink-muted">Assign roles and home branches for {profile.full_name ?? firstName}. Cashiers use POS access; admins manage this backoffice.</p>
+              <p className="employee-eyebrow">People operations · {currentBranchName}</p>
+              <h1>Employees</h1>
+              <p>Manage your team, roles, attendance, and payroll in one place.</p>
             </div>
-            <span className={`rounded-pill px-3 py-2 text-xs font-extrabold ${canWrite ? "bg-success/10 text-success" : "bg-secondary text-primary"}`}>{canWrite ? "Admin editing enabled" : "Manager view only"}</span>
+            <span className={`employee-access-note ${canWrite ? "employee-access-note--enabled" : ""}`}>{canWrite ? "Admin editing enabled" : "Manager view only"}</span>
           </div>
 
-          {readParam(params.saved) === "1" && <div role="status" className="mt-5 rounded-card border border-success/25 bg-success/10 px-4 py-3 text-sm font-semibold text-success">Staff access updated. Their next sign-in will use the new role and branch assignment.</div>}
-          {readParam(params.error) && <div role="alert" className="mt-5 rounded-card border border-danger/25 bg-danger-soft px-4 py-3 text-sm font-semibold text-danger">{readParam(params.error)}</div>}
-          {queryWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink">Some staff data could not refresh. The page is showing the profiles that were available.</div>}
-          {!canWrite && <div role="status" className="mt-5 rounded-card border border-line bg-secondary px-4 py-3 text-sm font-semibold text-primary">This directory is read-only for your role. Ask an organization admin to change staff access.</div>}
+          {readParam(params, "saved") && <div role="status" className="employee-notice employee-notice--success"><AdminIcon name="check" size={17} /> {savedMessage(readParam(params, "saved"))}</div>}
+          {readParam(params, "error") && <div role="alert" className="employee-notice employee-notice--error"><AdminIcon name="alert" size={17} /> {readParam(params, "error")}</div>}
+          {queryWarning && <div role="status" className="employee-notice employee-notice--warning"><AdminIcon name="alert" size={17} /> Some employee workspace data could not refresh. Apply migration 0011 to enable all tabs.</div>}
+          {!canWrite && <div role="status" className="employee-notice employee-notice--info">This workspace is read-only for your role. Ask an organization admin to change staff access.</div>}
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <EmployeeMetric label="Team members" value={String(employees.length)} detail="In this organization" tone="bg-primary text-primary-fg" icon="employees" />
-            <EmployeeMetric label="Active staff" value={String(activeEmployees)} detail="Can sign in" tone="bg-success text-white" icon="dashboard" />
-            <EmployeeMetric label="Cashiers" value={String(cashierCount)} detail="POS role assigned" tone="bg-secondary text-primary" icon="pos" />
-            <EmployeeMetric label="Unassigned" value={String(unassignedCount)} detail="No home branch" tone="bg-warning/15 text-warning" icon="inventory" />
+          <div className="employee-body-grid">
+            <div className="min-w-0">
+              <section className="employee-kpi-grid" aria-label="Employee overview">
+                <EmployeeMetric label="Total Employees" value={String(employees.length)} detail="All branches" icon="employees" tone="employee-kpi-icon--brown" />
+                <EmployeeMetric label="Active" value={String(activeCount)} detail="Currently working" icon="employees" tone="employee-kpi-icon--green" />
+                <EmployeeMetric label="On Leave" value={String(onLeaveCount)} detail="On approved leave" icon="calendar" tone="employee-kpi-icon--orange" />
+                <EmployeeMetric label="Inactive" value={String(inactiveCount)} detail="Not active" icon="employees" tone="employee-kpi-icon--gray" />
+                <EmployeeMetric label={`Total Payroll (${periodLabel})`} value={formatPeso(payrollTotalThisWeek)} detail={formatDateRange(range.start, range.end)} icon="wallet" tone="employee-kpi-icon--blue" />
+              </section>
+
+              {(readParam(params, "create") === "employee" || editingEmployee) && <EmployeeEditor employee={editingEmployee} branches={branches} roles={roles} today={today} canWrite={canWrite} returnState={employeeListState} />}
+
+              <section className="employee-workspace-panel" aria-labelledby="employee-workspace-heading">
+                <div className="sr-only" id="employee-workspace-heading">Employee workspace</div>
+                <nav className="employee-tabs" aria-label="Employee workspace tabs">
+                  {TABS.map((item) => <Link key={item.key} href={employeeHref({ tab: item.key, q: readParam(params, "q"), role: requestedRole, status: requestedStatus, branch: branchFilter, start: range.start, end: range.end })} aria-current={tab === item.key ? "page" : undefined} className={tab === item.key ? "is-active" : ""}>{item.label}</Link>)}
+                </nav>
+
+                {tab === "list" && <EmployeeListTab employees={visibleEmployees} filteredCount={filteredEmployees.length} totalCount={employees.length} currentPage={currentPage} totalPages={totalPages} branches={branches} roleById={roleById} approvedLeaveToday={approvedLeaveToday} requestedRole={requestedRole} requestedStatus={requestedStatus} branchFilter={branchFilter} searchQuery={searchQuery} filtersOpen={filtersOpen} range={range} today={today} />}
+                {tab === "roles" && <RolesTab roles={roles} employees={employees} roleById={roleById} canWrite={canWrite} showCreate={readParam(params, "create") === "role"} />}
+                 {tab === "attendance" && <AttendanceTab employees={employees} logs={attendanceForDate} date={attendanceDate} selectedEmployeeId={selectedAttendanceEmployeeId} range={range} breakdown={selectedAttendanceBreakdown} canWrite={canWrite} />}
+                {tab === "payroll" && <PayrollTab employees={employees} records={payrollRecords} range={range} editing={editingPayroll} canWrite={canWrite} />}
+                {tab === "leave" && <LeaveTab employees={employees} requests={leaveRequests} canWrite={canWrite} showCreate={readParam(params, "create") === "leave"} />}
+              </section>
+            </div>
+
+            <aside className="employee-side-rail" aria-label="Employee summaries">
+              <PayrollOverview breakdown={payrollBreakdown} total={payrollTotalThisWeek} range={range} />
+              <AttendanceOverview breakdown={attendanceBreakdown} total={attendanceTotal} range={range} />
+              <RecentLeaveRequests requests={leaveRequests.slice(0, 3)} employeeById={employeeById} />
+              <Link href={employeeHref({ tab: "leave" })} className="employee-leave-cta"><AdminIcon name="calendar" size={17} /> Go to Leave Requests <AdminIcon name="arrow" size={16} /></Link>
+            </aside>
           </div>
-
-          <section aria-labelledby="employee-filters-heading" className="admin-panel mt-6 p-5">
-            <div className="admin-panel__header">
-              <div>
-                <p className="admin-panel__eyebrow">Find a team member</p>
-                <h2 id="employee-filters-heading" className="admin-panel__title">Filter staff</h2>
-              </div>
-              {hasFilters && <Link href="/admin/employees" className="admin-kpi-card__link mt-0">Clear filters <AdminIcon name="arrow" size={14} /></Link>}
-            </div>
-            <form action="/admin/employees" method="get" className="mt-4 grid gap-3 lg:grid-cols-[minmax(220px,1.5fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)_auto] lg:items-end">
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-extrabold uppercase tracking-[0.12em] text-ink-muted">Search</span>
-                <span className="relative block"><span className="pointer-events-none absolute inset-y-0 left-3 grid place-items-center text-ink-muted"><AdminIcon name="search" size={16} /></span><input name="q" defaultValue={searchQuery} placeholder="Search by full name" className="inventory-input pl-10" /></span>
-              </label>
-              <EmployeeFilterField label="Role" htmlFor="employee-role-filter"><select id="employee-role-filter" name="role" defaultValue={role} className="inventory-input">{roleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></EmployeeFilterField>
-              <EmployeeFilterField label="Status" htmlFor="employee-status-filter"><select id="employee-status-filter" name="status" defaultValue={status} className="inventory-input">{statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></EmployeeFilterField>
-              <EmployeeFilterField label="Branch" htmlFor="employee-branch-filter"><select id="employee-branch-filter" name="branch" defaultValue={branchFilter} className="inventory-input"><option value="">All branches</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.is_active ? "" : " (inactive)"}</option>)}<option value="unassigned">Unassigned</option></select></EmployeeFilterField>
-              <button type="submit" className="min-h-11 rounded-btn bg-primary px-5 text-sm font-extrabold text-primary-fg transition hover:bg-primary-hover">Apply</button>
-            </form>
-          </section>
-
-          <section aria-labelledby="staff-directory-heading" className="admin-panel mt-4 p-5">
-            <div className="admin-panel__header">
-              <div>
-                <p className="admin-panel__eyebrow">Access directory</p>
-                <h2 id="staff-directory-heading" className="admin-panel__title">Staff and branch assignments</h2>
-                <p className="admin-panel__subtitle">{filteredEmployees.length} matching member{filteredEmployees.length === 1 ? "" : "s"}. Save a row to apply its role, branch, and active status.</p>
-              </div>
-              <span className="rounded-pill bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary">Profiles are live</span>
-            </div>
-
-            {filteredEmployees.length === 0 ? (
-              <div className="mt-5 rounded-btn border border-dashed border-line-strong bg-surface-raised px-4 py-10 text-center">
-                <span className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-primary-soft text-primary"><AdminIcon name="employees" size={23} /></span>
-                <p className="mt-4 text-sm font-extrabold text-ink">No staff match these filters</p>
-                <p className="mt-1 text-xs text-ink-muted">Try a wider filter or clear the search to see the organization directory.</p>
-              </div>
-            ) : (
-              <>
-                <div className="mt-5 hidden grid-cols-[minmax(220px,1.2fr)_minmax(130px,0.8fr)_minmax(170px,0.9fr)_minmax(105px,0.55fr)_auto] gap-3 px-4 text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted lg:grid">
-                  <span>Staff member</span><span>Role</span><span>Home branch</span><span>Status</span><span className="text-right">Action</span>
-                </div>
-                <div className="mt-2 grid gap-2">
-                  {filteredEmployees.map((employee) => <EmployeeRow key={employee.id} employee={employee} branches={branches} branchById={branchById} canWrite={canWrite} isCurrentUser={employee.id === user.id} />)}
-                </div>
-              </>
-            )}
-          </section>
-
-          <section aria-labelledby="role-guide-heading" className="mt-4 grid gap-4 md:grid-cols-3">
-            <RoleGuide id="role-guide-heading" role="Admin" detail="Full backoffice access, including staff assignments, catalog, and inventory controls." tone="bg-primary-soft text-primary" />
-            <RoleGuide role="Manager" detail="Review dashboard, orders, catalog, and inventory without changing protected records." tone="bg-warning/15 text-warning" />
-            <RoleGuide role="Cashier" detail="Sign in to the POS for sales. A home branch is required for reliable branch-level access." tone="bg-success/10 text-success" />
-          </section>
         </div>
       </div>
     </main>
   );
 }
 
-function EmployeeRow({ employee, branches, branchById, canWrite, isCurrentUser }: { employee: ProfileRecord; branches: BranchRecord[]; branchById: Map<string, BranchRecord>; canWrite: boolean; isCurrentUser: boolean }) {
-  const formId = `employee-form-${employee.id}`;
-  return (
-    <form id={formId} action={updateEmployee} className="grid gap-3 rounded-btn border border-line bg-surface-raised p-4 transition hover:border-line-strong lg:grid-cols-[minmax(220px,1.2fr)_minmax(130px,0.8fr)_minmax(170px,0.9fr)_minmax(105px,0.55fr)_auto] lg:items-center">
-      <input type="hidden" name="employee_id" value={employee.id} />
-      <div className="min-w-0">
-        <div className="flex items-center gap-2"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-soft text-sm font-extrabold text-primary">{employee.full_name.trim().charAt(0).toUpperCase()}</span><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><strong className="truncate text-sm font-extrabold text-ink">{employee.full_name}</strong><span className={`rounded-pill px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wide ${roleClass(employee.role)}`}>{roleLabel(employee.role)}</span></div><span className="mt-1 block truncate text-[10px] text-ink-muted">Joined {formatJoined(employee.created_at)}{isCurrentUser ? " · You" : ""}</span></div></div>
-      </div>
-      <label className="block"><span className="mb-1 block text-[10px] font-extrabold uppercase tracking-[0.1em] text-ink-muted lg:sr-only">Role</span><select name="role" defaultValue={employee.role} disabled={!canWrite} className="inventory-input min-h-10 text-xs">{roleOptions.filter((option) => option.value !== "all").map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><small className="mt-1 block text-[10px] text-ink-muted">{roleDetail(employee.role)}</small></label>
-      <label className="block"><span className="mb-1 block text-[10px] font-extrabold uppercase tracking-[0.1em] text-ink-muted lg:sr-only">Home branch</span><select name="store_id" defaultValue={employee.store_id ?? ""} disabled={!canWrite} className="inventory-input min-h-10 text-xs"><option value="">All branches / unassigned</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.is_active ? "" : " (inactive)"}</option>)}</select><small className="mt-1 block truncate text-[10px] text-ink-muted">Current: {employee.store_id ? branchById.get(employee.store_id)?.name ?? "Unknown branch" : "No branch assigned"}</small></label>
-      <label className="flex min-h-10 items-center gap-2 text-xs font-extrabold text-ink"><input type="checkbox" name="is_active" defaultChecked={employee.is_active} disabled={!canWrite} className="h-4 w-4 accent-primary" /><span className={employee.is_active ? "text-success" : "text-danger"}>{employee.is_active ? "Active" : "Inactive"}</span></label>
-      <button type="submit" disabled={!canWrite} className="min-h-10 rounded-btn bg-primary px-4 text-xs font-extrabold text-primary-fg transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50">Save changes</button>
+function EmployeeMetric({ label, value, detail, icon, tone }: { label: string; value: string; detail: string; icon: AdminIconName; tone: string }) {
+  return <article className="employee-kpi"><div className={`employee-kpi__icon ${tone}`}><AdminIcon name={icon} size={18} /></div><p className="employee-kpi__label">{label}</p><strong className="employee-kpi__value tnums">{value}</strong><span>{detail}</span></article>;
+}
+
+function DateRangeMenu({ tab, range, searchQuery, requestedRole, requestedStatus, branchFilter, filtersOpen }: { tab: WorkspaceTab; range: { start: string; end: string }; searchQuery: string; requestedRole: string; requestedStatus: string; branchFilter: string; filtersOpen: boolean }) {
+  return <details className="employee-date-menu">
+    <summary className="employee-date-control"><AdminIcon name="calendar" size={16} /><span>{formatDateRange(range.start, range.end)}</span><AdminIcon name="chevron" size={14} /></summary>
+    <form action="/admin/employees" method="get" className="employee-date-menu__form">
+      <input type="hidden" name="tab" value={tab} />
+      {searchQuery && <input type="hidden" name="q" value={searchQuery} />}
+      {requestedRole && <input type="hidden" name="role" value={requestedRole} />}
+      {requestedStatus && <input type="hidden" name="status" value={requestedStatus} />}
+      {branchFilter && <input type="hidden" name="branch" value={branchFilter} />}
+      {filtersOpen && <input type="hidden" name="filters" value="1" />}
+      <label><span>Start</span><input name="start" type="date" defaultValue={range.start} required /></label>
+      <label><span>End</span><input name="end" type="date" defaultValue={range.end} required /></label>
+      <button type="submit" className="employee-primary-button">Apply dates</button>
     </form>
-  );
+  </details>;
 }
 
-function EmployeeMetric({ label, value, detail, tone, icon }: { label: string; value: string; detail: string; tone: string; icon: "employees" | "dashboard" | "pos" | "inventory" }) {
-  return <article className="admin-kpi-card min-h-[132px]"><div className="admin-kpi-card__inner"><div className="admin-kpi-card__top"><span className="admin-kpi-card__label">{label}</span><span className={`admin-kpi-card__icon ${tone}`}><AdminIcon name={icon} size={17} /></span></div><p className="admin-kpi-card__value tnums">{value}</p><p className="admin-kpi-card__trend">{detail}</p></div></article>;
+function EmployeeListTab({ employees, filteredCount, totalCount, currentPage, totalPages, branches, roleById, approvedLeaveToday, requestedRole, requestedStatus, branchFilter, searchQuery, filtersOpen, range, today }: { employees: EmployeeRecord[]; filteredCount: number; totalCount: number; currentPage: number; totalPages: number; branches: BranchRecord[]; roleById: Map<string, RoleRecord>; approvedLeaveToday: Set<string>; requestedRole: string; requestedStatus: string; branchFilter: string; searchQuery: string; filtersOpen: boolean; range: { start: string; end: string }; today: string }) {
+  const exportHref = `/admin/employees/export?${new URLSearchParams({ ...(searchQuery ? { q: searchQuery } : {}), ...(requestedRole ? { role: requestedRole } : {}), ...(requestedStatus ? { status: requestedStatus } : {}), ...(branchFilter ? { branch: branchFilter } : {}) }).toString()}`;
+  const listState = { q: searchQuery, role: requestedRole, status: requestedStatus, branch: branchFilter, start: range.start, end: range.end, filters: filtersOpen ? "1" : undefined };
+  return <div className="employee-tab-content">
+    <div className="employee-filter-bar">
+      <form action="/admin/employees" method="get" className="employee-filter-form">
+        <input type="hidden" name="tab" value="list" />
+        <input type="hidden" name="start" value={range.start} />
+        <input type="hidden" name="end" value={range.end} />
+        {filtersOpen && <input type="hidden" name="filters" value="1" />}
+        {!filtersOpen && branchFilter && <input type="hidden" name="branch" value={branchFilter} />}
+        <label className="employee-search-field"><AdminIcon name="search" size={17} /><span className="sr-only">Search employees</span><input name="q" defaultValue={searchQuery} placeholder="Search by name, email or phone..." /></label>
+        <label><span className="sr-only">Role</span><select name="role" defaultValue={requestedRole || "all"}><option value="all">All Roles</option>{[...roleById.values()].map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label>
+        <label><span className="sr-only">Status</span><select name="status" defaultValue={requestedStatus || "all"}><option value="all">All Status</option><option value="active">Active</option><option value="on_leave">On Leave</option><option value="inactive">Inactive</option></select></label>
+        {filtersOpen && <label><span className="sr-only">Branch</span><select name="branch" defaultValue={branchFilter}><option value="">All Branches</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.is_active ? "" : " (inactive)"}</option>)}<option value="unassigned">Unassigned</option></select></label>}
+        <button type="submit" className="employee-filter-apply">Apply</button>
+      </form>
+      <a href={exportHref} className="employee-export-button"><AdminIcon name="upload" size={16} /> Export</a>
+    </div>
+    <div className="employee-table-wrap">
+      <table className="employee-table">
+        <thead><tr><th>Employee</th><th>Role</th><th>Schedule</th><th>Status</th><th>Contact</th><th>Date Hired</th><th>Actions</th></tr></thead>
+        <tbody>
+          {employees.length === 0 ? <tr><td colSpan={7}><EmptyState icon="employees" title="No employees found" detail="Add an employee record or clear the filters to see your team." /></td></tr> : employees.map((employee) => {
+            const role = employee.role_id ? roleById.get(employee.role_id) : null;
+            const onLeave = approvedLeaveToday.has(employee.id);
+            const status = onLeave ? "on_leave" : employee.is_active ? "active" : "inactive";
+            return <tr key={employee.id}>
+              <td><div className="employee-person-cell"><span className="employee-avatar">{initials(employee.full_name)}</span><div><strong>{employee.full_name}</strong><small>{employee.employee_code}{employee.job_title ? ` · ${employee.job_title}` : ""}</small></div></div></td>
+              <td><span className={`employee-role ${roleTone(role?.color ?? employee.role)}`}>{role?.name ?? roleLabel(employee.role)}</span></td>
+              <td><span className="employee-schedule">{scheduleLabel(employee)}</span></td>
+              <td><span className={`employee-status ${statusTone(status)}`}>{statusLabel(status)}</span></td>
+              <td><div className="employee-contact"><strong>{employee.phone || "No phone"}</strong><small>{employee.email || "No email"}</small></div></td>
+              <td className="tnums whitespace-nowrap">{formatDate(employee.hired_on)}</td>
+               <td><div className="employee-row-actions"><Link href={employeeHref({ ...listState, tab: "list", edit: employee.id })} className="employee-icon-button" aria-label={`Edit ${employee.full_name}`}><AdminIcon name="edit" size={15} /></Link><Link href={employeeHref({ ...listState, tab: "attendance", employee: employee.id, date: today })} className="employee-icon-button" aria-label={`Open attendance for ${employee.full_name}`}><AdminIcon name="more" size={16} /></Link></div></td>
+            </tr>;
+          })}
+        </tbody>
+      </table>
+    </div>
+    <div className="employee-table-footer"><span>Showing {filteredCount === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1} to {Math.min(currentPage * PAGE_SIZE, filteredCount)} of {filteredCount} employees <small>({totalCount} total)</small></span><div className="employee-pagination">{currentPage > 1 && <Link href={employeeHref({ tab: "list", page: String(currentPage - 1), q: searchQuery, role: requestedRole, status: requestedStatus, branch: branchFilter, start: range.start, end: range.end, filters: filtersOpen ? "1" : undefined })} aria-label="Previous page">‹</Link>}{Array.from({ length: totalPages }, (_, index) => index + 1).slice(Math.max(0, currentPage - 2), Math.min(totalPages, currentPage + 1)).map((page) => <Link key={page} href={employeeHref({ tab: "list", page: String(page), q: searchQuery, role: requestedRole, status: requestedStatus, branch: branchFilter, start: range.start, end: range.end, filters: filtersOpen ? "1" : undefined })} className={page === currentPage ? "is-active" : ""}>{page}</Link>)}{currentPage < totalPages && <Link href={employeeHref({ tab: "list", page: String(currentPage + 1), q: searchQuery, role: requestedRole, status: requestedStatus, branch: branchFilter, start: range.start, end: range.end, filters: filtersOpen ? "1" : undefined })} aria-label="Next page">›</Link>}</div></div>
+  </div>;
 }
 
-function EmployeeFilterField({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {
-  return <label htmlFor={htmlFor} className="block"><span className="mb-1.5 block text-xs font-extrabold uppercase tracking-[0.12em] text-ink-muted">{label}</span>{children}</label>;
+function RolesTab({ roles, employees, roleById, canWrite, showCreate }: { roles: RoleRecord[]; employees: EmployeeRecord[]; roleById: Map<string, RoleRecord>; canWrite: boolean; showCreate: boolean }) {
+  return <div className="employee-tab-content">
+    <div className="employee-tab-heading"><div><p className="employee-section-kicker">Access control</p><h2>Roles & Permissions</h2><p>Control which areas each role can access. These permissions are stored per organization.</p></div><Link href={employeeHref({ tab: "roles", create: showCreate ? undefined : "role" })} className="employee-outline-button"><AdminIcon name="plus" size={15} /> {showCreate ? "Close" : "Add Role"}</Link></div>
+    {showCreate && <RoleEditor canWrite={canWrite} />}
+    <div className="employee-role-grid">{roles.length === 0 ? <EmptyState icon="settings" title="No roles configured" detail="Create a role to define employee permissions." /> : roles.map((role) => <RoleEditor key={role.id} role={role} employeeCount={employees.filter((employee) => employee.role_id === role.id).length} canWrite={canWrite} />)}</div>
+    <section className="employee-assignment-panel"><div className="employee-tab-heading"><div><p className="employee-section-kicker">Current assignments</p><h2>Who has each role</h2></div></div><div className="employee-assignment-list">{employees.length === 0 ? <p className="employee-muted">No employee records yet.</p> : employees.map((employee) => { const role = employee.role_id ? roleById.get(employee.role_id) : null; return <div key={employee.id} className="employee-assignment-row"><span className="employee-avatar employee-avatar--small">{initials(employee.full_name)}</span><span><strong>{employee.full_name}</strong><small>{employee.employee_code}</small></span><span className={`employee-role ${roleTone(role?.color ?? employee.role)}`}>{role?.name ?? roleLabel(employee.role)}</span></div>; })}</div></section>
+  </div>;
 }
 
-function RoleGuide({ id, role, detail, tone }: { id?: string; role: string; detail: string; tone: string }) {
-  return <article id={id} className="admin-panel p-4"><span className={`grid h-9 w-9 place-items-center rounded-btn text-xs font-extrabold ${tone}`}>{role.charAt(0)}</span><h3 className="mt-3 text-sm font-extrabold text-ink">{role}</h3><p className="mt-1 text-xs leading-5 text-ink-muted">{detail}</p></article>;
+function RoleEditor({ role, employeeCount = 0, canWrite }: { role?: RoleRecord; employeeCount?: number; canWrite: boolean }) {
+  const selected = new Set(role?.permissions ?? []);
+  const permissionOptions = Array.from(new Set([...PERMISSIONS.map(([key]) => key), ...selected]));
+  return <form action={saveRole} className="employee-role-card">
+    {role && <input type="hidden" name="role_id" value={role.id} />}
+    <div className="employee-role-card__head"><span className={`employee-role-mark ${roleTone(role?.color ?? "brown")}`}>{(role?.name ?? "New role").charAt(0).toUpperCase()}</span><div><strong>{role?.name ?? "New role"}</strong><small>{role ? `${employeeCount} employee${employeeCount === 1 ? "" : "s"} assigned` : "Create a reusable access profile"}</small></div></div>
+    <label><span>Name</span><input name="name" defaultValue={role?.name ?? ""} placeholder="e.g. Kitchen Staff" required disabled={!canWrite} /></label>
+    <label><span>Description</span><textarea name="description" defaultValue={role?.description ?? ""} rows={2} placeholder="What this role is responsible for" disabled={!canWrite} /></label>
+    <label><span>Accent</span><select name="color" defaultValue={role?.color ?? "brown"} disabled={!canWrite}><option value="brown">Brown</option><option value="amber">Amber</option><option value="green">Green</option><option value="blue">Blue</option></select></label>
+    <fieldset className="employee-permission-fieldset"><legend>Permissions</legend><div className="employee-permissions">{permissionOptions.map((permission) => <label key={permission}><input type="checkbox" name="permissions" value={permission} defaultChecked={selected.has(permission)} disabled={!canWrite} /><span>{permissionLabel(permission)}</span></label>)}</div></fieldset>
+    <label className="employee-checkbox"><input type="checkbox" name="is_active" defaultChecked={role?.is_active ?? true} disabled={!canWrite} /><span>Role is active</span></label>
+    <button type="submit" disabled={!canWrite} className="employee-primary-button employee-primary-button--full">{role ? "Save permissions" : "Create role"}</button>
+  </form>;
+}
+
+function AttendanceTab({ employees, logs, date, selectedEmployeeId, range, breakdown, canWrite }: { employees: EmployeeRecord[]; logs: Map<string, AttendanceRecord>; date: string; selectedEmployeeId: string; range: { start: string; end: string }; breakdown: Record<"present" | "absent" | "late" | "on_leave", number>; canWrite: boolean }) {
+  const selectedEmployee = employees.find((employee) => employee.id === selectedEmployeeId);
+  const attendanceEmployees = selectedEmployee ? [selectedEmployee] : employees;
+  return <div className="employee-tab-content">
+    <div className="employee-tab-heading"><div><p className="employee-section-kicker">Daily time log</p><h2>Attendance</h2><p>{selectedEmployee ? `Showing ${selectedEmployee.full_name}. Record the actual attendance status and timestamps.` : "Record the actual attendance status and timestamps for each employee."}</p></div><form method="get" action="/admin/employees" className="employee-date-form"><input type="hidden" name="tab" value="attendance" /><input type="hidden" name="range_start" value={range.start} /><input type="hidden" name="range_end" value={range.end} />{selectedEmployeeId && <input type="hidden" name="employee" value={selectedEmployeeId} />}<label><span>Date</span><input type="date" name="date" defaultValue={date} /></label><button type="submit" className="employee-outline-button">View date</button></form></div>
+    <div className="employee-mini-stats">{(["present", "absent", "late", "on_leave"] as const).map((status) => <div key={status}><span className={`employee-status-dot ${statusTone(status)}`} /><strong>{breakdown[status]}</strong><small>{statusLabel(status)}</small></div>)}</div>
+    <div className="employee-table-wrap"><table className="employee-table employee-table--attendance"><thead><tr><th>Employee</th><th>Status</th><th>Check in</th><th>Check out</th><th>Notes</th><th>Action</th></tr></thead><tbody>{attendanceEmployees.length === 0 ? <tr><td colSpan={6}><EmptyState icon="employees" title="No employees to log" detail="Create an employee record first." /></td></tr> : attendanceEmployees.map((employee) => <AttendanceRow key={employee.id} employee={employee} log={logs.get(employee.id)} date={date} range={range} canWrite={canWrite} />)}</tbody></table></div>
+  </div>;
+}
+
+function AttendanceRow({ employee, log, date, range, canWrite }: { employee: EmployeeRecord; log?: AttendanceRecord; date: string; range: { start: string; end: string }; canWrite: boolean }) {
+  const formId = `attendance-save-${employee.id}`;
+  return <tr><td><div className="employee-person-cell"><span className="employee-avatar employee-avatar--small">{initials(employee.full_name)}</span><div><strong>{employee.full_name}</strong><small>{employee.employee_code}</small></div></div></td><td><select form={formId} name="status" defaultValue={log?.status ?? "present"} disabled={!canWrite}><option value="present">Present</option><option value="absent">Absent</option><option value="late">Late</option><option value="on_leave">On Leave</option></select></td><td><input form={formId} name="check_in" type="time" defaultValue={formatTimestampInput(log?.check_in ?? null)} disabled={!canWrite} /></td><td><input form={formId} name="check_out" type="time" defaultValue={formatTimestampInput(log?.check_out ?? null)} disabled={!canWrite} /></td><td><input form={formId} name="notes" defaultValue={log?.notes ?? ""} placeholder="Optional note" disabled={!canWrite} /></td><td><form id={formId} action={saveAttendance}><input type="hidden" name="employee_id" value={employee.id} /><input type="hidden" name="work_date" value={date} /><input type="hidden" name="range_start" value={range.start} /><input type="hidden" name="range_end" value={range.end} /><button type="submit" disabled={!canWrite} className="employee-save-button">Save</button></form></td></tr>;
+}
+
+function PayrollTab({ employees, records, range, editing, canWrite }: { employees: EmployeeRecord[]; records: PayrollRecord[]; range: { start: string; end: string }; editing?: PayrollRecord; canWrite: boolean }) {
+  return <div className="employee-tab-content">
+    <div className="employee-tab-heading"><div><p className="employee-section-kicker">{rangeScopeLabel(range)} pay run</p><h2>Payroll</h2><p>Save gross components and deductions in centavos for the selected period.</p></div><span className="employee-data-badge"><AdminIcon name="wallet" size={14} /> {formatDateRange(range.start, range.end)}</span></div>
+    <PayrollEditor employees={employees} range={range} record={editing} canWrite={canWrite} />
+    <div className="employee-table-wrap"><table className="employee-table employee-table--payroll"><thead><tr><th>Employee</th><th>Period</th><th>Regular pay</th><th>Overtime</th><th>Allowances</th><th>Deductions</th><th>Net pay</th><th>Status</th><th /></tr></thead><tbody>{records.length === 0 ? <tr><td colSpan={9}><EmptyState icon="wallet" title="No payroll records for this period" detail="Use the payroll form above to record the first pay run." /></td></tr> : records.map((record) => { const employee = employees.find((item) => item.id === record.employee_id); return <tr key={record.id}><td><strong>{employee?.full_name ?? "Unknown employee"}</strong><small className="block">{employee?.employee_code ?? record.employee_id.slice(0, 8)}</small></td><td className="whitespace-nowrap">{formatDate(record.period_start)} – {formatDate(record.period_end)}</td><td className="tnums">{formatPeso(Number(record.regular_pay))}</td><td className="tnums">{formatPeso(Number(record.overtime_pay))}</td><td className="tnums">{formatPeso(Number(record.allowances))}</td><td className="tnums">{formatPeso(Number(record.deductions))}</td><td className="tnums font-extrabold">{formatPeso(payrollTotal(record))}</td><td><span className={`employee-status ${statusTone(record.status)}`}>{statusLabel(record.status)}</span></td><td><Link href={employeeHref({ tab: "payroll", edit_payroll: record.id, start: range.start, end: range.end })} className="employee-text-link">Edit</Link></td></tr>; })}</tbody></table></div>
+  </div>;
+}
+
+function PayrollEditor({ employees, range, record, canWrite }: { employees: EmployeeRecord[]; range: { start: string; end: string }; record?: PayrollRecord; canWrite: boolean }) {
+  const defaultEmployee = record?.employee_id ?? employees[0]?.id ?? "";
+  return <form action={savePayroll} className="employee-entry-form"><div className="employee-entry-form__heading"><div><p className="employee-section-kicker">{record ? "Edit payroll record" : "Record payroll"}</p><h3>{record ? "Update pay run" : "Add a pay run"}</h3></div><span>All values are actual database entries</span></div><div className="employee-entry-grid employee-entry-grid--payroll"><label><span>Employee</span><select name="employee_id" defaultValue={defaultEmployee} required disabled={!canWrite}>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.full_name} · {employee.employee_code}</option>)}</select></label><label><span>Period start</span><input name="period_start" type="date" defaultValue={record?.period_start ?? range.start} required disabled={!canWrite} /></label><label><span>Period end</span><input name="period_end" type="date" defaultValue={record?.period_end ?? range.end} required disabled={!canWrite} /></label><label><span>Regular pay (₱)</span><input name="regular_pay" type="number" min="0" step="0.01" defaultValue={formatCentsInput(record?.regular_pay)} disabled={!canWrite} /></label><label><span>Overtime (₱)</span><input name="overtime_pay" type="number" min="0" step="0.01" defaultValue={formatCentsInput(record?.overtime_pay)} disabled={!canWrite} /></label><label><span>Allowances (₱)</span><input name="allowances" type="number" min="0" step="0.01" defaultValue={formatCentsInput(record?.allowances)} disabled={!canWrite} /></label><label><span>Deductions (₱)</span><input name="deductions" type="number" min="0" step="0.01" defaultValue={formatCentsInput(record?.deductions)} disabled={!canWrite} /></label><label><span>Status</span><select name="status" defaultValue={record?.status ?? "draft"} disabled={!canWrite}><option value="draft">Draft</option><option value="processed">Processed</option><option value="paid">Paid</option></select></label></div><label className="employee-wide-field"><span>Notes</span><input name="notes" defaultValue={record?.notes ?? ""} placeholder="Optional pay run note" disabled={!canWrite} /></label><button type="submit" disabled={!canWrite || employees.length === 0} className="employee-primary-button">{record ? "Save payroll" : "Record payroll"}</button></form>;
+}
+
+function LeaveTab({ employees, requests, canWrite, showCreate }: { employees: EmployeeRecord[]; requests: LeaveRecord[]; canWrite: boolean; showCreate: boolean }) {
+  return <div className="employee-tab-content"><div className="employee-tab-heading"><div><p className="employee-section-kicker">Time off workflow</p><h2>Leave Requests</h2><p>Review pending requests and keep approved leave reflected in the employee status.</p></div><Link href={employeeHref({ tab: "leave", create: showCreate ? undefined : "leave" })} className="employee-outline-button"><AdminIcon name="plus" size={15} /> {showCreate ? "Close" : "New request"}</Link></div>{showCreate && <LeaveEditor employees={employees} canWrite={canWrite} />}{requests.length === 0 ? <EmptyState icon="calendar" title="No leave requests yet" detail="New requests will appear here for review." /> : <div className="employee-leave-list">{requests.map((request) => { const employee = employees.find((item) => item.id === request.employee_id); return <div key={request.id} className="employee-leave-row"><span className={`employee-leave-icon ${statusTone(request.status)}`}><AdminIcon name="calendar" size={17} /></span><div className="employee-leave-copy"><strong>{employee?.full_name ?? "Unknown employee"}</strong><small>{request.leave_type} · {formatDate(request.start_date)} – {formatDate(request.end_date)}</small>{request.reason && <p>{request.reason}</p>}</div><span className={`employee-status ${statusTone(request.status)}`}>{statusLabel(request.status)}</span>{canWrite && request.status === "pending" && <div className="employee-leave-actions"><form action={updateLeaveStatus}><input type="hidden" name="request_id" value={request.id} /><input type="hidden" name="status" value="approved" /><button type="submit" className="employee-save-button">Approve</button></form><form action={updateLeaveStatus}><input type="hidden" name="request_id" value={request.id} /><input type="hidden" name="status" value="rejected" /><button type="submit" className="employee-reject-button">Reject</button></form></div>}</div>; })}</div>}</div>;
+}
+
+function LeaveEditor({ employees, canWrite }: { employees: EmployeeRecord[]; canWrite: boolean }) {
+  const today = todayInSingapore();
+  return <form action={createLeaveRequest} className="employee-entry-form"><div className="employee-entry-form__heading"><div><p className="employee-section-kicker">New request</p><h3>Submit leave request</h3></div></div><div className="employee-entry-grid"><label><span>Employee</span><select name="employee_id" defaultValue={employees[0]?.id ?? ""} required disabled={!canWrite}>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.full_name}</option>)}</select></label><label><span>Leave type</span><select name="leave_type" defaultValue="Personal Leave" disabled={!canWrite}><option>Personal Leave</option><option>Vacation Leave</option><option>Sick Leave</option><option>Emergency Leave</option></select></label><label><span>Start date</span><input type="date" name="start_date" defaultValue={today} required disabled={!canWrite} /></label><label><span>End date</span><input type="date" name="end_date" defaultValue={today} required disabled={!canWrite} /></label></div><label className="employee-wide-field"><span>Reason</span><textarea name="reason" rows={2} placeholder="Add context for the reviewer" disabled={!canWrite} /></label><button type="submit" disabled={!canWrite || employees.length === 0} className="employee-primary-button">Create request</button></form>;
+}
+
+function EmployeeEditor({ employee, branches, roles, today, canWrite, returnState }: { employee?: EmployeeRecord; branches: BranchRecord[]; roles: RoleRecord[]; today: string; canWrite: boolean; returnState: Record<string, string | undefined> }) {
+  const defaultRoleId = employee?.role_id ?? roles.find((role) => role.slug === "cashier")?.id ?? roles[0]?.id ?? "";
+  const returnHref = employeeHref({ tab: "list", ...returnState });
+  return <section className="employee-editor-panel"><div className="employee-tab-heading"><div><p className="employee-section-kicker">{employee ? "Edit record" : "Directory action"}</p><h2>{employee ? `Edit ${employee.full_name}` : "Add employee"}</h2><p>{employee ? "Update the employee directory and linked sign-in access." : "Create a staff record now; login access can be linked separately."}</p></div><Link href={returnHref} className="employee-icon-button" aria-label="Close employee form">×</Link></div><form action={employee ? updateEmployee : createEmployee} className="employee-entry-form"><input type="hidden" name="employee_id" value={employee?.id ?? ""} />{Object.entries(returnState).map(([key, value]) => value ? <input key={key} type="hidden" name={`return_${key}`} value={value} /> : null)}<div className="employee-entry-grid"><label><span>Full name</span><input name="full_name" defaultValue={employee?.full_name ?? ""} placeholder="Juan Dela Cruz" required maxLength={120} disabled={!canWrite} /></label><label><span>Email</span><input name="email" type="email" defaultValue={employee?.email ?? ""} placeholder="employee@email.com" disabled={!canWrite} /></label><label><span>Phone</span><input name="phone" defaultValue={employee?.phone ?? ""} placeholder="0917 123 4567" disabled={!canWrite} /></label><label><span>Job title</span><input name="job_title" defaultValue={employee?.job_title ?? ""} placeholder="Cashier" disabled={!canWrite} /></label><label><span>Workspace role</span><select name="role_id" defaultValue={defaultRoleId} disabled={!canWrite}><option value="">No role selected</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label><label><span>Sign-in access</span><select name="access_role" defaultValue={employee?.role ?? "cashier"} disabled={!canWrite}><option value="admin">Admin</option><option value="manager">Manager</option><option value="cashier">Cashier</option></select></label><label><span>Home branch</span><select name="store_id" defaultValue={employee?.store_id ?? ""} disabled={!canWrite}><option value="">All branches / unassigned</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.is_active ? "" : " (inactive)"}</option>)}</select></label><label><span>Date hired</span><input name="hired_on" type="date" defaultValue={employee?.hired_on ?? today} required disabled={!canWrite} /></label><label><span>Schedule start</span><input name="schedule_start" type="time" defaultValue={employee?.schedule_start?.slice(0, 5) ?? "09:00"} required disabled={!canWrite} /></label><label><span>Schedule end</span><input name="schedule_end" type="time" defaultValue={employee?.schedule_end?.slice(0, 5) ?? "17:00"} required disabled={!canWrite} /></label></div><fieldset className="employee-schedule-fieldset"><legend>Working days</legend><div className="employee-day-checkboxes">{DAYS.map(([key, label]) => <label key={key}><input type="checkbox" name="schedule_days" value={key} defaultChecked={employee ? employee.schedule_days.includes(key) : true} disabled={!canWrite} /><span>{label}</span></label>)}</div></fieldset>{employee && <label className="employee-checkbox"><input type="checkbox" name="is_active" defaultChecked={employee.is_active} disabled={!canWrite} /><span>Employee is active</span></label>}<button type="submit" disabled={!canWrite} className="employee-primary-button">{employee ? "Save employee" : "Add employee"}</button></form></section>;
+}
+
+function PayrollOverview({ breakdown, total, range }: { breakdown: { regular: number; overtime: number; allowances: number; deductions: number }; total: number; range: { start: string; end: string } }) {
+  return <section className="employee-side-card"><div className="employee-side-card__heading"><div><p className="employee-section-kicker">Payroll Overview</p><h2>{formatDateRange(range.start, range.end)}</h2></div><Link href={employeeHref({ tab: "payroll", start: range.start, end: range.end })} className="employee-side-select">{rangeScopeLabel(range)} <AdminIcon name="chevron" size={12} /></Link></div><strong className="employee-side-total tnums">{formatPeso(total)}</strong><div className="employee-breakdown"><span>Regular Pay <strong>{formatPeso(breakdown.regular)}</strong></span><span>Overtime Pay <strong>{formatPeso(breakdown.overtime)}</strong></span><span>Allowances <strong>{formatPeso(breakdown.allowances)}</strong></span>{breakdown.deductions > 0 && <span>Deductions <strong>-{formatPeso(breakdown.deductions)}</strong></span>}</div><Link href={employeeHref({ tab: "payroll", start: range.start, end: range.end })} className="employee-side-link">View payroll records <AdminIcon name="arrow" size={14} /></Link></section>;
+}
+
+function AttendanceOverview({ breakdown, total, range }: { breakdown: Record<"present" | "absent" | "late" | "on_leave", number>; total: number; range: { start: string; end: string } }) {
+  const presentEnd = total ? breakdown.present / total * 100 : 0;
+  const absentEnd = presentEnd + (total ? breakdown.absent / total * 100 : 0);
+  const lateEnd = absentEnd + (total ? breakdown.late / total * 100 : 0);
+  const gradient = total ? `conic-gradient(#4b8e4e 0 ${presentEnd}%, #f05a21 ${presentEnd}% ${absentEnd}%, #f9ae36 ${absentEnd}% ${lateEnd}%, #9ba0a3 ${lateEnd}% 100%)` : "conic-gradient(#e8ded2 0 100%)";
+  return <section className="employee-side-card"><div className="employee-side-card__heading"><div><p className="employee-section-kicker">Attendance Summary</p><h2>{formatDateRange(range.start, range.end)}</h2></div><span className="employee-side-select">Live data</span></div><div className="employee-attendance-chart"><div className="employee-donut" style={{ background: gradient }}><div>{total}</div></div><div className="employee-legend">{(["present", "absent", "late", "on_leave"] as const).map((status) => <span key={status}><i className={`employee-legend-dot employee-legend-dot--${status}`} /> <b>{statusLabel(status)}</b> <small>{breakdown[status]} ({total ? Math.round(breakdown[status] / total * 100) : 0}%)</small></span>)}</div></div><div className="employee-total-logs"><span>Total Logs</span><strong>{total}</strong></div></section>;
+}
+
+function RecentLeaveRequests({ requests, employeeById }: { requests: LeaveRecord[]; employeeById: Map<string, EmployeeRecord> }) {
+  return <section className="employee-side-card"><div className="employee-side-card__heading"><div><p className="employee-section-kicker">Recent Leave Requests</p></div><Link href={employeeHref({ tab: "leave" })} className="employee-text-link">View all</Link></div>{requests.length === 0 ? <p className="employee-muted">No leave requests yet.</p> : <div className="employee-recent-leaves">{requests.map((request) => { const employee = employeeById.get(request.employee_id); return <div key={request.id}><span className={`employee-leave-icon ${statusTone(request.status)}`}><AdminIcon name="calendar" size={14} /></span><div><strong>{employee?.full_name ?? "Unknown employee"}</strong><small>{request.leave_type}</small><small>{formatDate(request.start_date)} – {formatDate(request.end_date)}</small></div><span className={`employee-status ${statusTone(request.status)}`}>{statusLabel(request.status)}</span></div>; })}</div>}</section>;
+}
+
+function EmptyState({ icon, title, detail }: { icon: AdminIconName; title: string; detail: string }) {
+  return <div className="employee-empty-state"><span><AdminIcon name={icon} size={23} /></span><strong>{title}</strong><p>{detail}</p></div>;
 }
 
 function EmployeesProfileMissing() {
-  return (
-    <main className="grid min-h-screen place-items-center bg-bg p-6 text-center text-ink">
-      <div className="max-w-md rounded-card border border-line bg-surface p-8 shadow-[var(--shadow-pop)]">
-        <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Backoffice setup</p>
-        <h1 className="mt-2 text-2xl font-extrabold">Your admin profile is not ready.</h1>
-        <p className="mt-3 text-sm leading-6 text-ink-muted">Ask an organization admin to finish the profile and branch assignment, then sign in again.</p>
-        <div className="mt-6 flex justify-center gap-2"><Link href="/admin" className="rounded-btn bg-secondary px-4 py-3 text-sm font-extrabold uppercase text-primary">Back to dashboard</Link><SignOutButton /></div>
-      </div>
-    </main>
-  );
+  return <main className="grid min-h-screen place-items-center bg-bg p-6 text-center text-ink"><div className="max-w-md rounded-card border border-line bg-surface p-8 shadow-[var(--shadow-pop)]"><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Backoffice setup</p><h1 className="mt-2 text-2xl font-extrabold">Your admin profile is not ready.</h1><p className="mt-3 text-sm leading-6 text-ink-muted">Ask an organization admin to finish the profile and branch assignment, then sign in again.</p><div className="mt-6 flex justify-center gap-2"><Link href="/admin" className="rounded-btn bg-secondary px-4 py-3 text-sm font-extrabold uppercase text-primary">Back to dashboard</Link><SignOutButton /></div></div></main>;
 }
