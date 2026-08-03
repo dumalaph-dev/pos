@@ -17,6 +17,12 @@ export type StockMovementLike = {
 /** The first backoffice signal for products without a configured threshold. */
 export const LOW_STOCK_THRESHOLD = 2;
 
+export function stockThreshold(minStock: number | string | null | undefined): number {
+  if (minStock === null || minStock === undefined || (typeof minStock === "string" && minStock.trim() === "")) return LOW_STOCK_THRESHOLD;
+  const value = Number(minStock);
+  return Number.isFinite(value) && value >= 0 ? value : LOW_STOCK_THRESHOLD;
+}
+
 export function stockMovementDelta(type: string, qty: number): number {
   if (type === "receive" || type === "yield_in") return qty;
   if (type === "yield_out" || type === "sale" || type === "waste") return -qty;
@@ -37,9 +43,17 @@ export function formatStockQuantity(value: number): string {
   return value.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
 }
 
-export function stockStatus(value: number | undefined): "unknown" | "out" | "low" | "ok" {
+export function stockStatus(value: number | undefined, minStock?: number | string | null): "unknown" | "out" | "low" | "ok" {
   if (value === undefined) return "unknown";
   if (value <= 0) return "out";
-  if (value <= LOW_STOCK_THRESHOLD) return "low";
+  if (value <= stockThreshold(minStock)) return "low";
   return "ok";
+}
+
+/** Use recorded weight for per-kilogram lines and item quantity for all others. */
+export function salesQuantity(line: { qty: number | string | null | undefined; weight_kg?: number | string | null }): number {
+  const weight = Number(line.weight_kg);
+  if (Number.isFinite(weight) && weight > 0) return weight;
+  const quantity = Number(line.qty);
+  return Number.isFinite(quantity) ? quantity : 0;
 }

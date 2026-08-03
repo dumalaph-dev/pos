@@ -3,6 +3,7 @@ import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { SignOutButton } from "@/components/SignOutButton";
+import { formatStockQuantity, salesQuantity } from "@/lib/inventory";
 import { formatPeso } from "@/lib/money";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 
@@ -20,7 +21,7 @@ type ProfileRecord = {
 
 type BranchRecord = { id: string; name: string; is_active: boolean };
 type CategoryRecord = { id: string; name: string };
-type ProductRecord = { id: string; name: string; category_id: string | null };
+type ProductRecord = { id: string; name: string; category_id: string | null; unit: string };
 type OrderRecord = {
   id: string;
   store_id: string;
@@ -36,6 +37,7 @@ type OrderItemRecord = {
   product_id: string | null;
   name_snapshot: string;
   qty: number;
+  weight_kg: number | null;
   line_total: number;
 };
 
@@ -140,7 +142,7 @@ export default async function ReportsPage({
   const [branchesResult, categoriesResult, productsResult, ordersResult] = await Promise.all([
     supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name"),
     supabase.from("categories").select("id, name").eq("org_id", profile.org_id).order("sort_order").order("name"),
-    supabase.from("products").select("id, name, category_id").eq("org_id", profile.org_id).limit(1000),
+    supabase.from("products").select("id, name, category_id, unit").eq("org_id", profile.org_id).limit(1000),
     supabase
       .from("orders")
       .select("id, store_id, status, discount_amount, vat_amount, total, payment_method, created_at")
@@ -161,7 +163,7 @@ export default async function ReportsPage({
   if (orderIds.length > 0) {
     const { data, error } = await supabase
       .from("order_items")
-      .select("order_id, product_id, name_snapshot, qty, line_total")
+      .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total")
       .in("order_id", orderIds);
     orderItems = (data ?? []) as OrderItemRecord[];
     orderItemsError = Boolean(error);
@@ -205,21 +207,21 @@ export default async function ReportsPage({
     ...(paymentTotalsByMethod.get(method) ?? { orders: 0, total: 0 }),
   }));
 
-  const topItemsByName = new Map<string, { name: string; qty: number; total: number }>();
-  const categorySalesById = new Map<string, { name: string; qty: number; total: number }>();
+  const topItemsByName = new Map<string, { name: string; qty: number; unit: string; total: number }>();
+  const categorySalesById = new Map<string, { name: string; qty: number; unit: string; total: number }>();
   for (const item of orderItems) {
     if (!completedOrderIds.has(item.order_id)) continue;
 
-    const topItem = topItemsByName.get(item.name_snapshot) ?? { name: item.name_snapshot, qty: 0, total: 0 };
-    topItem.qty += Number(item.qty);
+    const product = item.product_id ? productById.get(item.product_id) : null;
+    const topItem = topItemsByName.get(item.name_snapshot) ?? { name: item.name_snapshot, qty: 0, unit: product?.unit ?? "items", total: 0 };
+    topItem.qty += salesQuantity(item);
     topItem.total += Number(item.line_total);
     topItemsByName.set(item.name_snapshot, topItem);
 
-    const product = item.product_id ? productById.get(item.product_id) : null;
     const category = product?.category_id ? categoryById.get(product.category_id) : null;
     const categoryKey = category?.id ?? "uncategorized";
-    const categoryItem = categorySalesById.get(categoryKey) ?? { name: category?.name ?? "Uncategorized", qty: 0, total: 0 };
-    categoryItem.qty += Number(item.qty);
+    const categoryItem = categorySalesById.get(categoryKey) ?? { name: category?.name ?? "Uncategorized", qty: 0, unit: product?.unit ?? "items", total: 0 };
+    categoryItem.qty += salesQuantity(item);
     categoryItem.total += Number(item.line_total);
     categorySalesById.set(categoryKey, categoryItem);
   }
@@ -271,8 +273,8 @@ export default async function ReportsPage({
           </div>
 
           <div className="mt-4 grid gap-4 xl:grid-cols-2">
-            <ReportListPanel title="Best sellers" subtitle="Top items by revenue" emptyTitle="No completed sales yet" emptyDetail="Items will appear after the first completed order." items={topItems.map((item) => ({ label: item.name, detail: `${item.qty} sold`, value: displayPeso(item.total) }))} />
-            <ReportListPanel title="Sales by category" subtitle="Menu families driving item sales" emptyTitle="No category sales yet" emptyDetail="Category performance will appear after completed orders." items={categorySales.map((item) => ({ label: item.name, detail: `${item.qty} item${item.qty === 1 ? "" : "s"} sold`, value: displayPeso(item.total) }))} />
+            <ReportListPanel title="Best sellers" subtitle="Top items by revenue" emptyTitle="No completed sales yet" emptyDetail="Items will appear after the first completed order." items={topItems.map((item) => ({ label: item.name, detail: `${formatStockQuantity(item.qty)} ${item.unit} sold`, value: displayPeso(item.total) }))} />
+            <ReportListPanel title="Sales by category" subtitle="Menu families driving item sales" emptyTitle="No category sales yet" emptyDetail="Category performance will appear after completed orders." items={categorySales.map((item) => ({ label: item.name, detail: `${formatStockQuantity(item.qty)} ${item.unit} sold`, value: displayPeso(item.total) }))} />
           </div>
 
           <section aria-labelledby="branch-report-heading" className="admin-panel mt-4 p-5"><div className="admin-panel__header"><div><p className="admin-panel__eyebrow">Branch comparison</p><h2 id="branch-report-heading" className="admin-panel__title">Where sales are happening</h2><p className="admin-panel__subtitle">Completed sales for the selected period</p></div><Link href="/admin/employees" className="admin-kpi-card__link mt-0">Manage staff <AdminIcon name="arrow" size={14} /></Link></div>{branchStats.length === 0 ? <ReportEmpty title="No branches found" detail="Create a branch to compare performance." /> : <div className="mt-4 overflow-x-auto"><table className="admin-list-table min-w-[620px]"><thead><tr><th>Branch</th><th>Orders</th><th>Total sales</th><th>Share</th><th>Average order</th></tr></thead><tbody>{branchStats.map((branch) => <tr key={branch.id}><td><strong>{branch.name}</strong><small className="mt-1 block text-[10px] text-ink-muted">{branch.is_active ? "Active" : "Inactive"}</small></td><td className="tnums">{branch.orders}</td><td className="tnums font-extrabold">{displayPeso(branch.sales)}</td><td className="tnums">{totalSales ? Math.round((branch.sales / totalSales) * 100) : 0}%</td><td className="tnums font-extrabold">{displayPeso(branch.orders ? Math.round(branch.sales / branch.orders) : 0)}</td></tr>)}</tbody></table></div>}</section>

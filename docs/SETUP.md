@@ -34,6 +34,13 @@ SQL lives in `supabase/migrations/` (run in order):
 1. `0001_schema.sql` — tables, enums, indexes
 2. `0002_rls.sql` — grants, helper functions, RLS policies, append-only triggers
 3. `0003_functions.sql` — `clone_menu` (multi-branch)
+4. `0004_lockdown.sql` — public grants and privilege lockdown
+5. `0005_place_order.sql` — online order transaction and stock wiring
+6. `0006_sync_idempotency.sql` — idempotent order sync constraints
+7. `0007_inventory_wiring.sql` — stock movement RPC and POS inventory ledger
+8. `0008_admin_query_indexes.sql` — backoffice query indexes
+9. `0009_admin_business_records.sql` — customers, suppliers, and expenses
+10. `0010_inventory_catalog_fields.sql` — SKU, barcode, cost, minimum-stock, and supplier fields; **must run after `0009`**
 
 **Apply them** either way:
 - **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push`
@@ -43,7 +50,7 @@ SQL lives in `supabase/migrations/` (run in order):
 ```bash
 npx supabase login                                  # one-time browser flow
 npx supabase link --project-ref uzavkjftwcuixidxyopr  # prompts for the DB password
-npx supabase db push                                # applies 0001–0003 in order
+npx supabase db push                                # applies all pending migrations in order
 ```
 > `supabase db push` runs **migrations only** — never `seed.sql` (local-dev fixture data stays local). Never run `supabase db reset` against a hosted project.
 

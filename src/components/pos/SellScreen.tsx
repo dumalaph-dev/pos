@@ -42,6 +42,7 @@ type Product = {
   category_id: string | null;
   image_url?: string | null;
   track_stock?: boolean;
+  min_stock?: number | null;
 };
 type Category = { id: string; name: string; icon: string | null };
 
@@ -326,7 +327,7 @@ export default function SellScreen() {
           .order("sort_order"),
         supabase
           .from("products")
-          .select("id, name, pricing_mode, price, unit, category_id, image_url, track_stock")
+          .select("id, name, pricing_mode, price, unit, category_id, image_url, track_stock, min_stock")
           .eq(scope.column, scope.value)
           .eq("is_active", true)
           .order("sort_order"),
@@ -469,7 +470,7 @@ export default function SellScreen() {
   const notifyStock = useCallback((product: Product) => {
     if (!product.track_stock) return;
     const available = stockByProductId[product.id];
-    const status = stockStatus(available);
+    const status = stockStatus(available, product.min_stock);
     if (status === "out") {
       setToast({ msg: `${product.name} is out of recorded stock. The sale can still continue.` });
     } else if (status === "low") {
@@ -601,7 +602,7 @@ export default function SellScreen() {
     };
 
     const outOfRecordedStock = cart.filter(
-      (line) => line.product.track_stock && stockStatus(stockByProductId[line.product.id]) === "out",
+      (line) => line.product.track_stock && stockStatus(stockByProductId[line.product.id], line.product.min_stock) === "out",
     );
     if (outOfRecordedStock.length > 0) {
       setToast({ msg: `${outOfRecordedStock.map((line) => line.product.name).join(", ")} has no recorded stock. The sale will still be saved.` });
@@ -956,7 +957,7 @@ export default function SellScreen() {
                         <span className="tnums">{displayPeso(product.price)}{product.pricing_mode === "per_kg" ? " / kg" : ""}</span>
                         {product.track_stock && (() => {
                           const available = stockByProductId[product.id];
-                          const status = stockStatus(available);
+                          const status = stockStatus(available, product.min_stock);
                           return <small className={`product-card__stock product-card__stock--${status}`}>{status === "unknown" ? "Stock pending" : status === "out" ? "Out of stock" : `${formatStockQuantity(available ?? 0)} ${product.unit} left`}</small>;
                         })()}
                       </div>

@@ -71,7 +71,7 @@ async function validStore(supabase: Awaited<ReturnType<typeof createClient>>, or
 function refreshSettings() {
   revalidatePath("/admin/settings");
   revalidatePath("/admin");
-  revalidatePath("/admin/catalog");
+  revalidatePath("/products");
   revalidatePath("/admin/inventory");
   revalidatePath("/pos");
 }

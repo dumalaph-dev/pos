@@ -34,7 +34,7 @@ The three hard problems, in order: **(1) offline-first correctness**, **(2) mult
 /admin                backoffice shell + branch switcher
   /admin/dashboard    per-branch + "All branches"
   /admin/branches     add/edit branch, clone menu, devices
-  /admin/products     catalog CRUD (per branch)
+  /products           product and category CRUD (per branch)
   /admin/inventory    stock in / yield / waste / variance
   /admin/orders       list, void/refund, reprint
   /admin/shifts       X/Z reading

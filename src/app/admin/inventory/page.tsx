@@ -4,12 +4,14 @@ import type { ReactNode } from "react";
 import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
+import { BranchProductSelector } from "@/components/admin/BranchProductSelector";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import {
   formatStockQuantity,
   LOW_STOCK_THRESHOLD,
   stockMovementDelta,
+  stockThreshold,
   type StockMovementType,
 } from "@/lib/inventory";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
@@ -162,6 +164,21 @@ function readColumns(value: string | string[] | undefined) {
 function readPageSize(value: string) {
   const parsed = Number(value);
   return parsed === 25 || parsed === 50 ? parsed : 10;
+}
+
+type SupabaseQueryError = { code?: string; message?: string; details?: string } | null | undefined;
+const OPTIONAL_INVENTORY_FIELDS = ["sku", "barcode", "cost_price", "min_stock", "supplier_id"];
+
+function isInventorySchemaError(error: SupabaseQueryError) {
+  if (!error) return false;
+  const code = error.code ?? "";
+  const message = `${error.message ?? ""} ${error.details ?? ""}`.toLowerCase();
+  const pointsToInventorySchema = OPTIONAL_INVENTORY_FIELDS.some((field) => message.includes(field)) || message.includes("supplier");
+  const indicatesMissingSchema = ["42703", "42P01", "PGRST204", "PGRST205"].includes(code)
+    || message.includes("schema cache")
+    || message.includes("does not exist")
+    || message.includes("could not find the table");
+  return pointsToInventorySchema && indicatesMissingSchema;
 }
 
 function shortName(name: string | null, fallback: string) {
@@ -344,6 +361,7 @@ export default async function InventoryPage({
   const suppliers = (suppliersResult.data ?? []) as SupplierRecord[];
   let products = (productsResult.data ?? []) as ProductRecord[];
   let productsQueryWarning = Boolean(productsResult.error);
+  let productsSchemaWarning = isInventorySchemaError(productsResult.error);
 
   if (productsResult.error) {
     const fallbackProductsResult = await supabase
@@ -354,6 +372,7 @@ export default async function InventoryPage({
       .order("name")
       .limit(2000);
     const fallbackProducts = (fallbackProductsResult.data ?? []) as BaseProductRecord[];
+    productsSchemaWarning = productsSchemaWarning || isInventorySchemaError(fallbackProductsResult.error);
     products = fallbackProducts.map((product) => ({
       ...product,
       sku: null,
@@ -382,8 +401,7 @@ export default async function InventoryPage({
     const branch = branchById.get(product.store_id);
     if (!branch) return [];
     const onHand = stockByKey.get(`${branch.id}:${product.id}`) ?? 0;
-    const minimumStock = Number(product.min_stock);
-    const minStock = Number.isFinite(minimumStock) ? Math.max(minimumStock, 0) : LOW_STOCK_THRESHOLD;
+    const minStock = stockThreshold(product.min_stock);
     const costRate = product.cost_price ?? product.price;
     return [{
       branch,
@@ -399,7 +417,7 @@ export default async function InventoryPage({
 
   const requestedStatus = readParam(params.status);
   const status: InventoryStatus = isInventoryStatus(requestedStatus) ? requestedStatus : "all";
-  const searchQuery = readParam(params.q);
+  const searchQuery = readParam(params.q).trim();
   const normalizedQuery = searchQuery.toLowerCase();
   const requestedCategory = readParam(params.category);
   const category = requestedCategory || "all";
@@ -434,8 +452,13 @@ export default async function InventoryPage({
   }).length;
   const estimatedValue = allRows.reduce((sum, row) => sum + row.inventoryValue, 0);
   const estimatedValueItems = allRows.filter((row) => row.product.cost_price == null).length;
+  const catalogFieldsWarning = productsSchemaWarning || isInventorySchemaError(suppliersResult.error);
   const queryWarning = Boolean(
-    branchesResult.error || categoriesResult.error || suppliersResult.error || movementsResult.error || productsQueryWarning,
+    branchesResult.error
+      || categoriesResult.error
+      || movementsResult.error
+      || (productsQueryWarning && !productsSchemaWarning)
+      || (suppliersResult.error && !catalogFieldsWarning),
   );
   const canWrite = profile.role === "admin";
   const currentBranchName = profile.store_id
@@ -466,6 +489,8 @@ export default async function InventoryPage({
   const posSaleCount = movements.filter((movement) => movement.type === "sale").length;
   const userInitial = firstName.slice(0, 1).toUpperCase();
   const inventoryAlertCount = lowStockCount + outOfStockCount;
+  const activeFilterCount = [category !== "all", status !== "all", Boolean(supplier)].filter(Boolean).length;
+  const hiddenColumnCount = columnOptions.length - visibleColumns.size;
 
   return (
     <main className="admin-page text-ink">
@@ -479,7 +504,7 @@ export default async function InventoryPage({
             <Link href="#inventory-table" className="admin-icon-button admin-icon-button--alert" aria-label={inventoryAlertCount ? `View ${inventoryAlertCount} inventory alerts` : "View inventory status"}><AdminIcon name="bell" size={19} />{inventoryAlertCount > 0 && <span className="admin-icon-button__badge" aria-hidden="true">{inventoryAlertCount > 9 ? "9+" : inventoryAlertCount}</span>}</Link>
             <Link href="#inventory-help" className="admin-icon-button admin-icon-button--help" aria-label="View inventory help"><AdminIcon name="help" size={19} /></Link>
             <div className="admin-user-chip"><span className="admin-user-chip__avatar" aria-hidden="true">{userInitial}</span><span className="admin-user-chip__copy"><strong>{firstName}</strong><small>{profile.role === "manager" ? "Manager" : "Admin"}⌄</small></span></div>
-            <SignOutButton className="px-2 py-2 text-[10px]" />
+            <SignOutButton className="inventory-button px-2 text-[10px]" />
           </header>
           <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line/70 pb-5 pt-2">
             <div>
@@ -488,13 +513,13 @@ export default async function InventoryPage({
               <p className="mt-1 max-w-2xl text-sm text-ink-muted">Manage your inventory items, stock levels, and track usage across all branches, {firstName}.</p>
             </div>
             <div className="admin-compact-toolbar">
-              <Link href={buildInventoryHref({ ...baseHref, page: 1, movement: "receive" }) + "#stock-movement"} className="admin-compact-toolbar__button gap-2 rounded-btn bg-secondary text-xs font-extrabold text-primary transition hover:bg-secondary-hover"><AdminIcon name="download" size={15} />Stock In<AdminIcon name="chevron" size={13} /></Link>
-              <Link href={buildInventoryHref({ ...baseHref, page: 1, movement: "yield_out" }) + "#stock-movement"} className="admin-compact-toolbar__button gap-2 rounded-btn bg-secondary text-xs font-extrabold text-primary transition hover:bg-secondary-hover"><AdminIcon name="upload" size={15} />Stock Out<AdminIcon name="chevron" size={13} /></Link>
+              <Link href={buildInventoryHref({ ...baseHref, page: 1, movement: "receive" }) + "#stock-movement"} className="inventory-button gap-1.5 rounded-btn bg-secondary text-[11px] font-extrabold text-primary transition hover:bg-secondary-hover"><AdminIcon name="download" size={14} />Stock in<AdminIcon name="chevron" size={12} /></Link>
+              <Link href={buildInventoryHref({ ...baseHref, page: 1, movement: "yield_out" }) + "#stock-movement"} className="inventory-button gap-1.5 rounded-btn bg-secondary text-[11px] font-extrabold text-primary transition hover:bg-secondary-hover"><AdminIcon name="upload" size={14} />Stock out<AdminIcon name="chevron" size={12} /></Link>
               <details className="relative">
-                <summary className="admin-compact-toolbar__button list-none cursor-pointer gap-2 rounded-btn bg-primary text-xs font-extrabold text-primary-fg"><AdminIcon name="plus" size={15} />Add item<AdminIcon name="chevron" size={13} /></summary>
-                <div className="absolute right-0 top-full z-20 mt-2 grid min-w-40 gap-1 rounded-card border border-line bg-surface p-2 shadow-[var(--shadow-pop)]">
-                  <Link href="/admin/catalog#new-product-heading" className="rounded-btn px-3 py-2 text-xs font-bold text-primary hover:bg-primary-soft">New product</Link>
-                  <Link href="/admin/catalog#category-heading" className="rounded-btn px-3 py-2 text-xs font-bold text-primary hover:bg-primary-soft">New category</Link>
+                <summary className="inventory-button list-none cursor-pointer gap-1.5 rounded-btn bg-primary text-[11px] font-extrabold text-primary-fg"><AdminIcon name="plus" size={14} />Add item<AdminIcon name="chevron" size={12} /></summary>
+                <div className="absolute right-0 top-full z-20 mt-1 grid min-w-40 gap-1 rounded-card border border-line bg-surface p-1.5 shadow-[var(--shadow-pop)]">
+                  <Link href="/products?create=product#product-form" className="inventory-menu-item">New product</Link>
+                  <Link href="/products?create=category#category-form" className="inventory-menu-item">New category</Link>
                 </div>
               </details>
             </div>
@@ -502,7 +527,8 @@ export default async function InventoryPage({
 
           {savedMessage && <div role="status" className="mt-5 rounded-card border border-success/25 bg-success/10 px-4 py-3 text-sm font-semibold text-success">{savedMessage}</div>}
           {readParam(params.error) && <div role="alert" className="mt-5 rounded-card border border-danger/25 bg-danger-soft px-4 py-3 text-sm font-semibold text-danger">{readParam(params.error)}</div>}
-          {queryWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink">Some inventory fields are unavailable. Ensure <code className="font-bold">0009_admin_business_records.sql</code> is applied before <code className="font-bold">0010_inventory_catalog_fields.sql</code> in Supabase to enable suppliers and advanced inventory fields.</div>}
+          {catalogFieldsWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-3 py-2.5 text-xs text-ink"><strong className="font-extrabold">Some inventory fields are unavailable.</strong> Ensure <code className="font-bold">0009_admin_business_records.sql</code> is applied before <code className="font-bold">0010_inventory_catalog_fields.sql</code> in Supabase to enable suppliers and advanced inventory fields.</div>}
+          {queryWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-3 py-2.5 text-xs text-ink">Some inventory data could not refresh. Check the connection and try again.</div>}
           {!canWrite && <div role="status" className="mt-5 rounded-card border border-line bg-secondary px-4 py-3 text-sm font-semibold text-primary">This inventory view is read-only for your role. Ask an organization admin to record stock movements or edit catalog fields.</div>}
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -515,46 +541,48 @@ export default async function InventoryPage({
 
           <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_252px]">
             <div className="min-w-0">
-              <section aria-labelledby="inventory-filters-heading" className="admin-panel p-4">
-                <form action="/admin/inventory" method="get" className="grid gap-3 xl:grid-cols-[minmax(220px,1.7fr)_repeat(3,minmax(145px,0.8fr))_auto] xl:items-center">
+              <section aria-labelledby="inventory-filters-heading" className="admin-panel p-2.5 sm:p-3">
+                <form action="/admin/inventory" method="get" className="inventory-filter-bar">
                   <input type="hidden" name="page" value="1" />
                   <input type="hidden" name="pageSize" value={pageSize} />
-                  <label className="relative block">
+                  <label className="inventory-search">
                     <span className="sr-only" id="inventory-filters-heading">Search inventory</span>
-                    <span className="pointer-events-none absolute inset-y-0 left-3 grid place-items-center text-ink-muted"><AdminIcon name="search" size={16} /></span>
-                    <input name="q" defaultValue={searchQuery} placeholder="Search by item name, SKU or barcode..." className="inventory-input pl-10 text-xs" />
+                    <span className="pointer-events-none absolute inset-y-0 left-2.5 grid place-items-center text-ink-muted"><AdminIcon name="search" size={15} /></span>
+                    <input name="q" defaultValue={searchQuery} placeholder="Search inventory" className="inventory-input inventory-input--compact inventory-search__input" />
                   </label>
-                  <label className="sr-only" htmlFor="inventory-category">Category</label>
-                  <select id="inventory-category" name="category" defaultValue={category} className="inventory-input text-xs font-bold">
-                    <option value="all">All categories</option>
-                    {categories.filter((item) => item.is_active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                    <option value="uncategorized">Others</option>
-                  </select>
-                  <label className="sr-only" htmlFor="inventory-status">Status</label>
-                  <select id="inventory-status" name="status" defaultValue={status} className="inventory-input text-xs font-bold">
-                    {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
-                  <label className="sr-only" htmlFor="inventory-supplier">Supplier</label>
-                  <select id="inventory-supplier" name="supplier" defaultValue={supplier || ""} className="inventory-input text-xs font-bold">
-                    <option value="">All suppliers</option>
-                    {suppliers.filter((item) => item.is_active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                  </select>
-                  <details className="relative justify-self-start xl:justify-self-end">
-                    <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-btn border border-line bg-surface px-3 text-xs font-extrabold text-primary"><AdminIcon name="columns" size={15} />Columns</summary>
-                    <div className="absolute right-0 top-full z-20 mt-2 grid min-w-48 gap-2 rounded-card border border-line bg-surface p-3 shadow-[var(--shadow-pop)]">
-                      {columnOptions.map((column) => <label key={column.value} className="flex items-center gap-2 text-xs font-bold text-ink"><input type="checkbox" name="columns" value={column.value} defaultChecked={visibleColumns.has(column.value)} className="h-4 w-4 accent-primary" />{column.label}</label>)}
-                      <button type="submit" className="mt-1 rounded-btn bg-primary px-3 py-2 text-xs font-extrabold text-primary-fg">Apply</button>
-                    </div>
-                  </details>
-                  <button type="submit" className="min-h-11 rounded-btn bg-primary px-4 text-xs font-extrabold text-primary-fg transition hover:bg-primary-hover">Apply</button>
+
+                  <div className="inventory-filter-bar__actions">
+                    <details className="relative" open={activeFilterCount > 0}>
+                      <summary className="inventory-button list-none cursor-pointer gap-1.5 rounded-btn border border-line bg-surface text-[11px] font-extrabold text-primary"><AdminIcon name="filter" size={14} />Filters{activeFilterCount > 0 && <span className="inventory-filter-count">{activeFilterCount}</span>}<AdminIcon name="chevron" size={12} /></summary>
+                      <div className="inventory-filter-menu">
+                        <label className="grid gap-1"><span className="inventory-filter-menu__label">Category</span><select id="inventory-category" name="category" defaultValue={category} className="inventory-input inventory-input--compact text-xs font-bold"><option value="all">All categories</option>{categories.filter((item) => item.is_active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}<option value="uncategorized">Others</option></select></label>
+                        <label className="grid gap-1"><span className="inventory-filter-menu__label">Status</span><select id="inventory-status" name="status" defaultValue={status} className="inventory-input inventory-input--compact text-xs font-bold">{statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+                        <label className="grid gap-1"><span className="inventory-filter-menu__label">Supplier</span><select id="inventory-supplier" name="supplier" defaultValue={supplier || ""} className="inventory-input inventory-input--compact text-xs font-bold"><option value="">All suppliers</option>{suppliers.filter((item) => item.is_active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+                        <div className="inventory-filter-menu__actions">
+                          {activeFilterCount > 0 && <Link href={buildInventoryHref({ ...baseHref, category: "all", status: "all", supplier: "", page: 1 })} className="inventory-button inventory-button--ghost">Reset</Link>}
+                          <button type="submit" className="inventory-button rounded-btn bg-primary text-[11px] font-extrabold text-primary-fg transition hover:bg-primary-hover">Apply</button>
+                        </div>
+                      </div>
+                    </details>
+
+                    <details className="relative" open={hiddenColumnCount > 0}>
+                      <summary className="inventory-button list-none cursor-pointer gap-1.5 rounded-btn border border-line bg-surface text-[11px] font-extrabold text-primary"><AdminIcon name="columns" size={14} />Columns{hiddenColumnCount > 0 && <span className="inventory-filter-count">{hiddenColumnCount}</span>}<AdminIcon name="chevron" size={12} /></summary>
+                      <div className="inventory-filter-menu inventory-filter-menu--columns">
+                        {columnOptions.map((column) => <label key={column.value} className="flex items-center gap-2 text-[11px] font-bold text-ink"><input type="checkbox" name="columns" value={column.value} defaultChecked={visibleColumns.has(column.value)} className="h-3.5 w-3.5 accent-primary" />{column.label}</label>)}
+                        <button type="submit" className="inventory-button mt-1 rounded-btn bg-primary text-[11px] font-extrabold text-primary-fg transition hover:bg-primary-hover">Apply</button>
+                      </div>
+                    </details>
+
+                    <button type="submit" className="inventory-button rounded-btn bg-primary text-[11px] font-extrabold text-primary-fg transition hover:bg-primary-hover" aria-label="Apply inventory search"><AdminIcon name="search" size={14} /><span className="hidden sm:inline">Search</span><span className="sm:hidden">Go</span></button>
+                  </div>
                 </form>
               </section>
 
               <nav aria-label="Inventory categories" className="admin-panel mt-3 overflow-x-auto p-2">
                 <div className="flex min-w-max gap-1">
                   {categoryTabs.map((tab) => (
-                    <Link key={tab.id} href={buildInventoryHref({ ...baseHref, category: tab.id, page: 1 })} className={`flex min-w-[104px] items-center gap-2 rounded-btn border px-3 py-2.5 transition ${category === tab.id ? "border-primary/35 bg-primary-fg/20 text-primary" : "border-transparent text-ink-muted hover:border-line hover:bg-surface-raised"}`}>
-                      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-btn bg-secondary text-sm text-primary" aria-hidden="true">{tab.icon}</span>
+                    <Link key={tab.id} href={buildInventoryHref({ ...baseHref, category: tab.id, page: 1 })} className={`inventory-category-tab ${category === tab.id ? "is-active" : ""}`}>
+                      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-secondary text-xs text-primary" aria-hidden="true">{tab.icon}</span>
                       <span className="min-w-0"><strong className="block truncate text-[11px] font-extrabold">{tab.label}</strong><small className="block text-[10px] font-semibold text-ink-muted">{tab.count} items</small></span>
                     </Link>
                   ))}
@@ -567,7 +595,7 @@ export default async function InventoryPage({
                   <span className="rounded-pill bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary">{canWrite ? "Admin editing enabled" : "Read only"}</span>
                 </div>
                 {pageRows.length === 0 ? (
-                  <EmptyState title="No inventory items match these filters" detail="Try a wider search, choose another category, or add a tracked product from the catalog." href="/admin/catalog#new-product-heading" action="Add item" />
+                  <EmptyState title="No inventory items match these filters" detail="Try a wider search, choose another category, or add a tracked product from Products." href="/products?create=product#product-form" action="Add item" />
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="admin-list-table min-w-[1180px]">
@@ -584,14 +612,14 @@ export default async function InventoryPage({
                             {visibleColumns.has("cost") && <td className="tnums whitespace-nowrap text-[10px] font-semibold">{row.product.cost_price == null ? "—" : formatPeso(Number(row.product.cost_price))}</td>}
                             {visibleColumns.has("selling") && <td className="tnums whitespace-nowrap text-[10px] font-semibold">{formatPeso(Number(row.product.price))}</td>}
                             {visibleColumns.has("supplier") && <td className="max-w-[130px] truncate text-[10px] font-semibold" title={row.supplierName}>{row.supplierName}</td>}
-                            <td><div className="flex items-center justify-end gap-1"><Link href={`/admin/catalog#product-${row.product.id}`} aria-label={`Edit ${row.product.name}`} className="grid h-8 w-8 place-items-center rounded-btn border border-line bg-surface text-primary transition hover:bg-primary-soft"><AdminIcon name="edit" size={14} /></Link><details className="relative"><summary className="grid h-8 w-8 cursor-pointer list-none place-items-center rounded-btn border border-line bg-surface text-primary transition hover:bg-primary-soft" aria-label={`More actions for ${row.product.name}`}><AdminIcon name="more" size={15} /></summary><div className="absolute right-0 top-full z-20 mt-1 grid min-w-44 gap-1 rounded-card border border-line bg-surface p-2 shadow-[var(--shadow-pop)]"><Link href={`/admin/inventory?product=${row.product.id}&movement=receive#stock-movement`} className="rounded-btn px-3 py-2 text-xs font-bold text-primary hover:bg-primary-soft">Record stock movement</Link><Link href={`/admin/catalog#product-${row.product.id}`} className="rounded-btn px-3 py-2 text-xs font-bold text-primary hover:bg-primary-soft">Edit catalog item</Link></div></details></div></td>
+                            <td><div className="flex items-center justify-end gap-1"><Link href={`/products?edit=${row.product.id}#product-edit`} aria-label={`Edit ${row.product.name}`} className="inventory-icon-button border border-line bg-surface text-primary transition hover:bg-primary-soft"><AdminIcon name="edit" size={14} /></Link><details className="relative"><summary className="inventory-icon-button cursor-pointer list-none border border-line bg-surface text-primary transition hover:bg-primary-soft" aria-label={`More actions for ${row.product.name}`}><AdminIcon name="more" size={15} /></summary><div className="absolute right-0 top-full z-20 mt-1 grid min-w-44 gap-1 rounded-card border border-line bg-surface p-1.5 shadow-[var(--shadow-pop)]"><Link href={`/admin/inventory?product=${row.product.id}&movement=receive#stock-movement`} className="inventory-menu-item">Record stock movement</Link><Link href={`/products?edit=${row.product.id}#product-edit`} className="inventory-menu-item">Edit product</Link></div></details></div></td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
                 )}
-                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-4"><span className="text-[10px] font-semibold text-ink-muted">Showing {firstRow} to {lastRow} of {filteredRows.length} items</span><div className="flex items-center gap-1">{page > 1 ? <Link href={buildInventoryHref({ ...baseHref, page: page - 1 })} className="grid h-8 w-8 place-items-center rounded-btn border border-line text-primary hover:bg-primary-soft" aria-label="Previous page">‹</Link> : <span className="grid h-8 w-8 place-items-center rounded-btn border border-line text-ink-subtle" aria-hidden="true">‹</span>}{Array.from({ length: Math.min(totalPages, 5) }, (_, index) => index + 1).map((pageNumber) => <Link key={pageNumber} href={buildInventoryHref({ ...baseHref, page: pageNumber })} className={`grid h-8 min-w-8 place-items-center rounded-btn px-2 text-[10px] font-extrabold ${pageNumber === page ? "bg-primary text-primary-fg" : "border border-line bg-surface text-primary hover:bg-primary-soft"}`}>{pageNumber}</Link>)}{page < totalPages ? <Link href={buildInventoryHref({ ...baseHref, page: page + 1 })} className="grid h-8 w-8 place-items-center rounded-btn border border-line text-primary hover:bg-primary-soft" aria-label="Next page">›</Link> : <span className="grid h-8 w-8 place-items-center rounded-btn border border-line text-ink-subtle" aria-hidden="true">›</span>}</div><form action="/admin/inventory" method="get" className="flex items-center gap-2"><input type="hidden" name="q" value={searchQuery} /><input type="hidden" name="category" value={category} /><input type="hidden" name="status" value={status} /><input type="hidden" name="supplier" value={supplier} /><input type="hidden" name="columns" value={[...visibleColumns].join(",")} /><label htmlFor="inventory-page-size" className="text-[10px] font-semibold text-ink-muted">Rows per page:</label><select id="inventory-page-size" name="pageSize" defaultValue={String(pageSize)} className="inventory-input min-h-8 w-auto py-1 text-[10px]"><option value="10">10</option><option value="25">25</option><option value="50">50</option></select><button type="submit" className="rounded-btn border border-line bg-surface px-2 py-1.5 text-[10px] font-extrabold text-primary hover:bg-primary-soft">Apply</button></form></div>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3"><span className="text-[10px] font-semibold text-ink-muted">Showing {firstRow} to {lastRow} of {filteredRows.length} items</span><div className="flex items-center gap-1">{page > 1 ? <Link href={buildInventoryHref({ ...baseHref, page: page - 1 })} className="inventory-icon-button border border-line text-primary hover:bg-primary-soft" aria-label="Previous page">‹</Link> : <span className="inventory-icon-button border border-line text-ink-subtle" aria-hidden="true">‹</span>}{Array.from({ length: Math.min(totalPages, 5) }, (_, index) => index + 1).map((pageNumber) => <Link key={pageNumber} href={buildInventoryHref({ ...baseHref, page: pageNumber })} className={`inventory-page-button ${pageNumber === page ? "is-active" : ""}`}>{pageNumber}</Link>)}{page < totalPages ? <Link href={buildInventoryHref({ ...baseHref, page: page + 1 })} className="inventory-icon-button border border-line text-primary hover:bg-primary-soft" aria-label="Next page">›</Link> : <span className="inventory-icon-button border border-line text-ink-subtle" aria-hidden="true">›</span>}</div><form action="/admin/inventory" method="get" className="flex items-center gap-2"><input type="hidden" name="q" value={searchQuery} /><input type="hidden" name="category" value={category} /><input type="hidden" name="status" value={status} /><input type="hidden" name="supplier" value={supplier} /><input type="hidden" name="columns" value={[...visibleColumns].join(",")} /><label htmlFor="inventory-page-size" className="text-[10px] font-semibold text-ink-muted">Rows per page:</label><select id="inventory-page-size" name="pageSize" defaultValue={String(pageSize)} className="inventory-input inventory-input--compact w-auto text-[10px]"><option value="10">10</option><option value="25">25</option><option value="50">50</option></select><button type="submit" className="inventory-button inventory-button--ghost">Apply</button></form></div>
               </section>
 
               <StockMovementForm branches={branches} products={formProducts} defaultBranch={defaultBranch} defaultProductId={defaultProduct?.id ?? ""} defaultMovement={defaultMovement} canWrite={canWrite} open={Boolean(readParam(params.movement) || selectedProductId || readParam(params.error))} />
@@ -600,7 +628,7 @@ export default async function InventoryPage({
             <aside className="grid content-start gap-3">
               <section className="admin-panel p-4"><div className="flex items-start gap-3"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-success/10 text-success"><AdminIcon name="check" size={16} /></span><div><h2 className="text-sm font-extrabold text-ink">Inventory is connected to POS</h2><p className="mt-2 text-[10px] leading-5 text-ink-muted">Tracked items deduct automatically when completed POS orders are recorded.</p></div></div><div className="mt-4 flex items-center justify-between gap-2 border-t border-line pt-3 text-[10px] font-semibold text-ink-muted"><span>Last movement</span><span className="text-right">{movements[0] ? formatDateTime(movements[0].created_at) : "No movement yet"}</span></div>{posSaleCount > 0 && <p className="mt-2 text-[10px] font-bold text-success">{posSaleCount} POS sale movement{posSaleCount === 1 ? "" : "s"} recorded.</p>}</section>
               <section id="inventory-help" className="admin-panel p-4"><h2 className="text-sm font-extrabold text-ink">Did you know?</h2><ul className="mt-4 grid gap-3 text-[10px] leading-4 text-ink-muted"><li className="flex gap-2"><AdminIcon name="check" size={15} /><span>Add items manually or import in bulk from the catalog.</span></li><li className="flex gap-2"><AdminIcon name="check" size={15} /><span>Set a minimum stock level for every tracked item.</span></li><li className="flex gap-2"><AdminIcon name="check" size={15} /><span>Track stock in, out, waste, and adjustments.</span></li><li className="flex gap-2"><AdminIcon name="check" size={15} /><span>Use the reports page to review inventory usage.</span></li></ul></section>
-              <section className="admin-panel p-4"><div className="flex items-center justify-between gap-2"><h2 className="text-sm font-extrabold text-ink">Recent stock movements</h2><Link href="#stock-movement" className="text-[10px] font-extrabold text-primary hover:underline">View all</Link></div>{recentMovements.length === 0 ? <p className="mt-4 rounded-btn border border-dashed border-line-strong px-3 py-5 text-center text-[10px] text-ink-muted">No stock movements yet.</p> : <div className="mt-3 divide-y divide-line/70">{recentMovements.map((movement) => { const product = productById.get(movement.product_id); const delta = stockMovementDelta(movement.type, Number(movement.qty)); return <div key={movement.id} className="flex items-start gap-2 py-3 first:pt-0"><span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-extrabold ${movementClass(movement.type)}`} aria-hidden="true">{delta >= 0 ? "↓" : "↑"}</span><span className="min-w-0 flex-1"><strong className="block truncate text-[10px] font-extrabold text-ink">{movementLabel(movement.type)}</strong><small className="mt-1 block truncate text-[10px] text-ink-muted">{product?.name ?? "Unknown product"}</small><small className="block text-[9px] text-ink-muted">{formatDateTime(movement.created_at)}</small></span><strong className={`tnums whitespace-nowrap text-[10px] font-extrabold ${delta >= 0 ? "text-success" : "text-danger"}`}>{delta >= 0 ? "+" : "−"}{formatStockQuantity(Math.abs(delta))} {movement.unit}</strong></div>; })}</div>}<Link href="/admin/reports" className="mt-3 flex min-h-9 items-center justify-center gap-2 rounded-btn border border-line-strong px-3 text-[10px] font-extrabold text-primary transition hover:bg-primary-soft"><AdminIcon name="chart" size={14} />View inventory reports</Link></section>
+              <section className="admin-panel p-4"><div className="flex items-center justify-between gap-2"><h2 className="text-sm font-extrabold text-ink">Recent stock movements</h2><Link href="#stock-movement" className="text-[10px] font-extrabold text-primary hover:underline">View all</Link></div>{recentMovements.length === 0 ? <p className="mt-4 rounded-btn border border-dashed border-line-strong px-3 py-5 text-center text-[10px] text-ink-muted">No stock movements yet.</p> : <div className="mt-3 divide-y divide-line/70">{recentMovements.map((movement) => { const product = productById.get(movement.product_id); const delta = stockMovementDelta(movement.type, Number(movement.qty)); return <div key={movement.id} className="flex items-start gap-2 py-3 first:pt-0"><span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-extrabold ${movementClass(movement.type)}`} aria-hidden="true">{delta >= 0 ? "↓" : "↑"}</span><span className="min-w-0 flex-1"><strong className="block truncate text-[10px] font-extrabold text-ink">{movementLabel(movement.type)}</strong><small className="mt-1 block truncate text-[10px] text-ink-muted">{product?.name ?? "Unknown product"}</small><small className="block text-[9px] text-ink-muted">{formatDateTime(movement.created_at)}</small></span><strong className={`tnums whitespace-nowrap text-[10px] font-extrabold ${delta >= 0 ? "text-success" : "text-danger"}`}>{delta >= 0 ? "+" : "−"}{formatStockQuantity(Math.abs(delta))} {movement.unit}</strong></div>; })}</div>}<Link href="/admin/reports" className="inventory-button mt-3 w-full rounded-btn border border-line-strong text-[10px] font-extrabold text-primary transition hover:bg-primary-soft"><AdminIcon name="chart" size={14} />View inventory reports</Link></section>
             </aside>
           </div>
         </div>
@@ -614,15 +642,42 @@ function InventoryMetric({ label, value, detail, tone, icon }: { label: string; 
 }
 
 function StockMovementForm({ branches, products, defaultBranch, defaultProductId, defaultMovement, canWrite, open }: { branches: BranchRecord[]; products: ProductRecord[]; defaultBranch: string; defaultProductId: string; defaultMovement: Exclude<StockMovementType, "sale">; canWrite: boolean; open: boolean }) {
-  return <details id="stock-movement" open={open} className="admin-panel mt-4 p-5"><summary className="flex cursor-pointer list-none items-start justify-between gap-3"><span><span className="admin-panel__eyebrow">Stock control</span><strong className="mt-1 block text-lg font-extrabold text-ink">Record a stock movement</strong><small className="mt-1 block text-xs text-ink-muted">Use a signed ledger action. POS sales are recorded automatically.</small></span><span className="rounded-pill bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary">{canWrite ? "Admin only" : "Read only"}</span></summary>{products.length === 0 ? <div className="mt-5 rounded-btn border border-dashed border-line-strong bg-surface-raised px-4 py-6 text-center"><p className="text-sm font-extrabold text-ink">No tracked products yet</p><p className="mt-1 text-xs text-ink-muted">Enable Track stock on a product before recording inventory.</p><Link href="/admin/catalog#new-product-heading" className="mt-4 inline-flex rounded-btn bg-primary px-4 py-2 text-xs font-extrabold text-primary-fg">Add item</Link></div> : <form action={recordStockMovement} className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4"><InventoryField label="Branch" htmlFor="inventory-store"><select id="inventory-store" name="store_id" defaultValue={defaultBranch} required disabled={!canWrite} className="inventory-input text-xs">{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.is_active ? "" : " · inactive"}</option>)}</select></InventoryField><InventoryField label="Item" htmlFor="inventory-product"><select id="inventory-product" name="product_id" defaultValue={defaultProductId} required disabled={!canWrite} className="inventory-input text-xs">{products.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.unit}</option>)}</select></InventoryField><InventoryField label="Movement" htmlFor="inventory-type"><select id="inventory-type" name="type" defaultValue={defaultMovement} required disabled={!canWrite} className="inventory-input text-xs">{movementOptions.map((option) => <option key={option.value} value={option.value}>{option.label} · {option.detail}</option>)}</select></InventoryField><InventoryField label="Quantity" htmlFor="inventory-qty"><input id="inventory-qty" name="qty" type="number" inputMode="decimal" step="0.001" placeholder="e.g. 10 or -2" required disabled={!canWrite} className="inventory-input tnums text-xs" /></InventoryField><InventoryField label="Unit cost · ₱" htmlFor="inventory-cost"><input id="inventory-cost" name="unit_cost" type="number" inputMode="decimal" min="0" step="0.01" placeholder="Optional" disabled={!canWrite} className="inventory-input tnums text-xs" /></InventoryField><InventoryField label="Reason / reference" htmlFor="inventory-reason" className="md:col-span-2"><input id="inventory-reason" name="reason" placeholder="Required for waste and adjustments" disabled={!canWrite} className="inventory-input text-xs" /></InventoryField><button type="submit" disabled={!canWrite} className="min-h-11 rounded-btn bg-primary px-4 text-xs font-extrabold text-primary-fg transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50 md:self-end">Record movement</button></form>}</details>;
+  return (
+    <details id="stock-movement" open={open} className="admin-panel mt-4 p-4">
+      <summary className="inventory-section-summary">
+        <span>
+          <span className="admin-panel__eyebrow">Stock control</span>
+          <strong className="mt-1 block text-lg font-extrabold text-ink">Record a stock movement</strong>
+          <small className="mt-1 block text-xs text-ink-muted">Use a signed ledger action. POS sales are recorded automatically.</small>
+        </span>
+        <span className="rounded-pill bg-primary-soft px-2.5 py-1 text-[10px] font-extrabold text-primary">{canWrite ? "Admin only" : "Read only"}</span>
+      </summary>
+      {products.length === 0 ? (
+        <div className="mt-4 rounded-btn border border-dashed border-line-strong bg-surface-raised px-4 py-6 text-center">
+          <p className="text-sm font-extrabold text-ink">No tracked products yet</p>
+          <p className="mt-1 text-xs text-ink-muted">Enable Track stock on a product before recording inventory.</p>
+          <Link href="/products?create=product#product-form" className="inventory-button mt-3 rounded-btn bg-primary text-[11px] font-extrabold text-primary-fg">Add item</Link>
+        </div>
+      ) : (
+        <form action={recordStockMovement} className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <BranchProductSelector branches={branches} products={products} defaultBranch={defaultBranch} defaultProductId={defaultProductId} canWrite={canWrite} />
+          <InventoryField label="Movement" htmlFor="inventory-type"><select id="inventory-type" name="type" defaultValue={defaultMovement} required disabled={!canWrite} className="inventory-input inventory-input--compact text-xs">{movementOptions.map((option) => <option key={option.value} value={option.value}>{option.label} · {option.detail}</option>)}</select></InventoryField>
+          <InventoryField label="Quantity" htmlFor="inventory-qty"><input id="inventory-qty" name="qty" type="number" inputMode="decimal" step="0.001" placeholder="e.g. 10 or -2" required disabled={!canWrite} className="inventory-input inventory-input--compact tnums text-xs" /></InventoryField>
+          <InventoryField label="Unit cost · ₱" htmlFor="inventory-cost"><input id="inventory-cost" name="unit_cost" type="number" inputMode="decimal" min="0" step="0.01" placeholder="Optional" disabled={!canWrite} className="inventory-input inventory-input--compact tnums text-xs" /></InventoryField>
+          <InventoryField label="Reason / reference" htmlFor="inventory-reason" className="md:col-span-2"><input id="inventory-reason" name="reason" placeholder="Required for waste and adjustments" disabled={!canWrite} className="inventory-input inventory-input--compact text-xs" /></InventoryField>
+          <button type="submit" disabled={!canWrite} className="inventory-button self-end rounded-btn bg-primary text-[11px] font-extrabold text-primary-fg transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50">Record movement</button>
+        </form>
+      )}
+    </details>
+  );
 }
 
 function InventoryField({ label, htmlFor, children, className = "" }: { label: string; htmlFor: string; children: ReactNode; className?: string }) {
-  return <label htmlFor={htmlFor} className={`block ${className}`}><span className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted">{label}</span>{children}</label>;
+  return <label htmlFor={htmlFor} className={`block ${className}`}><span className="mb-1 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted">{label}</span>{children}</label>;
 }
 
 function EmptyState({ title, detail, href, action }: { title: string; detail: string; href: string; action: string }) {
-  return <div className="grid place-items-center px-4 py-14 text-center"><span className="grid h-12 w-12 place-items-center rounded-full bg-primary-soft text-primary"><AdminIcon name="box" size={23} /></span><p className="mt-4 text-sm font-extrabold text-ink">{title}</p><p className="mt-1 max-w-sm text-xs leading-5 text-ink-muted">{detail}</p><Link href={href} className="mt-4 rounded-btn bg-primary px-4 py-2 text-xs font-extrabold text-primary-fg">{action}</Link></div>;
+  return <div className="grid place-items-center px-4 py-14 text-center"><span className="grid h-12 w-12 place-items-center rounded-full bg-primary-soft text-primary"><AdminIcon name="box" size={23} /></span><p className="mt-4 text-sm font-extrabold text-ink">{title}</p><p className="mt-1 max-w-sm text-xs leading-5 text-ink-muted">{detail}</p><Link href={href} className="inventory-button mt-3 rounded-btn bg-primary text-[11px] font-extrabold text-primary-fg">{action}</Link></div>;
 }
 
 function InventoryProfileMissing() {

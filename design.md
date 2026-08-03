@@ -60,7 +60,7 @@ Cold enterprise blue, purple gradients, glassmorphism, heavy shadows, tiny tap t
 
 ## Admin catalog workspace
 
-The `/admin/catalog` workspace is the owner-facing source of truth for the POS menu:
+The `/products` workspace is the owner-facing source of truth for the POS menu:
 
 - Keep the same cream canvas, roast-brown structure, brick-red primary action, warm borders, and tabular money treatment as the POS and inventory screens.
 - Organize the screen as `catalog metrics → add product / categories → editable product table`. The product table may scroll horizontally; the page itself should remain easy to scan.
@@ -71,7 +71,7 @@ The `/admin/catalog` workspace is the owner-facing source of truth for the POS m
 
 ## Admin dashboard reference
 
-The supplied admin reference image defines the backoffice shell used by `/admin`, `/admin/catalog`, and `/admin/inventory`:
+The supplied admin reference image defines the backoffice shell used by `/admin`, `/products`, and `/admin/inventory`:
 
 - Use a pale paper canvas with a quiet 220–238px left rail, circular house mark, branch context, grouped navigation, and a warm quick-actions card at the bottom.
 - The dashboard hierarchy is `greeting → date/report controls → six KPI cards → sales/category/best-sellers → transactions/stock/today → branch/system status`.

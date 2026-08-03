@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 type PricingMode = "fixed" | "per_kg";
 
 function catalogRedirect(message: string): never {
-  redirect(`/admin/catalog?error=${encodeURIComponent(message)}`);
+  redirect(`/products?error=${encodeURIComponent(message)}`);
 }
 
 function readText(formData: FormData, name: string) {
@@ -199,6 +199,8 @@ async function validSupplier(
 }
 
 function refreshCatalog() {
+  revalidatePath("/products");
+  revalidatePath("/admin/products");
   revalidatePath("/admin/catalog");
   revalidatePath("/admin/inventory");
   revalidatePath("/admin");
@@ -234,7 +236,7 @@ export async function createCategory(formData: FormData) {
   if (error) catalogRedirect(error.message || "The category could not be created.");
 
   refreshCatalog();
-  redirect("/admin/catalog?saved=category");
+  redirect("/products?saved=category");
 }
 
 export async function updateCategory(formData: FormData) {
@@ -269,7 +271,7 @@ export async function updateCategory(formData: FormData) {
   if (error) catalogRedirect(error.message || "The category could not be updated.");
 
   refreshCatalog();
-  redirect("/admin/catalog?saved=category");
+  redirect("/products?saved=category");
 }
 
 export async function createProduct(formData: FormData) {
@@ -332,7 +334,7 @@ export async function createProduct(formData: FormData) {
   if (result.error) catalogRedirect(result.error.message || "The product could not be created.");
 
   refreshCatalog();
-  redirect(`/admin/catalog?saved=product${result.usedLegacySchema ? "&legacy=1" : ""}`);
+  redirect(`/products?saved=product${result.usedLegacySchema ? "&legacy=1" : ""}`);
 }
 
 export async function updateProduct(formData: FormData) {
@@ -392,7 +394,7 @@ export async function updateProduct(formData: FormData) {
   if (result.error) catalogRedirect(result.error.message || "The product could not be updated.");
 
   refreshCatalog();
-  redirect(`/admin/catalog?saved=product${result.usedLegacySchema ? "&legacy=1" : ""}`);
+  redirect(`/products?saved=product${result.usedLegacySchema ? "&legacy=1" : ""}`);
 }
 
 export async function importProducts(formData: FormData) {
@@ -469,5 +471,56 @@ export async function importProducts(formData: FormData) {
   if (result.error) catalogRedirect(result.error.message || "The inventory items could not be imported.");
 
   refreshCatalog();
-  redirect(`/admin/catalog?saved=imported${result.usedLegacySchema ? "&legacy=1" : ""}${defaultStore ? `&store=${encodeURIComponent(defaultStore.name)}` : ""}`);
+  redirect(`/products?saved=imported${result.usedLegacySchema ? "&legacy=1" : ""}${defaultStore ? `&store=${encodeURIComponent(defaultStore.name)}` : ""}`);
+}
+
+export async function toggleProductVisibility(formData: FormData) {
+  const { supabase, orgId } = await requireAdmin();
+  const productId = readText(formData, "product_id");
+  const requestedValue = readText(formData, "is_active");
+  const isActive = requestedValue === "true";
+
+  if (!productId || (requestedValue !== "true" && requestedValue !== "false")) {
+    catalogRedirect("That product visibility change is invalid.");
+  }
+
+  const { error } = await supabase
+    .from("products")
+    .update({ is_active: isActive })
+    .eq("id", productId)
+    .eq("org_id", orgId);
+
+  if (error) catalogRedirect(error.message || "The product visibility could not be updated.");
+
+  refreshCatalog();
+  redirect(`/products?saved=visibility&product=${encodeURIComponent(productId)}`);
+}
+
+export async function bulkUpdateProducts(formData: FormData) {
+  const { supabase, orgId } = await requireAdmin();
+  const selectedIds = formData.getAll("product_ids").filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+  const productIds = Array.from(new Set(selectedIds)).slice(0, 100);
+  const isActive = readText(formData, "is_active");
+  const trackStock = readText(formData, "track_stock");
+
+  if (productIds.length === 0) catalogRedirect("Select at least one product for the bulk update.");
+  if (!["leave", "true", "false"].includes(isActive) || !["leave", "true", "false"].includes(trackStock)) {
+    catalogRedirect("Choose valid bulk update values.");
+  }
+
+  const fields: Record<string, boolean> = {};
+  if (isActive !== "leave") fields.is_active = isActive === "true";
+  if (trackStock !== "leave") fields.track_stock = trackStock === "true";
+  if (Object.keys(fields).length === 0) catalogRedirect("Choose at least one field to update.");
+
+  const { error } = await supabase
+    .from("products")
+    .update(fields)
+    .eq("org_id", orgId)
+    .in("id", productIds);
+
+  if (error) catalogRedirect(error.message || "The selected products could not be updated.");
+
+  refreshCatalog();
+  redirect(`/products?saved=bulk&updated=${productIds.length}`);
 }

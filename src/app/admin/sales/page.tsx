@@ -6,7 +6,7 @@ import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
-import { LOW_STOCK_THRESHOLD, stockMovementDelta, stockStatus, type StockMovementType } from "@/lib/inventory";
+import { salesQuantity, stockMovementDelta, stockStatus, type StockMovementType } from "@/lib/inventory";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 
 type AdminRole = "admin" | "manager" | "cashier";
@@ -43,6 +43,7 @@ type OrderItemRecord = {
   product_id: string | null;
   name_snapshot: string;
   qty: number;
+  weight_kg: number | null;
   line_total: number;
 };
 
@@ -53,6 +54,7 @@ type ProductRecord = {
   store_id: string;
   image_url: string | null;
   track_stock: boolean;
+  min_stock: number | null;
   is_active: boolean;
 };
 
@@ -304,7 +306,7 @@ export default async function SalesPage({
     .limit(5000);
   let productsQuery = supabase
     .from("products")
-    .select("id, name, unit, store_id, image_url, track_stock, is_active")
+    .select("id, name, unit, store_id, image_url, track_stock, min_stock, is_active")
     .eq("org_id", profile.org_id)
     .order("name")
     .limit(1000);
@@ -345,7 +347,7 @@ export default async function SalesPage({
   if (currentOrderIds.length > 0) {
     const { data, error } = await supabase
       .from("order_items")
-      .select("order_id, product_id, name_snapshot, qty, line_total")
+      .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total")
       .in("order_id", currentOrderIds);
     orderItems = (data ?? []) as OrderItemRecord[];
     orderItemsError = Boolean(error);
@@ -382,7 +384,7 @@ export default async function SalesPage({
   const bestItemsByKey = new Map<string, BestSellingItem>();
   const itemCountByOrder = new Map<string, number>();
   for (const item of orderItems) {
-    itemCountByOrder.set(item.order_id, (itemCountByOrder.get(item.order_id) ?? 0) + Number(item.qty));
+    itemCountByOrder.set(item.order_id, (itemCountByOrder.get(item.order_id) ?? 0) + salesQuantity(item));
     if (!completedOrderIds.has(item.order_id)) continue;
     const product = item.product_id ? productById.get(item.product_id) : undefined;
     const key = item.product_id ?? `name:${item.name_snapshot}`;
@@ -394,7 +396,7 @@ export default async function SalesPage({
       imageUrl: productImage(product),
       unit: product?.unit ?? "pcs",
     };
-    existing.qty += Number(item.qty);
+    existing.qty += salesQuantity(item);
     existing.total += Number(item.line_total);
     bestItemsByKey.set(key, existing);
   }
@@ -409,7 +411,7 @@ export default async function SalesPage({
     .filter((product) => product.track_stock)
     .map((product) => {
       const onHand = stockByKey.get(`${product.store_id}:${product.id}`) ?? 0;
-      const status = stockStatus(onHand);
+      const status = stockStatus(onHand, product.min_stock);
       return { product, onHand, status, branchName: branchById.get(product.store_id)?.name ?? "Unknown branch" };
     })
     .filter((row): row is StockAlertRow => row.status === "low" || row.status === "out")
@@ -532,7 +534,7 @@ function HourlyHeatmap({ hourlySales, peakHour, peakShare }: { hourlySales: numb
 function AlertsPanel({ lowStockCount, outOfStockCount, demandChange, todaySales, peakHour, range, branch }: { lowStockCount: number; outOfStockCount: number; demandChange: number | null; todaySales: number; peakHour: { hour: number; total: number } | null; range: SalesRange; branch: string }) {
   const inventoryHref = branch ? `/admin/inventory` : "/admin/inventory";
   const demandDetail = demandChange === null ? todaySales > 0 ? "Not enough prior days for a comparison" : "No completed sales recorded today" : `Sales ${Math.abs(demandChange).toFixed(0)}% ${demandChange >= 0 ? "higher" : "lower"} than the recent daily average`;
-  return <section aria-labelledby="sales-alerts-heading" className="admin-panel min-w-0 p-5"><div className="admin-panel__header"><div><h2 id="sales-alerts-heading" className="admin-panel__title">Alerts &amp; reminders</h2><p className="admin-panel__subtitle">Signals from inventory and current sales</p></div><Link href={inventoryHref} className="text-xs font-extrabold text-primary hover:underline">View all</Link></div><div className="mt-4 divide-y divide-line/70"><AlertRow href={inventoryHref} icon="inventory" tone="bg-danger-soft text-danger" label="Low stock items" detail={`${lowStockCount} item${lowStockCount === 1 ? " is" : "s are"} at or below ${LOW_STOCK_THRESHOLD} units`} badge={lowStockCount} /><AlertRow href={inventoryHref} icon="inventory" tone="bg-danger-soft text-danger" label="Out of stock items" detail={`${outOfStockCount} item${outOfStockCount === 1 ? " is" : "s are"} out of stock`} badge={outOfStockCount} /><AlertRow href={salesHref({ range, branch })} icon="chart" tone="bg-success/10 text-success" label="Demand today" detail={demandDetail} /><AlertRow href="#hourly-sales" icon="chart" tone="bg-warning/15 text-warning" label="Top selling hour" detail={peakHour ? formatHourRange(peakHour.hour) : "No completed sales yet"} /></div></section>;
+  return <section aria-labelledby="sales-alerts-heading" className="admin-panel min-w-0 p-5"><div className="admin-panel__header"><div><h2 id="sales-alerts-heading" className="admin-panel__title">Alerts &amp; reminders</h2><p className="admin-panel__subtitle">Signals from inventory and current sales</p></div><Link href={inventoryHref} className="text-xs font-extrabold text-primary hover:underline">View all</Link></div><div className="mt-4 divide-y divide-line/70"><AlertRow href={inventoryHref} icon="inventory" tone="bg-danger-soft text-danger" label="Low stock items" detail={`${lowStockCount} item${lowStockCount === 1 ? " is" : "s are"} at or below the configured minimum`} badge={lowStockCount} /><AlertRow href={inventoryHref} icon="inventory" tone="bg-danger-soft text-danger" label="Out of stock items" detail={`${outOfStockCount} item${outOfStockCount === 1 ? " is" : "s are"} out of stock`} badge={outOfStockCount} /><AlertRow href={salesHref({ range, branch })} icon="chart" tone="bg-success/10 text-success" label="Demand today" detail={demandDetail} /><AlertRow href="#hourly-sales" icon="chart" tone="bg-warning/15 text-warning" label="Top selling hour" detail={peakHour ? formatHourRange(peakHour.hour) : "No completed sales yet"} /></div></section>;
 }
 
 function AlertRow({ href, icon, tone, label, detail, badge }: { href: string; icon: "inventory" | "chart"; tone: string; label: string; detail: string; badge?: number }) {

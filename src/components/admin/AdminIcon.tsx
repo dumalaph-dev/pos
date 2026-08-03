@@ -10,6 +10,8 @@ export type AdminIconName =
   | "reports"
   | "employees"
   | "promotions"
+  | "tag"
+  | "star"
   | "settings"
   | "search"
   | "bell"
@@ -70,6 +72,10 @@ export function AdminIcon({ name, size = 18 }: { name: AdminIconName; size?: num
       return <svg {...common}><circle cx="9" cy="8" r="3" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0M17 5v6M14 8h6" /></svg>;
     case "promotions":
       return <svg {...common}><path d="M20 13 13 20l-9-9V4h7l9 9Z" /><circle cx="8" cy="8" r="1" /><path d="m13 7 4 4" /></svg>;
+    case "tag":
+      return <svg {...common}><path d="M20 13 13 20l-9-9V4h7l9 9Z" /><circle cx="8" cy="8" r="1.2" /></svg>;
+    case "star":
+      return <svg {...common}><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z" /></svg>;
     case "settings":
       return <svg {...common}><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" /><circle cx="12" cy="12" r="4" /></svg>;
     case "search":

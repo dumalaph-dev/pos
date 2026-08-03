@@ -5,7 +5,7 @@ import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
-import { stockMovementDelta, stockStatus, formatStockQuantity, LOW_STOCK_THRESHOLD, type StockMovementType } from "@/lib/inventory";
+import { formatStockQuantity, salesQuantity, stockMovementDelta, stockStatus, stockThreshold, type StockMovementType } from "@/lib/inventory";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 
 type AdminRole = "admin" | "manager" | "cashier";
@@ -39,6 +39,7 @@ type ProductRecord = {
   store_id: string;
   image_url: string | null;
   track_stock: boolean;
+  min_stock: number | null;
 };
 
 type OrderRecord = {
@@ -58,6 +59,7 @@ type OrderItemRecord = {
   product_id: string;
   name_snapshot: string;
   qty: number;
+  weight_kg: number | null;
   line_total: number;
 };
 
@@ -185,7 +187,7 @@ export default async function AdminPage() {
       .order("name"),
     supabase
       .from("products")
-      .select("id, name, category_id, unit, store_id, image_url, track_stock")
+      .select("id, name, category_id, unit, store_id, image_url, track_stock, min_stock")
       .eq("org_id", profile.org_id)
       .order("name")
       .limit(1000),
@@ -232,7 +234,7 @@ export default async function AdminPage() {
   if (orderIds.length > 0) {
     const { data, error } = await supabase
       .from("order_items")
-      .select("order_id, product_id, name_snapshot, qty, line_total")
+      .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total")
       .in("order_id", orderIds);
     orderItems = (data ?? []) as OrderItemRecord[];
     orderItemsError = Boolean(error);
@@ -266,7 +268,7 @@ export default async function AdminPage() {
     (trackedProductsByStore.get(branch.id) ?? [])
       .map((product) => {
         const onHand = stockByKey.get(`${branch.id}:${product.id}`) ?? 0;
-        return { branch, product, onHand, status: stockStatus(onHand) };
+        return { branch, product, onHand, status: stockStatus(onHand, product.min_stock) };
       }),
   );
   const lowStockRows = stockRows
@@ -278,24 +280,24 @@ export default async function AdminPage() {
   const inventoryAlertCount = lowStockCount + outOfStockCount;
 
   const completedOrderIds = new Set(completedOrders.map((order) => order.id));
-  const topItemsByName = new Map<string, { name: string; qty: number; total: number }>();
+  const topItemsByName = new Map<string, { name: string; qty: number; unit: string; total: number }>();
   const categorySalesById = new Map<string, { id: string; name: string; qty: number; total: number }>();
   let itemsSold = 0;
   for (const item of orderItems) {
     if (!completedOrderIds.has(item.order_id)) continue;
-    const topItem = topItemsByName.get(item.name_snapshot) ?? { name: item.name_snapshot, qty: 0, total: 0 };
-    topItem.qty += Number(item.qty);
+    const product = productById.get(item.product_id);
+    const topItem = topItemsByName.get(item.name_snapshot) ?? { name: item.name_snapshot, qty: 0, unit: product?.unit ?? "items", total: 0 };
+    topItem.qty += salesQuantity(item);
     topItem.total += Number(item.line_total);
     topItemsByName.set(item.name_snapshot, topItem);
 
-    const product = productById.get(item.product_id);
     const category = product?.category_id ? categoryById.get(product.category_id) : null;
     const categoryKey = category?.id ?? "uncategorized";
     const categoryItem = categorySalesById.get(categoryKey) ?? { id: categoryKey, name: category?.name ?? "Uncategorized", qty: 0, total: 0 };
-    categoryItem.qty += Number(item.qty);
+    categoryItem.qty += salesQuantity(item);
     categoryItem.total += Number(item.line_total);
     categorySalesById.set(categoryKey, categoryItem);
-    itemsSold += Number(item.qty);
+    itemsSold += salesQuantity(item);
   }
 
   const topItems = Array.from(topItemsByName.values())
@@ -348,7 +350,7 @@ export default async function AdminPage() {
               <span className="admin-brand__mark"><AdminIcon name="pig" size={20} /></span>
               <span className="admin-brand__copy"><strong>Mario&apos;s</strong><small>LECHON HOUSE</small></span>
             </Link>
-            <Link href="/admin/catalog" className="admin-icon-button" aria-label="Open product catalog"><AdminIcon name="box" size={19} /></Link>
+            <Link href="/products" className="admin-icon-button" aria-label="Open products"><AdminIcon name="box" size={19} /></Link>
             <Link href="/admin/inventory" className="admin-icon-button admin-icon-button--alert" aria-label={inventoryAlertCount ? `View ${inventoryAlertCount} inventory alerts` : "View inventory status"}>
               <AdminIcon name="bell" size={19} />
               {inventoryAlertCount > 0 && <span className="admin-icon-button__badge" aria-hidden="true">{inventoryAlertCount > 9 ? "9+" : inventoryAlertCount}</span>}
@@ -397,13 +399,13 @@ export default async function AdminPage() {
             <section aria-labelledby="category-performance-heading" className="admin-panel p-5">
               <div className="admin-panel__header">
                 <div><h2 id="category-performance-heading" className="admin-panel__title">Sales by Category</h2><p className="admin-panel__subtitle">Where today&apos;s revenue is coming from</p></div>
-                <Link href="/admin/catalog" className="admin-kpi-card__link mt-0">Manage <AdminIcon name="arrow" size={14} /></Link>
+                <Link href="/products" className="admin-kpi-card__link mt-0">Manage <AdminIcon name="arrow" size={14} /></Link>
               </div>
               <div className="admin-category-bars mt-5">
                 {categorySales.length === 0 ? <EmptyState title="No category sales yet" detail="Completed orders will show which parts of your menu drive revenue." /> : categorySales.map((category, index) => <div key={category.id} className="admin-category-bar">
                   <div className="admin-category-bar__meta"><span><i className={`admin-category-bar__rank ${index === 0 ? "is-top" : ""}`}>{index + 1}</i><strong>{category.name}</strong></span><span className="tnums">{displayPeso(category.total)}</span></div>
                   <div className="admin-category-bar__track"><span style={{ width: `${Math.max(7, Math.round((category.total / largestCategorySale) * 100))}%` }} /></div>
-                  <div className="admin-category-bar__detail"><span>{category.qty} item{category.qty === 1 ? "" : "s"} sold</span><span>{totalSales ? Math.round((category.total / totalSales) * 100) : 0}% of today&apos;s sales</span></div>
+                  <div className="admin-category-bar__detail"><span>{formatStockQuantity(category.qty)} item{category.qty === 1 ? "" : "s"} sold</span><span>{totalSales ? Math.round((category.total / totalSales) * 100) : 0}% of today&apos;s sales</span></div>
                 </div>)}
               </div>
             </section>
@@ -411,9 +413,9 @@ export default async function AdminPage() {
             <section aria-labelledby="best-selling-heading" className="admin-panel p-5">
               <div className="admin-panel__header"><div><h2 id="best-selling-heading" className="admin-panel__title">Best Selling Items</h2><p className="admin-panel__subtitle">Top 5 items by quantity sold</p></div></div>
               <div className="admin-ranking">
-                {topItems.length === 0 ? <EmptyState title="No sales yet" detail="Best sellers will appear after the first completed order." /> : topItems.map((item, index) => <div key={item.name} className="admin-ranking__item"><span className="admin-ranking__rank">{index + 1}</span><span className="admin-ranking__image"><Image src={productImage({ name: item.name })} alt="" width={34} height={34} /></span><span className="admin-ranking__copy"><strong>{item.name}</strong><small>{item.qty} sold</small></span><strong className="admin-ranking__total">{displayPeso(item.total)}</strong></div>)}
+                {topItems.length === 0 ? <EmptyState title="No sales yet" detail="Best sellers will appear after the first completed order." /> : topItems.map((item, index) => <div key={item.name} className="admin-ranking__item"><span className="admin-ranking__rank">{index + 1}</span><span className="admin-ranking__image"><Image src={productImage({ name: item.name })} alt="" width={34} height={34} /></span><span className="admin-ranking__copy"><strong>{item.name}</strong><small>{formatStockQuantity(item.qty)} {item.unit} sold</small></span><strong className="admin-ranking__total">{displayPeso(item.total)}</strong></div>)}
               </div>
-              <Link href="/admin/catalog" className="admin-kpi-card__link mt-4">View all items <AdminIcon name="arrow" size={14} /></Link>
+              <Link href="/products" className="admin-kpi-card__link mt-4">View all items <AdminIcon name="arrow" size={14} /></Link>
             </section>
           </div>
 
@@ -425,7 +427,7 @@ export default async function AdminPage() {
 
             <section id="low-stock-alerts" aria-labelledby="low-stock-heading" className="admin-panel min-w-0 p-5">
               <div className="admin-panel__header"><div><h2 id="low-stock-heading" className="admin-panel__title">Low Stock Alerts</h2><p className="admin-panel__subtitle">Items that need to be restocked</p></div><Link href="/admin/inventory" className="admin-kpi-card__link mt-0">View all</Link></div>
-              <div className="mt-3">{lowStockRows.length === 0 ? <EmptyState title="Stock levels look good" detail="Tracked products will appear here when they reach the low threshold." /> : lowStockRows.map((row) => <StockAlert key={`${row.branch.id}:${row.product.id}`} name={row.product.name} detail={`${row.branch.name} · Stock: ${formatStockQuantity(row.onHand)} ${row.product.unit}`} minimum={`Min: ${LOW_STOCK_THRESHOLD} ${row.product.unit}`} onHand={row.onHand} image={productImage(row.product)} danger={row.status === "out"} />)}</div>
+              <div className="mt-3">{lowStockRows.length === 0 ? <EmptyState title="Stock levels look good" detail="Tracked products will appear here when they reach their configured minimum." /> : lowStockRows.map((row) => <StockAlert key={`${row.branch.id}:${row.product.id}`} name={row.product.name} detail={`${row.branch.name} · Stock: ${formatStockQuantity(row.onHand)} ${row.product.unit}`} minimum={`Min: ${formatStockQuantity(stockThreshold(row.product.min_stock))} ${row.product.unit}`} threshold={stockThreshold(row.product.min_stock)} onHand={row.onHand} image={productImage(row.product)} danger={row.status === "out"} />)}</div>
             </section>
 
             <section aria-labelledby="today-heading" className="admin-panel min-w-0 p-5">
@@ -500,8 +502,8 @@ function SalesChart({ series }: { series: Array<{ label: string; value: number }
   );
 }
 
-function StockAlert({ name, detail, minimum, onHand, image, danger }: { name: string; detail: string; minimum: string; onHand: number; image: string; danger: boolean }) {
-  const percentage = Math.max(8, Math.min(100, (onHand / Math.max(LOW_STOCK_THRESHOLD, 1)) * 100));
+function StockAlert({ name, detail, minimum, threshold, onHand, image, danger }: { name: string; detail: string; minimum: string; threshold: number; onHand: number; image: string; danger: boolean }) {
+  const percentage = Math.max(8, Math.min(100, (onHand / Math.max(threshold, 1)) * 100));
   return <div className="admin-stock-alert"><span className="admin-stock-alert__image"><Image src={image} alt="" width={38} height={38} /></span><span className="admin-stock-alert__copy"><strong>{name}</strong><small>{detail}</small></span><span className="admin-stock-alert__bar"><small>{minimum}</small><div><span className={danger ? "is-danger" : ""} style={{ width: `${percentage}%` }} /></div></span></div>;
 }
 
