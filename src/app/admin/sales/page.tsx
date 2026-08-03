@@ -6,7 +6,7 @@ import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
-import { salesQuantity, stockMovementDelta, stockStatus, type StockMovementType } from "@/lib/inventory";
+import { salesQuantity, stockStatus } from "@/lib/inventory";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 
 type AdminRole = "admin" | "manager" | "cashier";
@@ -58,10 +58,9 @@ type ProductRecord = {
   is_active: boolean;
 };
 
-type MovementRecord = {
+type StockRow = {
   store_id: string;
   product_id: string;
-  type: StockMovementType;
   qty: number;
 };
 
@@ -310,23 +309,27 @@ export default async function SalesPage({
     .eq("org_id", profile.org_id)
     .order("name")
     .limit(1000);
-  let movementsQuery = supabase
-    .from("stock_movements")
-    .select("store_id, product_id, type, qty")
-    .eq("org_id", profile.org_id)
-    .limit(10000);
   if (branchFilter) {
     currentOrdersQuery = currentOrdersQuery.eq("store_id", branchFilter);
     previousOrdersQuery = previousOrdersQuery.eq("store_id", branchFilter);
     productsQuery = productsQuery.eq("store_id", branchFilter);
-    movementsQuery = movementsQuery.eq("store_id", branchFilter);
   }
 
-  const [branchesResult, cashiersResult, productsResult, movementsResult, currentOrdersResult, previousOrdersResult] = await Promise.all([
+  const [branchesResult, cashiersResult, productsResult, stockResult, itemsResult, currentOrdersResult, previousOrdersResult] = await Promise.all([
     supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name"),
     supabase.from("profiles").select("id, full_name, role").eq("org_id", profile.org_id).order("full_name").limit(200),
     productsQuery,
-    movementsQuery,
+    // Aggregate the stock ledger in Postgres instead of shipping up to 10,000
+    // raw movement rows to the browser on every sales-page load.
+    supabase.rpc("current_stock", { p_org_id: profile.org_id }),
+    // Items join straight to the current window's orders so this runs in the
+    // same round trip as the batch instead of a second sequential .in() query.
+    supabase
+      .from("order_items")
+      .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status)")
+      .eq("orders.org_id", profile.org_id)
+      .gte("orders.created_at", window.currentStart.toISOString())
+      .lt("orders.created_at", window.currentEnd.toISOString()),
     currentOrdersQuery,
     previousOrdersQuery,
   ]);
@@ -334,24 +337,15 @@ export default async function SalesPage({
   const branches = (branchesResult.data ?? []) as BranchRecord[];
   const cashiers = (cashiersResult.data ?? []) as CashierRecord[];
   const products = (productsResult.data ?? []) as ProductRecord[];
-  const movements = (movementsResult.data ?? []) as MovementRecord[];
+  const stock = (stockResult.data ?? []) as StockRow[];
   const currentOrders = (currentOrdersResult.data ?? []) as SalesOrder[];
   const previousOrders = (previousOrdersResult.data ?? []) as SalesOrder[];
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
   const cashierById = new Map(cashiers.map((cashier) => [cashier.id, cashier]));
   const productById = new Map(products.map((product) => [product.id, product]));
 
-  let orderItems: OrderItemRecord[] = [];
-  let orderItemsError = false;
-  const currentOrderIds = currentOrders.map((order) => order.id);
-  if (currentOrderIds.length > 0) {
-    const { data, error } = await supabase
-      .from("order_items")
-      .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total")
-      .in("order_id", currentOrderIds);
-    orderItems = (data ?? []) as OrderItemRecord[];
-    orderItemsError = Boolean(error);
-  }
+  const orderItems = (itemsResult.data ?? []) as OrderItemRecord[];
+  const orderItemsError = Boolean(itemsResult.error);
 
   const currentSummary = summarizeOrders(currentOrders);
   const previousSummary = summarizeOrders(previousOrders);
@@ -403,9 +397,8 @@ export default async function SalesPage({
   const bestSellingItems = [...bestItemsByKey.values()].sort((left, right) => right.total - left.total || right.qty - left.qty).slice(0, 5);
 
   const stockByKey = new Map<string, number>();
-  for (const movement of movements) {
-    const key = `${movement.store_id}:${movement.product_id}`;
-    stockByKey.set(key, (stockByKey.get(key) ?? 0) + stockMovementDelta(movement.type, Number(movement.qty)));
+  for (const row of stock) {
+    stockByKey.set(`${row.store_id}:${row.product_id}`, Number(row.qty));
   }
   const stockRows = products
     .filter((product) => product.track_stock)
@@ -430,7 +423,7 @@ export default async function SalesPage({
   }
   const peakShare = peakHour && currentSummary.sales > 0 ? Math.round((peakHour.total / currentSummary.sales) * 100) : 0;
 
-  const queryWarning = Boolean(branchesResult.error || cashiersResult.error || productsResult.error || movementsResult.error || currentOrdersResult.error || previousOrdersResult.error || orderItemsError);
+  const queryWarning = Boolean(branchesResult.error || cashiersResult.error || productsResult.error || stockResult.error || currentOrdersResult.error || previousOrdersResult.error || orderItemsError);
   const currentBranchName = profile.store_id ? branchById.get(profile.store_id)?.name ?? DEFAULT_STORE_NAME : "All branches";
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
   const branchLabel = branchFilter ? branchById.get(branchFilter)?.name ?? "Selected branch" : "All branches";

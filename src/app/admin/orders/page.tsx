@@ -346,12 +346,28 @@ export default async function OrdersPage({
   }
   const previousOrdersPromise = startDate ? previousOrdersQuery : null;
 
-  const [branchesResult, cashiersResult, productsResult, ordersResult, previousOrdersResult] = await Promise.all([
+  // Items are joined straight to the filtered orders so they run in the same
+  // round trip as the batch. range=all has no date bound, so that range keeps
+  // the bounded two-step .in() fetch below.
+  let itemsQuery = startDate
+    ? supabase
+        .from("order_items")
+        .select("order_id, product_id, name_snapshot, qty, weight_kg, unit_price_snapshot, line_total, orders!inner(status)")
+        .eq("orders.org_id", profile.org_id)
+        .gte("orders.created_at", startDate.toISOString())
+        .lt("orders.created_at", todayEnd.toISOString())
+    : null;
+  if (itemsQuery && status !== "all") itemsQuery = itemsQuery.eq("orders.status", status);
+  if (itemsQuery && payment !== "all") itemsQuery = itemsQuery.eq("orders.payment_method", payment);
+  if (itemsQuery && branchFilter) itemsQuery = itemsQuery.eq("orders.store_id", branchFilter);
+
+  const [branchesResult, cashiersResult, productsResult, ordersResult, previousOrdersResult, itemsResult] = await Promise.all([
     supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name"),
     supabase.from("profiles").select("id, full_name, role").eq("org_id", profile.org_id).order("full_name").limit(200),
     supabase.from("products").select("id, image_url, unit").eq("org_id", profile.org_id).limit(1000),
     ordersQuery,
     previousOrdersPromise,
+    itemsQuery,
   ]);
 
   const branches = (branchesResult.data ?? []) as BranchRecord[];
@@ -375,7 +391,10 @@ export default async function OrdersPage({
   let orderItems: OrderItemRecord[] = [];
   let orderItemsError = false;
   const orderIds = orders.map((order) => order.id);
-  if (orderIds.length > 0) {
+  if (itemsResult) {
+    orderItems = (itemsResult.data ?? []) as OrderItemRecord[];
+    orderItemsError = Boolean(itemsResult.error);
+  } else if (orderIds.length > 0) {
     const { data, error } = await supabase
       .from("order_items")
       .select("order_id, product_id, name_snapshot, qty, weight_kg, unit_price_snapshot, line_total")

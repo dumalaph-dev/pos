@@ -86,6 +86,12 @@ type MovementRecord = {
   created_at: string;
 };
 
+type StockRow = {
+  store_id: string;
+  product_id: string;
+  qty: number;
+};
+
 type InventoryRow = {
   branch: BranchRecord;
   product: ProductRecord;
@@ -323,7 +329,7 @@ export default async function InventoryPage({
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile) return <InventoryProfileMissing />;
 
-  const [branchesResult, categoriesResult, suppliersResult, productsResult, movementsResult] = await Promise.all([
+  const [branchesResult, categoriesResult, suppliersResult, productsResult, movementsResult, stockResult] = await Promise.all([
     supabase
       .from("stores")
       .select("id, name, is_active")
@@ -354,6 +360,9 @@ export default async function InventoryPage({
       .eq("org_id", profile.org_id)
       .order("created_at", { ascending: false })
       .limit(5000),
+    // On-hand totals come from the server-side ledger aggregation; the raw
+    // movements query above stays only for the movement history table.
+    supabase.rpc("current_stock", { p_org_id: profile.org_id }),
   ]);
 
   const branches = (branchesResult.data ?? []) as BranchRecord[];
@@ -391,10 +400,17 @@ export default async function InventoryPage({
   const productById = new Map(products.map((product) => [product.id, product]));
   const trackedProducts = products.filter((product) => product.track_stock);
   const stockByKey = new Map<string, number>();
-
-  for (const movement of movements) {
-    const key = `${movement.store_id}:${movement.product_id}`;
-    stockByKey.set(key, (stockByKey.get(key) ?? 0) + stockMovementDelta(movement.type, Number(movement.qty)));
+  if (stockResult.error) {
+    // current_stock RPC unavailable (migration not applied yet): fall back to
+    // deriving stock from the movements history fetch, as before.
+    for (const movement of movements) {
+      const key = `${movement.store_id}:${movement.product_id}`;
+      stockByKey.set(key, (stockByKey.get(key) ?? 0) + stockMovementDelta(movement.type, Number(movement.qty)));
+    }
+  } else {
+    for (const row of (stockResult.data ?? []) as StockRow[]) {
+      stockByKey.set(`${row.store_id}:${row.product_id}`, Number(row.qty));
+    }
   }
 
   const allRows: InventoryRow[] = trackedProducts.flatMap((product) => {

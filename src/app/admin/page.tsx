@@ -5,7 +5,7 @@ import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
-import { formatStockQuantity, salesQuantity, stockMovementDelta, stockStatus, stockThreshold, type StockMovementType } from "@/lib/inventory";
+import { formatStockQuantity, salesQuantity, stockStatus, stockThreshold } from "@/lib/inventory";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 
 type AdminRole = "admin" | "manager" | "cashier";
@@ -63,10 +63,9 @@ type OrderItemRecord = {
   line_total: number;
 };
 
-type MovementRecord = {
+type StockRow = {
   store_id: string;
   product_id: string;
-  type: StockMovementType;
   qty: number;
 };
 
@@ -179,7 +178,7 @@ export default async function AdminPage() {
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile) return <AdminProfileMissing />;
 
-  const [branchesResult, productsResult, categoriesResult, ordersResult, movementsResult, devicesResult] = await Promise.all([
+  const [branchesResult, productsResult, categoriesResult, ordersResult, stockResult, itemsResult, devicesResult] = await Promise.all([
     supabase
       .from("stores")
       .select("id, name, is_active")
@@ -205,11 +204,19 @@ export default async function AdminPage() {
       .lt("created_at", end.toISOString())
       .order("created_at", { ascending: false })
       .limit(2000),
+    // Aggregate the stock ledger in Postgres instead of shipping up to 5,000
+    // raw movement rows to the browser on every dashboard load.
+    supabase.rpc("current_stock", { p_org_id: profile.org_id }),
+    // Items are joined straight to today's completed orders so this runs in
+    // the same round trip as the rest of the batch instead of a second
+    // sequential query with a huge .in() filter.
     supabase
-      .from("stock_movements")
-      .select("store_id, product_id, type, qty")
-      .eq("org_id", profile.org_id)
-      .limit(5000),
+      .from("order_items")
+      .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status)")
+      .eq("orders.org_id", profile.org_id)
+      .eq("orders.status", "completed")
+      .gte("orders.created_at", start.toISOString())
+      .lt("orders.created_at", end.toISOString()),
     supabase
       .from("devices")
       .select("is_active")
@@ -221,27 +228,17 @@ export default async function AdminPage() {
   const products = (productsResult.data ?? []) as ProductRecord[];
   const categories = (categoriesResult.data ?? []) as CategoryRecord[];
   const allOrders = (ordersResult.data ?? []) as OrderRecord[];
-  const movements = (movementsResult.data ?? []) as MovementRecord[];
+  const stock = (stockResult.data ?? []) as StockRow[];
   const devices = (devicesResult.data ?? []) as DeviceRecord[];
   const todayOrders = allOrders.filter((order) => {
     const timestamp = new Date(order.created_at).getTime();
     return timestamp >= start.getTime() && timestamp < end.getTime();
   });
-  const orderIds = todayOrders.map((order) => order.id);
-
-  let orderItems: OrderItemRecord[] = [];
-  let orderItemsError = false;
-  if (orderIds.length > 0) {
-    const { data, error } = await supabase
-      .from("order_items")
-      .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total")
-      .in("order_id", orderIds);
-    orderItems = (data ?? []) as OrderItemRecord[];
-    orderItemsError = Boolean(error);
-  }
+  const orderItems = (itemsResult.data ?? []) as OrderItemRecord[];
+  const orderItemsError = Boolean(itemsResult.error);
 
   const queryWarning = Boolean(
-    branchesResult.error || productsResult.error || categoriesResult.error || ordersResult.error || movementsResult.error || devicesResult.error || orderItemsError,
+    branchesResult.error || productsResult.error || categoriesResult.error || ordersResult.error || stockResult.error || devicesResult.error || orderItemsError,
   );
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
   const categoryById = new Map(categories.map((category) => [category.id, category]));
@@ -253,9 +250,8 @@ export default async function AdminPage() {
   const activeDevices = devices.filter((device) => device.is_active).length;
 
   const stockByKey = new Map<string, number>();
-  for (const movement of movements) {
-    const key = `${movement.store_id}:${movement.product_id}`;
-    stockByKey.set(key, (stockByKey.get(key) ?? 0) + stockMovementDelta(movement.type, Number(movement.qty)));
+  for (const row of stock) {
+    stockByKey.set(`${row.store_id}:${row.product_id}`, Number(row.qty));
   }
   const trackedProductsByStore = new Map<string, ProductRecord[]>();
   for (const product of products) {
@@ -453,7 +449,7 @@ export default async function AdminPage() {
               <div className="admin-status-grid mt-5">
                 <SystemStatus name="POS terminals" status={devicesResult.error ? "Unavailable" : devices.length ? `${activeDevices} active` : "Not registered"} warning={Boolean(devicesResult.error || devices.length === 0)} />
                 <SystemStatus name="Database" status={queryWarning ? "Check" : "Online"} warning={queryWarning} />
-                <SystemStatus name="Inventory" status={movementsResult.error ? "Check" : "Online"} warning={Boolean(movementsResult.error)} />
+                <SystemStatus name="Inventory" status={stockResult.error ? "Check" : "Online"} warning={Boolean(stockResult.error)} />
                 <SystemStatus name="Access scope" status={profile.role === "admin" ? "Org-wide" : "Branch-only"} />
               </div>
             </section>

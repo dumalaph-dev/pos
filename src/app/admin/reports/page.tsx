@@ -139,7 +139,7 @@ export default async function ReportsPage({
 
   const { start: todayStart, end: todayEnd } = getSingaporeDayBounds();
   const startDate = new Date(todayStart.getTime() - DAY_MS * (dayCount - 1));
-  const [branchesResult, categoriesResult, productsResult, ordersResult] = await Promise.all([
+  const [branchesResult, categoriesResult, productsResult, ordersResult, itemsResult] = await Promise.all([
     supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name"),
     supabase.from("categories").select("id, name").eq("org_id", profile.org_id).order("sort_order").order("name"),
     supabase.from("products").select("id, name, category_id, unit").eq("org_id", profile.org_id).limit(1000),
@@ -151,23 +151,23 @@ export default async function ReportsPage({
       .lt("created_at", todayEnd.toISOString())
       .order("created_at", { ascending: false })
       .limit(2000),
+    // Items are joined straight to the range's completed orders so they run
+    // in the same round trip as the batch instead of a second .in() query.
+    supabase
+      .from("order_items")
+      .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status)")
+      .eq("orders.org_id", profile.org_id)
+      .eq("orders.status", "completed")
+      .gte("orders.created_at", startDate.toISOString())
+      .lt("orders.created_at", todayEnd.toISOString()),
   ]);
 
   const branches = (branchesResult.data ?? []) as BranchRecord[];
   const categories = (categoriesResult.data ?? []) as CategoryRecord[];
   const products = (productsResult.data ?? []) as ProductRecord[];
   const orders = (ordersResult.data ?? []) as OrderRecord[];
-  const orderIds = orders.map((order) => order.id);
-  let orderItems: OrderItemRecord[] = [];
-  let orderItemsError = false;
-  if (orderIds.length > 0) {
-    const { data, error } = await supabase
-      .from("order_items")
-      .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total")
-      .in("order_id", orderIds);
-    orderItems = (data ?? []) as OrderItemRecord[];
-    orderItemsError = Boolean(error);
-  }
+  const orderItems = (itemsResult.data ?? []) as OrderItemRecord[];
+  const orderItemsError = Boolean(itemsResult.error);
 
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
   const categoryById = new Map(categories.map((category) => [category.id, category]));
