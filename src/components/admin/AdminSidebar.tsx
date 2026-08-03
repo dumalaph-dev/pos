@@ -11,6 +11,12 @@ type NavItem = {
   next?: boolean;
 };
 
+type QuickAction = {
+  label: string;
+  href: string;
+  icon: AdminIconName;
+};
+
 const primaryNav: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: "dashboard", active: "overview" },
   { label: "Sales", href: "/admin/sales", icon: "sales", active: "sales" },
@@ -31,6 +37,22 @@ const comingSoonNav: NavItem[] = [
 ];
 
 export function AdminSidebar({ branchName, active }: { branchName: string; active: AdminSection }) {
+  const quickActions: QuickAction[] = active === "inventory"
+    ? [
+        { label: "Add item", href: "/admin/catalog#new-product-heading", icon: "plus" },
+        { label: "Add category", href: "/admin/catalog#category-heading", icon: "box" },
+        { label: "Stock in", href: "/admin/inventory?movement=receive#stock-movement", icon: "download" },
+        { label: "Stock out", href: "/admin/inventory?movement=yield_out#stock-movement", icon: "upload" },
+        { label: "Adjust stock", href: "/admin/inventory?movement=adjust#stock-movement", icon: "refresh" },
+        { label: "Import items", href: "/admin/catalog?mode=import#import-items", icon: "box" },
+      ]
+    : [
+        { label: "New sale", href: "/pos", icon: "bag" },
+        { label: "Add product", href: "/admin/catalog", icon: "box" },
+        { label: "Stock count", href: "/admin/inventory", icon: "inventory" },
+        { label: "View reports", href: "/admin/reports", icon: "reports" },
+      ];
+
   return (
     <aside className="admin-sidebar hidden lg:flex">
       <div className="admin-sidebar__inner">
@@ -87,10 +109,7 @@ export function AdminSidebar({ branchName, active }: { branchName: string; activ
 
         <div className="admin-quick-actions">
           <p>Quick actions</p>
-          <Link href="/pos"><AdminIcon name="bag" size={17} />New sale</Link>
-          <Link href="/admin/catalog"><AdminIcon name="box" size={17} />Add product</Link>
-          <Link href="/admin/inventory"><AdminIcon name="inventory" size={17} />Stock count</Link>
-          <Link href="/admin/reports"><AdminIcon name="reports" size={17} />View reports</Link>
+          {quickActions.map((item) => <Link key={item.label} href={item.href}><AdminIcon name={item.icon} size={17} />{item.label}</Link>)}
         </div>
 
         <Link href="/admin/settings#devices" className="admin-sidebar__footer" aria-label="Open terminal settings">

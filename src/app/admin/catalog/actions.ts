@@ -36,10 +36,105 @@ function readPrice(value: string) {
   return toCentavos(parsed);
 }
 
+function readOptionalCostPrice(value: string) {
+  if (!value) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100_000_000) return undefined;
+  return toCentavos(parsed);
+}
+
+function readMinimumStock(value: string) {
+  if (!value) return 2;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1_000_000) return null;
+  return parsed;
+}
+
 function readImagePath(value: string) {
   if (!value) return null;
   if (!value.startsWith("/") || value.length > 500) return undefined;
   return value;
+}
+
+function splitCsvLine(line: string) {
+  const values: string[] = [];
+  let value = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === '"') {
+      if (quoted && line[index + 1] === '"') {
+        value += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (character === "," && !quoted) {
+      values.push(value.trim());
+      value = "";
+    } else {
+      value += character;
+    }
+  }
+  values.push(value.trim());
+  return values;
+}
+
+function readImportBoolean(value: string, fallback: boolean) {
+  if (!value) return fallback;
+  return ["1", "true", "yes", "on"].includes(value.toLowerCase());
+}
+
+const OPTIONAL_PRODUCT_COLUMNS = ["sku", "barcode", "cost_price", "min_stock", "supplier_id"] as const;
+
+function isMissingOptionalProductColumn(error: { code?: string | null; message?: string | null } | null) {
+  if (!error) return false;
+  const message = (error.message ?? "").toLowerCase();
+  const mentionsOptionalColumn = OPTIONAL_PRODUCT_COLUMNS.some((column) => message.includes(column));
+  return mentionsOptionalColumn && (error.code === "42703" || error.code === "PGRST204" || message.includes("schema cache") || message.includes("does not exist"));
+}
+
+function baseProductRecord(record: Record<string, unknown>) {
+  const base = { ...record };
+  OPTIONAL_PRODUCT_COLUMNS.forEach((column) => delete base[column]);
+  return base;
+}
+
+async function insertProductRecords(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  records: Record<string, unknown> | Record<string, unknown>[],
+) {
+  const result = await supabase.from("products").insert(records);
+  if (!result.error || !isMissingOptionalProductColumn(result.error)) {
+    return { error: result.error, usedLegacySchema: false };
+  }
+
+  const legacyRecords = Array.isArray(records) ? records.map(baseProductRecord) : baseProductRecord(records);
+  const fallback = await supabase.from("products").insert(legacyRecords);
+  return { error: fallback.error, usedLegacySchema: !fallback.error };
+}
+
+async function updateProductRecord(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orgId: string,
+  productId: string,
+  fields: Record<string, unknown>,
+) {
+  const result = await supabase
+    .from("products")
+    .update(fields)
+    .eq("id", productId)
+    .eq("org_id", orgId);
+  if (!result.error || !isMissingOptionalProductColumn(result.error)) {
+    return { error: result.error, usedLegacySchema: false };
+  }
+
+  const fallback = await supabase
+    .from("products")
+    .update(baseProductRecord(fields))
+    .eq("id", productId)
+    .eq("org_id", orgId);
+  return { error: fallback.error, usedLegacySchema: !fallback.error };
 }
 
 async function requireAdmin() {
@@ -84,6 +179,20 @@ async function validCategory(
     .select("id")
     .eq("id", categoryId)
     .eq("store_id", storeId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  return Boolean(data);
+}
+
+async function validSupplier(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orgId: string,
+  supplierId: string,
+) {
+  const { data } = await supabase
+    .from("suppliers")
+    .select("id")
+    .eq("id", supplierId)
     .eq("org_id", orgId)
     .maybeSingle();
   return Boolean(data);
@@ -171,6 +280,11 @@ export async function createProduct(formData: FormData) {
   const pricingMode = readPricingMode(readText(formData, "pricing_mode"));
   const unit = readText(formData, "unit");
   const price = readPrice(readText(formData, "price"));
+  const costPrice = readOptionalCostPrice(readText(formData, "cost_price"));
+  const minimumStock = readMinimumStock(readText(formData, "min_stock"));
+  const sku = readText(formData, "sku");
+  const barcode = readText(formData, "barcode");
+  const supplierId = readText(formData, "supplier_id");
   const imagePath = readImagePath(readText(formData, "image_url"));
   const sortOrder = readSortOrder(readText(formData, "sort_order"));
 
@@ -186,10 +300,14 @@ export async function createProduct(formData: FormData) {
   if (!pricingMode) catalogRedirect("Choose fixed pricing or price per kilogram.");
   if (!unit || unit.length > 24) catalogRedirect("Add a unit such as pcs, tray, cup, bottle, or kg.");
   if (price === null) catalogRedirect("Enter a valid non-negative price in pesos.");
+  if (costPrice === undefined) catalogRedirect("Cost price must be a valid non-negative peso amount.");
+  if (minimumStock === null) catalogRedirect("Minimum stock must be a valid non-negative quantity.");
+  if (sku.length > 80 || barcode.length > 80) catalogRedirect("SKU and barcode must be 80 characters or fewer.");
+  if (supplierId && !(await validSupplier(supabase, orgId, supplierId))) catalogRedirect("Choose a supplier from your organization.");
   if (imagePath === undefined) catalogRedirect("Image paths must be local paths such as /food/product.png.");
   if (sortOrder === null) catalogRedirect("Sort order must be a whole number greater than or equal to zero.");
 
-  const { error } = await supabase.from("products").insert({
+  const baseRecord = {
     org_id: orgId,
     store_id: storeId,
     category_id: categoryId || null,
@@ -201,12 +319,20 @@ export async function createProduct(formData: FormData) {
     image_url: imagePath,
     is_active: true,
     sort_order: sortOrder,
+  };
+  const result = await insertProductRecords(supabase, {
+    ...baseRecord,
+    sku: sku || null,
+    barcode: barcode || null,
+    cost_price: costPrice,
+    min_stock: minimumStock,
+    supplier_id: supplierId || null,
   });
 
-  if (error) catalogRedirect(error.message || "The product could not be created.");
+  if (result.error) catalogRedirect(result.error.message || "The product could not be created.");
 
   refreshCatalog();
-  redirect("/admin/catalog?saved=product");
+  redirect(`/admin/catalog?saved=product${result.usedLegacySchema ? "&legacy=1" : ""}`);
 }
 
 export async function updateProduct(formData: FormData) {
@@ -218,6 +344,11 @@ export async function updateProduct(formData: FormData) {
   const pricingMode = readPricingMode(readText(formData, "pricing_mode"));
   const unit = readText(formData, "unit");
   const price = readPrice(readText(formData, "price"));
+  const costPrice = readOptionalCostPrice(readText(formData, "cost_price"));
+  const minimumStock = readMinimumStock(readText(formData, "min_stock"));
+  const sku = readText(formData, "sku");
+  const barcode = readText(formData, "barcode");
+  const supplierId = readText(formData, "supplier_id");
   const imagePath = readImagePath(readText(formData, "image_url"));
   const sortOrder = readSortOrder(readText(formData, "sort_order"));
 
@@ -233,28 +364,110 @@ export async function updateProduct(formData: FormData) {
   if (!pricingMode) catalogRedirect("Choose fixed pricing or price per kilogram.");
   if (!unit || unit.length > 24) catalogRedirect("Add a unit such as pcs, tray, cup, bottle, or kg.");
   if (price === null) catalogRedirect("Enter a valid non-negative price in pesos.");
+  if (costPrice === undefined) catalogRedirect("Cost price must be a valid non-negative peso amount.");
+  if (minimumStock === null) catalogRedirect("Minimum stock must be a valid non-negative quantity.");
+  if (sku.length > 80 || barcode.length > 80) catalogRedirect("SKU and barcode must be 80 characters or fewer.");
+  if (supplierId && !(await validSupplier(supabase, orgId, supplierId))) catalogRedirect("Choose a supplier from your organization.");
   if (imagePath === undefined) catalogRedirect("Image paths must be local paths such as /food/product.png.");
   if (sortOrder === null) catalogRedirect("Sort order must be a whole number greater than or equal to zero.");
 
-  const { error } = await supabase
-    .from("products")
-    .update({
-      store_id: storeId,
-      category_id: categoryId || null,
-      name,
-      pricing_mode: pricingMode,
-      price,
-      unit,
-      track_stock: readBoolean(formData, "track_stock"),
-      image_url: imagePath,
-      is_active: readBoolean(formData, "is_active"),
-      sort_order: sortOrder,
-    })
-    .eq("id", productId)
-    .eq("org_id", orgId);
+  const result = await updateProductRecord(supabase, orgId, productId, {
+    store_id: storeId,
+    category_id: categoryId || null,
+    name,
+    sku: sku || null,
+    barcode: barcode || null,
+    pricing_mode: pricingMode,
+    price,
+    cost_price: costPrice,
+    min_stock: minimumStock,
+    unit,
+    supplier_id: supplierId || null,
+    track_stock: readBoolean(formData, "track_stock"),
+    image_url: imagePath,
+    is_active: readBoolean(formData, "is_active"),
+    sort_order: sortOrder,
+  });
 
-  if (error) catalogRedirect(error.message || "The product could not be updated.");
+  if (result.error) catalogRedirect(result.error.message || "The product could not be updated.");
 
   refreshCatalog();
-  redirect("/admin/catalog?saved=product");
+  redirect(`/admin/catalog?saved=product${result.usedLegacySchema ? "&legacy=1" : ""}`);
+}
+
+export async function importProducts(formData: FormData) {
+  const { supabase, orgId } = await requireAdmin();
+  const defaultStoreId = readText(formData, "store_id");
+  const csv = readText(formData, "csv");
+
+  if (!defaultStoreId || !(await validStore(supabase, orgId, defaultStoreId))) {
+    catalogRedirect("Choose a valid default branch for the import.");
+  }
+  if (!csv) catalogRedirect("Paste a CSV file before importing items.");
+
+  const lines = csv.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length < 2) catalogRedirect("The CSV needs a header row and at least one item row.");
+
+  const headers = splitCsvLine(lines[0]).map((header) => header.toLowerCase().replace(/\s+/g, "_"));
+  if (!headers.includes("name") || !headers.includes("price") || !headers.includes("unit")) {
+    catalogRedirect("CSV headers must include name, price, and unit.");
+  }
+
+  const [storesResult, categoriesResult, suppliersResult] = await Promise.all([
+    supabase.from("stores").select("id, name").eq("org_id", orgId),
+    supabase.from("categories").select("id, store_id, name").eq("org_id", orgId),
+    supabase.from("suppliers").select("id, name").eq("org_id", orgId),
+  ]);
+  const stores = (storesResult.data ?? []) as Array<{ id: string; name: string }>;
+  const categories = (categoriesResult.data ?? []) as Array<{ id: string; store_id: string; name: string }>;
+  const suppliers = (suppliersResult.data ?? []) as Array<{ id: string; name: string }>;
+  const defaultStore = stores.find((store) => store.id === defaultStoreId);
+  const records: Array<Record<string, unknown>> = [];
+
+  for (let index = 1; index < lines.length; index += 1) {
+    const values = splitCsvLine(lines[index]);
+    const row = Object.fromEntries(headers.map((header, headerIndex) => [header, values[headerIndex] ?? ""]));
+    const storeId = row.store_id || defaultStoreId;
+    const store = stores.find((item) => item.id === storeId || item.name.toLowerCase() === String(storeId).toLowerCase());
+    if (!store) catalogRedirect(`Row ${index + 1}: choose a valid store_id or branch name.`);
+    const categoryValue = String(row.category_id ?? row.category ?? "").trim();
+    const category = categoryValue ? categories.find((item) => item.id === categoryValue || (item.store_id === store.id && item.name.toLowerCase() === categoryValue.toLowerCase())) : undefined;
+    if (categoryValue && !category) catalogRedirect(`Row ${index + 1}: category does not belong to the selected branch.`);
+    const supplierValue = String(row.supplier_id ?? row.supplier ?? "").trim();
+    const supplier = supplierValue ? suppliers.find((item) => item.id === supplierValue || item.name.toLowerCase() === supplierValue.toLowerCase()) : undefined;
+    if (supplierValue && !supplier) catalogRedirect(`Row ${index + 1}: supplier was not found in this organization.`);
+    const name = String(row.name ?? "").trim();
+    const unit = String(row.unit ?? "").trim();
+    const pricingMode = readPricingMode(String(row.pricing_mode ?? "fixed"));
+    const price = readPrice(String(row.price ?? ""));
+    const costPrice = readOptionalCostPrice(String(row.cost_price ?? ""));
+    const minimumStock = readMinimumStock(String(row.min_stock ?? ""));
+    const imagePath = readImagePath(String(row.image_url ?? "").trim());
+    if (name.length < 2 || name.length > 120 || !unit || unit.length > 24 || !pricingMode || price === null) catalogRedirect(`Row ${index + 1}: name, unit, pricing_mode, and a valid price are required.`);
+    if (costPrice === undefined || minimumStock === null || imagePath === undefined) catalogRedirect(`Row ${index + 1}: cost, minimum stock, or image path is invalid.`);
+    records.push({
+      org_id: orgId,
+      store_id: store.id,
+      category_id: category?.id ?? null,
+      supplier_id: supplier?.id ?? null,
+      name,
+      sku: String(row.sku ?? "").trim() || null,
+      barcode: String(row.barcode ?? "").trim() || null,
+      pricing_mode: pricingMode,
+      price,
+      cost_price: costPrice,
+      min_stock: minimumStock,
+      unit,
+      track_stock: readImportBoolean(String(row.track_stock ?? ""), true),
+      image_url: imagePath,
+      is_active: readImportBoolean(String(row.is_active ?? ""), true),
+      sort_order: Number.isInteger(Number(row.sort_order)) && Number(row.sort_order) >= 0 ? Number(row.sort_order) : 0,
+    });
+  }
+
+  const result = await insertProductRecords(supabase, records);
+  if (result.error) catalogRedirect(result.error.message || "The inventory items could not be imported.");
+
+  refreshCatalog();
+  redirect(`/admin/catalog?saved=imported${result.usedLegacySchema ? "&legacy=1" : ""}${defaultStore ? `&store=${encodeURIComponent(defaultStore.name)}` : ""}`);
 }

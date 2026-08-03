@@ -128,6 +128,59 @@ textarea.inventory-input {
   opacity: 0.55;
 }
 
+.admin-compact-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.admin-compact-toolbar__filters {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  min-width: max-content;
+}
+
+.admin-compact-toolbar__select {
+  display: block;
+  flex: 0 0 auto;
+  height: 36px;
+  min-height: 36px;
+  min-width: 104px;
+  width: 104px;
+  padding: 0 8px;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-compact-toolbar__select--range {
+  min-width: 112px;
+  width: 112px;
+}
+
+.admin-compact-toolbar__button {
+  display: inline-flex;
+  height: 36px;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+@media (min-width: 1024px) {
+  .admin-compact-toolbar {
+    flex-wrap: nowrap;
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* Backoffice reference shell                                                 */
 /* -------------------------------------------------------------------------- */

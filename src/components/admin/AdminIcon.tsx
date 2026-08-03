@@ -22,7 +22,17 @@ export type AdminIconName =
   | "box"
   | "chart"
   | "eye"
-  | "pig";
+  | "pig"
+  | "check"
+  | "alert"
+  | "filter"
+  | "columns"
+  | "plus"
+  | "upload"
+  | "download"
+  | "edit"
+  | "more"
+  | "refresh";
 
 export function AdminIcon({ name, size = 18 }: { name: AdminIconName; size?: number }) {
   const common = {
@@ -86,5 +96,25 @@ export function AdminIcon({ name, size = 18 }: { name: AdminIconName; size?: num
       return <svg {...common}><path d="M2.5 12s3.4-5 9.5-5 9.5 5 9.5 5-3.4 5-9.5 5-9.5-5-9.5-5Z" /><circle cx="12" cy="12" r="2.2" /></svg>;
     case "pig":
       return <svg {...common}><path d="M5 13c0-4 3-7 8-7 2 0 4 .7 5.3 2.1 1.4 0 2.7.6 3.7 1.9l-1.5 1.4.3 2.6-2 .2c-.8 2.2-2.8 3.8-5.8 3.8H9l-2 2H5l1-3.2c-.7-1-1-2.3-1-3.8Z" /><circle cx="17" cy="10" r=".7" /><path d="M19 14h2M8 12h.01" /></svg>;
+    case "check":
+      return <svg {...common}><circle cx="12" cy="12" r="9" /><path d="m8 12 2.5 2.5L16.5 9" /></svg>;
+    case "alert":
+      return <svg {...common}><path d="m12 3 9 17H3L12 3Z" /><path d="M12 9v4M12 17h.01" /></svg>;
+    case "filter":
+      return <svg {...common}><path d="M4 5h16M7 12h10M10 19h4" /></svg>;
+    case "columns":
+      return <svg {...common}><rect x="4" y="4" width="6" height="16" rx="1" /><rect x="14" y="4" width="6" height="16" rx="1" /></svg>;
+    case "plus":
+      return <svg {...common}><path d="M12 5v14M5 12h14" /></svg>;
+    case "upload":
+      return <svg {...common}><path d="M12 16V4M8 8l4-4 4 4M5 20h14" /></svg>;
+    case "download":
+      return <svg {...common}><path d="M12 4v12M8 12l4 4 4-4M5 20h14" /></svg>;
+    case "edit":
+      return <svg {...common}><path d="m14 5 5 5M4 20l3.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z" /></svg>;
+    case "more":
+      return <svg {...common}><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" /></svg>;
+    case "refresh":
+      return <svg {...common}><path d="M20 7v5h-5M4 17v-5h5" /><path d="M6.2 9A7 7 0 0 1 18.6 7M17.8 15A7 7 0 0 1 5.4 17" /></svg>;
   }
 }

@@ -1,19 +1,24 @@
+import Image from "next/image";
 import { redirect } from "next/navigation";
-import { AdminSidebar } from "@/components/admin/AdminSidebar";
+import type { ReactNode } from "react";
+import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
+import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import {
   formatStockQuantity,
   LOW_STOCK_THRESHOLD,
   stockMovementDelta,
-  stockStatus,
   type StockMovementType,
 } from "@/lib/inventory";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { recordStockMovement } from "./actions";
 
 type AdminRole = "admin" | "manager" | "cashier";
+type PricingMode = "fixed" | "per_kg";
+type InventoryStatus = "all" | "in_stock" | "low" | "out";
+type InventoryColumn = "sku" | "category" | "unit" | "stock" | "status" | "cost" | "selling" | "supplier";
 
 type ProfileRecord = {
   full_name: string | null;
@@ -29,15 +34,42 @@ type BranchRecord = {
   is_active: boolean;
 };
 
+type CategoryRecord = {
+  id: string;
+  store_id: string;
+  name: string;
+  icon: string | null;
+  sort_order: number;
+  is_active: boolean;
+};
+
+type SupplierRecord = {
+  id: string;
+  store_id: string | null;
+  name: string;
+  is_active: boolean;
+};
+
 type ProductRecord = {
   id: string;
-  name: string;
-  unit: string;
-  price: number;
-  track_stock: boolean;
-  is_active: boolean;
   store_id: string;
+  category_id: string | null;
+  supplier_id: string | null;
+  name: string;
+  sku: string | null;
+  barcode: string | null;
+  pricing_mode: PricingMode;
+  price: number;
+  cost_price: number | null;
+  unit: string;
+  min_stock: number;
+  track_stock: boolean;
+  image_url: string | null;
+  is_active: boolean;
+  sort_order: number;
 };
+
+type BaseProductRecord = Omit<ProductRecord, "supplier_id" | "sku" | "barcode" | "cost_price" | "min_stock">;
 
 type MovementRecord = {
   id: string;
@@ -48,18 +80,93 @@ type MovementRecord = {
   unit: string;
   unit_cost: number | null;
   reason: string | null;
+  ref_order_id: string | null;
   created_at: string;
 };
 
+type InventoryRow = {
+  branch: BranchRecord;
+  product: ProductRecord;
+  categoryName: string;
+  supplierName: string;
+  onHand: number;
+  minStock: number;
+  status: Exclude<InventoryStatus, "all">;
+  inventoryValue: number;
+};
+
 const DEFAULT_STORE_NAME = "Mario's Lechon House";
+const DAY_MS = 24 * 60 * 60 * 1000;
+const LOCAL_PRODUCT_IMAGES: Record<string, string> = {
+  "whole lechon (small)": "/food/whole-lechon-small.png",
+  "whole lechon (medium)": "/food/whole-lechon-medium.png",
+  "whole lechon (large)": "/food/whole-lechon-medium.png",
+  "lechon belly (1/2kg)": "/food/lechon-belly-half.png",
+  "lechon belly (1kg)": "/food/lechon-belly-one.png",
+  "lechon paksiw (1/2kg)": "/food/lechon-paksiw.png",
+  "lechon kawali (1/2kg)": "/food/lechon-kawali.png",
+  "rice & sides": "/food/rice-sides.png",
+  "java rice": "/food/java-rice.png",
+  "mang tomas (small)": "/food/mang-tomas.png",
+};
+
+const columnOptions: Array<{ value: InventoryColumn; label: string }> = [
+  { value: "sku", label: "SKU / barcode" },
+  { value: "category", label: "Category" },
+  { value: "unit", label: "Unit" },
+  { value: "stock", label: "Stock on hand" },
+  { value: "status", label: "Status" },
+  { value: "cost", label: "Cost price" },
+  { value: "selling", label: "Selling price" },
+  { value: "supplier", label: "Supplier" },
+];
 
 const movementOptions: Array<{ value: Exclude<StockMovementType, "sale">; label: string; detail: string }> = [
   { value: "receive", label: "Stock in", detail: "Add purchased or opening stock" },
+  { value: "yield_out", label: "Stock out", detail: "Consume stock during prep or service" },
   { value: "yield_in", label: "Yield in", detail: "Add usable product from prep" },
-  { value: "yield_out", label: "Yield out", detail: "Consume raw stock during prep" },
   { value: "waste", label: "Waste / spoilage", detail: "Remove damaged or spoiled stock" },
   { value: "adjust", label: "Adjustment", detail: "Signed correction after a count" },
 ];
+
+const statusOptions: Array<{ value: InventoryStatus; label: string }> = [
+  { value: "all", label: "All status" },
+  { value: "in_stock", label: "In stock" },
+  { value: "low", label: "Low stock" },
+  { value: "out", label: "Out of stock" },
+];
+
+function readParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
+
+function readValues(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value : value ? [value] : [];
+}
+
+function isInventoryStatus(value: string): value is InventoryStatus {
+  return statusOptions.some((option) => option.value === value);
+}
+
+function isInventoryColumn(value: string): value is InventoryColumn {
+  return columnOptions.some((column) => column.value === value);
+}
+
+function readColumns(value: string | string[] | undefined) {
+  const requested = readValues(value)
+    .flatMap((item) => item.split(","))
+    .filter(isInventoryColumn);
+  return new Set<InventoryColumn>(requested.length > 0 ? requested : columnOptions.map((column) => column.value));
+}
+
+function readPageSize(value: string) {
+  const parsed = Number(value);
+  return parsed === 25 || parsed === 50 ? parsed : 10;
+}
+
+function shortName(name: string | null, fallback: string) {
+  return name?.trim().split(/\s+/)[0] || fallback;
+}
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("en-PH", {
@@ -71,14 +178,55 @@ function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
-function shortName(name: string | null, fallback: string) {
-  return name?.trim().split(/\s+/)[0] || fallback;
+function formatToday(value: Date) {
+  return new Intl.DateTimeFormat("en-PH", {
+    day: "numeric",
+    month: "short",
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+  }).format(value);
+}
+
+function getSingaporeDayBounds() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+  }).formatToParts(new Date());
+  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
+  const start = new Date(`${part("year")}-${part("month")}-${part("day")}T00:00:00+08:00`);
+  return { start, end: new Date(start.getTime() + DAY_MS) };
+}
+
+function productImage(product: ProductRecord) {
+  return product.image_url?.startsWith("/")
+    ? product.image_url
+    : LOCAL_PRODUCT_IMAGES[product.name.trim().toLowerCase()] ?? "/food/whole-lechon-small.png";
+}
+
+function statusFor(onHand: number, minStock: number): Exclude<InventoryStatus, "all"> {
+  if (onHand <= 0) return "out";
+  if (onHand <= minStock) return "low";
+  return "in_stock";
+}
+
+function statusLabel(status: Exclude<InventoryStatus, "all">) {
+  if (status === "out") return "Out of stock";
+  if (status === "low") return "Low stock";
+  return "In stock";
+}
+
+function statusClass(status: Exclude<InventoryStatus, "all">) {
+  if (status === "out") return "bg-danger-soft text-danger";
+  if (status === "low") return "bg-warning/15 text-warning";
+  return "bg-success/10 text-success";
 }
 
 function movementLabel(type: StockMovementType) {
   if (type === "receive") return "Stock in";
   if (type === "yield_in") return "Yield in";
-  if (type === "yield_out") return "Yield out";
+  if (type === "yield_out") return "Stock out";
   if (type === "waste") return "Waste";
   if (type === "sale") return "POS sale";
   return "Adjustment";
@@ -90,11 +238,59 @@ function movementClass(type: StockMovementType) {
   return "bg-warning/15 text-warning";
 }
 
+function buildInventoryHref({
+  q,
+  category,
+  status,
+  supplier,
+  page,
+  pageSize,
+  product,
+  movement,
+  columns,
+}: {
+  q: string;
+  category: string;
+  status: InventoryStatus;
+  supplier: string;
+  page: number;
+  pageSize: number;
+  product?: string;
+  movement?: string;
+  columns?: Set<InventoryColumn>;
+}) {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (category !== "all") params.set("category", category);
+  if (status !== "all") params.set("status", status);
+  if (supplier) params.set("supplier", supplier);
+  if (page > 1) params.set("page", String(page));
+  if (pageSize !== 10) params.set("pageSize", String(pageSize));
+  if (product) params.set("product", product);
+  if (movement) params.set("movement", movement);
+  if (columns && columns.size < columnOptions.length) params.set("columns", [...columns].join(","));
+  const query = params.toString();
+  return query ? `/admin/inventory?${query}` : "/admin/inventory";
+}
+
 export default async function InventoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; saved?: string }>;
+  searchParams: Promise<{
+    error?: string | string[];
+    saved?: string | string[];
+    q?: string | string[];
+    category?: string | string[];
+    status?: string | string[];
+    supplier?: string | string[];
+    page?: string | string[];
+    pageSize?: string | string[];
+    columns?: string | string[];
+    product?: string | string[];
+    movement?: string | string[];
+  }>;
 }) {
+  const params = await searchParams;
   const supabase = await createClient();
   const user = await getAuthenticatedUser(supabase);
 
@@ -110,63 +306,166 @@ export default async function InventoryPage({
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile) return <InventoryProfileMissing />;
 
-  const [branchesResult, productsResult, movementsResult] = await Promise.all([
+  const [branchesResult, categoriesResult, suppliersResult, productsResult, movementsResult] = await Promise.all([
     supabase
       .from("stores")
       .select("id, name, is_active")
       .eq("org_id", profile.org_id)
       .order("name"),
     supabase
-      .from("products")
-      .select("id, name, unit, price, track_stock, is_active, store_id")
+      .from("categories")
+      .select("id, store_id, name, icon, sort_order, is_active")
+      .eq("org_id", profile.org_id)
+      .order("sort_order")
+      .order("name"),
+    supabase
+      .from("suppliers")
+      .select("id, store_id, name, is_active")
       .eq("org_id", profile.org_id)
       .order("name")
       .limit(1000),
     supabase
+      .from("products")
+      .select("id, store_id, category_id, supplier_id, name, sku, barcode, pricing_mode, price, cost_price, unit, min_stock, track_stock, image_url, is_active, sort_order")
+      .eq("org_id", profile.org_id)
+      .order("sort_order")
+      .order("name")
+      .limit(2000),
+    supabase
       .from("stock_movements")
-      .select("id, store_id, product_id, type, qty, unit, unit_cost, reason, created_at")
+      .select("id, store_id, product_id, type, qty, unit, unit_cost, reason, ref_order_id, created_at")
       .eq("org_id", profile.org_id)
       .order("created_at", { ascending: false })
-      .limit(1000),
+      .limit(5000),
   ]);
 
   const branches = (branchesResult.data ?? []) as BranchRecord[];
-  const products = (productsResult.data ?? []) as ProductRecord[];
+  const categories = (categoriesResult.data ?? []) as CategoryRecord[];
+  const suppliers = (suppliersResult.data ?? []) as SupplierRecord[];
+  let products = (productsResult.data ?? []) as ProductRecord[];
+  let productsQueryWarning = Boolean(productsResult.error);
+
+  if (productsResult.error) {
+    const fallbackProductsResult = await supabase
+      .from("products")
+      .select("id, store_id, category_id, name, pricing_mode, price, unit, track_stock, image_url, is_active, sort_order")
+      .eq("org_id", profile.org_id)
+      .order("sort_order")
+      .order("name")
+      .limit(2000);
+    const fallbackProducts = (fallbackProductsResult.data ?? []) as BaseProductRecord[];
+    products = fallbackProducts.map((product) => ({
+      ...product,
+      sku: null,
+      barcode: null,
+      cost_price: null,
+      min_stock: LOW_STOCK_THRESHOLD,
+      supplier_id: null,
+    }));
+    productsQueryWarning = true;
+  }
+
   const movements = (movementsResult.data ?? []) as MovementRecord[];
-  const trackedProducts = products.filter((product) => product.track_stock);
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
+  const categoryById = new Map(categories.map((category) => [category.id, category]));
+  const supplierById = new Map(suppliers.map((supplier) => [supplier.id, supplier]));
   const productById = new Map(products.map((product) => [product.id, product]));
+  const trackedProducts = products.filter((product) => product.track_stock);
   const stockByKey = new Map<string, number>();
 
   for (const movement of movements) {
     const key = `${movement.store_id}:${movement.product_id}`;
     stockByKey.set(key, (stockByKey.get(key) ?? 0) + stockMovementDelta(movement.type, Number(movement.qty)));
   }
-  const trackedProductsByStore = new Map<string, ProductRecord[]>();
-  for (const product of trackedProducts) {
-    const storeProducts = trackedProductsByStore.get(product.store_id) ?? [];
-    storeProducts.push(product);
-    trackedProductsByStore.set(product.store_id, storeProducts);
-  }
 
-  const inventoryRows = branches.flatMap((branch) =>
-    (trackedProductsByStore.get(branch.id) ?? [])
-      .map((product) => {
-        const onHand = stockByKey.get(`${branch.id}:${product.id}`) ?? 0;
-        return { branch, product, onHand, status: stockStatus(onHand) };
-      }),
+  const allRows: InventoryRow[] = trackedProducts.flatMap((product) => {
+    const branch = branchById.get(product.store_id);
+    if (!branch) return [];
+    const onHand = stockByKey.get(`${branch.id}:${product.id}`) ?? 0;
+    const minimumStock = Number(product.min_stock);
+    const minStock = Number.isFinite(minimumStock) ? Math.max(minimumStock, 0) : LOW_STOCK_THRESHOLD;
+    const costRate = product.cost_price ?? product.price;
+    return [{
+      branch,
+      product,
+      categoryName: product.category_id ? categoryById.get(product.category_id)?.name ?? "Uncategorized" : "Uncategorized",
+      supplierName: product.supplier_id ? supplierById.get(product.supplier_id)?.name ?? "Unassigned" : "Unassigned",
+      onHand,
+      minStock,
+      status: statusFor(onHand, minStock),
+      inventoryValue: Math.max(0, onHand) * Number(costRate),
+    }];
+  });
+
+  const requestedStatus = readParam(params.status);
+  const status: InventoryStatus = isInventoryStatus(requestedStatus) ? requestedStatus : "all";
+  const searchQuery = readParam(params.q);
+  const normalizedQuery = searchQuery.toLowerCase();
+  const requestedCategory = readParam(params.category);
+  const category = requestedCategory || "all";
+  const requestedSupplier = readParam(params.supplier);
+  const supplier = requestedSupplier && supplierById.has(requestedSupplier) ? requestedSupplier : "";
+  const selectedProductId = productById.has(readParam(params.product)) ? readParam(params.product) : "";
+  const visibleColumns = readColumns(params.columns);
+  const pageSize = readPageSize(readParam(params.pageSize));
+  const requestedPage = Math.max(1, Number(readParam(params.page)) || 1);
+  const filteredRows = allRows.filter((row) => {
+    if (category !== "all" && category !== "uncategorized" && row.product.category_id !== category) return false;
+    if (category === "uncategorized" && row.product.category_id) return false;
+    if (status !== "all" && row.status !== status) return false;
+    if (supplier && row.product.supplier_id !== supplier) return false;
+    if (!normalizedQuery) return true;
+    return [row.product.name, row.product.sku, row.product.barcode, row.categoryName, row.supplierName]
+      .filter(Boolean)
+      .some((value) => value!.toLowerCase().includes(normalizedQuery));
+  });
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const page = Math.min(requestedPage, totalPages);
+  const pageRows = filteredRows.slice((page - 1) * pageSize, page * pageSize);
+  const firstRow = filteredRows.length === 0 ? 0 : (page - 1) * pageSize + 1;
+  const lastRow = Math.min(page * pageSize, filteredRows.length);
+
+  const { start: todayStart, end: todayEnd } = getSingaporeDayBounds();
+  const lowStockCount = allRows.filter((row) => row.status === "low").length;
+  const outOfStockCount = allRows.filter((row) => row.status === "out").length;
+  const movedToday = movements.filter((movement) => {
+    const time = new Date(movement.created_at).getTime();
+    return time >= todayStart.getTime() && time < todayEnd.getTime();
+  }).length;
+  const estimatedValue = allRows.reduce((sum, row) => sum + row.inventoryValue, 0);
+  const estimatedValueItems = allRows.filter((row) => row.product.cost_price == null).length;
+  const queryWarning = Boolean(
+    branchesResult.error || categoriesResult.error || suppliersResult.error || movementsResult.error || productsQueryWarning,
   );
-  const lowStockCount = inventoryRows.filter((row) => row.status === "low" || row.status === "out").length;
-  const queryWarning = Boolean(branchesResult.error || productsResult.error || movementsResult.error);
-  const params = await searchParams;
   const canWrite = profile.role === "admin";
   const currentBranchName = profile.store_id
     ? branchById.get(profile.store_id)?.name ?? DEFAULT_STORE_NAME
     : "All branches";
-  const orgName = profile.organizations?.name ?? DEFAULT_STORE_NAME;
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
-  const defaultBranch = profile.store_id ?? branches[0]?.id ?? "";
+  const activeBranches = branches.filter((branch) => branch.is_active);
   const formProducts = trackedProducts.filter((product) => product.is_active);
+  const selectedMovementProduct = selectedProductId ? productById.get(selectedProductId) : undefined;
+  const defaultProduct = selectedMovementProduct ?? formProducts[0];
+  const defaultBranch = defaultProduct?.store_id ?? profile.store_id ?? activeBranches[0]?.id ?? branches[0]?.id ?? "";
+  const requestedMovement = readParam(params.movement);
+  const defaultMovement = movementOptions.some((option) => option.value === requestedMovement)
+    ? (requestedMovement as Exclude<StockMovementType, "sale">)
+    : "receive";
+  const recentMovements = movements
+    .filter((movement) => !selectedProductId || movement.product_id === selectedProductId)
+    .slice(0, 4);
+  const categoryCounts = new Map<string, number>();
+  for (const row of allRows) categoryCounts.set(row.product.category_id ?? "uncategorized", (categoryCounts.get(row.product.category_id ?? "uncategorized") ?? 0) + 1);
+  const categoryTabs = [
+    { id: "all", label: "All items", icon: "▦", count: allRows.length },
+    ...categories.filter((item) => item.is_active).map((item) => ({ id: item.id, label: item.name, icon: item.icon ?? "•", count: categoryCounts.get(item.id) ?? 0 })),
+    { id: "uncategorized", label: "Others", icon: "⋯", count: categoryCounts.get("uncategorized") ?? 0 },
+  ];
+  const savedMessage = readParam(params.saved) === "1" ? "Stock movement recorded. The ledger and POS balance are up to date." : "";
+  const baseHref = { q: searchQuery, category, status, supplier, page, pageSize, columns: visibleColumns };
+  const posSaleCount = movements.filter((movement) => movement.type === "sale").length;
+  const userInitial = firstName.slice(0, 1).toUpperCase();
+  const inventoryAlertCount = lowStockCount + outOfStockCount;
 
   return (
     <main className="admin-page text-ink">
@@ -174,221 +473,158 @@ export default async function InventoryPage({
         <AdminSidebar branchName={currentBranchName} active="inventory" />
 
         <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
-          <header className="admin-reference-header flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-3 shadow-[var(--shadow-card)] sm:px-5">
-            <Link href="/admin" className="flex min-w-0 items-center gap-3 lg:hidden">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-primary/25 bg-primary-soft text-lg text-primary" aria-hidden="true">◉</span>
-              <span className="min-w-0">
-                <strong className="block truncate text-sm font-extrabold text-primary">Mario&apos;s Lechon House</strong>
-                <small className="block text-[10px] font-extrabold uppercase tracking-[0.16em] text-ink-muted">Inventory · Backoffice</small>
-              </span>
-            </Link>
-            <div className="ml-auto flex items-center gap-2">
-              <Link href="/admin" className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Overview</Link>
-              <Link href="/pos" className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Open POS</Link>
-              <SignOutButton className="px-3 py-2 text-xs" />
+          <header className="admin-topbar">
+            <Link href="/admin" className="admin-mobile-brand" aria-label="Admin dashboard"><span className="admin-brand__mark"><AdminIcon name="pig" size={20} /></span><span className="admin-brand__copy"><strong>Mario&apos;s</strong><small>LECHON HOUSE</small></span></Link>
+            <Link href="#inventory-filters-heading" className="admin-icon-button" aria-label="Search inventory"><AdminIcon name="search" size={19} /></Link>
+            <Link href="#inventory-table" className="admin-icon-button admin-icon-button--alert" aria-label={inventoryAlertCount ? `View ${inventoryAlertCount} inventory alerts` : "View inventory status"}><AdminIcon name="bell" size={19} />{inventoryAlertCount > 0 && <span className="admin-icon-button__badge" aria-hidden="true">{inventoryAlertCount > 9 ? "9+" : inventoryAlertCount}</span>}</Link>
+            <Link href="#inventory-help" className="admin-icon-button admin-icon-button--help" aria-label="View inventory help"><AdminIcon name="help" size={19} /></Link>
+            <div className="admin-user-chip"><span className="admin-user-chip__avatar" aria-hidden="true">{userInitial}</span><span className="admin-user-chip__copy"><strong>{firstName}</strong><small>{profile.role === "manager" ? "Manager" : "Admin"}⌄</small></span></div>
+            <SignOutButton className="px-2 py-2 text-[10px]" />
+          </header>
+          <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line/70 pb-5 pt-2">
+            <div>
+              <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Inventory control · {currentBranchName}</p>
+              <h1 className="mt-2 text-3xl font-extrabold tracking-[-0.05em] text-ink sm:text-4xl">Inventory</h1>
+              <p className="mt-1 max-w-2xl text-sm text-ink-muted">Manage your inventory items, stock levels, and track usage across all branches, {firstName}.</p>
+            </div>
+            <div className="admin-compact-toolbar">
+              <Link href={buildInventoryHref({ ...baseHref, page: 1, movement: "receive" }) + "#stock-movement"} className="admin-compact-toolbar__button gap-2 rounded-btn bg-secondary text-xs font-extrabold text-primary transition hover:bg-secondary-hover"><AdminIcon name="download" size={15} />Stock In<AdminIcon name="chevron" size={13} /></Link>
+              <Link href={buildInventoryHref({ ...baseHref, page: 1, movement: "yield_out" }) + "#stock-movement"} className="admin-compact-toolbar__button gap-2 rounded-btn bg-secondary text-xs font-extrabold text-primary transition hover:bg-secondary-hover"><AdminIcon name="upload" size={15} />Stock Out<AdminIcon name="chevron" size={13} /></Link>
+              <details className="relative">
+                <summary className="admin-compact-toolbar__button list-none cursor-pointer gap-2 rounded-btn bg-primary text-xs font-extrabold text-primary-fg"><AdminIcon name="plus" size={15} />Add item<AdminIcon name="chevron" size={13} /></summary>
+                <div className="absolute right-0 top-full z-20 mt-2 grid min-w-40 gap-1 rounded-card border border-line bg-surface p-2 shadow-[var(--shadow-pop)]">
+                  <Link href="/admin/catalog#new-product-heading" className="rounded-btn px-3 py-2 text-xs font-bold text-primary hover:bg-primary-soft">New product</Link>
+                  <Link href="/admin/catalog#category-heading" className="rounded-btn px-3 py-2 text-xs font-bold text-primary hover:bg-primary-soft">New category</Link>
+                </div>
+              </details>
             </div>
           </header>
 
-          <div className="mt-6 flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Inventory control · {currentBranchName}</p>
-              <h1 className="mt-2 text-3xl font-extrabold tracking-[-0.04em] text-ink sm:text-4xl">Keep {orgName} in sync, {firstName}.</h1>
-              <p className="mt-2 max-w-2xl text-sm text-ink-muted">On-hand counts are derived from the append-only ledger. Completed POS orders add sale movements automatically after the inventory migration is applied.</p>
-            </div>
-            <span className="rounded-pill border border-line bg-surface px-3 py-2 text-xs font-bold text-ink-muted">Low stock signal · ≤ {LOW_STOCK_THRESHOLD} units</span>
+          {savedMessage && <div role="status" className="mt-5 rounded-card border border-success/25 bg-success/10 px-4 py-3 text-sm font-semibold text-success">{savedMessage}</div>}
+          {readParam(params.error) && <div role="alert" className="mt-5 rounded-card border border-danger/25 bg-danger-soft px-4 py-3 text-sm font-semibold text-danger">{readParam(params.error)}</div>}
+          {queryWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink">Some inventory fields are unavailable. Ensure <code className="font-bold">0009_admin_business_records.sql</code> is applied before <code className="font-bold">0010_inventory_catalog_fields.sql</code> in Supabase to enable suppliers and advanced inventory fields.</div>}
+          {!canWrite && <div role="status" className="mt-5 rounded-card border border-line bg-secondary px-4 py-3 text-sm font-semibold text-primary">This inventory view is read-only for your role. Ask an organization admin to record stock movements or edit catalog fields.</div>}
+
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <InventoryMetric label="Total items" value={String(allRows.length)} detail="Tracked across all branches" tone="bg-primary text-primary-fg" icon="box" />
+            <InventoryMetric label="Low stock items" value={String(lowStockCount)} detail="Need to reorder soon" tone="bg-accent text-accent-fg" icon="inventory" />
+            <InventoryMetric label="Out of stock" value={String(outOfStockCount)} detail="Require immediate attention" tone="bg-warning text-white" icon="alert" />
+            <InventoryMetric label="Total inventory value" value={estimatedValue ? formatPeso(Math.round(estimatedValue)) : "₱0.00"} detail={estimatedValueItems ? `Estimated for ${estimatedValueItems} item${estimatedValueItems === 1 ? "" : "s"}` : "Based on cost price"} tone="bg-success text-white" icon="wallet" />
+            <InventoryMetric label="Items moved today" value={String(movedToday)} detail={`Since ${formatToday(todayStart)}`} tone="bg-[#2f7df4] text-white" icon="chart" />
           </div>
 
-          {params.saved === "1" && (
-            <div role="status" className="mt-5 rounded-card border border-success/25 bg-success/10 px-4 py-3 text-sm font-semibold text-success">Stock movement recorded. The ledger and audit trail are up to date.</div>
-          )}
-          {params.error && (
-            <div role="alert" className="mt-5 rounded-card border border-danger/25 bg-danger-soft px-4 py-3 text-sm font-semibold text-danger">{params.error}</div>
-          )}
-          {queryWarning && (
-            <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink">Some inventory data could not refresh. Check the Supabase connection and RLS scope before recording a count.</div>
-          )}
-          {!canWrite && (
-            <div role="status" className="mt-5 rounded-card border border-line bg-secondary px-4 py-3 text-sm font-semibold text-primary">This view is read-only for your role. Ask an organization admin to record stock movements.</div>
-          )}
-
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <InventoryMetric label="Tracked products" value={String(trackedProducts.length)} detail="Across your visible branches" tone="bg-primary text-primary-fg" />
-            <InventoryMetric label="Low / out" value={String(lowStockCount)} detail={`At or below ${LOW_STOCK_THRESHOLD} units`} tone="bg-accent text-accent-fg" />
-            <InventoryMetric label="Ledger entries" value={String(movements.length)} detail="Latest 1,000 movement rows" tone="bg-secondary text-primary" />
-            <InventoryMetric label="Branches" value={String(branches.length)} detail="RLS-scoped branch view" tone="bg-primary-soft text-primary" />
-          </div>
-
-          <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(300px,0.75fr)_minmax(0,1.25fr)]">
-            <section aria-labelledby="movement-heading" className="rounded-card border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-              <div>
-                <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-ink-muted">Ledger action</p>
-                <h2 id="movement-heading" className="mt-1 text-xl font-extrabold text-ink">Record a movement</h2>
-                <p className="mt-2 text-xs leading-5 text-ink-muted">Use a signed delta for adjustments. POS sales are never entered here manually.</p>
-              </div>
-              {formProducts.length === 0 ? (
-                <div className="mt-5 rounded-btn border border-dashed border-line-strong bg-surface-raised px-4 py-6 text-center">
-                  <p className="text-sm font-extrabold text-ink">No tracked products yet</p>
-                  <p className="mt-1 text-xs text-ink-muted">Enable Track stock on a product before recording inventory.</p>
-                </div>
-              ) : (
-                <form action={recordStockMovement} className="mt-5 space-y-4">
-                  <InventoryField label="Branch" htmlFor="inventory-store">
-                    <select id="inventory-store" name="store_id" defaultValue={defaultBranch} required disabled={!canWrite} className="inventory-input">
-                      {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.is_active ? "" : " · inactive"}</option>)}
-                    </select>
-                  </InventoryField>
-                  <InventoryField label="Tracked product" htmlFor="inventory-product">
-                    <select id="inventory-product" name="product_id" defaultValue={formProducts[0]?.id} required disabled={!canWrite} className="inventory-input">
-                      {formProducts.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.unit}</option>)}
-                    </select>
-                  </InventoryField>
-                  <InventoryField label="Movement" htmlFor="inventory-type">
-                    <select id="inventory-type" name="type" defaultValue="receive" required disabled={!canWrite} className="inventory-input">
-                      {movementOptions.map((option) => <option key={option.value} value={option.value}>{option.label} · {option.detail}</option>)}
-                    </select>
-                  </InventoryField>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <InventoryField label="Quantity" htmlFor="inventory-qty">
-                      <input id="inventory-qty" name="qty" type="number" inputMode="decimal" step="0.001" placeholder="e.g. 10 or -2" required disabled={!canWrite} className="inventory-input tnums" />
-                    </InventoryField>
-                    <InventoryField label="Unit cost · ₱" htmlFor="inventory-cost">
-                      <input id="inventory-cost" name="unit_cost" type="number" inputMode="decimal" min="0" step="0.01" placeholder="Optional" disabled={!canWrite} className="inventory-input tnums" />
-                    </InventoryField>
-                  </div>
-                  <InventoryField label="Reason / reference" htmlFor="inventory-reason">
-                    <textarea id="inventory-reason" name="reason" rows={3} placeholder="Required for waste and adjustments" disabled={!canWrite} className="inventory-input min-h-20 resize-y" />
-                  </InventoryField>
-                  <button type="submit" disabled={!canWrite} className="w-full rounded-btn bg-accent px-4 py-3 text-sm font-extrabold uppercase tracking-wide text-accent-fg transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50">Record movement</button>
+          <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_252px]">
+            <div className="min-w-0">
+              <section aria-labelledby="inventory-filters-heading" className="admin-panel p-4">
+                <form action="/admin/inventory" method="get" className="grid gap-3 xl:grid-cols-[minmax(220px,1.7fr)_repeat(3,minmax(145px,0.8fr))_auto] xl:items-center">
+                  <input type="hidden" name="page" value="1" />
+                  <input type="hidden" name="pageSize" value={pageSize} />
+                  <label className="relative block">
+                    <span className="sr-only" id="inventory-filters-heading">Search inventory</span>
+                    <span className="pointer-events-none absolute inset-y-0 left-3 grid place-items-center text-ink-muted"><AdminIcon name="search" size={16} /></span>
+                    <input name="q" defaultValue={searchQuery} placeholder="Search by item name, SKU or barcode..." className="inventory-input pl-10 text-xs" />
+                  </label>
+                  <label className="sr-only" htmlFor="inventory-category">Category</label>
+                  <select id="inventory-category" name="category" defaultValue={category} className="inventory-input text-xs font-bold">
+                    <option value="all">All categories</option>
+                    {categories.filter((item) => item.is_active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                    <option value="uncategorized">Others</option>
+                  </select>
+                  <label className="sr-only" htmlFor="inventory-status">Status</label>
+                  <select id="inventory-status" name="status" defaultValue={status} className="inventory-input text-xs font-bold">
+                    {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                  <label className="sr-only" htmlFor="inventory-supplier">Supplier</label>
+                  <select id="inventory-supplier" name="supplier" defaultValue={supplier || ""} className="inventory-input text-xs font-bold">
+                    <option value="">All suppliers</option>
+                    {suppliers.filter((item) => item.is_active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  </select>
+                  <details className="relative justify-self-start xl:justify-self-end">
+                    <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-btn border border-line bg-surface px-3 text-xs font-extrabold text-primary"><AdminIcon name="columns" size={15} />Columns</summary>
+                    <div className="absolute right-0 top-full z-20 mt-2 grid min-w-48 gap-2 rounded-card border border-line bg-surface p-3 shadow-[var(--shadow-pop)]">
+                      {columnOptions.map((column) => <label key={column.value} className="flex items-center gap-2 text-xs font-bold text-ink"><input type="checkbox" name="columns" value={column.value} defaultChecked={visibleColumns.has(column.value)} className="h-4 w-4 accent-primary" />{column.label}</label>)}
+                      <button type="submit" className="mt-1 rounded-btn bg-primary px-3 py-2 text-xs font-extrabold text-primary-fg">Apply</button>
+                    </div>
+                  </details>
+                  <button type="submit" className="min-h-11 rounded-btn bg-primary px-4 text-xs font-extrabold text-primary-fg transition hover:bg-primary-hover">Apply</button>
                 </form>
-              )}
-            </section>
+              </section>
 
-            <section aria-labelledby="on-hand-heading" className="min-w-0 rounded-card border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-ink-muted">Derived balance</p>
-                  <h2 id="on-hand-heading" className="mt-1 text-xl font-extrabold text-ink">Stock on hand</h2>
+              <nav aria-label="Inventory categories" className="admin-panel mt-3 overflow-x-auto p-2">
+                <div className="flex min-w-max gap-1">
+                  {categoryTabs.map((tab) => (
+                    <Link key={tab.id} href={buildInventoryHref({ ...baseHref, category: tab.id, page: 1 })} className={`flex min-w-[104px] items-center gap-2 rounded-btn border px-3 py-2.5 transition ${category === tab.id ? "border-primary/35 bg-primary-fg/20 text-primary" : "border-transparent text-ink-muted hover:border-line hover:bg-surface-raised"}`}>
+                      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-btn bg-secondary text-sm text-primary" aria-hidden="true">{tab.icon}</span>
+                      <span className="min-w-0"><strong className="block truncate text-[11px] font-extrabold">{tab.label}</strong><small className="block text-[10px] font-semibold text-ink-muted">{tab.count} items</small></span>
+                    </Link>
+                  ))}
                 </div>
-                <span className="rounded-pill bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary">Ledger total</span>
-              </div>
-              {inventoryRows.length === 0 ? (
-                <div className="mt-5 rounded-btn border border-dashed border-line-strong bg-surface-raised px-4 py-8 text-center">
-                  <p className="text-sm font-extrabold text-ink">No inventory rows yet</p>
-                  <p className="mt-1 text-xs text-ink-muted">Tracked products will appear here branch by branch.</p>
-                </div>
-              ) : (
-                <div className="mt-4 overflow-x-auto">
-                  <table className="w-full min-w-[640px] border-collapse text-left">
-                    <thead>
-                      <tr className="border-b border-line text-[10px] font-extrabold uppercase tracking-[0.14em] text-ink-muted">
-                        <th className="px-2 py-3">Product</th>
-                        <th className="px-2 py-3">Branch</th>
-                        <th className="px-2 py-3 text-right">On hand</th>
-                        <th className="px-2 py-3 text-right">State</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {inventoryRows.map((row) => (
-                        <tr key={`${row.branch.id}:${row.product.id}`} className="border-b border-line/70 last:border-0">
-                          <td className="px-2 py-3"><strong className="block text-sm font-extrabold text-ink">{row.product.name}</strong><span className="text-xs text-ink-muted">{row.product.unit}</span></td>
-                          <td className="px-2 py-3 text-sm font-semibold text-ink-muted">{row.branch.name}</td>
-                          <td className="tnums px-2 py-3 text-right text-sm font-extrabold text-ink">{formatStockQuantity(row.onHand)} <span className="text-xs font-semibold text-ink-muted">{row.product.unit}</span></td>
-                          <td className="px-2 py-3 text-right"><span className={`inline-flex rounded-pill px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${row.status === "out" ? "bg-danger-soft text-danger" : row.status === "low" ? "bg-warning/15 text-warning" : "bg-success/10 text-success"}`}>{row.status === "out" ? "Out" : row.status === "low" ? "Low" : "Healthy"}</span></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-          </div>
+              </nav>
 
-          <section aria-labelledby="ledger-heading" className="mt-4 min-w-0 rounded-card border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-ink-muted">Audit trail</p>
-                <h2 id="ledger-heading" className="mt-1 text-xl font-extrabold text-ink">Recent movements</h2>
-              </div>
-              <span className="rounded-pill border border-line bg-surface-raised px-3 py-1.5 text-xs font-bold text-ink-muted">Newest first</span>
+              <section id="inventory-table" aria-labelledby="inventory-table-heading" className="admin-panel mt-3 overflow-hidden">
+                <div className="flex flex-wrap items-end justify-between gap-3 border-b border-line px-4 py-4">
+                  <div><p className="admin-panel__eyebrow">Inventory directory</p><h2 id="inventory-table-heading" className="admin-panel__title">All inventory items</h2><p className="admin-panel__subtitle">{filteredRows.length} matching item{filteredRows.length === 1 ? "" : "s"} across your visible branches.</p></div>
+                  <span className="rounded-pill bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary">{canWrite ? "Admin editing enabled" : "Read only"}</span>
+                </div>
+                {pageRows.length === 0 ? (
+                  <EmptyState title="No inventory items match these filters" detail="Try a wider search, choose another category, or add a tracked product from the catalog." href="/admin/catalog#new-product-heading" action="Add item" />
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="admin-list-table min-w-[1180px]">
+                      <thead><tr><th>Item name</th>{visibleColumns.has("sku") && <th>SKU / barcode</th>}{visibleColumns.has("category") && <th>Category</th>}{visibleColumns.has("unit") && <th>Unit</th>}{visibleColumns.has("stock") && <th>Stock on hand</th>}{visibleColumns.has("status") && <th>Status</th>}{visibleColumns.has("cost") && <th>Cost price</th>}{visibleColumns.has("selling") && <th>Selling price</th>}{visibleColumns.has("supplier") && <th>Supplier</th>}<th>Actions</th></tr></thead>
+                      <tbody>
+                        {pageRows.map((row) => (
+                          <tr key={`${row.branch.id}:${row.product.id}`}>
+                            <td><div className="flex min-w-[220px] items-center gap-2"><span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-md bg-primary-soft text-primary"><Image src={productImage(row.product)} alt="" width={36} height={36} className="h-full w-full object-cover" /></span><span className="min-w-0"><strong className="block truncate text-[11px] font-extrabold">{row.product.name}</strong><small className="mt-1 block text-[10px] text-ink-muted">{row.branch.name}</small></span></div></td>
+                            {visibleColumns.has("sku") && <td className="whitespace-nowrap"><strong className="block text-[10px] font-bold">{row.product.sku || "SKU not set"}</strong><small className="mt-1 block text-[10px] text-ink-muted">{row.product.barcode || "Barcode not set"}</small></td>}
+                            {visibleColumns.has("category") && <td className="whitespace-nowrap text-[10px] font-bold text-accent">{row.categoryName}</td>}
+                            {visibleColumns.has("unit") && <td className="whitespace-nowrap text-[10px] font-semibold text-ink-muted">{row.product.unit}</td>}
+                            {visibleColumns.has("stock") && <td className="whitespace-nowrap"><strong className="tnums block text-[11px] font-extrabold">{formatStockQuantity(row.onHand)} {row.product.unit}</strong><small className="mt-1 block text-[10px] text-ink-muted">min: {formatStockQuantity(row.minStock)} {row.product.unit}</small></td>}
+                            {visibleColumns.has("status") && <td><span className={`inline-flex whitespace-nowrap rounded-pill px-2.5 py-1 text-[10px] font-extrabold ${statusClass(row.status)}`}>{statusLabel(row.status)}</span></td>}
+                            {visibleColumns.has("cost") && <td className="tnums whitespace-nowrap text-[10px] font-semibold">{row.product.cost_price == null ? "—" : formatPeso(Number(row.product.cost_price))}</td>}
+                            {visibleColumns.has("selling") && <td className="tnums whitespace-nowrap text-[10px] font-semibold">{formatPeso(Number(row.product.price))}</td>}
+                            {visibleColumns.has("supplier") && <td className="max-w-[130px] truncate text-[10px] font-semibold" title={row.supplierName}>{row.supplierName}</td>}
+                            <td><div className="flex items-center justify-end gap-1"><Link href={`/admin/catalog#product-${row.product.id}`} aria-label={`Edit ${row.product.name}`} className="grid h-8 w-8 place-items-center rounded-btn border border-line bg-surface text-primary transition hover:bg-primary-soft"><AdminIcon name="edit" size={14} /></Link><details className="relative"><summary className="grid h-8 w-8 cursor-pointer list-none place-items-center rounded-btn border border-line bg-surface text-primary transition hover:bg-primary-soft" aria-label={`More actions for ${row.product.name}`}><AdminIcon name="more" size={15} /></summary><div className="absolute right-0 top-full z-20 mt-1 grid min-w-44 gap-1 rounded-card border border-line bg-surface p-2 shadow-[var(--shadow-pop)]"><Link href={`/admin/inventory?product=${row.product.id}&movement=receive#stock-movement`} className="rounded-btn px-3 py-2 text-xs font-bold text-primary hover:bg-primary-soft">Record stock movement</Link><Link href={`/admin/catalog#product-${row.product.id}`} className="rounded-btn px-3 py-2 text-xs font-bold text-primary hover:bg-primary-soft">Edit catalog item</Link></div></details></div></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-4"><span className="text-[10px] font-semibold text-ink-muted">Showing {firstRow} to {lastRow} of {filteredRows.length} items</span><div className="flex items-center gap-1">{page > 1 ? <Link href={buildInventoryHref({ ...baseHref, page: page - 1 })} className="grid h-8 w-8 place-items-center rounded-btn border border-line text-primary hover:bg-primary-soft" aria-label="Previous page">‹</Link> : <span className="grid h-8 w-8 place-items-center rounded-btn border border-line text-ink-subtle" aria-hidden="true">‹</span>}{Array.from({ length: Math.min(totalPages, 5) }, (_, index) => index + 1).map((pageNumber) => <Link key={pageNumber} href={buildInventoryHref({ ...baseHref, page: pageNumber })} className={`grid h-8 min-w-8 place-items-center rounded-btn px-2 text-[10px] font-extrabold ${pageNumber === page ? "bg-primary text-primary-fg" : "border border-line bg-surface text-primary hover:bg-primary-soft"}`}>{pageNumber}</Link>)}{page < totalPages ? <Link href={buildInventoryHref({ ...baseHref, page: page + 1 })} className="grid h-8 w-8 place-items-center rounded-btn border border-line text-primary hover:bg-primary-soft" aria-label="Next page">›</Link> : <span className="grid h-8 w-8 place-items-center rounded-btn border border-line text-ink-subtle" aria-hidden="true">›</span>}</div><form action="/admin/inventory" method="get" className="flex items-center gap-2"><input type="hidden" name="q" value={searchQuery} /><input type="hidden" name="category" value={category} /><input type="hidden" name="status" value={status} /><input type="hidden" name="supplier" value={supplier} /><input type="hidden" name="columns" value={[...visibleColumns].join(",")} /><label htmlFor="inventory-page-size" className="text-[10px] font-semibold text-ink-muted">Rows per page:</label><select id="inventory-page-size" name="pageSize" defaultValue={String(pageSize)} className="inventory-input min-h-8 w-auto py-1 text-[10px]"><option value="10">10</option><option value="25">25</option><option value="50">50</option></select><button type="submit" className="rounded-btn border border-line bg-surface px-2 py-1.5 text-[10px] font-extrabold text-primary hover:bg-primary-soft">Apply</button></form></div>
+              </section>
+
+              <StockMovementForm branches={branches} products={formProducts} defaultBranch={defaultBranch} defaultProductId={defaultProduct?.id ?? ""} defaultMovement={defaultMovement} canWrite={canWrite} open={Boolean(readParam(params.movement) || selectedProductId || readParam(params.error))} />
             </div>
-            {movements.length === 0 ? (
-              <div className="mt-5 rounded-btn border border-dashed border-line-strong bg-surface-raised px-4 py-7 text-center">
-                <p className="text-sm font-extrabold text-ink">The ledger is ready</p>
-                <p className="mt-1 text-xs text-ink-muted">The first stock-in or POS sale will appear here.</p>
-              </div>
-            ) : (
-              <div className="mt-4 overflow-x-auto">
-                <table className="w-full min-w-[760px] border-collapse text-left">
-                  <thead>
-                    <tr className="border-b border-line text-[10px] font-extrabold uppercase tracking-[0.14em] text-ink-muted">
-                      <th className="px-2 py-3">When</th>
-                      <th className="px-2 py-3">Product</th>
-                      <th className="px-2 py-3">Branch</th>
-                      <th className="px-2 py-3">Movement</th>
-                      <th className="px-2 py-3 text-right">Delta</th>
-                      <th className="px-2 py-3">Reason</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {movements.slice(0, 30).map((movement) => {
-                      const product = productById.get(movement.product_id);
-                      const delta = stockMovementDelta(movement.type, Number(movement.qty));
-                      return (
-                        <tr key={movement.id} className="border-b border-line/70 last:border-0">
-                          <td className="px-2 py-3 text-xs font-semibold text-ink-muted">{formatDateTime(movement.created_at)}</td>
-                          <td className="px-2 py-3"><strong className="block text-sm font-extrabold text-ink">{product?.name ?? "Unknown product"}</strong><span className="text-xs text-ink-muted">{movement.unit_cost == null ? "No unit cost" : `${formatPeso(Number(movement.unit_cost))} / unit`}</span></td>
-                          <td className="px-2 py-3 text-sm font-semibold text-ink-muted">{branchById.get(movement.store_id)?.name ?? "Unknown branch"}</td>
-                          <td className="px-2 py-3"><span className={`inline-flex rounded-pill px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${movementClass(movement.type)}`}>{movementLabel(movement.type)}</span></td>
-                          <td className={`tnums px-2 py-3 text-right text-sm font-extrabold ${delta >= 0 ? "text-success" : "text-danger"}`}>{delta >= 0 ? "+" : "−"}{formatStockQuantity(Math.abs(delta))} {movement.unit}</td>
-                          <td className="max-w-[220px] truncate px-2 py-3 text-sm font-semibold text-ink-muted" title={movement.reason ?? "—"}>{movement.reason ?? "—"}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
+
+            <aside className="grid content-start gap-3">
+              <section className="admin-panel p-4"><div className="flex items-start gap-3"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-success/10 text-success"><AdminIcon name="check" size={16} /></span><div><h2 className="text-sm font-extrabold text-ink">Inventory is connected to POS</h2><p className="mt-2 text-[10px] leading-5 text-ink-muted">Tracked items deduct automatically when completed POS orders are recorded.</p></div></div><div className="mt-4 flex items-center justify-between gap-2 border-t border-line pt-3 text-[10px] font-semibold text-ink-muted"><span>Last movement</span><span className="text-right">{movements[0] ? formatDateTime(movements[0].created_at) : "No movement yet"}</span></div>{posSaleCount > 0 && <p className="mt-2 text-[10px] font-bold text-success">{posSaleCount} POS sale movement{posSaleCount === 1 ? "" : "s"} recorded.</p>}</section>
+              <section id="inventory-help" className="admin-panel p-4"><h2 className="text-sm font-extrabold text-ink">Did you know?</h2><ul className="mt-4 grid gap-3 text-[10px] leading-4 text-ink-muted"><li className="flex gap-2"><AdminIcon name="check" size={15} /><span>Add items manually or import in bulk from the catalog.</span></li><li className="flex gap-2"><AdminIcon name="check" size={15} /><span>Set a minimum stock level for every tracked item.</span></li><li className="flex gap-2"><AdminIcon name="check" size={15} /><span>Track stock in, out, waste, and adjustments.</span></li><li className="flex gap-2"><AdminIcon name="check" size={15} /><span>Use the reports page to review inventory usage.</span></li></ul></section>
+              <section className="admin-panel p-4"><div className="flex items-center justify-between gap-2"><h2 className="text-sm font-extrabold text-ink">Recent stock movements</h2><Link href="#stock-movement" className="text-[10px] font-extrabold text-primary hover:underline">View all</Link></div>{recentMovements.length === 0 ? <p className="mt-4 rounded-btn border border-dashed border-line-strong px-3 py-5 text-center text-[10px] text-ink-muted">No stock movements yet.</p> : <div className="mt-3 divide-y divide-line/70">{recentMovements.map((movement) => { const product = productById.get(movement.product_id); const delta = stockMovementDelta(movement.type, Number(movement.qty)); return <div key={movement.id} className="flex items-start gap-2 py-3 first:pt-0"><span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-extrabold ${movementClass(movement.type)}`} aria-hidden="true">{delta >= 0 ? "↓" : "↑"}</span><span className="min-w-0 flex-1"><strong className="block truncate text-[10px] font-extrabold text-ink">{movementLabel(movement.type)}</strong><small className="mt-1 block truncate text-[10px] text-ink-muted">{product?.name ?? "Unknown product"}</small><small className="block text-[9px] text-ink-muted">{formatDateTime(movement.created_at)}</small></span><strong className={`tnums whitespace-nowrap text-[10px] font-extrabold ${delta >= 0 ? "text-success" : "text-danger"}`}>{delta >= 0 ? "+" : "−"}{formatStockQuantity(Math.abs(delta))} {movement.unit}</strong></div>; })}</div>}<Link href="/admin/reports" className="mt-3 flex min-h-9 items-center justify-center gap-2 rounded-btn border border-line-strong px-3 text-[10px] font-extrabold text-primary transition hover:bg-primary-soft"><AdminIcon name="chart" size={14} />View inventory reports</Link></section>
+            </aside>
+          </div>
         </div>
       </div>
     </main>
   );
 }
 
-function InventoryMetric({ label, value, detail, tone }: { label: string; value: string; detail: string; tone: string }) {
-  return (
-    <article className="rounded-card border border-line bg-surface p-4 shadow-[var(--shadow-card)] transition-transform duration-150 hover:-translate-y-0.5">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-xs font-extrabold uppercase tracking-[0.13em] text-ink-muted">{label}</p>
-        <span className={`grid h-9 w-9 place-items-center rounded-btn text-sm font-extrabold ${tone}`} aria-hidden="true">▦</span>
-      </div>
-      <p className="tnums mt-5 text-2xl font-extrabold tracking-[-0.04em] text-ink">{value}</p>
-      <p className="mt-1 text-xs font-semibold text-ink-muted">{detail}</p>
-    </article>
-  );
+function InventoryMetric({ label, value, detail, tone, icon }: { label: string; value: string; detail: string; tone: string; icon: AdminIconName }) {
+  return <article className="admin-kpi-card min-h-[116px]"><div className="admin-kpi-card__inner"><div className="admin-kpi-card__top"><span className="admin-kpi-card__label">{label}</span><span className={`admin-kpi-card__icon ${tone}`}><AdminIcon name={icon} size={17} /></span></div><p className="admin-kpi-card__value tnums">{value}</p><p className="admin-kpi-card__trend">{detail}</p></div></article>;
 }
 
-function InventoryField({ label, htmlFor, children }: { label: string; htmlFor: string; children: React.ReactNode }) {
-  return (
-    <label htmlFor={htmlFor} className="block">
-      <span className="mb-1.5 block text-xs font-extrabold uppercase tracking-[0.12em] text-ink-muted">{label}</span>
-      {children}
-    </label>
-  );
+function StockMovementForm({ branches, products, defaultBranch, defaultProductId, defaultMovement, canWrite, open }: { branches: BranchRecord[]; products: ProductRecord[]; defaultBranch: string; defaultProductId: string; defaultMovement: Exclude<StockMovementType, "sale">; canWrite: boolean; open: boolean }) {
+  return <details id="stock-movement" open={open} className="admin-panel mt-4 p-5"><summary className="flex cursor-pointer list-none items-start justify-between gap-3"><span><span className="admin-panel__eyebrow">Stock control</span><strong className="mt-1 block text-lg font-extrabold text-ink">Record a stock movement</strong><small className="mt-1 block text-xs text-ink-muted">Use a signed ledger action. POS sales are recorded automatically.</small></span><span className="rounded-pill bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary">{canWrite ? "Admin only" : "Read only"}</span></summary>{products.length === 0 ? <div className="mt-5 rounded-btn border border-dashed border-line-strong bg-surface-raised px-4 py-6 text-center"><p className="text-sm font-extrabold text-ink">No tracked products yet</p><p className="mt-1 text-xs text-ink-muted">Enable Track stock on a product before recording inventory.</p><Link href="/admin/catalog#new-product-heading" className="mt-4 inline-flex rounded-btn bg-primary px-4 py-2 text-xs font-extrabold text-primary-fg">Add item</Link></div> : <form action={recordStockMovement} className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4"><InventoryField label="Branch" htmlFor="inventory-store"><select id="inventory-store" name="store_id" defaultValue={defaultBranch} required disabled={!canWrite} className="inventory-input text-xs">{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.is_active ? "" : " · inactive"}</option>)}</select></InventoryField><InventoryField label="Item" htmlFor="inventory-product"><select id="inventory-product" name="product_id" defaultValue={defaultProductId} required disabled={!canWrite} className="inventory-input text-xs">{products.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.unit}</option>)}</select></InventoryField><InventoryField label="Movement" htmlFor="inventory-type"><select id="inventory-type" name="type" defaultValue={defaultMovement} required disabled={!canWrite} className="inventory-input text-xs">{movementOptions.map((option) => <option key={option.value} value={option.value}>{option.label} · {option.detail}</option>)}</select></InventoryField><InventoryField label="Quantity" htmlFor="inventory-qty"><input id="inventory-qty" name="qty" type="number" inputMode="decimal" step="0.001" placeholder="e.g. 10 or -2" required disabled={!canWrite} className="inventory-input tnums text-xs" /></InventoryField><InventoryField label="Unit cost · ₱" htmlFor="inventory-cost"><input id="inventory-cost" name="unit_cost" type="number" inputMode="decimal" min="0" step="0.01" placeholder="Optional" disabled={!canWrite} className="inventory-input tnums text-xs" /></InventoryField><InventoryField label="Reason / reference" htmlFor="inventory-reason" className="md:col-span-2"><input id="inventory-reason" name="reason" placeholder="Required for waste and adjustments" disabled={!canWrite} className="inventory-input text-xs" /></InventoryField><button type="submit" disabled={!canWrite} className="min-h-11 rounded-btn bg-primary px-4 text-xs font-extrabold text-primary-fg transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50 md:self-end">Record movement</button></form>}</details>;
+}
+
+function InventoryField({ label, htmlFor, children, className = "" }: { label: string; htmlFor: string; children: ReactNode; className?: string }) {
+  return <label htmlFor={htmlFor} className={`block ${className}`}><span className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted">{label}</span>{children}</label>;
+}
+
+function EmptyState({ title, detail, href, action }: { title: string; detail: string; href: string; action: string }) {
+  return <div className="grid place-items-center px-4 py-14 text-center"><span className="grid h-12 w-12 place-items-center rounded-full bg-primary-soft text-primary"><AdminIcon name="box" size={23} /></span><p className="mt-4 text-sm font-extrabold text-ink">{title}</p><p className="mt-1 max-w-sm text-xs leading-5 text-ink-muted">{detail}</p><Link href={href} className="mt-4 rounded-btn bg-primary px-4 py-2 text-xs font-extrabold text-primary-fg">{action}</Link></div>;
 }
 
 function InventoryProfileMissing() {
-  return (
-    <main className="grid min-h-screen place-items-center bg-bg p-6 text-center text-ink">
-      <div className="max-w-md rounded-card border border-line bg-surface p-8 shadow-[var(--shadow-pop)]">
-        <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Backoffice setup</p>
-        <h1 className="mt-2 text-2xl font-extrabold">Your admin profile is not ready.</h1>
-        <p className="mt-3 text-sm leading-6 text-ink-muted">Ask an organization admin to finish the profile and branch assignment, then sign in again.</p>
-        <div className="mt-6 flex justify-center gap-2">
-          <Link href="/admin" className="rounded-btn bg-secondary px-4 py-3 text-sm font-extrabold uppercase text-primary">Back to dashboard</Link>
-          <SignOutButton />
-        </div>
-      </div>
-    </main>
-  );
+  return <main className="grid min-h-screen place-items-center bg-bg p-6 text-center text-ink"><div className="max-w-md rounded-card border border-line bg-surface p-8 shadow-[var(--shadow-pop)]"><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Backoffice setup</p><h1 className="mt-2 text-2xl font-extrabold">Your admin profile is not ready.</h1><p className="mt-3 text-sm leading-6 text-ink-muted">Ask an organization admin to finish the profile and branch assignment, then sign in again.</p><div className="mt-6 flex justify-center gap-2"><Link href="/admin" className="rounded-btn bg-secondary px-4 py-3 text-sm font-extrabold uppercase text-primary">Back to dashboard</Link><SignOutButton /></div></div></main>;
 }

@@ -4,7 +4,7 @@ import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
-import { createCategory, createProduct, updateCategory, updateProduct } from "./actions";
+import { createCategory, createProduct, importProducts, updateCategory, updateProduct } from "./actions";
 
 type AdminRole = "admin" | "manager" | "cashier";
 type PricingMode = "fixed" | "per_kg";
@@ -18,6 +18,12 @@ type ProfileRecord = {
 };
 
 type BranchRecord = {
+  id: string;
+  name: string;
+  is_active: boolean;
+};
+
+type SupplierRecord = {
   id: string;
   name: string;
   is_active: boolean;
@@ -37,23 +43,31 @@ type ProductRecord = {
   store_id: string;
   category_id: string | null;
   name: string;
+  sku: string | null;
+  barcode: string | null;
   pricing_mode: PricingMode;
   price: number;
+  cost_price: number | null;
+  min_stock: number;
   unit: string;
+  supplier_id: string | null;
   track_stock: boolean;
   image_url: string | null;
   is_active: boolean;
   sort_order: number;
 };
 
+type LegacyProductRecord = Omit<ProductRecord, "sku" | "barcode" | "cost_price" | "min_stock" | "supplier_id">;
+
 const DEFAULT_STORE_NAME = "Mario's Lechon House";
 
 export default async function CatalogPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; saved?: string }>;
+  searchParams: Promise<{ error?: string; saved?: string; mode?: string; legacy?: string }>;
 }) {
   const params = await searchParams;
+  const showImport = params.mode === "import";
   const supabase = await createClient();
   const user = await getAuthenticatedUser(supabase);
 
@@ -69,7 +83,7 @@ export default async function CatalogPage({
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile) return <CatalogProfileMissing />;
 
-  const [branchesResult, categoriesResult, productsResult] = await Promise.all([
+  const [branchesResult, categoriesResult, productsResult, suppliersResult] = await Promise.all([
     supabase
       .from("stores")
       .select("id, name, is_active")
@@ -83,19 +97,39 @@ export default async function CatalogPage({
       .order("name"),
     supabase
       .from("products")
-      .select("id, store_id, category_id, name, pricing_mode, price, unit, track_stock, image_url, is_active, sort_order")
+      .select("id, store_id, category_id, name, sku, barcode, pricing_mode, price, cost_price, min_stock, unit, supplier_id, track_stock, image_url, is_active, sort_order")
       .eq("org_id", profile.org_id)
       .order("sort_order")
+      .order("name")
+      .limit(1000),
+    supabase
+      .from("suppliers")
+      .select("id, name, is_active")
+      .eq("org_id", profile.org_id)
       .order("name")
       .limit(1000),
   ]);
 
   const branches = (branchesResult.data ?? []) as BranchRecord[];
   const categories = (categoriesResult.data ?? []) as CategoryRecord[];
-  const products = (productsResult.data ?? []) as ProductRecord[];
+  let products = (productsResult.data ?? []) as ProductRecord[];
+  let productsQueryWarning = Boolean(productsResult.error);
+  if (productsResult.error) {
+    const fallbackProductsResult = await supabase
+      .from("products")
+      .select("id, store_id, category_id, name, pricing_mode, price, unit, track_stock, image_url, is_active, sort_order")
+      .eq("org_id", profile.org_id)
+      .order("sort_order")
+      .order("name")
+      .limit(1000);
+    const fallbackProducts = (fallbackProductsResult.data ?? []) as LegacyProductRecord[];
+    products = fallbackProducts.map((product) => ({ ...product, sku: null, barcode: null, cost_price: null, min_stock: 2, supplier_id: null }));
+    productsQueryWarning = true;
+  }
+  const suppliers = (suppliersResult.data ?? []) as SupplierRecord[];
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
   const categoryById = new Map(categories.map((category) => [category.id, category]));
-  const queryWarning = Boolean(branchesResult.error || categoriesResult.error || productsResult.error);
+  const queryWarning = Boolean(branchesResult.error || categoriesResult.error || productsQueryWarning || suppliersResult.error);
   const canWrite = profile.role === "admin";
   const defaultBranch = profile.store_id ?? branches[0]?.id ?? "";
   const currentBranchName = profile.store_id
@@ -143,11 +177,11 @@ export default async function CatalogPage({
           )}
           {params.saved && (
             <div role="status" className="mt-5 rounded-card border border-success/20 bg-success/10 px-4 py-3 text-sm font-semibold text-success">
-              {params.saved === "category" ? "Category saved. Your POS category rail will use it on the next catalog refresh." : "Product saved. The POS will use the updated catalog on its next refresh."}
+              {params.legacy === "1" ? "Item saved. Apply the inventory catalog migrations to enable SKU, barcode, cost, minimum-stock, and supplier fields." : params.saved === "category" ? "Category saved. Your POS category rail will use it on the next catalog refresh." : params.saved === "imported" ? "Items imported. Inventory and POS now use the new catalog rows." : "Product saved. The POS will use the updated catalog on its next refresh."}
             </div>
           )}
           {queryWarning && (
-            <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink">Some catalog data could not refresh. The page is showing the data that was available.</div>
+            <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink">Some catalog fields are unavailable. Ensure <code className="font-bold">0009_admin_business_records.sql</code> is applied before <code className="font-bold">0010_inventory_catalog_fields.sql</code> in Supabase before using suppliers and advanced inventory fields.</div>
           )}
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -183,6 +217,12 @@ export default async function CatalogPage({
                   <CatalogField label="Product name" htmlFor="new-product-name" className="sm:col-span-2">
                     <input id="new-product-name" name="name" placeholder="e.g. Whole Lechon (Medium)" required disabled={!canWrite} className="inventory-input" />
                   </CatalogField>
+                  <CatalogField label="SKU" htmlFor="new-product-sku">
+                    <input id="new-product-sku" name="sku" placeholder="e.g. LECHON-MED-001" disabled={!canWrite} className="inventory-input" />
+                  </CatalogField>
+                  <CatalogField label="Barcode" htmlFor="new-product-barcode">
+                    <input id="new-product-barcode" name="barcode" placeholder="Optional barcode" disabled={!canWrite} className="inventory-input" />
+                  </CatalogField>
                   <CatalogField label="Pricing" htmlFor="new-product-pricing">
                     <select id="new-product-pricing" name="pricing_mode" defaultValue="fixed" required disabled={!canWrite} className="inventory-input">
                       <option value="fixed">Fixed price</option>
@@ -192,8 +232,20 @@ export default async function CatalogPage({
                   <CatalogField label="Price Â· â‚±" htmlFor="new-product-price">
                     <input id="new-product-price" name="price" type="number" inputMode="decimal" min="0" step="0.01" placeholder="6500.00" required disabled={!canWrite} className="inventory-input tnums" />
                   </CatalogField>
+                  <CatalogField label="Cost price · ₱" htmlFor="new-product-cost">
+                    <input id="new-product-cost" name="cost_price" type="number" inputMode="decimal" min="0" step="0.01" placeholder="Optional" disabled={!canWrite} className="inventory-input tnums" />
+                  </CatalogField>
                   <CatalogField label="Unit" htmlFor="new-product-unit">
                     <input id="new-product-unit" name="unit" placeholder="pcs, tray, cup, kg" required disabled={!canWrite} className="inventory-input" />
+                  </CatalogField>
+                  <CatalogField label="Minimum stock" htmlFor="new-product-min-stock">
+                    <input id="new-product-min-stock" name="min_stock" type="number" inputMode="decimal" min="0" step="0.001" defaultValue="2" disabled={!canWrite} className="inventory-input tnums" />
+                  </CatalogField>
+                  <CatalogField label="Supplier" htmlFor="new-product-supplier">
+                    <select id="new-product-supplier" name="supplier_id" defaultValue="" disabled={!canWrite} className="inventory-input">
+                      <option value="">Unassigned</option>
+                      {suppliers.filter((supplier) => supplier.is_active).map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+                    </select>
                   </CatalogField>
                   <CatalogField label="Sort order" htmlFor="new-product-sort">
                     <input id="new-product-sort" name="sort_order" type="number" min="0" step="1" defaultValue="0" disabled={!canWrite} className="inventory-input tnums" />
@@ -254,6 +306,15 @@ export default async function CatalogPage({
             </section>
           </div>
 
+          <details id="import-items" open={showImport} className="admin-panel mt-4 p-5">
+            <summary className="flex cursor-pointer list-none items-start justify-between gap-3"><span><span className="admin-panel__eyebrow">Bulk catalog action</span><strong className="mt-1 block text-lg font-extrabold text-ink">Import items</strong><small className="mt-1 block text-xs text-ink-muted">Paste a CSV with name, price, and unit. Optional columns include sku, barcode, category, supplier, cost_price, min_stock, and image_url.</small></span><span className="rounded-pill bg-secondary px-3 py-1.5 text-xs font-extrabold text-primary">Admin only</span></summary>
+            <form action={importProducts} className="mt-5 grid gap-4 md:grid-cols-[220px_minmax(0,1fr)_auto] md:items-end">
+              <CatalogField label="Default branch" htmlFor="import-store"><select id="import-store" name="store_id" defaultValue={defaultBranch} required disabled={!canWrite || branches.length === 0} className="inventory-input"><option value="">Choose branch</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></CatalogField>
+              <CatalogField label="CSV data" htmlFor="import-csv"><textarea id="import-csv" name="csv" rows={4} disabled={!canWrite} placeholder="name,price,unit,sku,category,supplier,cost_price,min_stock\nWhole Lechon (Medium),6500,kg,LECHON-MED-001,Lechon,Rico's Farm,5400,5" className="inventory-input min-h-24 resize-y font-mono text-[11px]" /></CatalogField>
+              <button type="submit" disabled={!canWrite || branches.length === 0} className="min-h-11 rounded-btn bg-primary px-4 text-xs font-extrabold text-primary-fg transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50">Import items</button>
+            </form>
+          </details>
+
           <section aria-labelledby="products-heading" className="mt-4 rounded-card border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -285,6 +346,7 @@ export default async function CatalogPage({
                         branches={branches}
                         categories={categories}
                         categoryById={categoryById}
+                        suppliers={suppliers}
                         canWrite={canWrite}
                       />
                     ))}
@@ -353,12 +415,14 @@ function ProductEditor({
   branches,
   categories,
   categoryById,
+  suppliers,
   canWrite,
 }: {
   product: ProductRecord;
   branches: BranchRecord[];
   categories: CategoryRecord[];
   categoryById: Map<string, CategoryRecord>;
+  suppliers: SupplierRecord[];
   canWrite: boolean;
 }) {
   const formId = `product-form-${product.id}`;
@@ -366,12 +430,14 @@ function ProductEditor({
   const categoryName = product.category_id ? categoryById.get(product.category_id)?.name ?? "Unknown category" : "Uncategorized";
 
   return (
-    <tr className="border-b border-line/70 align-top last:border-0">
+    <tr id={`product-${product.id}`} className="border-b border-line/70 align-top last:border-0">
       <td className="px-2 py-3">
         <form id={formId} action={updateProduct}>
           <input type="hidden" name="product_id" value={product.id} />
         </form>
         <input name="name" form={formId} aria-label={`Name for ${product.name}`} defaultValue={product.name} disabled={!canWrite} className="inventory-input min-h-10 min-w-[190px] text-xs font-extrabold" />
+        <input name="sku" form={formId} aria-label={`SKU for ${product.name}`} defaultValue={product.sku ?? ""} placeholder="SKU" disabled={!canWrite} className="inventory-input mt-2 min-h-9 min-w-[190px] text-[11px]" />
+        <input name="barcode" form={formId} aria-label={`Barcode for ${product.name}`} defaultValue={product.barcode ?? ""} placeholder="Barcode" disabled={!canWrite} className="inventory-input mt-2 min-h-9 min-w-[190px] text-[11px]" />
         <input name="image_url" form={formId} aria-label={`Image path for ${product.name}`} defaultValue={product.image_url ?? ""} placeholder="/food/...png" disabled={!canWrite} className="inventory-input mt-2 min-h-9 min-w-[190px] text-[11px]" />
       </td>
       <td className="px-2 py-3">
@@ -399,10 +465,13 @@ function ProductEditor({
           <input name="unit" form={formId} aria-label={`Unit for ${product.name}`} defaultValue={product.unit} disabled={!canWrite} className="inventory-input min-h-9 w-28 text-xs" />
           <span className="text-[10px] font-bold text-ink-muted">{formatPeso(Number(product.price))}</span>
         </div>
+        <input name="cost_price" form={formId} aria-label={`Cost price for ${product.name}`} type="number" min="0" step="0.01" defaultValue={product.cost_price == null ? "" : (Number(product.cost_price) / 100).toFixed(2)} placeholder="Cost price" disabled={!canWrite} className="inventory-input mt-2 min-h-9 w-28 text-xs tnums" />
+        <input name="min_stock" form={formId} aria-label={`Minimum stock for ${product.name}`} type="number" min="0" step="0.001" defaultValue={Number(product.min_stock ?? 2)} disabled={!canWrite} className="inventory-input mt-2 min-h-9 w-28 text-xs tnums" />
         <input name="sort_order" form={formId} aria-label={`Sort order for ${product.name}`} type="number" min="0" step="1" defaultValue={product.sort_order} disabled={!canWrite} className="inventory-input mt-2 min-h-9 w-20 text-center text-xs tnums" />
       </td>
       <td className="px-2 py-3">
         <div className="space-y-2 text-xs font-bold text-ink-muted">
+          <select name="supplier_id" form={formId} aria-label={`Supplier for ${product.name}`} defaultValue={product.supplier_id ?? ""} disabled={!canWrite} className="inventory-input min-h-9 min-w-[150px] text-xs"><option value="">Unassigned supplier</option>{suppliers.filter((supplier) => supplier.is_active).map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select>
           <label className="flex items-center gap-2"><input type="checkbox" name="track_stock" form={formId} defaultChecked={product.track_stock} disabled={!canWrite} className="h-4 w-4 accent-primary" /> Track stock</label>
           <label className="flex items-center gap-2"><input type="checkbox" name="is_active" form={formId} defaultChecked={product.is_active} disabled={!canWrite} className="h-4 w-4 accent-primary" /> Show in POS</label>
         </div>
