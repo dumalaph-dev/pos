@@ -13,9 +13,11 @@ import { formatPeso, weightLineTotal } from "@/lib/money";
 import { formatStockQuantity, stockMovementDelta, stockStatus } from "@/lib/inventory";
 import { SignOutButton } from "@/components/SignOutButton";
 import PrinterSettingsModal from "@/components/pos/PrinterSettings";
+import OrderHistory from "@/components/pos/OrderHistory";
 import {
   buildOrderNo,
   enqueueOrder,
+  flushAuditOutbox,
   flushOutbox,
   getDeviceId,
   loadCachedCatalog,
@@ -244,6 +246,7 @@ export default function SellScreen() {
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
+  const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const collapsedNavRef = useRef<HTMLButtonElement>(null);
   const collapseNavRef = useRef<HTMLButtonElement>(null);
@@ -388,7 +391,8 @@ export default function SellScreen() {
   const flush = useCallback(async () => {
     if (!navigator.onLine) return;
     const synced = await flushOutbox(supabase);
-    if (synced > 0) {
+    const auditSynced = await flushAuditOutbox(supabase);
+    if (synced > 0 || auditSynced > 0) {
       // Network is back — refresh catalog + flip the pill back to Online.
       retryMs.current = 2000;
       void refreshCatalog();
@@ -680,66 +684,6 @@ export default function SellScreen() {
     [printerSettings],
   );
 
-  const reprintLast = async () => {
-    if (!profile) return;
-    try {
-      const { data: order, error: orderErr } = await supabase
-        .from("orders")
-        .select(
-          "id, order_no, cashier_id, profiles(full_name), subtotal, discount_type, discount_amount, discount_ref, vatable_sale, vat_amount, vat_exempt_sale, total, payment_method, payment_ref, amount_tendered, change_due, created_at_device",
-        )
-        .eq("store_id", profile.store_id)
-        .order("created_at_device", { ascending: false })
-        .limit(1)
-        .single();
-      if (orderErr || !order) {
-        setToast({ msg: "No orders to reprint yet." });
-        return;
-      }
-      const { data: items } = await supabase
-        .from("order_items")
-        .select("name_snapshot, qty, weight_kg, line_total")
-        .eq("order_id", order.id);
-      const receipt = buildReceipt({
-         storeName: profile.store_name ?? DEFAULT_STORE_NAME,
-        orderNo: order.order_no,
-        cashier: (order.profiles as { full_name?: string } | null)?.full_name ?? "",
-        createdAt: new Date(order.created_at_device),
-        items: (items ?? []).map((i) => ({
-          name: i.name_snapshot,
-          qty: Number(i.qty),
-          weightKg: i.weight_kg != null ? Number(i.weight_kg) : null,
-          lineTotal: Number(i.line_total),
-        })),
-        subtotal: order.subtotal,
-        discountAmount: order.discount_amount,
-        discountRef: order.discount_ref,
-        vatableSale: order.vatable_sale,
-        vatAmount: order.vat_amount,
-        vatExemptSale: order.vat_exempt_sale,
-        total: order.total,
-        paymentMethod: order.payment_method,
-        paymentRef: order.payment_ref,
-        amountTendered: order.amount_tendered,
-        changeDue: order.change_due,
-        paperWidth: printerSettings.paperWidth,
-      });
-      const printed = await doPrint(receipt, "reprint");
-      if (!printed) return;
-      await supabase.from("audit_logs").insert({
-        org_id: profile.org_id,
-        store_id: profile.store_id,
-        actor_id: profile.id,
-        action: "order.reprint",
-        entity: "orders",
-        entity_id: order.id,
-        after: { order_no: order.order_no },
-      });
-    } catch {
-      setToast({ msg: "Couldn't load the last order for reprint." });
-    }
-  };
-
   const savePrinter = async (s: PrinterSettings) => {
     savePrinterSettings(s);
     setPrinterSettings(s);
@@ -848,13 +792,21 @@ export default function SellScreen() {
               </div>
 
               <div className="pos-mode-tabs" role="tablist" aria-label="Main navigation">
-                <button type="button" role="tab" aria-selected="true" className="pos-mode-tab is-active">POS</button>
                 <button
                   type="button"
                   role="tab"
-                  aria-selected="false"
-                  className="pos-mode-tab"
-                  onClick={() => setToast({ msg: "Order history is available from More → Receipts." })}
+                  aria-selected={!orderHistoryOpen}
+                  className={"pos-mode-tab" + (!orderHistoryOpen ? " is-active" : "")}
+                  onClick={() => setOrderHistoryOpen(false)}
+                >
+                  POS
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={orderHistoryOpen}
+                  className={"pos-mode-tab" + (orderHistoryOpen ? " is-active" : "")}
+                  onClick={() => setOrderHistoryOpen(true)}
                 >
                   ORDERS
                 </button>
@@ -869,7 +821,7 @@ export default function SellScreen() {
                   <span className="pos-tool__icon-wrap"><Icon name="hold" size={24} />{parked.length > 0 && <b>{parked.length}</b>}</span>
                   <span>Hold</span>
                 </button>
-                <button type="button" className="pos-tool" onClick={() => void reprintLast()}>
+                <button type="button" className="pos-tool" onClick={() => setOrderHistoryOpen(true)}>
                   <Icon name="receipt" size={24} />
                   <span>Receipts</span>
                 </button>
@@ -1110,6 +1062,19 @@ export default function SellScreen() {
           </aside>
         </div>
 
+        {orderHistoryOpen && profile && (
+          <OrderHistory
+            profile={profile}
+            storeName={storeName}
+            offline={offline}
+            pendingCount={pending}
+            printerSettings={printerSettings}
+            onClose={() => setOrderHistoryOpen(false)}
+            onPrint={doPrint}
+            onToast={(msg) => setToast({ msg })}
+          />
+        )}
+
         {keypad && (
           <KeypadModal
             product={keypad.product}
@@ -1223,10 +1188,10 @@ export default function SellScreen() {
           </button>
         )}
         <button
-          onClick={() => void reprintLast()}
+          onClick={() => setOrderHistoryOpen(true)}
           className="rounded-btn bg-secondary px-3 py-1.5 text-sm font-semibold text-ink"
         >
-          Reprint
+          Orders / Receipts
         </button>
         <button
           onClick={() => setSettingsOpen(true)}

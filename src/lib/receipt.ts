@@ -30,6 +30,7 @@ export type ReceiptData = {
   amountTendered?: number | null;
   changeDue?: number | null;
   officialReceipt?: boolean; // false → "not an official receipt" line
+  isReprint?: boolean;
   paperWidth?: 58 | 80;
 };
 
@@ -127,6 +128,7 @@ export function buildReceipt(data: ReceiptData): Uint8Array {
   leftRight("Date", data.createdAt.toLocaleDateString("en-PH"));
   leftRight("Time", data.createdAt.toLocaleTimeString("en-PH"));
   leftRight("Cashier", data.cashier);
+  if (data.isReprint) line("*** REPRINT ***", { align: "center", bold: true });
   rule();
 
   for (const item of data.items) {

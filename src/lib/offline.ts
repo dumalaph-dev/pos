@@ -18,9 +18,21 @@ export type PendingOrder = {
   attempts: number;
 };
 
+export type PendingAuditLog = {
+  id?: number;
+  payload: Record<string, unknown>;
+  created_at: string;
+  attempts: number;
+};
+
 type PosDB = Dexie & {
   outbox: Table<PendingOrder, number>;
+  auditOutbox: Table<PendingAuditLog, number>;
   catalog: Table<{ key: string; json: string }, string>;
+};
+
+type OrderSyncClient = {
+  rpc: (fn: string, args: unknown) => PromiseLike<{ error: unknown; data?: unknown }>;
 };
 
 let _db: PosDB | null = null;
@@ -29,6 +41,11 @@ function getDb(): PosDB {
   const db = new Dexie("pos-db") as PosDB;
   db.version(1).stores({
     outbox: "++id, local_uuid, created_at",
+    catalog: "key",
+  });
+  db.version(2).stores({
+    outbox: "++id, local_uuid, created_at",
+    auditOutbox: "++id, created_at",
     catalog: "key",
   });
   _db = db;
@@ -87,6 +104,64 @@ export async function pendingCount(): Promise<number> {
   return getDb().outbox.count();
 }
 
+/** Read locally saved orders so the POS can show them before server sync. */
+export async function listPendingOrders(): Promise<PendingOrder[]> {
+  return getDb().outbox.orderBy("created_at").reverse().toArray();
+}
+
+/** Queue an audit event when the network is unavailable. */
+export async function enqueueAuditLog(payload: Record<string, unknown>): Promise<void> {
+  await getDb().auditOutbox.add({
+    payload,
+    created_at: new Date().toISOString(),
+    attempts: 0,
+  });
+}
+
+type AuditSyncClient = {
+  from: (table: "audit_logs") => {
+    insert: (values: Record<string, unknown>) => PromiseLike<{ error: unknown }>;
+  };
+};
+
+/** Replay locally queued audit events without blocking the sale or print path. */
+export async function flushAuditOutbox(client: AuditSyncClient): Promise<number> {
+  const db = getDb();
+  const pending = await db.auditOutbox.orderBy("created_at").toArray();
+  let synced = 0;
+  for (const item of pending) {
+    let error: unknown = null;
+    try {
+      const result = await client.from("audit_logs").insert(item.payload);
+      error = result.error ?? null;
+    } catch (cause) {
+      error = cause;
+    }
+    if (error) {
+      await db.auditOutbox.update(item.id!, { attempts: item.attempts + 1 });
+      continue;
+    }
+    await db.auditOutbox.delete(item.id!);
+    synced++;
+  }
+  return synced;
+}
+
+async function linkPendingAudits(localUuid: string, entityId: unknown): Promise<void> {
+  if (typeof entityId !== "string" || !entityId) return;
+  const db = getDb();
+  const queued = await db.auditOutbox.toArray();
+  for (const item of queued) {
+    const after = item.payload.after;
+    if (typeof after !== "object" || after === null) continue;
+    const auditAfter = after as Record<string, unknown>;
+    if (auditAfter.local_uuid !== localUuid || item.payload.entity_id) continue;
+    await db.auditOutbox.update(item.id!, {
+      payload: { ...item.payload, entity_id: entityId },
+    });
+  }
+}
+
 /** Subscribe to outbox size changes; returns an unsubscribe fn. */
 export function watchPending(cb: (n: number) => void): () => void {
   const subscription = liveQuery(() => getDb().outbox.count()).subscribe({
@@ -100,9 +175,7 @@ export function watchPending(cb: (n: number) => void): () => void {
  * Replay every queued order through `place_order`. The RPC is idempotent on
  * local_uuid, so replays are safe. Returns how many orders were confirmed.
  */
-export async function flushOutbox(client: {
-  rpc: (fn: string, args: unknown) => PromiseLike<{ error: unknown }>;
-}): Promise<number> {
+export async function flushOutbox(client: OrderSyncClient): Promise<number> {
   const db = getDb();
   const pending = await db.outbox.orderBy("created_at").toArray();
   let synced = 0;
@@ -114,6 +187,7 @@ export async function flushOutbox(client: {
         p_items: item.p_items,
       });
       error = res.error ?? null;
+      if (!error) await linkPendingAudits(item.local_uuid, res.data);
     } catch (e) {
       error = e; // network failure — keep queued, retry later
     }
