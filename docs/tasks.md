@@ -189,6 +189,7 @@
 - Added migration `0012_employee_id_login.sql`; linked hosted verification passed with migrations `0001` through `0012` matching, `profiles.password_change_required` present with default `false`, the active employee-code lookup index present, and current hosted counts of 1 employee and 0 forced-password profiles.
 - Server configuration required before provisioning: set the real hosted `SUPABASE_SERVICE_ROLE_KEY` and a server-only `EMPLOYEE_INITIAL_PASSWORD` of at least 8 characters. The temporary password is never shipped to the client. Protected browser login/provisioning remains pending until those runtime values are configured and the in-app browser is signed in.
 - Code verification passed: `npx tsc --noEmit`, `npm run lint`, and `npm run build`. The build exposes `/account/password`; only the existing middleware/OpenNext-on-Windows/punycode warnings remain.
+- Deployment follow-up: the first Sites publish was rejected by Cloudflare's 10 MiB Worker limit because Next traced an unused 4 MiB font-metrics file. Removed that trace-only artifact from the validated Sites staging step while retaining the UI's sans-serif fallback stack; the follow-up build is ready for republishing.
 
 ## Cross-cutting (do continuously, not a phase)
 - [ ] Audit-logging on every sensitive action as features land (don't retrofit).
