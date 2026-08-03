@@ -79,9 +79,27 @@ Fixture users: `admin-a|cashier-a1|cashier-a2@fixture.test` (Org Alpha) and `adm
 ## 7. Printing (P3)
 Browsers can't open raw TCP sockets, so LAN printing goes through a tiny local bridge:
 ```bash
-node scripts/printer-bridge.mjs   # run on any always-on device on the printer's network (port 8787)
+node scripts/printer-bridge.mjs   # run on an always-on device on the printer's network
 ```
 Then in the app: **🖨 → Network → printer IP + port 9100 → Bridge host → Test**. Receipts print automatically after each sale (58/80mm); failures show a non-blocking **Retry print** toast and never block the sale. Bluetooth (Web Bluetooth) and USB (WebUSB) transports are also implemented for Chrome/Android and Chrome/Edge respectively. Sale receipts include the VAT split (VAT-inclusive prices; SC/PWD sales VAT-exempt) and "THIS IS NOT AN OFFICIAL RECEIPT" until BIR registration.
+
+The bridge listens on port `8787` by default. If it is changed, start it with `BRIDGE_PORT=<port>` and enter the same bridge port in POS printer settings.
+
+### Printer validation command
+
+Run the repeatable local preflight from the repository root. It starts a local bridge when needed, sends an ESC/POS slip, forces an unreachable-printer failure, then retries after bringing the TCP sink back:
+
+```bash
+npm run printer:validate:mock
+```
+
+For the store printer, use its LAN address. The bridge must already be running when it is on another device; a loopback bridge is started automatically if needed:
+
+```bash
+node --experimental-strip-types scripts/validate-printer.mjs --printer-ip 192.168.1.50 --bridge-host 192.168.1.20 --paper-width 80
+```
+
+A real-printer pass means the bridge acknowledged the ESC/POS bytes at `ip:port`; observe the physical slip and confirm the header, `PRINTER-TEST`, VAT, total, and non-official-receipt notice. Use `--skip-retry` only when the bridge is remote and the local failure/retry check cannot be run there.
 
 ## 8. Build & deploy
 ```bash

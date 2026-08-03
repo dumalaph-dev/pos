@@ -667,11 +667,14 @@ export default function SellScreen() {
       try {
         const printer = await getPrinter(printerSettings);
         await printer.print(bytes);
+        setToast((current) => (current?.retry ? null : current));
+        return true;
       } catch (e) {
         setToast({
           msg: `Couldn't print ${label} — ${(e as Error).message ?? e}`,
           retry: true,
         });
+        return false;
       }
     },
     [printerSettings],
@@ -721,7 +724,8 @@ export default function SellScreen() {
         changeDue: order.change_due,
         paperWidth: printerSettings.paperWidth,
       });
-      await doPrint(receipt, "reprint");
+      const printed = await doPrint(receipt, "reprint");
+      if (!printed) return;
       await supabase.from("audit_logs").insert({
         org_id: profile.org_id,
         store_id: profile.store_id,
@@ -754,6 +758,7 @@ export default function SellScreen() {
             port: s.port,
             paper_width: s.paperWidth,
             bridge_host: s.bridgeHost,
+            bridge_port: s.bridgePort,
           },
         },
         { onConflict: "store_id,device_prefix" },

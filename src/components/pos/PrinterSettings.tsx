@@ -131,6 +131,17 @@ export default function PrinterSettingsModal({
                 className={input + " mt-1"}
               />
             </label>
+            <label className="mt-3 block text-sm font-medium text-ink">
+              Bridge port
+              <input
+                value={form.bridgePort}
+                onChange={(e) => set("bridgePort", Number(e.target.value) || 8787)}
+                inputMode="numeric"
+                min={1}
+                max={65535}
+                className={input + " mt-1"}
+              />
+            </label>
           </>
         )}
 
@@ -151,7 +162,7 @@ export default function PrinterSettingsModal({
 
         <p className="mt-3 text-xs text-ink-muted">
           {form.transport === "network" &&
-            "Run `node scripts/printer-bridge.mjs` on any device on the printer's network."}
+            "Run `node scripts/printer-bridge.mjs` on any device on the printer's network; the bridge port must match."}
           {form.transport === "bluetooth" &&
             "Uses Web Bluetooth — pair once per browser on Chrome/Android."}
           {form.transport === "usb" && "Uses WebUSB — Chrome/Edge only."}

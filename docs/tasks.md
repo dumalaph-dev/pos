@@ -12,7 +12,7 @@
 | **P0** | Foundation & infra | 🟡 In progress | 5 / 9 | Schema + auth must exist before any feature |
 | **P1** | POS core (online) | ⬜ Not started | 0 / 8 | — |
 | **P2** | Offline layer | ⬜ Not started | 0 / 7 | Needs P1 sell flow |
-| **P3** | Printing | ⬜ Not started | 0 / 7 | **Blocked on printer purchase (PRD §6.4)** |
+| **P3** | Printing | 🟡 In progress | 6 / 7 | **Physical LAN printer validation pending (PRD §6.4)** |
 | **P4** | Multi-branch | ⬜ Not started | 0 / 8 | Schema from P0 |
 | **P5** | Customer display | ⬜ Not started | 0 / 6 | Needs P1 cart events |
 | **P6** | Backoffice | ⬜ Not started | 0 / 8 | — |
@@ -63,16 +63,22 @@
 - [x] Connection indicator pill: `Online / Offline · N pending`. *(✅ e2e-verified)*
 - [x] Airplane-mode drill: 15 offline sales + reconnect → exactly 15 server orders, no dupes; force-close resumes. *(✅ drill passed locally: 3 offline sales → API down → reconnect → exactly 3 orders, 3 audit rows, unique uuids; full 15-on-device drill at pilot, P9)*
 
-## P3 — Printing  🔴 *(confirm printer purchase first — PRD §6.4)*
+## P3 — Printing  🟡 *(confirm physical printer first — PRD §6.4)*
 *Goal: an order slip prints in ≤3s, offline, per tablet.*
 
-- [ ] **Buy-one-to-test:** put the recommended LAN printer on a router with no internet; confirm raw TCP to `ip:9100` prints ESC/POS. *(🔲 owner has the printer — run the store test: bridge + Test page, per SETUP.md §Printer)*
-- [x] `PrinterAdapter` interface: `bluetooth | network | usb`, single ESC/POS receipt builder. *(`src/lib/printer.ts` + `src/lib/receipt.ts`; network adapter e2e-verified: PWA → ws bridge → TCP :9100)*
-- [x] `network` adapter (raw TCP :9100) — the recommended default; then `bluetooth` (BLE/GATT) and `usb` (WebUSB). *(network fully verified incl. retry path; bluetooth/usb implemented, need hardware)*
+- [ ] **Buy-one-to-test:** put the recommended LAN printer on a router with no internet; confirm raw TCP to `ip:9100` prints ESC/POS. *(2026-08-03: attempted the active LAN peer `192.168.254.116` and scanned `192.168.254.0/24`; no TCP `9100` listener was reachable, so no physical slip was observed.)*
+- [x] `PrinterAdapter` interface: `bluetooth | network | usb`, single ESC/POS receipt builder. *(`src/lib/printer.ts` + `src/lib/receipt.ts`; mock bridge validation passes the PWA-equivalent adapter path.)*
+- [x] `network` adapter (raw TCP :9100) — the recommended default; then `bluetooth` (BLE/GATT) and `usb` (WebUSB). *(2026-08-03: mock success, forced unreachable target, and retry all pass; real hardware remains pending.)*
 - [x] Receipt builder: branch name/address, order #, items, discount+ID, totals, payment, change, "not an official receipt" line; 58/80mm. *(✅ 12/12 unit checks; VAT split now computed: VAT-inclusive prices, SC/PWD exempt)*
 - [x] Per-tablet printer settings screen (transport + connection + paper width), stored on the device + `devices` row. *(✅ settings modal + Test print; admin saves also upsert the devices row)*
 - [x] Reprint last / reprint from history (marked `REPRINT`, logged); auto-reconnect. *(✅ Reprint button prints last order + `order.reprint` audit row)*
-- [x] Failure handling: non-blocking "Retry print" toast; sale always completes. *(✅ verified: bridge down → sale saved + toast → Retry → receipt printed)*
+- [x] Failure handling: non-blocking "Retry print" toast; sale always completes. *(adapter/bridge failure → retry is automated and passing; the POS toast plus sale-preservation step still needs the on-device run.)*
+
+### P3 validation record — 2026-08-03
+
+- `npm run printer:validate:mock`: PASS — final run delivered the exact 988-byte ESC/POS payload in 7ms, passed 8/8 capture checks, returned the expected `ECONNREFUSED` failure, and delivered the retry in 4ms with 8/8 checks.
+- Existing `node --experimental-strip-types scripts/test-print.mjs`: PASS — 12/12 receipt-byte checks through WebSocket bridge → TCP `9100` mock.
+- Real-store result: BLOCKED by current network state, not by a code failure. The workstation is `192.168.254.105`; the only visible peer `192.168.254.116` refused `9100`, and the full `/24` scan found no open `9100`. Re-run `node --experimental-strip-types scripts/validate-printer.mjs --printer-ip <store-printer-ip>` when the printer is powered on and on the same LAN, then observe the physical slip before marking the first item complete.
 
 ## P4 — Multi-Branch
 *Goal: owner adds a branch and a tablet joins it — no developer.*

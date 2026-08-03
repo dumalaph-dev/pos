@@ -90,7 +90,7 @@ type PrinterTransport = 'bluetooth' | 'network' | 'usb';
 interface PrinterConfig {
   transport: PrinterTransport;
   paperWidth: 58 | 80;      // mm
-  // bluetooth: { bleDeviceId }  |  network: { ip, port=9100 }  |  usb: { vendorId, productId }
+  // bluetooth: { bleDeviceId }  |  network: { ip, port=9100, bridgeHost, bridgePort=8787 }  |  usb: { vendorId, productId }
   connection: Record<string, unknown>;
 }
 

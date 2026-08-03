@@ -68,6 +68,12 @@ Fixture: **2 orgs**, each with **2 branches**, each branch with an admin + a cas
 | 5.6 | 58mm vs 80mm layout | M | both render correctly |
 | 5.7 | Receipt content | M | branch, items, discount+ID, totals, "not an official receipt" line present |
 
+### Validation record — 2026-08-03
+
+- `npm run printer:validate:mock` is the repeatable bridge preflight. Final run: PASS with an exact 988-byte payload, 8/8 capture checks on the initial delivery, an expected `ECONNREFUSED` failure, and 8/8 checks on the retry (4ms retry acknowledgement).
+- The real-store probe used the active LAN (`192.168.254.105`) and checked the visible peer `192.168.254.116`; TCP `9100` was closed. A scan of `192.168.254.0/24` found no TCP `9100` listener. No physical slip was observed, so 5.1 and 5.2 remain pending rather than being marked passed.
+- 5.3's bridge/adapter failure-and-retry behavior is automated and passing; the POS toast plus sale-preservation behavior still needs the on-device/manual run against a reachable store setup.
+
 ## 6. Multi-branch (PRD §6.7)
 
 | # | Test | Type | Pass |

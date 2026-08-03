@@ -63,7 +63,7 @@ create table devices (
   name              text not null,
   device_prefix     text not null,             -- e.g. 'T1' → order no prefix
   printer_transport printer_transport,
-  printer_config    jsonb not null default '{}', -- {ble_id} | {ip,port} | {paper_width}
+  printer_config    jsonb not null default '{}', -- {ble_id} | {ip,port,bridge_host,bridge_port} | {paper_width}
   paired_display_id text,                       -- customer display pairing token
   is_active         boolean not null default true,
   last_seen_at      timestamptz,

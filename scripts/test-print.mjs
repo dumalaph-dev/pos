@@ -39,6 +39,7 @@ const receipt = buildReceipt({
 const printer = await getPrinter({
   transport: "network",
   bridgeHost: "127.0.0.1",
+  bridgePort: 8787,
   ip: "127.0.0.1",
   port: 9100,
   paperWidth: 58,

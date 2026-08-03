@@ -10,27 +10,47 @@ export type PrinterTransport = "network" | "bluetooth" | "usb";
 
 export type PrinterSettings = {
   transport: PrinterTransport;
-  bridgeHost: string; // ws://<host>:8787 — where the bridge runs (same LAN)
+  bridgeHost: string; // host where the local bridge runs (same LAN)
+  bridgePort: number; // usually 8787
   ip: string; // network printer address
   port: number; // usually 9100
   paperWidth: 58 | 80;
 };
 
 const SETTINGS_KEY = "pos.printer.v1";
-const BRIDGE_PORT = 8787;
+export const DEFAULT_BRIDGE_PORT = 8787;
 
 export const DEFAULT_SETTINGS: PrinterSettings = {
   transport: "network",
   bridgeHost: "127.0.0.1",
+  bridgePort: DEFAULT_BRIDGE_PORT,
   ip: "",
   port: 9100,
   paperWidth: 58,
 };
 
+function validPort(value: unknown, fallback: number): number {
+  const port = typeof value === "number" ? value : Number(value);
+  return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : fallback;
+}
+
+function normalizeSettings(value: unknown): PrinterSettings {
+  const raw = typeof value === "object" && value !== null ? (value as Partial<PrinterSettings>) : {};
+  return {
+    ...DEFAULT_SETTINGS,
+    transport: raw.transport === "bluetooth" || raw.transport === "usb" ? raw.transport : "network",
+    bridgeHost: typeof raw.bridgeHost === "string" ? raw.bridgeHost.trim() : DEFAULT_SETTINGS.bridgeHost,
+    bridgePort: validPort(raw.bridgePort, DEFAULT_BRIDGE_PORT),
+    ip: typeof raw.ip === "string" ? raw.ip.trim() : DEFAULT_SETTINGS.ip,
+    port: validPort(raw.port, DEFAULT_SETTINGS.port),
+    paperWidth: raw.paperWidth === 80 ? 80 : 58,
+  };
+}
+
 export function loadPrinterSettings(): PrinterSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    if (raw) return normalizeSettings(JSON.parse(raw));
   } catch {
     /* fall through to defaults */
   }
@@ -38,7 +58,7 @@ export function loadPrinterSettings(): PrinterSettings {
 }
 
 export function savePrinterSettings(s: PrinterSettings): void {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(normalizeSettings(s)));
 }
 
 export interface PrinterAdapter {
@@ -58,50 +78,64 @@ function bytesToBase64(bytes: Uint8Array): string {
 
 class NetworkAdapter implements PrinterAdapter {
   private bridgeHost: string;
+  private bridgePort: number;
   private ip: string;
   private port: number;
 
-  constructor(bridgeHost: string, ip: string, port: number) {
+  constructor(bridgeHost: string, bridgePort: number, ip: string, port: number) {
     this.bridgeHost = bridgeHost;
+    this.bridgePort = bridgePort;
     this.ip = ip;
     this.port = port;
   }
 
   async print(bytes: Uint8Array): Promise<void> {
     if (!this.ip) throw new Error("Printer IP is not set");
-    const ws = new WebSocket(`ws://${this.bridgeHost}:${BRIDGE_PORT}`);
-    const result = await new Promise<{ ok: boolean; error?: string }>((resolve, reject) => {
+    const bridgeHost = this.bridgeHost.trim().replace(/^wss?:\/\//i, "").replace(/\/+$/, "");
+    if (!bridgeHost) throw new Error("Printer bridge host is not set");
+    const hostForUrl = bridgeHost.includes(":") && !bridgeHost.startsWith("[") ? `[${bridgeHost}]` : bridgeHost;
+    const bridgeUrl = `ws://${hostForUrl}:${this.bridgePort}`;
+    const payload = JSON.stringify({
+      type: "print",
+      ip: this.ip,
+      port: this.port,
+      bytes: bytesToBase64(bytes),
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const ws = new WebSocket(bridgeUrl);
       const timer = setTimeout(() => {
-        ws.close();
-        reject(new Error("Printer bridge timed out — is the bridge running?"));
+        settleFailure("Printer bridge timed out — is the bridge running?");
       }, 8000);
-      ws.onopen = () => {
-        ws.send(
-          JSON.stringify({
-            type: "print",
-            ip: this.ip,
-            port: this.port,
-            bytes: bytesToBase64(bytes),
-          }),
-        );
+      const closeSocket = () => {
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close();
       };
-      ws.onmessage = (e) => {
+      const settle = (callback: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        closeSocket();
+        callback();
+      };
+      const settleFailure = (message: string) => settle(() => reject(new Error(message)));
+
+      ws.onopen = () => ws.send(payload);
+      ws.onmessage = (event) => {
         try {
-          const msg = JSON.parse(String(e.data));
-          clearTimeout(timer);
-          resolve(msg);
+          const result = JSON.parse(String(event.data)) as { ok?: boolean; error?: string };
+          if (typeof result.ok !== "boolean") return;
+          if (result.ok) settle(resolve);
+          else settleFailure(result.error ?? "Print failed");
         } catch {
-          /* ignore */
+          settleFailure("Printer bridge returned an invalid response");
         }
       };
-      ws.onerror = () => {
-        clearTimeout(timer);
-        reject(new Error(`Cannot reach the printer bridge (ws://${this.bridgeHost}:${BRIDGE_PORT})`));
+      ws.onerror = () => settleFailure(`Cannot reach the printer bridge (${bridgeUrl})`);
+      ws.onclose = () => {
+        if (!settled) settleFailure("Printer bridge closed before confirming the print");
       };
-      ws.onclose = () => clearTimeout(timer);
     });
-    ws.close();
-    if (!result.ok) throw new Error(result.error ?? "Print failed");
   }
 }
 
@@ -163,7 +197,7 @@ class UsbAdapter implements PrinterAdapter {
 export async function getPrinter(s: PrinterSettings): Promise<PrinterAdapter> {
   switch (s.transport) {
     case "network":
-      return new NetworkAdapter(s.bridgeHost, s.ip, s.port);
+      return new NetworkAdapter(s.bridgeHost, validPort(s.bridgePort, DEFAULT_BRIDGE_PORT), s.ip, s.port);
     case "bluetooth":
       return new BluetoothAdapter();
     case "usb":

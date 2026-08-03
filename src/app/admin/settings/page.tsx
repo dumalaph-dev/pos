@@ -200,10 +200,15 @@ function PrinterFields({ prefix, config = {}, transport = "network", canWrite }:
           <input id={`${prefix}-port`} name="port" type="number" inputMode="numeric" min="1" max="65535" defaultValue={configText(config, "port", "9100")} disabled={!canWrite} className="inventory-input tnums" />
         </SettingsField>
       </div>
-      <SettingsField label="Bridge host" htmlFor={`${prefix}-bridge`}>
-        <input id={`${prefix}-bridge`} name="bridge_host" defaultValue={configText(config, "bridge_host", "127.0.0.1")} disabled={!canWrite} placeholder="127.0.0.1" className="inventory-input" />
-      </SettingsField>
-      <p className="text-[10px] leading-5 text-ink-muted">Network printers use the local WebSocket bridge on port 8787. Bluetooth and USB require browser support on the POS device.</p>
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
+        <SettingsField label="Bridge host" htmlFor={`${prefix}-bridge`}>
+          <input id={`${prefix}-bridge`} name="bridge_host" defaultValue={configText(config, "bridge_host", "127.0.0.1")} disabled={!canWrite} placeholder="127.0.0.1" className="inventory-input" />
+        </SettingsField>
+        <SettingsField label="Bridge port" htmlFor={`${prefix}-bridge-port`}>
+          <input id={`${prefix}-bridge-port`} name="bridge_port" type="number" inputMode="numeric" min="1" max="65535" defaultValue={configText(config, "bridge_port", "8787")} disabled={!canWrite} className="inventory-input tnums" />
+        </SettingsField>
+      </div>
+      <p className="text-[10px] leading-5 text-ink-muted">Network printers use the local WebSocket bridge. Start it with <code>BRIDGE_PORT</code> when using a non-default port; Bluetooth and USB require browser support on the POS device.</p>
     </div>
   );
 }

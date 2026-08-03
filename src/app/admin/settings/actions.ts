@@ -137,13 +137,14 @@ function readDeviceFields(formData: FormData) {
   const port = readPort(readText(formData, "port"));
   const ip = readText(formData, "ip");
   const bridgeHost = readText(formData, "bridge_host");
+  const bridgePort = readPort(readText(formData, "bridge_port"));
 
   validateRequiredText(name, "Terminal name", 80);
   if (!storeId) settingsRedirect("Choose a branch for this terminal.");
   if (!/^[A-Z0-9-]{1,12}$/.test(devicePrefix)) settingsRedirect("Device prefix may contain only letters, numbers, and hyphens.");
-  if (!transport || paperWidth === null || port === null) settingsRedirect("Choose a valid printer transport, paper width, and port.");
+  if (!transport || paperWidth === null || port === null || bridgePort === null) settingsRedirect("Choose a valid printer transport, paper width, printer port, and bridge port.");
   if (ip.length > 120 || bridgeHost.length > 120) settingsRedirect("Printer connection details are too long.");
-  return { storeId, name, devicePrefix, transport, paperWidth, port, ip, bridgeHost };
+  return { storeId, name, devicePrefix, transport, paperWidth, port, ip, bridgeHost, bridgePort };
 }
 
 async function validDeviceStore(supabase: Awaited<ReturnType<typeof createClient>>, orgId: string, storeId: string) {
@@ -161,7 +162,7 @@ export async function createDeviceSettings(formData: FormData) {
     name: fields.name,
     device_prefix: fields.devicePrefix,
     printer_transport: fields.transport,
-    printer_config: { ip: fields.ip, port: fields.port, paper_width: fields.paperWidth, bridge_host: fields.bridgeHost },
+    printer_config: { ip: fields.ip, port: fields.port, paper_width: fields.paperWidth, bridge_host: fields.bridgeHost, bridge_port: fields.bridgePort },
     is_active: true,
   });
   if (error) settingsRedirect(error.message || "The terminal could not be created.");
@@ -180,7 +181,7 @@ export async function updateDeviceSettings(formData: FormData) {
   const { data: existing } = await supabase.from("devices").select("printer_config").eq("id", deviceId).eq("org_id", orgId).maybeSingle();
   if (!existing) settingsRedirect("That terminal is not available in your organization.");
   const currentConfig = isRecord(existing.printer_config) ? existing.printer_config : {};
-  const printerConfig = { ...currentConfig, ip: fields.ip, port: fields.port, paper_width: fields.paperWidth, bridge_host: fields.bridgeHost };
+  const printerConfig = { ...currentConfig, ip: fields.ip, port: fields.port, paper_width: fields.paperWidth, bridge_host: fields.bridgeHost, bridge_port: fields.bridgePort };
   const { error } = await supabase
     .from("devices")
     .update({
