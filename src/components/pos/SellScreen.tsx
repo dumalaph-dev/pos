@@ -1242,7 +1242,7 @@ export default function SellScreen() {
             ))}
           </div>
         )}
-        <SignOutButton />
+        <SignOutButton className="px-4 py-2" />
       </header>
 
       {/* Body: rail · grid · cart */}

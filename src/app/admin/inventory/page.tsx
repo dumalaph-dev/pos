@@ -541,7 +541,7 @@ export default async function InventoryPage({
             <Link href="#inventory-table" className="admin-icon-button admin-icon-button--alert" aria-label={inventoryAlertCount ? `View ${inventoryAlertCount} inventory alerts` : "View inventory status"}><AdminIcon name="bell" size={19} />{inventoryAlertCount > 0 && <span className="admin-icon-button__badge" aria-hidden="true">{inventoryAlertCount > 9 ? "9+" : inventoryAlertCount}</span>}</Link>
             <Link href="#inventory-help" className="admin-icon-button admin-icon-button--help" aria-label="View inventory help"><AdminIcon name="help" size={19} /></Link>
             <div className="admin-user-chip"><span className="admin-user-chip__avatar" aria-hidden="true">{userInitial}</span><span className="admin-user-chip__copy"><strong>{firstName}</strong><small>{profile.role === "manager" ? "Manager" : "Admin"}⌄</small></span></div>
-            <SignOutButton className="inventory-button px-2 text-[10px]" />
+            <SignOutButton className="inventory-button text-[10px]" />
           </header>
           <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line/70 pb-5 pt-2">
             <div>
@@ -717,5 +717,5 @@ function EmptyState({ title, detail, href, action }: { title: string; detail: st
 }
 
 function InventoryProfileMissing() {
-  return <main className="grid min-h-screen place-items-center bg-bg p-6 text-center text-ink"><div className="max-w-md rounded-card border border-line bg-surface p-8 shadow-[var(--shadow-pop)]"><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Backoffice setup</p><h1 className="mt-2 text-2xl font-extrabold">Your admin profile is not ready.</h1><p className="mt-3 text-sm leading-6 text-ink-muted">Ask an organization admin to finish the profile and branch assignment, then sign in again.</p><div className="mt-6 flex justify-center gap-2"><Link href="/admin" className="rounded-btn bg-secondary px-4 py-3 text-sm font-extrabold uppercase text-primary">Back to dashboard</Link><SignOutButton /></div></div></main>;
+  return <main className="grid min-h-screen place-items-center bg-bg p-6 text-center text-ink"><div className="max-w-md rounded-card border border-line bg-surface p-8 shadow-[var(--shadow-pop)]"><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Backoffice setup</p><h1 className="mt-2 text-2xl font-extrabold">Your admin profile is not ready.</h1><p className="mt-3 text-sm leading-6 text-ink-muted">Ask an organization admin to finish the profile and branch assignment, then sign in again.</p><div className="mt-6 flex justify-center gap-2"><Link href="/admin" className="rounded-btn bg-secondary px-4 py-3 text-sm font-extrabold uppercase text-primary">Back to dashboard</Link><SignOutButton className="px-4 py-2" /></div></div></main>;
 }

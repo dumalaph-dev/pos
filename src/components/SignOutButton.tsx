@@ -4,11 +4,17 @@ import { useFormStatus } from "react-dom";
 import { signOut } from "@/app/actions";
 import { clearOfflineCaches } from "@/lib/offline-cache";
 
-/* Kept as utilities rather than a CSS class: globals.css rules are unlayered
+/* Kept as utilities rather than a CSS class: most of globals.css is unlayered
    and would outrank Tailwind's utilities layer, so a class here would silently
-   beat the `px-2 py-2 text-[10px]` overrides the topbars pass in. */
+   beat the `text-[10px]` overrides the topbars pass in.
+
+   Padding is deliberately absent. Tailwind orders utilities within a family by
+   value, not by the order they appear in the class attribute, so a default
+   `px-4` here would outrank the smaller `px-2`/`px-3` callers pass in and the
+   override would silently do nothing. Every call site supplies its own padding,
+   or carries a component class that sets it. */
 const BUTTON_BASE =
-  "rounded-btn bg-secondary px-4 py-2 text-sm font-bold uppercase text-primary " +
+  "rounded-btn bg-secondary text-sm font-bold uppercase text-primary " +
   "transition duration-150 hover:bg-secondary-hover hover:text-primary-hover " +
   "active:scale-[0.97] active:bg-secondary-hover " +
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary " +
