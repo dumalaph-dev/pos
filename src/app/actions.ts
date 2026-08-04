@@ -76,5 +76,10 @@ export async function loginWithEmployeeId(_previousState: LoginState, formData: 
 export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
-  redirect("/");
+  // Cache Storage lives on the client and outlives the session, so the server
+  // cannot clear it here. Flag the landing so the login page wipes the
+  // app-shell caches even when sign-out did not come from SignOutButton
+  // (expired session, a redirect, JS-disabled fallback). See
+  // src/lib/offline-cache.ts.
+  redirect("/?signed-out=1");
 }
