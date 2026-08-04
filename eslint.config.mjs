@@ -17,6 +17,8 @@ const eslintConfig = defineConfig([
     // OpenNext output is generated during the deployment build.
     ".open-next/**",
     "dist/**",
+    // Claude/Codex worktrees are machine-local copies, not this checkout's source.
+    ".claude/worktrees/**",
   ]),
 ]);
 
