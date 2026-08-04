@@ -6,7 +6,7 @@
  * Orders are written to the local outbox FIRST (offline.ts), then synced via
  * the idempotent `place_order` RPC — the UI never awaits the network.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { formatPeso, weightLineTotal } from "@/lib/money";
@@ -28,6 +28,7 @@ import {
 import {
   getPrinter,
   loadPrinterSettings,
+  openCashDrawer,
   savePrinterSettings,
   type PrinterSettings,
 } from "@/lib/printer";
@@ -82,9 +83,117 @@ type ProfileData = {
   org_id: string;
   store_id: string | null;
   store_name: string | null;
+  store_address: string | null;
   full_name: string | null;
   role: "admin" | "manager" | "cashier" | null;
+  pos_config?: PosRuntimeConfig;
 };
+
+type RuntimePaymentMethod = "cash" | "gcash" | "maya" | "card";
+type PosRuntimeConfig = {
+  palette: "brown" | "blue" | "green" | "purple" | "custom";
+  customColor: string;
+  uiStyle: "modern" | "classic" | "soft" | "dark" | "bold";
+  defaultOrderType: string;
+  orderTypes: string[];
+  paymentMethods: Record<RuntimePaymentMethod, boolean>;
+  vatRate: number;
+  showVat: boolean;
+  showStockStatus: boolean;
+  enableOrderNotes: boolean;
+  receiptHeader: string;
+  receiptFooter: string;
+  showCashier: boolean;
+  paperWidth: 58 | 80;
+};
+
+const DEFAULT_POS_RUNTIME_CONFIG: PosRuntimeConfig = {
+  palette: "brown",
+  customColor: "#5b2a0a",
+  uiStyle: "modern",
+  defaultOrderType: "Dine In",
+  orderTypes: ["Dine In", "Takeout"],
+  paymentMethods: { cash: true, gcash: true, maya: false, card: true },
+  vatRate: 0.12,
+  showVat: false,
+  showStockStatus: false,
+  enableOrderNotes: true,
+  receiptHeader: "",
+  receiptFooter: "",
+  showCashier: true,
+  paperWidth: 58,
+};
+
+const POS_PALETTE_COLORS: Record<PosRuntimeConfig["palette"], { primary: string; hover: string }> = {
+  brown: { primary: "#5b2a0a", hover: "#4a2208" },
+  blue: { primary: "#2f6fb3", hover: "#245b96" },
+  green: { primary: "#2f7344", hover: "#255c36" },
+  purple: { primary: "#7450b5", hover: "#5e3e96" },
+  custom: { primary: "#5b2a0a", hover: "#4a2208" },
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readBoolean(value: unknown, fallback: boolean) {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function readNumber(value: unknown, fallback: number, min: number, max: number) {
+  const numberValue = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(numberValue) && numberValue >= min && numberValue <= max ? numberValue : fallback;
+}
+
+function normalizePosRuntimeConfig(value: unknown, vatRateFallback = DEFAULT_POS_RUNTIME_CONFIG.vatRate, showVatFallback = DEFAULT_POS_RUNTIME_CONFIG.showVat): PosRuntimeConfig {
+  const source = isRecord(value) ? value : {};
+  const paymentSource = isRecord(source.paymentMethods) ? source.paymentMethods : {};
+  const allOrderTypes = ["Dine In", "Takeout", "Delivery"];
+  const orderTypes = Array.isArray(source.orderTypes)
+    ? source.orderTypes.filter((item): item is string => typeof item === "string" && allOrderTypes.includes(item)).slice(0, 3)
+    : [];
+  const enabledOrderTypes = orderTypes.length ? orderTypes : DEFAULT_POS_RUNTIME_CONFIG.orderTypes;
+  const configuredDefault = typeof source.defaultOrderType === "string" && allOrderTypes.includes(source.defaultOrderType)
+    ? source.defaultOrderType
+    : DEFAULT_POS_RUNTIME_CONFIG.defaultOrderType;
+  const palette = source.palette === "blue" || source.palette === "green" || source.palette === "purple" || source.palette === "custom" ? source.palette : "brown";
+  const uiStyle = source.uiStyle === "classic" || source.uiStyle === "soft" || source.uiStyle === "dark" || source.uiStyle === "bold" ? source.uiStyle : "modern";
+  const paymentMethods = {
+    cash: readBoolean(paymentSource.cash, DEFAULT_POS_RUNTIME_CONFIG.paymentMethods.cash),
+    gcash: readBoolean(paymentSource.gcash, DEFAULT_POS_RUNTIME_CONFIG.paymentMethods.gcash),
+    maya: readBoolean(paymentSource.maya, DEFAULT_POS_RUNTIME_CONFIG.paymentMethods.maya),
+    card: readBoolean(paymentSource.card, DEFAULT_POS_RUNTIME_CONFIG.paymentMethods.card),
+  };
+  if (!Object.values(paymentMethods).some(Boolean)) paymentMethods.cash = true;
+
+  return {
+    palette,
+    customColor: typeof source.customColor === "string" && /^#[0-9a-f]{6}$/i.test(source.customColor) ? source.customColor : DEFAULT_POS_RUNTIME_CONFIG.customColor,
+    uiStyle,
+    defaultOrderType: enabledOrderTypes.includes(configuredDefault) ? configuredDefault : enabledOrderTypes[0],
+    orderTypes: enabledOrderTypes,
+    paymentMethods,
+    vatRate: readNumber(source.vatRate, vatRateFallback, 0, 1),
+    showVat: readBoolean(source.showVat, showVatFallback),
+    showStockStatus: readBoolean(source.showStockStatus, DEFAULT_POS_RUNTIME_CONFIG.showStockStatus),
+    enableOrderNotes: readBoolean(source.enableOrderNotes, DEFAULT_POS_RUNTIME_CONFIG.enableOrderNotes),
+    receiptHeader: typeof source.receiptHeader === "string" ? source.receiptHeader.slice(0, 200) : "",
+    receiptFooter: typeof source.receiptFooter === "string" ? source.receiptFooter.slice(0, 200) : "",
+    showCashier: readBoolean(source.showCashier, DEFAULT_POS_RUNTIME_CONFIG.showCashier),
+    paperWidth: source.paperWidth === "80" || source.paperWidth === 80 ? 80 : 58,
+  };
+}
+
+function readStorePosConfig(value: unknown): { name: string | null; address: string | null; posConfig: PosRuntimeConfig } {
+  const store = isRecord(value) ? value : {};
+  const settings = isRecord(store.settings) ? store.settings : {};
+  const storeVatRate = readNumber(store.vat_rate, DEFAULT_POS_RUNTIME_CONFIG.vatRate, 0, 1);
+  return {
+    name: typeof store.name === "string" ? store.name : null,
+    address: typeof store.address === "string" ? store.address : null,
+    posConfig: normalizePosRuntimeConfig(settings.pos_config, storeVatRate, Boolean(store.vat_registered)),
+  };
+}
 
 function branchPrefix(storeName: string | null): string {
   const words = (storeName ?? "").trim().split(/\s+/).filter(Boolean);
@@ -97,8 +206,10 @@ const DEMO_PROFILE: ProfileData = {
   org_id: "00000000-0000-0000-0000-000000000002",
   store_id: "00000000-0000-0000-0000-000000000003",
   store_name: DEFAULT_STORE_NAME,
+  store_address: null,
   full_name: "Admin",
   role: "admin",
+  pos_config: DEFAULT_POS_RUNTIME_CONFIG,
 };
 
 const DEMO_CATEGORIES: Category[] = [
@@ -229,7 +340,8 @@ export default function SellScreen() {
   const [activeCat, setActiveCat] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [orderType, setOrderType] = useState("Dine In");
+  const [posConfig, setPosConfig] = useState<PosRuntimeConfig>(DEFAULT_POS_RUNTIME_CONFIG);
+  const [orderType, setOrderType] = useState(DEFAULT_POS_RUNTIME_CONFIG.defaultOrderType);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [note, setNote] = useState("");
   const [discount, setDiscount] = useState<DiscountState>(NO_DISCOUNT);
@@ -256,6 +368,49 @@ export default function SellScreen() {
   const lastReceipt = useRef<Uint8Array | null>(null);
   const [hasReceipt, setHasReceipt] = useState(false);
   const demoSeeded = useRef(false);
+  const orderTypeScope = useRef<string | null>(null);
+
+  const applyProfile = useCallback((nextProfile: ProfileData) => {
+    const nextConfig = normalizePosRuntimeConfig(nextProfile.pos_config);
+    const normalizedProfile: ProfileData = {
+      ...nextProfile,
+      store_address: nextProfile.store_address ?? null,
+      pos_config: nextConfig,
+    };
+    setProfile(normalizedProfile);
+    setPosConfig(nextConfig);
+    const scope = nextProfile.store_id ?? nextProfile.org_id;
+    setOrderType((current) => {
+      if (orderTypeScope.current !== scope) {
+        orderTypeScope.current = scope;
+        return nextConfig.defaultOrderType;
+      }
+      return nextConfig.orderTypes.includes(current) ? current : nextConfig.defaultOrderType;
+    });
+    setPrinterSettings((current) => current.paperWidth === nextConfig.paperWidth ? current : { ...current, paperWidth: nextConfig.paperWidth });
+  }, []);
+
+  useEffect(() => {
+    const action = new URLSearchParams(window.location.search).get("quickAction");
+    if (!action) return;
+    window.history.replaceState({}, "", window.location.pathname);
+
+    const timer = window.setTimeout(() => {
+      if (action === "park") {
+        setNavOpen(true);
+        setTrayOpen(true);
+        return;
+      }
+
+      if (action === "drawer") {
+        setNavOpen(true);
+        void openCashDrawer(printerSettings)
+          .then(() => setToast({ msg: "Cash drawer opened." }))
+          .catch((error: unknown) => setToast({ msg: error instanceof Error ? error.message : "Cash drawer could not be opened." }));
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [printerSettings]);
 
   // ── Catalog: network first, cached fallback (P2) ─────────────────────
   // NOTE: postgrest-js THROWS on network failures (fetch rejects) and only
@@ -270,17 +425,20 @@ export default function SellScreen() {
       if (session) {
         const { data: prof } = await supabase
           .from("profiles")
-          .select("id, org_id, store_id, stores(name), full_name, role")
+          .select("id, org_id, store_id, stores(name, address, vat_registered, vat_rate, settings), full_name, role")
           .eq("id", session.user.id)
           .single();
         if (prof) {
+          const store = readStorePosConfig(prof.stores);
           profileData = {
             id: prof.id,
             org_id: prof.org_id,
             store_id: prof.store_id,
-            store_name: (prof.stores as { name?: string } | null)?.name ?? null,
+            store_name: store.name,
+            store_address: store.address,
             full_name: (prof.full_name as string | null) ?? null,
             role: (prof.role as ProfileData["role"]) ?? null,
+            pos_config: store.posConfig,
           };
         }
       }
@@ -292,15 +450,15 @@ export default function SellScreen() {
     if (!profileData) {
       const cached = await loadCachedCatalog();
       if (cached) {
-        profileData = cached.profile as typeof profileData;
-        setProfile(profileData);
+        profileData = cached.profile as ProfileData;
+        applyProfile(profileData);
         setCategories(cached.categories as Category[]);
         setProducts(cached.products as Product[]);
         setStockByProductId(cached.stock ?? {});
       } else {
         // Keep the shell inspectable in a fresh local install. Once the first
         // real catalog is cached, the demo never replaces it.
-        setProfile(DEMO_PROFILE);
+        applyProfile(DEMO_PROFILE);
         setCategories(DEMO_CATEGORIES);
         setProducts(DEMO_PRODUCTS);
         setStockByProductId({});
@@ -313,7 +471,7 @@ export default function SellScreen() {
       setLoading(false);
       return;
     }
-    setProfile(profileData);
+    applyProfile(profileData);
 
     try {
       const scope = profileData.store_id
@@ -371,12 +529,12 @@ export default function SellScreen() {
     } catch {
       const cached = await loadCachedCatalog();
       if (cached) {
-        setProfile(cached.profile as typeof profileData);
+        applyProfile(cached.profile as ProfileData);
         setCategories(cached.categories as Category[]);
         setProducts(cached.products as Product[]);
         setStockByProductId(cached.stock ?? {});
       } else {
-        setProfile(DEMO_PROFILE);
+        applyProfile(DEMO_PROFILE);
         setCategories(DEMO_CATEGORIES);
         setProducts(DEMO_PRODUCTS);
         setStockByProductId({});
@@ -388,7 +546,7 @@ export default function SellScreen() {
       setOffline(true);
     }
     setLoading(false);
-  }, [supabase]);
+  }, [applyProfile, supabase]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- catalog hydration is the external cache/network boundary.
@@ -466,6 +624,10 @@ export default function SellScreen() {
   const discountAmount =
     discount.type === "none" ? 0 : round((subtotal * discount.pct) / 100);
   const total = subtotal - discountAmount;
+  const vatAmount = posConfig.showVat && posConfig.vatRate > 0
+    ? round((total * posConfig.vatRate) / (1 + posConfig.vatRate))
+    : 0;
+  const availablePaymentMethods = (['cash', 'gcash', 'maya', 'card'] as RuntimePaymentMethod[]).filter((method) => posConfig.paymentMethods[method]);
 
   const visibleProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -575,8 +737,8 @@ export default function SellScreen() {
 
     // VAT split (P3): prices are VAT-inclusive; SC/PWD sales are VAT-exempt.
     const vatExempt = isScPwd;
-    const vatAmount = vatExempt ? 0 : Math.round((total * 12) / 112);
-    const vatableSale = total - vatAmount;
+    const orderVatAmount = vatExempt ? 0 : vatAmount;
+    const vatableSale = vatExempt ? 0 : total - orderVatAmount;
 
     const p_items = cart.map((l) => ({
       product_id: l.product.id,
@@ -600,7 +762,7 @@ export default function SellScreen() {
       discount_amount: discountAmount,
       discount_ref: isScPwd ? `${discount.name} — ${discount.id}` : null,
       vatable_sale: vatableSale,
-      vat_amount: vatAmount,
+      vat_amount: orderVatAmount,
       vat_exempt_sale: vatExempt ? total : 0,
       total,
       payment_method: method,
@@ -649,6 +811,7 @@ export default function SellScreen() {
     // Print the receipt (fire-and-forget; failure shows a retry toast).
     const receipt = buildReceipt({
        storeName: profile.store_name ?? DEFAULT_STORE_NAME,
+      storeAddress: profile.store_address,
       orderNo,
       cashier: profile.full_name ?? "",
       createdAt: now,
@@ -662,14 +825,19 @@ export default function SellScreen() {
       discountAmount,
       discountRef: isScPwd ? `${discount.name} — ${discount.id}` : null,
       vatableSale,
-      vatAmount,
+      vatAmount: orderVatAmount,
       vatExemptSale: vatExempt ? total : 0,
       total,
       paymentMethod: method,
       paymentRef: payRef || null,
       amountTendered: method === "cash" ? tendered : null,
       changeDue: method === "cash" && tendered !== null ? tendered - total : null,
-      paperWidth: printerSettings.paperWidth,
+      paperWidth: posConfig.paperWidth,
+      vatRate: posConfig.vatRate,
+      showVat: posConfig.showVat,
+      receiptHeader: posConfig.receiptHeader,
+      receiptFooter: posConfig.receiptFooter,
+      showCashier: posConfig.showCashier,
     });
     void doPrint(receipt);
   };
@@ -762,9 +930,34 @@ export default function SellScreen() {
     const categoryOptions = categories.some((category) => category.id === "all")
       ? categories
       : [{ id: "all", name: "All Items", icon: "grid" }, ...categories];
+    const palette = POS_PALETTE_COLORS[posConfig.palette];
+    const primary = posConfig.palette === "custom" ? posConfig.customColor : palette.primary;
+    const posAppStyle = {
+      "--primary": primary,
+      "--primary-hover": posConfig.palette === "custom" ? primary : palette.hover,
+      "--primary-fg": "#ffffff",
+      "--accent": primary,
+      "--accent-hover": posConfig.palette === "custom" ? primary : palette.hover,
+      "--accent-fg": "#ffffff",
+      ...(posConfig.uiStyle === "dark" ? {
+        "--bg": "#1d1713",
+        "--surface": "#241c17",
+        "--surface-panel": "#2b211b",
+        "--surface-raised": "#33271f",
+        "--sidebar": "#211914",
+        "--border": "#49382d",
+        "--border-strong": "#604a3a",
+        "--text": "#fff8f0",
+        "--text-muted": "#c7b6a5",
+        "--text-subtle": "#9a8878",
+        "--primary-soft": "#453328",
+        "--secondary-btn": "#453328",
+        "--secondary-btn-hover": "#584235",
+      } : {}),
+    } as CSSProperties;
 
     return (
-      <main className="pos-app">
+      <main className={`pos-app pos-app--${posConfig.uiStyle}`} style={posAppStyle}>
         <header className={"pos-topbar" + (navOpen ? " is-open" : "")}>
           {!navOpen ? (
             <button
@@ -965,7 +1158,7 @@ export default function SellScreen() {
                       <div className="product-card__body">
                         <strong>{product.name}</strong>
                         <span className="tnums">{displayPeso(product.price)}{product.pricing_mode === "per_kg" ? " / kg" : ""}</span>
-                        {product.track_stock && (() => {
+                        {posConfig.showStockStatus && product.track_stock && (() => {
                           const available = stockByProductId[product.id];
                           const status = stockStatus(available, product.min_stock);
                           return <small className={`product-card__stock product-card__stock--${status}`}>{status === "unknown" ? "Stock pending" : status === "out" ? "Out of stock" : `${formatStockQuantity(available ?? 0)} ${product.unit} left`}</small>;
@@ -999,8 +1192,7 @@ export default function SellScreen() {
                 </div>
                 <div className="order-header__actions">
                   <select value={orderType} onChange={(event) => setOrderType(event.target.value)} className="order-type-select" aria-label="Order type">
-                    <option>Dine In</option>
-                    <option>Takeout</option>
+                    {posConfig.orderTypes.map((type) => <option key={type}>{type}</option>)}
                   </select>
                   <button
                     type="button"
@@ -1062,6 +1254,7 @@ export default function SellScreen() {
               <div className="order-summary">
                 <div><span>Subtotal</span><strong className="tnums">{displayPeso(subtotal)}</strong></div>
                 <div><span>Discount</span><strong className="tnums">{discountAmount > 0 ? "−" : ""}{displayPeso(discountAmount)}</strong></div>
+                {posConfig.showVat && <div><span>VAT ({Math.round(posConfig.vatRate * 100)}%)</span><strong className="tnums">{displayPeso(vatAmount)}</strong></div>}
                 <div className="order-summary__total"><span>TOTAL</span><strong className="tnums">{displayPeso(total)}</strong></div>
               </div>
 
@@ -1079,7 +1272,15 @@ export default function SellScreen() {
             storeName={storeName}
             offline={offline}
             pendingCount={pending}
-            printerSettings={printerSettings}
+            receiptSettings={{
+              paperWidth: posConfig.paperWidth,
+              vatRate: posConfig.vatRate,
+              showVat: posConfig.showVat,
+              receiptHeader: posConfig.receiptHeader,
+              receiptFooter: posConfig.receiptFooter,
+              showCashier: posConfig.showCashier,
+              storeAddress: profile.store_address,
+            }}
             onClose={() => setOrderHistoryOpen(false)}
             onPrint={doPrint}
             onToast={(msg) => setToast({ msg })}
@@ -1104,6 +1305,7 @@ export default function SellScreen() {
             onChange={setDiscount}
             note={note}
             onNoteChange={setNote}
+            enableOrderNotes={posConfig.enableOrderNotes}
             onClose={() => setDiscountOpen(false)}
           />
         )}
@@ -1111,6 +1313,7 @@ export default function SellScreen() {
         {payOpen && (
           <ChargeModal
             total={total}
+            availablePaymentMethods={availablePaymentMethods}
             onConfirm={placeOrder}
             onClose={() => setPayOpen(false)}
           />
@@ -1410,6 +1613,7 @@ export default function SellScreen() {
           onChange={setDiscount}
           note={note}
           onNoteChange={setNote}
+          enableOrderNotes={posConfig.enableOrderNotes}
           onClose={() => setDiscountOpen(false)}
         />
       )}
@@ -1418,6 +1622,7 @@ export default function SellScreen() {
       {payOpen && (
         <ChargeModal
           total={total}
+          availablePaymentMethods={availablePaymentMethods}
           onConfirm={placeOrder}
           onClose={() => setPayOpen(false)}
         />
@@ -1542,12 +1747,14 @@ function DiscountModal({
   onChange,
   note,
   onNoteChange,
+  enableOrderNotes,
   onClose,
 }: {
   value: DiscountState;
   onChange: (d: DiscountState) => void;
   note: string;
   onNoteChange: (note: string) => void;
+  enableOrderNotes: boolean;
   onClose: () => void;
 }) {
   const [selType, setSelType] = useState(value.type);
@@ -1621,7 +1828,7 @@ function DiscountModal({
           </div>
         )}
 
-        <label className="mt-4 block text-xs font-bold uppercase tracking-wide text-ink-muted">
+        {enableOrderNotes && <label className="mt-4 block text-xs font-bold uppercase tracking-wide text-ink-muted">
           Order note
           <textarea
             value={note}
@@ -1630,7 +1837,7 @@ function DiscountModal({
             rows={3}
             className="mt-1 w-full resize-none rounded-btn border border-line-strong bg-raised px-3 py-2 text-sm font-normal normal-case tracking-normal text-ink outline-none focus:border-primary"
           />
-        </label>
+        </label>}
 
         <div className="mt-4 grid grid-cols-2 gap-2">
           <button onClick={() => { onChange(NO_DISCOUNT); onClose(); }} className="rounded-btn bg-secondary py-3 font-bold text-ink">
@@ -1652,14 +1859,17 @@ function DiscountModal({
 /* ── Payment / charge modal ────────────────────────────────────────────── */
 function ChargeModal({
   total,
+  availablePaymentMethods,
   onConfirm,
   onClose,
 }: {
   total: number;
+  availablePaymentMethods: RuntimePaymentMethod[];
   onConfirm: (method: string, tendered: number | null, payRef: string) => void;
   onClose: () => void;
 }) {
-  const [method, setMethod] = useState<"cash" | "gcash" | "maya" | "card">("cash");
+  const methods = availablePaymentMethods.length ? availablePaymentMethods : ["cash" as const];
+  const [method, setMethod] = useState<RuntimePaymentMethod>(methods[0]);
   const [tendered, setTendered] = useState("");
   const [ref, setRef] = useState("");
 
@@ -1677,13 +1887,13 @@ function ChargeModal({
         <p className="tnums mt-1 text-3xl font-extrabold text-accent">{formatPeso(total)}</p>
 
         <div className="mt-3 grid grid-cols-4 gap-1.5">
-          {(["cash", "gcash", "maya", "card"] as const).map((m) => (
+          {methods.map((m) => (
             <button
               key={m}
               onClick={() => setMethod(m)}
               className={`rounded-btn py-2 text-sm font-bold capitalize ${method === m ? "bg-primary text-primary-fg" : "bg-secondary text-ink"}`}
             >
-              {m}
+              {m === "gcash" ? "GCash" : m[0].toUpperCase() + m.slice(1)}
             </button>
           ))}
         </div>

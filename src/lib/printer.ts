@@ -204,3 +204,11 @@ export async function getPrinter(s: PrinterSettings): Promise<PrinterAdapter> {
       return new UsbAdapter();
   }
 }
+
+/** Standard ESC/POS cash-drawer kick pulse (drawer connected to pin 2). */
+const CASH_DRAWER_PULSE = Uint8Array.from([0x1b, 0x70, 0x00, 0x19, 0xfa]);
+
+export async function openCashDrawer(s: PrinterSettings): Promise<void> {
+  const printer = await getPrinter(s);
+  await printer.print(CASH_DRAWER_PULSE);
+}

@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { AdminIcon, type AdminIconName } from "./AdminIcon";
 import { AdminLink as Link } from "./AdminLink";
 
-export type AdminSection = "overview" | "sales" | "orders" | "inventory" | "products" | "catalog" | "customers" | "suppliers" | "expenses" | "employees" | "reports" | "audit" | "settings" | "promotions";
+export type AdminSection = "overview" | "sales" | "pos" | "orders" | "inventory" | "products" | "catalog" | "customers" | "suppliers" | "expenses" | "employees" | "reports" | "audit" | "settings" | "promotions";
 
 type NavItem = {
   label: string;
@@ -22,19 +22,20 @@ export type AdminSidebarConnection = {
 const primaryNav: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: "dashboard", active: "overview" },
   { label: "Sales", href: "/admin/sales", icon: "sales", active: "sales" },
-  { label: "POS", href: "/pos", icon: "pos" },
+  { label: "POS", href: "/admin/pos", icon: "pos", active: "pos" },
   { label: "Orders", href: "/admin/orders", icon: "orders", active: "orders" },
   { label: "Inventory", href: "/admin/inventory", icon: "inventory", active: "inventory" },
   { label: "Products", href: "/products", icon: "box", active: "products" },
+  { label: "Customers", href: "/admin/customers", icon: "customers", active: "customers" },
 ];
 
 const comingSoonNav: NavItem[] = [
   { label: "Suppliers", href: "/admin/suppliers", icon: "suppliers", active: "suppliers" },
   { label: "Expenses", href: "/admin/expenses", icon: "expenses", active: "expenses" },
-  { label: "Reports", href: "/admin/reports", icon: "reports", active: "reports" },
-  { label: "Audit log", href: "/admin/audit", icon: "history", active: "audit" },
   { label: "Employees", href: "/admin/employees", icon: "employees", active: "employees" },
   { label: "Promotions", href: "/admin/promotions", icon: "promotions", active: "promotions" },
+  { label: "Reports", href: "/admin/reports", icon: "reports", active: "reports" },
+  { label: "Audit log", href: "/admin/audit", icon: "history", active: "audit" },
   { label: "Settings", href: "/admin/settings", icon: "settings", active: "settings" },
 ];
 
@@ -44,6 +45,7 @@ function activeSectionForPath(pathname: string | null): AdminSection {
 
   const routeSections: Array<[string, AdminSection]> = [
     ["/admin/sales", "sales"],
+    ["/admin/pos", "pos"],
     ["/admin/orders", "orders"],
     ["/admin/inventory", "inventory"],
     ["/admin/products", "products"],
@@ -68,21 +70,20 @@ export function AdminSidebar({ branchName, active: activeOverride, connection }:
   return (
     <aside className="admin-sidebar hidden lg:flex">
       <div className="admin-sidebar__inner">
-        <Link href="/admin" className="admin-brand" aria-label="Mario's Lechon House dashboard">
-          <span className="admin-brand__mark"><AdminIcon name="pig" size={27} /></span>
+        <Link href="/admin" className="admin-brand" aria-label="Rico's Lechon House dashboard">
+          <span className="admin-brand__mark"><AdminIcon name="pig" size={30} /></span>
           <span className="admin-brand__copy">
-            <strong>Mario&apos;s</strong>
+            <strong>Rico&apos;s</strong>
             <small>LECHON HOUSE</small>
           </span>
         </Link>
 
         <div className="admin-branch-switcher" aria-label={`Current branch: ${branchName}`}>
-          <span className="admin-branch-switcher__label">Current branch</span>
           <strong>{branchName}</strong>
+          <span className="admin-branch-switcher__chevron" aria-hidden="true">⌄</span>
         </div>
 
         <nav aria-label="Admin navigation" className="admin-nav">
-          <p className="admin-nav__label">Main menu</p>
           <div className="admin-nav__group">
             {primaryNav.map((item) => item.href ? (
               <Link
@@ -91,14 +92,13 @@ export function AdminSidebar({ branchName, active: activeOverride, connection }:
                 aria-current={item.active === active ? "page" : undefined}
                 className={`admin-nav__item ${item.active === active ? "is-active" : ""}`}
               >
-                <AdminIcon name={item.icon} size={18} />
+                <AdminIcon name={item.icon} size={17} />
                 <span>{item.label}</span>
               </Link>
             ) : null)}
           </div>
 
-          <p className="admin-nav__label admin-nav__label--secondary">Manage</p>
-          <div className="admin-nav__group">
+          <div className="admin-nav__group admin-nav__group--secondary">
             {comingSoonNav.map((item) => item.href ? (
               <Link
                 key={item.label}
@@ -106,12 +106,12 @@ export function AdminSidebar({ branchName, active: activeOverride, connection }:
                 aria-current={item.active === active ? "page" : undefined}
                 className={`admin-nav__item ${item.active === active ? "is-active" : ""}`}
               >
-                <AdminIcon name={item.icon} size={18} />
+                <AdminIcon name={item.icon} size={17} />
                 <span>{item.label}</span>
               </Link>
             ) : (
               <span key={item.label} className="admin-nav__item is-disabled" aria-disabled="true">
-                <AdminIcon name={item.icon} size={18} />
+                <AdminIcon name={item.icon} size={17} />
                 <span>{item.label}</span>
                 {item.next && <small>Next</small>}
               </span>
@@ -119,19 +119,21 @@ export function AdminSidebar({ branchName, active: activeOverride, connection }:
           </div>
         </nav>
 
-        {connection ? (
-          <div className="admin-sidebar__connection" aria-label={`POS connection: ${connection.connected ? "connected" : "not connected"}`}>
-            <div className="admin-sidebar__connection-head"><span className={`admin-sidebar__connection-dot ${connection.connected ? "is-connected" : ""}`} aria-hidden="true" /><strong>POS Connection</strong></div>
-            <p className={connection.connected ? "is-connected" : "is-disconnected"}>{connection.connected ? "Connected" : "Not connected"}</p>
-            <small>{connection.lastSyncedLabel ? `Last synced: ${connection.lastSyncedLabel}` : "Register a terminal in settings"}</small>
-            <Link href="/admin/settings#devices" className="admin-sidebar__connection-action"><AdminIcon name="settings" size={13} /> Manage devices</Link>
+        <section className="admin-quick-actions" aria-labelledby="quick-actions-heading">
+          <h2 id="quick-actions-heading">Quick actions</h2>
+          <Link href="/pos" className="admin-quick-actions__item"><span className="admin-quick-actions__icon"><AdminIcon name="plus" size={15} /></span><span>New Sale</span></Link>
+          <Link href="/pos?quickAction=park" className="admin-quick-actions__item"><span className="admin-quick-actions__icon"><AdminIcon name="pos" size={15} /></span><span>Park Order</span></Link>
+          <Link href="/admin/orders?status=refunded" className="admin-quick-actions__item"><span className="admin-quick-actions__icon"><AdminIcon name="history" size={15} /></span><span>Return / Refund</span></Link>
+          <Link href="/pos?quickAction=drawer" className="admin-quick-actions__item"><span className="admin-quick-actions__icon"><AdminIcon name="wallet" size={15} /></span><span>Open Cash Drawer</span></Link>
+        </section>
+
+        <section className="admin-system-info" aria-label="POS system information">
+          <h2>System info</h2>
+          <div>
+            <span>Last synced: {connection?.lastSyncedLabel ?? "Not synced yet"}</span>
+            <Link href="/admin/settings#devices" aria-label="Open terminal settings"><AdminIcon name="refresh" size={14} /></Link>
           </div>
-        ) : (
-          <Link href="/admin/settings#devices" className="admin-sidebar__footer" aria-label="Open terminal settings">
-            <span className="admin-sidebar__footer-icon" aria-hidden="true"><AdminIcon name="settings" size={16} /></span>
-            <span><strong>Terminal settings</strong><small>Manage devices</small></span>
-          </Link>
-        )}
+        </section>
       </div>
     </aside>
   );

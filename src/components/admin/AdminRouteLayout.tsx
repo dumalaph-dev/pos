@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { AdminShell } from "./AdminShell";
-import { getAuthenticatedUser } from "@/lib/supabase/server";
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { getAdminProfile } from "@/lib/admin/profile";
 
 type AdminRole = "admin" | "manager" | "cashier";
 type ShellProfile = {
   role: AdminRole | null;
+  org_id: string;
   store_id: string | null;
   password_change_required: boolean;
   stores: { name?: string } | null;
@@ -14,10 +15,42 @@ type ShellProfile = {
 
 const DEFAULT_STORE_NAME = "Mario's Lechon House";
 
+function formatLastSynced(value: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat("en-PH", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "Asia/Singapore",
+  }).format(date);
+}
+
+async function readConnection(orgId: string, storeId: string | null) {
+  try {
+    const supabase = await createClient();
+    let query = supabase
+      .from("devices")
+      .select("is_active, last_seen_at")
+      .eq("org_id", orgId)
+      .order("last_seen_at", { ascending: false, nullsFirst: false })
+      .limit(1);
+    if (storeId) query = query.eq("store_id", storeId);
+    const { data } = await query.maybeSingle();
+    const lastSeenAt = typeof data?.last_seen_at === "string" ? data.last_seen_at : null;
+    const lastSeenMs = lastSeenAt ? new Date(lastSeenAt).getTime() : NaN;
+    const connected = Boolean(data?.is_active && Number.isFinite(lastSeenMs) && Date.now() - lastSeenMs <= 5 * 60 * 1000);
+    return { connected, lastSyncedLabel: formatLastSynced(lastSeenAt) };
+  } catch {
+    return { connected: false, lastSyncedLabel: null };
+  }
+}
+
 export default async function AdminRouteLayout({ children }: { children: ReactNode }) {
-  // No Supabase client here: the identity comes from the check middleware
-  // already performed, and the profile is served from the shared per-request
-  // cache the page is about to read too. The shell costs zero round trips.
+  // The identity comes from the check middleware already performed, and the
+  // profile is served from the shared per-request cache the page reads too.
   const user = await getAuthenticatedUser();
 
   if (!user) redirect("/");
@@ -29,6 +62,7 @@ export default async function AdminRouteLayout({ children }: { children: ReactNo
   if (!profile) return children;
 
   const branchName = profile.store_id ? profile.stores?.name ?? DEFAULT_STORE_NAME : "All branches";
+  const connection = await readConnection(profile.org_id, profile.store_id);
 
-  return <AdminShell branchName={branchName}>{children}</AdminShell>;
+  return <AdminShell branchName={branchName} connection={connection}>{children}</AdminShell>;
 }

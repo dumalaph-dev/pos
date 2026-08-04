@@ -8,7 +8,6 @@ import {
   listPendingOrders,
   type PendingOrder,
 } from "@/lib/offline";
-import type { PrinterSettings } from "@/lib/printer";
 import { buildReceipt } from "@/lib/receipt";
 
 type OrderStatus = "completed" | "voided" | "refunded";
@@ -97,7 +96,15 @@ type OrderHistoryProps = {
   storeName: string;
   offline: boolean;
   pendingCount: number;
-  printerSettings: PrinterSettings;
+  receiptSettings: {
+    paperWidth: 58 | 80;
+    vatRate: number;
+    showVat: boolean;
+    receiptHeader: string;
+    receiptFooter: string;
+    showCashier: boolean;
+    storeAddress: string | null;
+  };
   onClose: () => void;
   onPrint: (bytes: Uint8Array, label?: string) => Promise<boolean>;
   onToast: (message: string) => void;
@@ -298,9 +305,10 @@ function serverItems(rows: ServerItemRow[]) {
   }, new Map());
 }
 
-function receiptForOrder(order: OrderHistoryRecord, profile: OrderHistoryProfile, storeName: string, paperWidth: 58 | 80) {
+function receiptForOrder(order: OrderHistoryRecord, profile: OrderHistoryProfile, storeName: string, settings: OrderHistoryProps["receiptSettings"]) {
   return buildReceipt({
     storeName,
+    storeAddress: settings.storeAddress,
     orderNo: order.orderNo,
     cashier: order.cashierId === profile.id ? profile.full_name ?? "Cashier" : "Branch cashier",
     createdAt: new Date(order.createdAtDevice),
@@ -322,7 +330,12 @@ function receiptForOrder(order: OrderHistoryRecord, profile: OrderHistoryProfile
     amountTendered: order.amountTendered,
     changeDue: order.changeDue,
     isReprint: true,
-    paperWidth,
+    paperWidth: settings.paperWidth,
+    vatRate: settings.vatRate,
+    showVat: settings.showVat,
+    receiptHeader: settings.receiptHeader,
+    receiptFooter: settings.receiptFooter,
+    showCashier: settings.showCashier,
   });
 }
 
@@ -331,7 +344,7 @@ export default function OrderHistory({
   storeName,
   offline,
   pendingCount,
-  printerSettings,
+  receiptSettings,
   onClose,
   onPrint,
   onToast,
@@ -441,7 +454,7 @@ export default function OrderHistory({
   const reprintSelected = async () => {
     if (!selectedOrder || printingId) return;
     setPrintingId(selectedOrder.id);
-    const receipt = receiptForOrder(selectedOrder, profile, storeName, printerSettings.paperWidth);
+    const receipt = receiptForOrder(selectedOrder, profile, storeName, receiptSettings);
     try {
       const printed = await onPrint(receipt, "reprint");
       if (!printed) return;

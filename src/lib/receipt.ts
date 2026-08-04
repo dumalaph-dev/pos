@@ -24,6 +24,8 @@ export type ReceiptData = {
   vatableSale: number;
   vatAmount: number;
   vatExemptSale: number;
+  vatRate?: number;
+  showVat?: boolean;
   total: number;
   paymentMethod: string;
   paymentRef?: string | null;
@@ -32,6 +34,9 @@ export type ReceiptData = {
   officialReceipt?: boolean; // false → "not an official receipt" line
   isReprint?: boolean;
   paperWidth?: 58 | 80;
+  receiptHeader?: string | null;
+  receiptFooter?: string | null;
+  showCashier?: boolean;
 };
 
 const COLUMNS = { 58: 32, 80: 42 } as const;
@@ -122,12 +127,17 @@ export function buildReceipt(data: ReceiptData): Uint8Array {
   blank();
   line(data.storeName, { align: "center", bold: true, double: true });
   if (data.storeAddress) line(data.storeAddress, { align: "center" });
+  if (data.receiptHeader) {
+    for (const headerLine of data.receiptHeader.split(/\r?\n/).map((value) => value.trim()).filter(Boolean)) {
+      line(headerLine, { align: "center" });
+    }
+  }
   blank();
   rule();
   leftRight("Order #", data.orderNo, true);
   leftRight("Date", data.createdAt.toLocaleDateString("en-PH"));
   leftRight("Time", data.createdAt.toLocaleTimeString("en-PH"));
-  leftRight("Cashier", data.cashier);
+  if (data.showCashier !== false) leftRight("Cashier", data.cashier);
   if (data.isReprint) line("*** REPRINT ***", { align: "center", bold: true });
   rule();
 
@@ -148,9 +158,11 @@ export function buildReceipt(data: ReceiptData): Uint8Array {
     leftRight("Discount", "-" + peso(data.discountAmount));
     if (data.discountRef) line("  " + data.discountRef);
   }
-  if (data.vatExemptSale > 0) leftRight("VAT-exempt sale", peso(data.vatExemptSale));
-  leftRight("VATable sale", peso(data.vatableSale));
-  leftRight("VAT (12%)", peso(data.vatAmount));
+  if (data.showVat !== false) {
+    if (data.vatExemptSale > 0) leftRight("VAT-exempt sale", peso(data.vatExemptSale));
+    leftRight("VATable sale", peso(data.vatableSale));
+    leftRight(`VAT (${Math.round((data.vatRate ?? 0.12) * 100)}%)`, peso(data.vatAmount));
+  }
   blank();
   line("TOTAL", { bold: true, double: true });
   line(peso(data.total), { align: "center", bold: true, double: true });
@@ -167,6 +179,11 @@ export function buildReceipt(data: ReceiptData): Uint8Array {
   if (!data.officialReceipt) {
     line("THIS IS NOT AN OFFICIAL RECEIPT", { align: "center", bold: true });
     blank();
+  }
+  if (data.receiptFooter) {
+    for (const footerLine of data.receiptFooter.split(/\r?\n/).map((value) => value.trim()).filter(Boolean)) {
+      line(footerLine, { align: "center" });
+    }
   }
   line("Salamat po!", { align: "center", bold: true });
   blank();

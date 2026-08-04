@@ -74,6 +74,7 @@ function refreshSettings() {
   revalidatePath("/products");
   revalidatePath("/admin/inventory");
   revalidatePath("/pos");
+  revalidatePath("/admin/pos");
 }
 
 export async function updateOrganizationSettings(formData: FormData) {
@@ -109,7 +110,21 @@ export async function updateBranchSettings(formData: FormData) {
 
   const { data: existing } = await supabase.from("stores").select("settings").eq("id", storeId).eq("org_id", orgId).single();
   const existingSettings = isRecord(existing?.settings) ? existing.settings : {};
-  const settings = { ...existingSettings, receipt_header: receiptHeader || null, receipt_footer: receiptFooter || null };
+  const existingPosSettings = isRecord(existingSettings.pos_config) ? existingSettings.pos_config : null;
+  const settings = {
+    ...existingSettings,
+    receipt_header: receiptHeader || null,
+    receipt_footer: receiptFooter || null,
+    ...(existingPosSettings ? {
+      pos_config: {
+        ...existingPosSettings,
+        vatRate,
+        showVat: readBoolean(formData, "vat_registered"),
+        receiptHeader,
+        receiptFooter,
+      },
+    } : {}),
+  };
   const { error } = await supabase
     .from("stores")
     .update({
