@@ -19,6 +19,7 @@ export type OrderHistoryProfile = {
   org_id: string;
   store_id: string | null;
   store_name: string | null;
+  store_tin: string | null;
   full_name: string | null;
 };
 
@@ -104,6 +105,7 @@ type OrderHistoryProps = {
     receiptFooter: string;
     showCashier: boolean;
     storeAddress: string | null;
+    storeTin: string | null;
   };
   onClose: () => void;
   onPrint: (bytes: Uint8Array, label?: string) => Promise<boolean>;
@@ -309,6 +311,7 @@ function receiptForOrder(order: OrderHistoryRecord, profile: OrderHistoryProfile
   return buildReceipt({
     storeName,
     storeAddress: settings.storeAddress,
+    storeTin: settings.storeTin,
     orderNo: order.orderNo,
     cashier: order.cashierId === profile.id ? profile.full_name ?? "Cashier" : "Branch cashier",
     createdAt: new Date(order.createdAtDevice),

@@ -131,7 +131,7 @@ export function AdminSidebar({ branchName, active: activeOverride, connection }:
           <h2>System info</h2>
           <div>
             <span>Last synced: {connection?.lastSyncedLabel ?? "Not synced yet"}</span>
-            <Link href="/admin/settings#devices" aria-label="Open terminal settings"><AdminIcon name="refresh" size={14} /></Link>
+          <Link href="/admin/pos?tab=hardware" aria-label="Open terminal settings"><AdminIcon name="refresh" size={14} /></Link>
           </div>
         </section>
       </div>

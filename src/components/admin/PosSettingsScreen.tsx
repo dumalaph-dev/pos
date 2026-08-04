@@ -4,9 +4,10 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, useTransition, type CSSProperties, type SVGProps } from "react";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
-import { savePosSettings } from "@/app/admin/pos/actions";
+import { createDeviceSettings, savePosSettings, updateDeviceSettings } from "@/app/admin/pos/actions";
 import { buildReceipt } from "@/lib/receipt";
 import { getPrinter, type PrinterSettings } from "@/lib/printer";
+import { getPosTheme, POS_THEME_OPTIONS, type PosThemeId } from "@/lib/pos-theme";
 
 export type AdminPosProduct = {
   id: string;
@@ -29,7 +30,9 @@ export type AdminPosCategory = {
 
 export type AdminPosDevice = {
   id: string;
+  store_id: string;
   name: string;
+  device_prefix: string;
   printer_transport: "bluetooth" | "network" | "usb" | null;
   printer_config: Record<string, unknown>;
   is_active: boolean;
@@ -37,7 +40,7 @@ export type AdminPosDevice = {
 };
 
 export type PaletteId = "brown" | "blue" | "green" | "purple" | "custom";
-export type UiStyleId = "modern" | "classic" | "soft" | "dark" | "bold";
+export type UiStyleId = PosThemeId;
 export type PaymentMethodId = "cash" | "card" | "gcash" | "maya" | "more";
 
 export type PosConfig = {
@@ -57,7 +60,8 @@ export type PosConfig = {
   paperWidth: "58" | "80";
 };
 
-type TabId = "preview" | "settings" | "payments" | "receipts" | "hardware";
+export type PosTabId = "preview" | "settings" | "payments" | "receipts" | "hardware";
+type TabId = PosTabId;
 type PreviewDevice = "desktop" | "tablet";
 type UtilityPanel = "notifications" | "help" | "profile" | "";
 type CartLine = { product: AdminPosProduct; qty: number };
@@ -84,14 +88,6 @@ const PALETTE_OPTIONS: Array<{ id: PaletteId; label: string; color?: string }> =
   { id: "green", label: "Green", color: "#2f7344" },
   { id: "purple", label: "Purple", color: "#7450b5" },
   { id: "custom", label: "Custom" },
-];
-
-const STYLE_OPTIONS: Array<{ id: UiStyleId; label: string; description: string }> = [
-  { id: "modern", label: "Modern (Default)", description: "Clean, minimal and easy to use." },
-  { id: "classic", label: "Classic", description: "Timeless look with more depth." },
-  { id: "soft", label: "Soft", description: "Light, soft and friendly feel." },
-  { id: "dark", label: "Dark", description: "Sleek and high contrast." },
-  { id: "bold", label: "Bold", description: "High energy and vibrant." },
 ];
 
 const TABS: Array<{ id: TabId; label: string }> = [
@@ -143,6 +139,15 @@ function devicePrinterSettings(device: AdminPosDevice): PrinterSettings {
     port: readDeviceNumber(config.port, 9100),
     paperWidth: config.paper_width === 80 || config.paper_width === "80" ? 80 : 58,
   };
+}
+
+function deviceText(config: Record<string, unknown>, key: string, fallback = "") {
+  const value = config[key];
+  return typeof value === "string" || typeof value === "number" ? String(value) : fallback;
+}
+
+function devicePaperWidth(config: Record<string, unknown>) {
+  return config.paper_width === 80 || config.paper_width === "80" ? "80" : "58";
 }
 
 function formatDateTime(value: Date) {
@@ -263,11 +268,16 @@ export default function PosSettingsScreen({
   organizationName,
   branchName,
   address,
+  tin,
   storeId,
   cashierName,
   canWrite,
   branchOptions,
+  deviceBranchOptions,
   queryWarning,
+  initialTab,
+  savedMessage,
+  errorMessage,
   initialNow,
   products,
   categories,
@@ -277,11 +287,16 @@ export default function PosSettingsScreen({
   organizationName: string;
   branchName: string;
   address: string;
+  tin: string;
   storeId: string;
   cashierName: string;
   canWrite: boolean;
   branchOptions: Array<{ id: string; name: string }>;
+  deviceBranchOptions: Array<{ id: string; name: string }>;
   queryWarning: boolean;
+  initialTab: PosTabId;
+  savedMessage: string;
+  errorMessage: string;
   initialNow: string;
   products: AdminPosProduct[];
   categories: AdminPosCategory[];
@@ -290,9 +305,10 @@ export default function PosSettingsScreen({
 }) {
   const catalog = useMemo(() => buildCatalog(products), [products]);
   const categoryOptions = useMemo(() => buildCategories(categories), [categories]);
-  const [activeTab, setActiveTab] = useState<TabId>("preview");
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab);
   const [previewDevice, setPreviewDevice] = useState<PreviewDevice>("desktop");
   const [config, setConfig] = useState<PosConfig>(initialSettings);
+  const [branchDetails, setBranchDetails] = useState({ name: branchName, address, tin });
   const [activeCategory, setActiveCategory] = useState("all");
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -318,6 +334,9 @@ export default function PosSettingsScreen({
   const [isSaving, startSaving] = useTransition();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [now, setNow] = useState(() => new Date(initialNow));
+  const currentBranchName = branchDetails.name || branchName;
+  const currentAddress = branchDetails.address;
+  const currentTin = branchDetails.tin;
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
@@ -349,7 +368,10 @@ export default function PosSettingsScreen({
   const availablePaymentMethods = (Object.keys(config.paymentMethods) as PaymentMethodId[]).filter((method) => config.paymentMethods[method]);
   const selectedPaymentMethod = config.paymentMethods[paymentMethod] ? paymentMethod : availablePaymentMethods[0] ?? "cash";
   const paletteColor = config.palette === "custom" ? config.customColor || "#5b2a0a" : PALETTE_OPTIONS.find((option) => option.id === config.palette)?.color || "#5b2a0a";
-  const previewStyle = { "--preview-accent": paletteColor } as CSSProperties;
+  const previewStyle = {
+    ...getPosTheme(config.uiStyle).variables,
+    "--preview-accent": paletteColor,
+  } as CSSProperties;
 
   function updateConfig(patch: Partial<PosConfig>) {
     setConfig((current) => ({ ...current, ...patch }));
@@ -389,8 +411,9 @@ export default function PosSettingsScreen({
       const settings = devicePrinterSettings(device);
       const printer = await getPrinter(settings);
       await printer.print(buildReceipt({
-        storeName: organizationName,
-        storeAddress: address,
+        storeName: currentBranchName,
+        storeAddress: currentAddress,
+        storeTin: currentTin,
         orderNo: "POS-TEST",
         cashier: cashierName,
         createdAt: new Date(),
@@ -404,6 +427,11 @@ export default function PosSettingsScreen({
         paymentMethod: "test",
         officialReceipt: false,
         paperWidth: settings.paperWidth,
+        vatRate: config.vatRate,
+        showVat: config.showVat,
+        receiptHeader: config.receiptHeader,
+        receiptFooter: config.receiptFooter,
+        showCashier: config.showCashier,
       }));
       setToast(`${device.name} test receipt sent.`);
     } catch (error: unknown) {
@@ -419,6 +447,9 @@ export default function PosSettingsScreen({
     const formData = new FormData();
     formData.set("store_id", storeId);
     formData.set("settings", JSON.stringify(config));
+    formData.set("branch_name", branchDetails.name);
+    formData.set("address", branchDetails.address);
+    formData.set("tin", branchDetails.tin);
     startSaving(async () => {
       try {
         const result = await savePosSettings(formData);
@@ -428,6 +459,10 @@ export default function PosSettingsScreen({
       }
       window.setTimeout(() => setToast(""), 3200);
     });
+  }
+
+  function updateBranchDetails(patch: Partial<typeof branchDetails>) {
+    setBranchDetails((current) => ({ ...current, ...patch }));
   }
 
   function choosePalette(palette: PaletteId) {
@@ -490,14 +525,16 @@ export default function PosSettingsScreen({
         {utilityPanel ? (
           <div className="pos-utility-popover" role="dialog" aria-label={utilityPanel === "profile" ? "Account menu" : utilityPanel === "help" ? "POS help" : "Notifications"}>
             {utilityPanel === "notifications" ? <><strong>Notifications</strong><p>No new stock or device alerts.</p><Link href="/admin/inventory">Review inventory <MiniIcon name="chevron" size={13} /></Link></> : null}
-            {utilityPanel === "help" ? <><strong>Need help?</strong><p>POS changes are saved to the selected branch and appear on the live cashier preview.</p><Link href="/admin/settings#devices">Open terminal settings <MiniIcon name="chevron" size={13} /></Link></> : null}
-            {utilityPanel === "profile" ? <><strong>{cashierName}</strong><p>{organizationName} · {branchName}</p><Link href="/account/password">Change password <MiniIcon name="chevron" size={13} /></Link><SignOutButton variant="menu" /></> : null}
+            {utilityPanel === "help" ? <><strong>Need help?</strong><p>POS changes are saved to the selected branch and appear on the live cashier preview.</p><Link href="/admin/pos?tab=hardware">Open terminal settings <MiniIcon name="chevron" size={13} /></Link></> : null}
+            {utilityPanel === "profile" ? <><strong>{cashierName}</strong><p>{organizationName} · {currentBranchName}</p><Link href="/account/password">Change password <MiniIcon name="chevron" size={13} /></Link><SignOutButton variant="menu" /></> : null}
           </div>
         ) : null}
       </header>
 
       <div className="pos-settings-content">
-        {queryWarning ? <div className="pos-settings-warning" role="status"><MiniIcon name="info" size={16} /> Some branch data could not be loaded. The preview is showing safe local fallback items; refresh after reconnecting to see the full catalog.</div> : null}
+         {savedMessage ? <div className="pos-settings-status pos-settings-status--success" role="status"><MiniIcon name="check" size={16} /> {savedMessage}</div> : null}
+         {errorMessage ? <div className="pos-settings-status pos-settings-status--error" role="alert"><MiniIcon name="info" size={16} /> {errorMessage}</div> : null}
+         {queryWarning ? <div className="pos-settings-warning" role="status"><MiniIcon name="info" size={16} /> Some branch data could not be loaded. The preview is showing safe local fallback items; refresh after reconnecting to see the full catalog.</div> : null}
         <div className="pos-settings-layout">
           <section className="pos-editor-card" aria-label="POS configuration workspace">
             <nav className="pos-settings-tabs" aria-label="POS settings sections">
@@ -515,8 +552,8 @@ export default function PosSettingsScreen({
                 </div>
                 <PreviewWindow
                   organizationName={organizationName}
-                  branchName={branchName}
-                  address={address}
+                   branchName={currentBranchName}
+                   address={currentAddress}
                   cashierName={cashierName}
                   now={now}
                   config={config}
@@ -567,8 +604,8 @@ export default function PosSettingsScreen({
 
             {activeTab === "settings" ? <PosSettingsPanel config={config} updateConfig={updateConfig} orderType={orderType} setDefaultOrderType={chooseDefaultOrderType} toggleOrderType={toggleOrderType} /> : null}
             {activeTab === "payments" ? <PaymentMethodsPanel config={config} updateConfig={updateConfig} /> : null}
-            {activeTab === "receipts" ? <ReceiptSettingsPanel config={config} updateConfig={updateConfig} branchName={branchName} /> : null}
-            {activeTab === "hardware" ? <HardwarePanel devices={devices} deviceTest={deviceTest} onTestDevice={testDevice} /> : null}
+            {activeTab === "receipts" ? <ReceiptSettingsPanel config={config} updateConfig={updateConfig} branchDetails={branchDetails} updateBranchDetails={updateBranchDetails} /> : null}
+            {activeTab === "hardware" ? <HardwarePanel devices={devices} deviceBranches={deviceBranchOptions} currentStoreId={storeId} canWrite={canWrite} deviceTest={deviceTest} onTestDevice={testDevice} /> : null}
           </section>
 
           <AppearancePanel
@@ -741,11 +778,29 @@ function PreviewWindow({
 }
 
 function AppearancePanel({ config, choosePalette, updateConfig, customPaletteOpen, setCustomPaletteOpen }: { config: PosConfig; choosePalette: (palette: PaletteId) => void; updateConfig: (patch: Partial<PosConfig>) => void; customPaletteOpen: boolean; setCustomPaletteOpen: (value: boolean) => void }) {
+  const activeTheme = getPosTheme(config.uiStyle);
+
   return (
     <aside className="pos-appearance-card">
       <div className="pos-appearance-card__heading"><h2>POS Appearance</h2><p>Customize the look and feel of your POS.</p></div>
       <div className="pos-appearance-section"><h3>Color Palette</h3><p>Choose a color palette</p><div className="pos-palette-options">{PALETTE_OPTIONS.map((palette) => <button type="button" key={palette.id} className={`pos-palette-option ${config.palette === palette.id ? "is-selected" : ""}`} aria-label={`Use ${palette.label} palette`} onClick={() => choosePalette(palette.id)}>{palette.color ? <span style={{ background: palette.color }} /> : <span className="pos-palette-custom"><MiniIcon name="plus" size={16} /></span>}{config.palette === palette.id ? <b><MiniIcon name="check" size={11} /></b> : null}</button>)}</div>{customPaletteOpen ? <label className="pos-custom-color"><span>Custom accent</span><input type="color" value={config.customColor || "#5b2a0a"} onChange={(event) => updateConfig({ customColor: event.target.value })} /><button type="button" onClick={() => setCustomPaletteOpen(false)}>Done</button></label> : null}</div>
-      <div className="pos-appearance-section"><h3>Theme UI Style</h3><p>Choose the overall UI style</p><select className="pos-appearance-select" value={config.uiStyle} onChange={(event) => updateConfig({ uiStyle: event.target.value as UiStyleId })}>{STYLE_OPTIONS.map((style) => <option value={style.id} key={style.id}>{style.label}</option>)}</select><div className="pos-style-options">{STYLE_OPTIONS.map((style) => <button type="button" key={style.id} className={`pos-style-option ${config.uiStyle === style.id ? "is-selected" : ""}`} onClick={() => updateConfig({ uiStyle: style.id })}><span className={`pos-style-thumbnail pos-style-thumbnail--${style.id}`}><i /><i /><i /></span><span><strong>{style.label}</strong><small>{style.description}</small></span><span className="pos-style-radio" /></button>)}</div></div>
+      <div className="pos-appearance-section pos-theme-section">
+        <div className="pos-theme-section-heading">
+          <div><h3>Interface theme</h3><p>Choose a complete visual system for the cashier workspace.</p></div>
+          <span className="pos-theme-active-pill"><MiniIcon name="check" size={11} /> Active</span>
+        </div>
+        <div className={`pos-theme-active-summary pos-theme-active-summary--${activeTheme.id}`}>
+          <span className={`pos-style-thumbnail pos-style-thumbnail--${activeTheme.id}`} aria-hidden="true"><i className="pos-style-thumbnail__top" /><i className="pos-style-thumbnail__rail" /><i className="pos-style-thumbnail__card" /><i className="pos-style-thumbnail__order" /><i className="pos-style-thumbnail__accent" /></span>
+          <span><small>Selected theme</small><strong>{activeTheme.label}</strong><p>{activeTheme.description}</p><em>{activeTheme.mood}</em></span>
+        </div>
+        <div className="pos-style-options" role="radiogroup" aria-label="POS interface theme">
+          {POS_THEME_OPTIONS.map((style) => <button type="button" role="radio" aria-checked={config.uiStyle === style.id} key={style.id} className={`pos-style-option ${config.uiStyle === style.id ? "is-selected" : ""}`} onClick={() => updateConfig({ uiStyle: style.id })}>
+            <span className={`pos-style-thumbnail pos-style-thumbnail--${style.id}`} aria-hidden="true"><i className="pos-style-thumbnail__top" /><i className="pos-style-thumbnail__rail" /><i className="pos-style-thumbnail__card" /><i className="pos-style-thumbnail__order" /><i className="pos-style-thumbnail__accent" /></span>
+            <span><strong>{style.label}</strong><small>{style.description}</small><em>{style.mood}</em></span>
+            <span className="pos-style-radio" />
+          </button>)}
+        </div>
+      </div>
       <div className="pos-appearance-note"><MiniIcon name="info" size={16} /><div><strong>Preview updates instantly</strong><p>All changes you make here will be reflected in the POS preview on the left.</p></div></div>
     </aside>
   );
@@ -757,7 +812,7 @@ function PanelHeading({ eyebrow, title, description }: { eyebrow: string; title:
 
 function PosSettingsPanel({ config, updateConfig, orderType, setDefaultOrderType, toggleOrderType }: { config: PosConfig; updateConfig: (patch: Partial<PosConfig>) => void; orderType: string; setDefaultOrderType: (value: string) => void; toggleOrderType: (value: string) => void }) {
   return (
-    <div className="pos-config-panel"><PanelHeading eyebrow="Cashier experience" title="POS Settings" description="Control how staff move through the sale flow at this branch." /><div className="pos-config-grid"><label className="pos-config-field"><span>Default order type</span><select value={config.defaultOrderType} onChange={(event) => setDefaultOrderType(event.target.value)}>{ORDER_TYPE_OPTIONS.map((value) => <option key={value}>{value}</option>)}</select></label><label className="pos-config-field"><span>VAT rate (%)</span><input type="number" min="0" max="100" step="0.01" value={(config.vatRate * 100).toFixed(2)} onChange={(event) => updateConfig({ vatRate: Math.max(0, Math.min(1, Number(event.target.value) / 100 || 0)) })} /></label></div><div className="pos-config-list"><ToggleRow title="Show VAT in checkout" description="Keep the VAT line visible in the current order summary." checked={config.showVat} onChange={(checked) => updateConfig({ showVat: checked })} /><ToggleRow title="Show stock status" description="Show on-hand status on product tiles when inventory is tracked." checked={config.showStockStatus} onChange={(checked) => updateConfig({ showStockStatus: checked })} /><ToggleRow title="Enable order notes" description="Let cashiers add preparation instructions to an order." checked={config.enableOrderNotes} onChange={(checked) => updateConfig({ enableOrderNotes: checked })} /></div><div className="pos-order-type-settings"><div><h3>Order types</h3><p>Choose which order types cashiers can use.</p></div>{ORDER_TYPE_OPTIONS.map((type) => <label key={type}><input type="checkbox" checked={config.orderTypes.includes(type)} onChange={() => toggleOrderType(type)} /><span>{type}</span>{orderType === type ? <small>Default</small> : null}</label>)}</div></div>
+    <div className="pos-config-panel"><PanelHeading eyebrow="Cashier experience" title="POS Settings" description="Control how staff move through the sale flow at this branch." /><div className="pos-config-grid"><label className="pos-config-field"><span>Default order type</span><select value={config.defaultOrderType} onChange={(event) => setDefaultOrderType(event.target.value)}>{ORDER_TYPE_OPTIONS.map((value) => <option key={value}>{value}</option>)}</select></label></div><div className="pos-config-list"><ToggleRow title="Show stock status" description="Show on-hand status on product tiles when inventory is tracked." checked={config.showStockStatus} onChange={(checked) => updateConfig({ showStockStatus: checked })} /><ToggleRow title="Enable order notes" description="Let cashiers add preparation instructions to an order." checked={config.enableOrderNotes} onChange={(checked) => updateConfig({ enableOrderNotes: checked })} /></div><div className="pos-order-type-settings"><div><h3>Order types</h3><p>Choose which order types cashiers can use.</p></div>{ORDER_TYPE_OPTIONS.map((type) => <label key={type}><input type="checkbox" checked={config.orderTypes.includes(type)} onChange={() => toggleOrderType(type)} /><span>{type}</span>{orderType === type ? <small>Default</small> : null}</label>)}</div></div>
   );
 }
 
@@ -772,14 +827,71 @@ function PaymentMethodsPanel({ config, updateConfig }: { config: PosConfig; upda
   return <div className="pos-config-panel"><PanelHeading eyebrow="Tender configuration" title="Payment Methods" description="Choose which payment methods are available to cashiers at checkout." /><div className="pos-payment-settings-list">{methods.map((method) => <div className={`pos-payment-settings-row ${config.paymentMethods[method.id] ? "is-enabled" : ""}`} key={method.id}><span className="pos-payment-settings-icon"><MiniIcon name={method.icon} size={18} /></span><span><strong>{method.label}</strong><small>{method.description}</small></span><Toggle label={`${method.label} payment method`} checked={config.paymentMethods[method.id]} onChange={(checked) => updateConfig({ paymentMethods: { ...config.paymentMethods, [method.id]: checked } })} /></div>)}</div></div>;
 }
 
-function ReceiptSettingsPanel({ config, updateConfig, branchName }: { config: PosConfig; updateConfig: (patch: Partial<PosConfig>) => void; branchName: string }) {
-  return <div className="pos-config-panel"><PanelHeading eyebrow="Printed order slip" title="Receipt Settings" description={`Configure what prints for ${branchName}. These values are stored with the branch.`} /><div className="pos-config-grid"><label className="pos-config-field pos-config-field--full"><span>Receipt header</span><textarea maxLength={200} value={config.receiptHeader} onChange={(event) => updateConfig({ receiptHeader: event.target.value })} placeholder="Optional line below the branch name" /></label><label className="pos-config-field pos-config-field--full"><span>Receipt footer</span><textarea maxLength={200} value={config.receiptFooter} onChange={(event) => updateConfig({ receiptFooter: event.target.value })} placeholder="Thank you message or return policy" /></label><label className="pos-config-field"><span>Paper width</span><select value={config.paperWidth} onChange={(event) => updateConfig({ paperWidth: event.target.value === "80" ? "80" : "58" })}><option value="58">58mm</option><option value="80">80mm</option></select></label></div><div className="pos-config-list"><ToggleRow title="Show cashier name" description="Print the active cashier on the order slip." checked={config.showCashier} onChange={(checked) => updateConfig({ showCashier: checked })} /><ToggleRow title="Include VAT summary" description="Print the VAT rate and amount when enabled for the branch." checked={config.showVat} onChange={(checked) => updateConfig({ showVat: checked })} /></div></div>;
+type BranchDetails = { name: string; address: string; tin: string };
+
+function ReceiptSettingsPanel({ config, updateConfig, branchDetails, updateBranchDetails }: { config: PosConfig; updateConfig: (patch: Partial<PosConfig>) => void; branchDetails: BranchDetails; updateBranchDetails: (patch: Partial<BranchDetails>) => void }) {
+  return (
+    <div className="pos-config-panel">
+      <PanelHeading eyebrow="Branch receipt profile" title="Receipt and tax details" description={`Configure the branch identity and receipt output for ${branchDetails.name || "this branch"}. Save Changes applies the complete POS configuration.`} />
+      <div className="pos-config-grid">
+        <label className="pos-config-field"><span>Branch name</span><input maxLength={120} value={branchDetails.name} onChange={(event) => updateBranchDetails({ name: event.target.value })} /></label>
+        <label className="pos-config-field"><span>TIN</span><input maxLength={80} value={branchDetails.tin} onChange={(event) => updateBranchDetails({ tin: event.target.value })} placeholder="Optional tax ID" /></label>
+        <label className="pos-config-field pos-config-field--full"><span>Branch address</span><input maxLength={240} value={branchDetails.address} onChange={(event) => updateBranchDetails({ address: event.target.value })} placeholder="Address printed on receipts" /></label>
+        <label className="pos-config-field"><span>VAT rate (%)</span><input type="number" min="0" max="100" step="0.01" value={(config.vatRate * 100).toFixed(2)} onChange={(event) => updateConfig({ vatRate: Math.max(0, Math.min(1, Number(event.target.value) / 100 || 0)) })} /></label>
+        <label className="pos-config-field"><span>Paper width</span><select value={config.paperWidth} onChange={(event) => updateConfig({ paperWidth: event.target.value === "80" ? "80" : "58" })}><option value="58">58mm</option><option value="80">80mm</option></select></label>
+        <label className="pos-config-field pos-config-field--full"><span>Receipt header</span><textarea maxLength={200} value={config.receiptHeader} onChange={(event) => updateConfig({ receiptHeader: event.target.value })} placeholder="Optional line below the branch name" /></label>
+        <label className="pos-config-field pos-config-field--full"><span>Receipt footer</span><textarea maxLength={200} value={config.receiptFooter} onChange={(event) => updateConfig({ receiptFooter: event.target.value })} placeholder="Thank you message or return policy" /></label>
+      </div>
+      <div className="pos-config-list">
+        <ToggleRow title="Include VAT summary" description="Show the configured VAT rate and amount in checkout and printed receipts." checked={config.showVat} onChange={(checked) => updateConfig({ showVat: checked })} />
+        <ToggleRow title="Show cashier name" description="Print the active cashier on the order slip." checked={config.showCashier} onChange={(checked) => updateConfig({ showCashier: checked })} />
+      </div>
+    </div>
+  );
 }
 
 function ToggleRow({ title, description, checked, onChange }: { title: string; description: string; checked: boolean; onChange: (checked: boolean) => void }) {
   return <div className="pos-toggle-row"><span><strong>{title}</strong><small>{description}</small></span><Toggle label={title} checked={checked} onChange={onChange} /></div>;
 }
 
-function HardwarePanel({ devices, deviceTest, onTestDevice }: { devices: AdminPosDevice[]; deviceTest: string | null; onTestDevice: (device: AdminPosDevice) => void }) {
-  return <div className="pos-config-panel"><PanelHeading eyebrow="Terminal connections" title="Hardware" description="Review the branch terminals that can print orders and open the cash drawer." />{devices.length ? <div className="pos-hardware-list">{devices.map((device) => <div className="pos-hardware-row" key={device.id}><span className={`pos-hardware-status ${device.is_active ? "is-active" : ""}`} /><span className="pos-hardware-icon"><MiniIcon name="desktop" size={18} /></span><span><strong>{device.name}</strong><small>{device.printer_transport ? `${device.printer_transport[0].toUpperCase()}${device.printer_transport.slice(1)} printer` : "Printer not configured"} · {device.is_active ? "Active" : "Disabled"}</small></span><button type="button" className="pos-outline-button" onClick={() => onTestDevice(device)} disabled={deviceTest !== null}>{deviceTest === device.id ? "Testing..." : "Test"}</button></div>)}</div> : <div className="pos-config-empty"><MiniIcon name="printer" size={22} /><strong>No terminals registered</strong><p>Register a device to connect a printer and cash drawer.</p></div>}<Link href="/admin/settings#devices" className="pos-primary-link"><MiniIcon name="settings" size={15} /> Manage terminals in Settings</Link></div>;
+function HardwarePanel({ devices, deviceBranches, currentStoreId, canWrite, deviceTest, onTestDevice }: { devices: AdminPosDevice[]; deviceBranches: Array<{ id: string; name: string }>; currentStoreId: string; canWrite: boolean; deviceTest: string | null; onTestDevice: (device: AdminPosDevice) => void }) {
+  const defaultBranch = currentStoreId || deviceBranches[0]?.id || "";
+  return (
+    <div className="pos-config-panel">
+      <PanelHeading eyebrow="Terminal connections" title="POS terminals and printers" description="Register and maintain the physical counters that print orders and open the cash drawer for this branch." />
+      <div className="pos-hardware-layout">
+        <form action={createDeviceSettings} className="pos-hardware-form">
+          <div className="pos-hardware-form__heading"><div><p>New terminal</p><h3>Register a POS device</h3><span>Give each counter a unique prefix for order numbers.</span></div><span className="pos-hardware-badge">Admin only</span></div>
+          <DeviceBranchField id="new-device-store" name="store_id" value={defaultBranch} branches={deviceBranches} canWrite={canWrite} />
+          <div className="pos-config-grid">
+            <label className="pos-config-field"><span>Terminal name</span><input name="name" defaultValue="Counter 1" disabled={!canWrite} required maxLength={80} /></label>
+            <label className="pos-config-field"><span>Device prefix</span><input name="device_prefix" defaultValue="T1" disabled={!canWrite} required maxLength={12} /></label>
+          </div>
+          <DevicePrinterFields prefix="new-device" config={{}} transport="network" canWrite={canWrite} />
+          <button type="submit" className="pos-save-button pos-hardware-submit" disabled={!canWrite || !defaultBranch}><MiniIcon name="plus" size={16} /> Register terminal</button>
+        </form>
+
+        <div className="pos-hardware-devices">
+          {devices.length ? devices.map((device) => <DeviceEditor key={device.id} device={device} deviceBranches={deviceBranches} canWrite={canWrite} deviceTest={deviceTest} onTestDevice={onTestDevice} />) : <div className="pos-config-empty"><MiniIcon name="printer" size={22} /><strong>No terminals registered</strong><p>Register a device to connect a printer and cash drawer.</p></div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeviceBranchField({ id, name, value, branches, canWrite }: { id: string; name: string; value: string; branches: Array<{ id: string; name: string }>; canWrite: boolean }) {
+  if (branches.length > 1) {
+    return <label className="pos-config-field"><span>Branch</span><select id={id} name={name} defaultValue={value} disabled={!canWrite} required>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>;
+  }
+  return <div className="pos-config-field"><span>Branch</span><input type="hidden" name={name} value={value} /><div className="pos-readonly-field">{branches[0]?.name ?? "No active branch"}</div></div>;
+}
+
+function DevicePrinterFields({ prefix, config, transport, canWrite }: { prefix: string; config: Record<string, unknown>; transport: "network" | "bluetooth" | "usb"; canWrite: boolean }) {
+  return <div className="pos-device-printer-fields"><p className="pos-hardware-section-label">Printer connection</p><div className="pos-config-grid"><label className="pos-config-field"><span>Printer transport</span><select id={`${prefix}-transport`} name="printer_transport" defaultValue={transport} disabled={!canWrite}><option value="network">Network</option><option value="bluetooth">Bluetooth</option><option value="usb">USB</option></select></label><label className="pos-config-field"><span>Paper width</span><select id={`${prefix}-paper`} name="paper_width" defaultValue={devicePaperWidth(config)} disabled={!canWrite}><option value="58">58mm</option><option value="80">80mm</option></select></label><label className="pos-config-field"><span>Printer IP</span><input id={`${prefix}-ip`} name="ip" defaultValue={deviceText(config, "ip")} disabled={!canWrite} placeholder="192.168.1.50" /></label><label className="pos-config-field"><span>Printer port</span><input id={`${prefix}-port`} name="port" type="number" inputMode="numeric" min="1" max="65535" defaultValue={deviceText(config, "port", "9100")} disabled={!canWrite} /></label><label className="pos-config-field"><span>Bridge host</span><input id={`${prefix}-bridge`} name="bridge_host" defaultValue={deviceText(config, "bridge_host", "127.0.0.1")} disabled={!canWrite} placeholder="127.0.0.1" /></label><label className="pos-config-field"><span>Bridge port</span><input id={`${prefix}-bridge-port`} name="bridge_port" type="number" inputMode="numeric" min="1" max="65535" defaultValue={deviceText(config, "bridge_port", "8787")} disabled={!canWrite} /></label></div><p className="pos-hardware-help">Network printers use the local WebSocket bridge. Bluetooth and USB require browser support on the POS device.</p></div>;
+}
+
+function DeviceEditor({ device, deviceBranches, canWrite, deviceTest, onTestDevice }: { device: AdminPosDevice; deviceBranches: Array<{ id: string; name: string }>; canWrite: boolean; deviceTest: string | null; onTestDevice: (device: AdminPosDevice) => void }) {
+  const branchName = deviceBranches.find((branch) => branch.id === device.store_id)?.name ?? "Selected branch";
+  const transport = device.printer_transport ?? "network";
+  return <form action={updateDeviceSettings} className="pos-device-editor"><div className="pos-device-editor__header"><div className="pos-device-editor__identity"><span className={`pos-hardware-status ${device.is_active ? "is-active" : ""}`} /><span className="pos-hardware-icon"><MiniIcon name="desktop" size={18} /></span><div><strong>{device.name}</strong><small>{branchName} · {transport[0].toUpperCase() + transport.slice(1)} printer · {device.is_active ? "Active" : "Disabled"}</small></div></div><button type="button" className="pos-outline-button pos-device-test" onClick={() => onTestDevice(device)} disabled={deviceTest !== null}>{deviceTest === device.id ? "Testing..." : "Test receipt"}</button></div><input type="hidden" name="device_id" value={device.id} /><div className="pos-config-grid"><DeviceBranchField id={`device-${device.id}-store`} name="store_id" value={device.store_id} branches={deviceBranches} canWrite={canWrite} /><label className="pos-config-field"><span>Terminal name</span><input name="name" defaultValue={device.name} disabled={!canWrite} required maxLength={80} /></label><label className="pos-config-field"><span>Device prefix</span><input name="device_prefix" defaultValue={device.device_prefix} disabled={!canWrite} required maxLength={12} /></label></div><DevicePrinterFields prefix={`device-${device.id}`} config={device.printer_config ?? {}} transport={transport} canWrite={canWrite} /><div className="pos-device-editor__footer"><label className="pos-checkbox"><input type="checkbox" name="is_active" defaultChecked={device.is_active} disabled={!canWrite} /><span>Terminal active</span></label><button type="submit" className="pos-outline-button" disabled={!canWrite}>Save terminal settings</button></div></form>;
 }
