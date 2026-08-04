@@ -25,6 +25,7 @@ type StoreRecord = {
   id: string;
   name: string;
   address: string | null;
+  tin: string | null;
   vat_registered: boolean;
   vat_rate: number;
   settings: JsonRecord;
@@ -62,6 +63,10 @@ function readEnum<T extends readonly string[]>(value: unknown, values: T, fallba
   return typeof value === "string" && values.includes(value) ? value as T[number] : fallback;
 }
 
+function readTab(value: unknown) {
+  return value === "receipts" || value === "hardware" || value === "settings" || value === "payments" ? value : "preview";
+}
+
 function readPosConfig(store: StoreRecord): PosConfig {
   const source = isRecord(store.settings?.pos_config) ? store.settings.pos_config : {};
   const paymentSource = isRecord(source.paymentMethods) ? source.paymentMethods : {};
@@ -91,7 +96,7 @@ function readPosConfig(store: StoreRecord): PosConfig {
     receiptHeader: readText(source.receiptHeader) || readText(store.settings?.receipt_header),
     receiptFooter: readText(source.receiptFooter) || readText(store.settings?.receipt_footer),
     showCashier: readBoolean(source.showCashier, true),
-    paperWidth: source.paperWidth === "80" ? "80" : "58",
+    paperWidth: source.paperWidth === "80" || (source.paperWidth === undefined && store.settings?.paper_width === "80") ? "80" : "58",
   };
 }
 
@@ -117,7 +122,7 @@ function catalogImage(name: string, imageUrl: string | null) {
   return imageMap[normalized] ?? null;
 }
 
-export default async function AdminPosPage({ searchParams }: { searchParams: Promise<{ store?: string | string[] }> }) {
+export default async function AdminPosPage({ searchParams }: { searchParams: Promise<{ store?: string | string[]; tab?: string | string[]; error?: string | string[]; saved?: string | string[] }> }) {
   const user = await getAuthenticatedUser();
   if (!user) redirect("/");
 
@@ -127,11 +132,14 @@ export default async function AdminPosPage({ searchParams }: { searchParams: Pro
   if (!profile) return <PosProfileMissing />;
   const params = await searchParams;
   const requestedStoreId = readParam(params.store);
+  const initialTab = readTab(readParam(params.tab));
+  const errorMessage = readParam(params.error);
+  const saved = readParam(params.saved);
 
   const supabase = await createClient();
   const [organizationResult, storesResult] = await Promise.all([
     supabase.from("organizations").select("name").eq("id", profile.org_id).maybeSingle(),
-    supabase.from("stores").select("id, name, address, vat_registered, vat_rate, settings").eq("org_id", profile.org_id).eq("is_active", true).order("name"),
+    supabase.from("stores").select("id, name, address, tin, vat_registered, vat_rate, settings").eq("org_id", profile.org_id).eq("is_active", true).order("name"),
   ]);
 
   const stores = (storesResult.data ?? []) as StoreRecord[];
@@ -142,7 +150,7 @@ export default async function AdminPosPage({ searchParams }: { searchParams: Pro
     ? await Promise.all([
         supabase.from("categories").select("id, name, icon").eq("store_id", storeId).eq("is_active", true).order("sort_order"),
         supabase.from("products").select("id, name, pricing_mode, price, unit, category_id, image_url, track_stock, min_stock").eq("store_id", storeId).eq("is_active", true).order("sort_order"),
-        supabase.from("devices").select("id, name, printer_transport, printer_config, is_active, last_seen_at").eq("store_id", storeId).order("name"),
+        supabase.from("devices").select("id, store_id, name, device_prefix, printer_transport, printer_config, is_active, last_seen_at").eq("store_id", storeId).order("name"),
       ])
     : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
 
@@ -167,22 +175,31 @@ export default async function AdminPosPage({ searchParams }: { searchParams: Pro
   const organizationName = organizationResult.data?.name || profile.organizations?.name || DEFAULT_ORGANIZATION_NAME;
   const branchName = store?.name || profile.stores?.name || DEFAULT_STORE_NAME;
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
+  const savedMessage = saved === "settings" ? "POS settings saved." : saved === "branch" ? "Receipt and tax details saved." : saved === "device" ? "Terminal settings saved." : "";
+  const deviceBranchOptions = profile.store_id
+    ? store ? [{ id: store.id, name: store.name }] : []
+    : stores.map((candidate) => ({ id: candidate.id, name: candidate.name }));
 
   return (
     <PosSettingsScreen
       organizationName={organizationName}
       branchName={branchName}
       address={store?.address ?? ""}
+      tin={store?.tin ?? ""}
       storeId={storeId}
       cashierName={firstName}
       canWrite={profile.role === "admin"}
       branchOptions={profile.store_id ? [] : stores.map((candidate) => ({ id: candidate.id, name: candidate.name }))}
+      deviceBranchOptions={deviceBranchOptions}
       queryWarning={queryWarning}
+      initialTab={initialTab}
+      savedMessage={savedMessage}
+      errorMessage={errorMessage}
       initialNow={new Date().toISOString()}
       products={products}
       categories={categories}
       devices={devices}
-      initialSettings={store ? readPosConfig(store) : readPosConfig({ id: "", name: DEFAULT_STORE_NAME, address: null, vat_registered: true, vat_rate: 0.12, settings: {} })}
+      initialSettings={store ? readPosConfig(store) : readPosConfig({ id: "", name: DEFAULT_STORE_NAME, address: null, tin: null, vat_registered: true, vat_rate: 0.12, settings: {} })}
     />
   );
 }

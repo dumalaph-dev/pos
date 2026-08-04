@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 type JsonRecord = Record<string, unknown>;
+type PrinterTransport = "network" | "bluetooth" | "usb";
 
 const PALETTES = ["brown", "blue", "green", "purple", "custom"] as const;
 const UI_STYLES = ["modern", "classic", "soft", "dark", "bold"] as const;
@@ -22,6 +23,10 @@ function readText(formData: FormData, name: string) {
 
 function readBoolean(value: unknown, fallback: boolean) {
   return typeof value === "boolean" ? value : fallback;
+}
+
+function readFormBoolean(formData: FormData, name: string) {
+  return formData.get(name) === "on" || formData.get(name) === "true";
 }
 
 function readEnum<T extends readonly string[]>(value: unknown, values: T, fallback: T[number]) {
@@ -42,8 +47,16 @@ function readSettings(value: string): JsonRecord | null {
   }
 }
 
-function settingsRedirect(message: string): never {
-  redirect(`/admin/pos?error=${encodeURIComponent(message)}`);
+function posRedirect(message: string, tab: "preview" | "receipts" | "hardware" = "preview"): never {
+  redirect(`/admin/pos?tab=${tab}&error=${encodeURIComponent(message)}`);
+}
+
+function posSaved(value: "settings" | "branch" | "device", tab: "preview" | "receipts" | "hardware" = "preview"): never {
+  redirect(`/admin/pos?tab=${tab}&saved=${value}`);
+}
+
+function validateRequiredText(value: string, label: string, maxLength: number, tab: "receipts" | "hardware") {
+  if (!value || value.length > maxLength) posRedirect(`${label} is required and must be at most ${maxLength} characters.`, tab);
 }
 
 async function requireAdminStore(storeId: string) {
@@ -58,16 +71,16 @@ async function requireAdminStore(storeId: string) {
     .eq("id", user.id)
     .single();
 
-  if (!profile || profile.role !== "admin") settingsRedirect("Only organization admins can save POS settings.");
+  if (!profile || profile.role !== "admin") posRedirect("Only organization admins can save POS settings.");
 
   const { data: store } = await supabase
     .from("stores")
-    .select("id, settings, vat_rate, vat_registered")
+    .select("id, name, address, tin, settings, vat_rate, vat_registered")
     .eq("id", storeId)
     .eq("org_id", profile.org_id)
     .maybeSingle();
 
-  if (!store) settingsRedirect("Choose a valid branch before saving POS settings.");
+  if (!store) posRedirect("Choose a valid branch before saving POS settings.");
 
   return { supabase, store };
 }
@@ -116,6 +129,12 @@ export async function savePosSettings(formData: FormData) {
   if (!incoming) return { ok: false, message: "POS settings could not be read." };
 
   const { supabase, store } = await requireAdminStore(storeId);
+  const branchName = formData.has("branch_name") ? readText(formData, "branch_name") : String(store.name ?? "");
+  const address = formData.has("address") ? readText(formData, "address") : String(store.address ?? "");
+  const tin = formData.has("tin") ? readText(formData, "tin") : String(store.tin ?? "");
+  validateRequiredText(branchName, "Branch name", 120, "receipts");
+  if (address.length > 240 || tin.length > 80) return { ok: false, message: "Branch details are longer than the allowed limit." };
+
   const currentSettings = isRecord(store.settings) ? store.settings : {};
   const currentPosSettings = isRecord(currentSettings.pos_config) ? currentSettings.pos_config : {};
   const branchVatRate = Number(store.vat_rate);
@@ -136,6 +155,9 @@ export async function savePosSettings(formData: FormData) {
   const { error } = await supabase
     .from("stores")
     .update({
+      name: branchName,
+      address: address || null,
+      tin: tin || null,
       settings: nextSettings,
       vat_rate: nextPosSettings.vatRate,
       vat_registered: nextPosSettings.showVat,
@@ -149,4 +171,137 @@ export async function savePosSettings(formData: FormData) {
   revalidatePath("/pos");
 
   return { ok: true, message: "POS settings saved." };
+}
+
+function readTransport(value: string): PrinterTransport | null {
+  return value === "network" || value === "bluetooth" || value === "usb" ? value : null;
+}
+
+function readPaperWidth(value: string) {
+  return value === "58" || value === "80" ? Number(value) : null;
+}
+
+function readPort(value: string) {
+  const port = Number(value);
+  return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : null;
+}
+
+function readDeviceFields(formData: FormData) {
+  const storeId = readText(formData, "store_id");
+  const name = readText(formData, "name");
+  const devicePrefix = readText(formData, "device_prefix").toUpperCase();
+  const transport = readTransport(readText(formData, "printer_transport"));
+  const paperWidth = readPaperWidth(readText(formData, "paper_width"));
+  const port = readPort(readText(formData, "port"));
+  const ip = readText(formData, "ip");
+  const bridgeHost = readText(formData, "bridge_host");
+  const bridgePort = readPort(readText(formData, "bridge_port"));
+
+  validateRequiredText(name, "Terminal name", 80, "hardware");
+  if (!storeId) posRedirect("Choose a branch for this terminal.", "hardware");
+  if (!/^[A-Z0-9-]{1,12}$/.test(devicePrefix)) posRedirect("Device prefix may contain only letters, numbers, and hyphens.", "hardware");
+  if (!transport || paperWidth === null || port === null || bridgePort === null) {
+    posRedirect("Choose a valid printer transport, paper width, printer port, and bridge port.", "hardware");
+  }
+  if (ip.length > 120 || bridgeHost.length > 120) posRedirect("Printer connection details are too long.", "hardware");
+  return { storeId, name, devicePrefix, transport, paperWidth, port, ip, bridgeHost, bridgePort };
+}
+
+async function requireAdmin() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) redirect("/");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("org_id, role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || profile.role !== "admin") posRedirect("Only organization admins can manage terminals.", "hardware");
+  return { supabase, orgId: profile.org_id };
+}
+
+async function validStore(supabase: Awaited<ReturnType<typeof createClient>>, orgId: string, storeId: string) {
+  const { data } = await supabase.from("stores").select("id").eq("id", storeId).eq("org_id", orgId).maybeSingle();
+  return Boolean(data);
+}
+
+async function validDeviceStore(supabase: Awaited<ReturnType<typeof createClient>>, orgId: string, storeId: string) {
+  if (!(await validStore(supabase, orgId, storeId))) posRedirect("Choose a branch from your organization.", "hardware");
+}
+
+function refreshPos() {
+  revalidatePath("/admin/pos");
+  revalidatePath("/admin/settings");
+  revalidatePath("/pos");
+}
+
+export async function createDeviceSettings(formData: FormData) {
+  const { supabase, orgId } = await requireAdmin();
+  const fields = readDeviceFields(formData);
+  await validDeviceStore(supabase, orgId, fields.storeId);
+
+  const { error } = await supabase.from("devices").insert({
+    org_id: orgId,
+    store_id: fields.storeId,
+    name: fields.name,
+    device_prefix: fields.devicePrefix,
+    printer_transport: fields.transport,
+    printer_config: {
+      ip: fields.ip,
+      port: fields.port,
+      paper_width: fields.paperWidth,
+      bridge_host: fields.bridgeHost,
+      bridge_port: fields.bridgePort,
+    },
+    is_active: true,
+  });
+  if (error) posRedirect(error.message || "The terminal could not be created.", "hardware");
+
+  refreshPos();
+  posSaved("device", "hardware");
+}
+
+export async function updateDeviceSettings(formData: FormData) {
+  const { supabase, orgId } = await requireAdmin();
+  const deviceId = readText(formData, "device_id");
+  const fields = readDeviceFields(formData);
+  await validDeviceStore(supabase, orgId, fields.storeId);
+  if (!deviceId) posRedirect("The terminal identifier is missing.", "hardware");
+
+  const { data: existing } = await supabase
+    .from("devices")
+    .select("printer_config")
+    .eq("id", deviceId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (!existing) posRedirect("That terminal is not available in your organization.", "hardware");
+
+  const currentConfig = isRecord(existing.printer_config) ? existing.printer_config : {};
+  const printerConfig = {
+    ...currentConfig,
+    ip: fields.ip,
+    port: fields.port,
+    paper_width: fields.paperWidth,
+    bridge_host: fields.bridgeHost,
+    bridge_port: fields.bridgePort,
+  };
+  const { error } = await supabase
+    .from("devices")
+    .update({
+      store_id: fields.storeId,
+      name: fields.name,
+      device_prefix: fields.devicePrefix,
+      printer_transport: fields.transport,
+      printer_config: printerConfig,
+      is_active: readFormBoolean(formData, "is_active"),
+    })
+    .eq("id", deviceId)
+    .eq("org_id", orgId);
+  if (error) posRedirect(error.message || "The terminal settings could not be saved.", "hardware");
+
+  refreshPos();
+  posSaved("device", "hardware");
 }

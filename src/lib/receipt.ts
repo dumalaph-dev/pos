@@ -14,6 +14,7 @@ export type ReceiptItem = {
 export type ReceiptData = {
   storeName: string;
   storeAddress?: string | null;
+  storeTin?: string | null;
   orderNo: string;
   cashier: string;
   createdAt: Date;
@@ -127,6 +128,7 @@ export function buildReceipt(data: ReceiptData): Uint8Array {
   blank();
   line(data.storeName, { align: "center", bold: true, double: true });
   if (data.storeAddress) line(data.storeAddress, { align: "center" });
+  if (data.storeTin) line(`TIN: ${data.storeTin}`, { align: "center" });
   if (data.receiptHeader) {
     for (const headerLine of data.receiptHeader.split(/\r?\n/).map((value) => value.trim()).filter(Boolean)) {
       line(headerLine, { align: "center" });

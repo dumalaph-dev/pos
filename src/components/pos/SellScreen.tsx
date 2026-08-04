@@ -33,6 +33,7 @@ import {
   type PrinterSettings,
 } from "@/lib/printer";
 import { buildReceipt } from "@/lib/receipt";
+import { getPosTheme } from "@/lib/pos-theme";
 
 type Product = {
   id: string;
@@ -84,6 +85,7 @@ type ProfileData = {
   store_id: string | null;
   store_name: string | null;
   store_address: string | null;
+  store_tin: string | null;
   full_name: string | null;
   role: "admin" | "manager" | "cashier" | null;
   pos_config?: PosRuntimeConfig;
@@ -184,14 +186,29 @@ function normalizePosRuntimeConfig(value: unknown, vatRateFallback = DEFAULT_POS
   };
 }
 
-function readStorePosConfig(value: unknown): { name: string | null; address: string | null; posConfig: PosRuntimeConfig } {
+function readStorePosConfig(value: unknown): { name: string | null; address: string | null; tin: string | null; posConfig: PosRuntimeConfig } {
   const store = isRecord(value) ? value : {};
   const settings = isRecord(store.settings) ? store.settings : {};
   const storeVatRate = readNumber(store.vat_rate, DEFAULT_POS_RUNTIME_CONFIG.vatRate, 0, 1);
   return {
     name: typeof store.name === "string" ? store.name : null,
     address: typeof store.address === "string" ? store.address : null,
+    tin: typeof store.tin === "string" ? store.tin : null,
     posConfig: normalizePosRuntimeConfig(settings.pos_config, storeVatRate, Boolean(store.vat_registered)),
+  };
+}
+
+function readDevicePrinterSettings(value: unknown): PrinterSettings | null {
+  if (!isRecord(value)) return null;
+  const config = isRecord(value.printer_config) ? value.printer_config : {};
+  const transport = value.printer_transport === "bluetooth" || value.printer_transport === "usb" ? value.printer_transport : "network";
+  return {
+    transport,
+    bridgeHost: typeof config.bridge_host === "string" && config.bridge_host.trim() ? config.bridge_host.trim() : "127.0.0.1",
+    bridgePort: readNumber(config.bridge_port, 8787, 1, 65535),
+    ip: typeof config.ip === "string" ? config.ip.trim() : "",
+    port: readNumber(config.port, 9100, 1, 65535),
+    paperWidth: config.paper_width === 80 || config.paper_width === "80" ? 80 : 58,
   };
 }
 
@@ -207,6 +224,7 @@ const DEMO_PROFILE: ProfileData = {
   store_id: "00000000-0000-0000-0000-000000000003",
   store_name: DEFAULT_STORE_NAME,
   store_address: null,
+  store_tin: null,
   full_name: "Admin",
   role: "admin",
   pos_config: DEFAULT_POS_RUNTIME_CONFIG,
@@ -370,11 +388,12 @@ export default function SellScreen() {
   const demoSeeded = useRef(false);
   const orderTypeScope = useRef<string | null>(null);
 
-  const applyProfile = useCallback((nextProfile: ProfileData) => {
+  const applyProfile = useCallback((nextProfile: ProfileData, nextPrinterSettings?: PrinterSettings) => {
     const nextConfig = normalizePosRuntimeConfig(nextProfile.pos_config);
     const normalizedProfile: ProfileData = {
       ...nextProfile,
       store_address: nextProfile.store_address ?? null,
+      store_tin: nextProfile.store_tin ?? null,
       pos_config: nextConfig,
     };
     setProfile(normalizedProfile);
@@ -387,7 +406,12 @@ export default function SellScreen() {
       }
       return nextConfig.orderTypes.includes(current) ? current : nextConfig.defaultOrderType;
     });
-    setPrinterSettings((current) => current.paperWidth === nextConfig.paperWidth ? current : { ...current, paperWidth: nextConfig.paperWidth });
+    if (nextPrinterSettings) {
+      setPrinterSettings(nextPrinterSettings);
+      savePrinterSettings(nextPrinterSettings);
+    } else {
+      setPrinterSettings((current) => current.paperWidth === nextConfig.paperWidth ? current : { ...current, paperWidth: nextConfig.paperWidth });
+    }
   }, []);
 
   useEffect(() => {
@@ -417,6 +441,7 @@ export default function SellScreen() {
   // resolves `{error}` for HTTP errors — both must be treated as offline.
   const refreshCatalog = useCallback(async () => {
     let profileData: ProfileData | null = null;
+    let databasePrinterSettings: PrinterSettings | undefined;
 
     try {
       const {
@@ -425,17 +450,30 @@ export default function SellScreen() {
       if (session) {
         const { data: prof } = await supabase
           .from("profiles")
-          .select("id, org_id, store_id, stores(name, address, vat_registered, vat_rate, settings), full_name, role")
+          .select("id, org_id, store_id, stores(name, address, tin, vat_registered, vat_rate, settings), full_name, role")
           .eq("id", session.user.id)
           .single();
         if (prof) {
           const store = readStorePosConfig(prof.stores);
+          if (prof.store_id) {
+            const { data: terminal } = await supabase
+              .from("devices")
+              .select("printer_transport, printer_config")
+              .eq("store_id", prof.store_id)
+              .eq("is_active", true)
+              .order("last_seen_at", { ascending: false })
+              .order("name")
+              .limit(1)
+              .maybeSingle();
+            databasePrinterSettings = readDevicePrinterSettings(terminal) ?? undefined;
+          }
           profileData = {
             id: prof.id,
             org_id: prof.org_id,
             store_id: prof.store_id,
             store_name: store.name,
             store_address: store.address,
+            store_tin: store.tin,
             full_name: (prof.full_name as string | null) ?? null,
             role: (prof.role as ProfileData["role"]) ?? null,
             pos_config: store.posConfig,
@@ -471,7 +509,7 @@ export default function SellScreen() {
       setLoading(false);
       return;
     }
-    applyProfile(profileData);
+    applyProfile(profileData, databasePrinterSettings);
 
     try {
       const scope = profileData.store_id
@@ -811,7 +849,8 @@ export default function SellScreen() {
     // Print the receipt (fire-and-forget; failure shows a retry toast).
     const receipt = buildReceipt({
        storeName: profile.store_name ?? DEFAULT_STORE_NAME,
-      storeAddress: profile.store_address,
+       storeAddress: profile.store_address,
+       storeTin: profile.store_tin,
       orderNo,
       cashier: profile.full_name ?? "",
       createdAt: now,
@@ -932,28 +971,33 @@ export default function SellScreen() {
       : [{ id: "all", name: "All Items", icon: "grid" }, ...categories];
     const palette = POS_PALETTE_COLORS[posConfig.palette];
     const primary = posConfig.palette === "custom" ? posConfig.customColor : palette.primary;
+    const theme = getPosTheme(posConfig.uiStyle);
+    const themeVars = theme.variables;
     const posAppStyle = {
+      ...themeVars,
+      "--bg": themeVars["--pos-theme-bg"],
+      "--surface": themeVars["--pos-theme-surface"],
+      "--surface-panel": themeVars["--pos-theme-surface-panel"],
+      "--surface-raised": themeVars["--pos-theme-surface-raised"],
+      "--sidebar": themeVars["--pos-theme-sidebar"],
+      "--border": themeVars["--pos-theme-border"],
+      "--border-strong": themeVars["--pos-theme-border-strong"],
+      "--text": themeVars["--pos-theme-text"],
+      "--text-muted": themeVars["--pos-theme-text-muted"],
+      "--text-subtle": themeVars["--pos-theme-text-subtle"],
       "--primary": primary,
       "--primary-hover": posConfig.palette === "custom" ? primary : palette.hover,
       "--primary-fg": "#ffffff",
+      "--primary-soft": themeVars["--pos-theme-primary-soft"],
       "--accent": primary,
       "--accent-hover": posConfig.palette === "custom" ? primary : palette.hover,
       "--accent-fg": "#ffffff",
-      ...(posConfig.uiStyle === "dark" ? {
-        "--bg": "#1d1713",
-        "--surface": "#241c17",
-        "--surface-panel": "#2b211b",
-        "--surface-raised": "#33271f",
-        "--sidebar": "#211914",
-        "--border": "#49382d",
-        "--border-strong": "#604a3a",
-        "--text": "#fff8f0",
-        "--text-muted": "#c7b6a5",
-        "--text-subtle": "#9a8878",
-        "--primary-soft": "#453328",
-        "--secondary-btn": "#453328",
-        "--secondary-btn-hover": "#584235",
-      } : {}),
+      "--secondary-btn": themeVars["--pos-theme-secondary"],
+      "--secondary-btn-hover": themeVars["--pos-theme-secondary-hover"],
+      "--radius-card": themeVars["--pos-theme-radius-card"],
+      "--radius-btn": themeVars["--pos-theme-radius-btn"],
+      "--shadow-card": themeVars["--pos-theme-shadow-card"],
+      "--shadow-pop": themeVars["--pos-theme-shadow-pop"],
     } as CSSProperties;
 
     return (
@@ -1279,7 +1323,8 @@ export default function SellScreen() {
               receiptHeader: posConfig.receiptHeader,
               receiptFooter: posConfig.receiptFooter,
               showCashier: posConfig.showCashier,
-              storeAddress: profile.store_address,
+               storeAddress: profile.store_address,
+              storeTin: profile.store_tin,
             }}
             onClose={() => setOrderHistoryOpen(false)}
             onPrint={doPrint}
