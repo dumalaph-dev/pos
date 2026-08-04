@@ -87,10 +87,13 @@
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-ui), var(--font-sans);
+/* Layered so the `bg-bg text-ink` utilities on <body> in layout.tsx apply. */
+@layer base {
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui), var(--font-sans);
+  }
 }
 
 /* Money, quantities, and any figure that must not jitter as it changes. */
@@ -3107,27 +3110,27 @@ textarea.inventory-input {
 /* POS reference shell                                                        */
 /* -------------------------------------------------------------------------- */
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
+/*
+  Element resets live in @layer base so Tailwind's utilities layer still wins.
+  Unlayered CSS beats *any* layered CSS regardless of specificity, so a bare
+  `button { ... }` here would silently discard every `text-*` / `outline-*`
+  utility applied to a button.
 
-button,
-input,
-select {
-  font: inherit;
-}
+  `box-sizing: border-box` on *, and `font: inherit` on button/input/select,
+  are both already in Tailwind v4's preflight (@layer base) — dropped rather
+  than duplicated.
+*/
+@layer base {
+  button {
+    -webkit-tap-highlight-color: transparent;
+  }
 
-button {
-  -webkit-tap-highlight-color: transparent;
-}
-
-button:focus-visible,
-input:focus-visible,
-select:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--primary) 28%, transparent);
-  outline-offset: 2px;
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--primary) 28%, transparent);
+    outline-offset: 2px;
+  }
 }
 
 .pos-app {
