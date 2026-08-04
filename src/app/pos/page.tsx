@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient } from "@/lib/supabase/server";
 import SellScreen from "@/components/pos/SellScreen";
 
@@ -17,6 +18,10 @@ export default async function PosPage() {
     // same as above
   }
   if (checked && !user) redirect("/");
+  if (checked && user) {
+    const profile = await getAdminProfile(user.id);
+    if (profile?.password_change_required) redirect("/account/password?required=1");
+  }
 
   return <SellScreen />;
 }

@@ -1,12 +1,14 @@
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { AdminShell } from "./AdminShell";
-import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
+import { getAuthenticatedUser, createClient } from "@/lib/supabase/server";
+import { getAdminProfile } from "@/lib/admin/profile";
 
 type AdminRole = "admin" | "manager" | "cashier";
 type ShellProfile = {
   role: AdminRole | null;
   store_id: string | null;
+  password_change_required: boolean;
   stores: { name?: string } | null;
 };
 
@@ -18,13 +20,9 @@ export default async function AdminRouteLayout({ children }: { children: ReactNo
 
   if (!user) redirect("/");
 
-  const { data: profileData } = await supabase
-    .from("profiles")
-    .select("role, store_id, stores(name)")
-    .eq("id", user.id)
-    .maybeSingle();
-  const profile = profileData as ShellProfile | null;
+  const profile = await getAdminProfile(user.id) as ShellProfile | null;
 
+  if (profile?.password_change_required) redirect("/account/password?required=1");
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile) return children;
 

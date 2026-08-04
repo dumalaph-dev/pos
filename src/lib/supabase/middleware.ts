@@ -47,6 +47,8 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isProtected = path.startsWith("/pos") || path.startsWith("/admin");
   const isPasswordSetup = path.startsWith("/account/password");
+  const isServerAction = request.headers.has("next-action");
+  const isRscNavigation = request.headers.get("RSC") === "1" && !isServerAction;
 
   // Unauthenticated → login (only when we could actually check).
   if (checked && !user && isProtected) {
@@ -56,9 +58,11 @@ export async function updateSession(request: NextRequest) {
   }
 
   // A provisioned employee must finish the password change before entering
-  // the POS or backoffice. If the profile check is unavailable, preserve the
-  // existing offline-friendly behavior and let the page-level auth checks run.
-  if (checked && user && isProtected && !isPasswordSetup) {
+  // the POS or backoffice. RSC navigations enforce this in the destination
+  // page's cached profile lookup so middleware does not add a second profile
+  // round trip to every client-side transition. Full document loads and
+  // server actions keep the middleware check as the coarse security boundary.
+  if (checked && user && isProtected && !isPasswordSetup && !isRscNavigation) {
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("password_change_required")

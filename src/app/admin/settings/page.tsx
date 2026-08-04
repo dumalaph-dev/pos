@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
+import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { createDeviceSettings, updateBranchSettings, updateDeviceSettings, updateOrganizationSettings } from "./actions";
 
@@ -15,6 +16,7 @@ type CurrentProfile = {
   role: AdminRole | null;
   org_id: string;
   store_id: string | null;
+  password_change_required: boolean;
 };
 
 type OrganizationRecord = {
@@ -98,13 +100,9 @@ export default async function SettingsPage({
 
   if (!user) redirect("/");
 
-  const { data: profileData } = await supabase
-    .from("profiles")
-    .select("full_name, role, org_id, store_id")
-    .eq("id", user.id)
-    .single();
-  const profile = profileData as CurrentProfile | null;
+  const profile = await getAdminProfile(user.id) as CurrentProfile | null;
 
+  if (profile?.password_change_required) redirect("/account/password?required=1");
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile) return <SettingsProfileMissing />;
 

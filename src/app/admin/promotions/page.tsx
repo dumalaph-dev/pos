@@ -3,6 +3,7 @@ import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
+import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 
 type AdminRole = "admin" | "manager" | "cashier";
@@ -15,6 +16,7 @@ type ProfileRecord = {
   role: AdminRole | null;
   org_id: string;
   store_id: string | null;
+  password_change_required: boolean;
 };
 
 type BranchRecord = { id: string; name: string; is_active: boolean };
@@ -121,13 +123,9 @@ export default async function PromotionsPage({
 
   if (!user) redirect("/");
 
-  const { data: profileData } = await supabase
-    .from("profiles")
-    .select("full_name, role, org_id, store_id")
-    .eq("id", user.id)
-    .single();
-  const profile = profileData as ProfileRecord | null;
+  const profile = await getAdminProfile(user.id) as ProfileRecord | null;
 
+  if (profile?.password_change_required) redirect("/account/password?required=1");
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile) return <PromotionsProfileMissing />;
 

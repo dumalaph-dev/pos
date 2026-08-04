@@ -3,6 +3,7 @@ import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
+import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import {
   createEmployee,
@@ -76,7 +77,7 @@ type LeaveRecord = {
   status: "pending" | "approved" | "rejected";
   created_at: string;
 };
-type CurrentProfile = { full_name: string | null; role: AccessRole | null; org_id: string; store_id: string | null };
+type CurrentProfile = { full_name: string | null; role: AccessRole | null; org_id: string; store_id: string | null; password_change_required: boolean };
 type SearchParams = Record<string, string | string[] | undefined>;
 
 const DEFAULT_STORE_NAME = "Mario's Lechon House";
@@ -257,8 +258,8 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   const user = await getAuthenticatedUser(supabase);
   if (!user) redirect("/");
 
-  const { data: profileData } = await supabase.from("profiles").select("full_name, role, org_id, store_id").eq("id", user.id).single();
-  const profile = profileData as CurrentProfile | null;
+  const profile = await getAdminProfile(user.id) as CurrentProfile | null;
+  if (profile?.password_change_required) redirect("/account/password?required=1");
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile) return <EmployeesProfileMissing />;
 
@@ -266,6 +267,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   const fallbackRange = weekRange(today);
   const range = selectedRange(params, fallbackRange);
   const tab = readTab(readParam(params, "tab"));
+  const employeeFormOpen = readParam(params, "create") === "employee" || Boolean(readParam(params, "edit"));
   const attendanceDate = dateIsValid(readParam(params, "date")) ? readParam(params, "date") : today;
   const attendanceFetchStart = attendanceDate < range.start ? attendanceDate : range.start;
   const attendanceFetchEnd = attendanceDate > range.end ? attendanceDate : range.end;
@@ -275,20 +277,40 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   const payrollSelect = tab === "payroll"
     ? "id, employee_id, period_start, period_end, regular_pay, overtime_pay, allowances, deductions, status, notes"
     : "regular_pay, overtime_pay, allowances, deductions";
+  const emptyResult = Promise.resolve({ data: null, error: null });
+  const attendanceQuery = employeeFormOpen
+    ? null
+    : supabase.from("attendance_logs").select(attendanceSelect).eq("org_id", profile.org_id).gte("work_date", attendanceFetchStart).lte("work_date", attendanceFetchEnd).order("work_date", { ascending: false }).limit(5000);
+  const payrollQuery = employeeFormOpen
+    ? null
+    : supabase.from("payroll_records").select(payrollSelect).eq("org_id", profile.org_id).lte("period_start", range.end).gte("period_end", range.start).order("period_start", { ascending: false }).limit(1000);
+  const fullLeaveQuery = tab === "leave"
+    ? supabase.from("leave_requests").select("id, employee_id, leave_type, start_date, end_date, reason, status, created_at").eq("org_id", profile.org_id).order("created_at", { ascending: false }).limit(1000)
+    : null;
+  const activeLeaveQuery = tab === "leave"
+    ? null
+    : supabase.from("leave_requests").select("employee_id, start_date, end_date").eq("org_id", profile.org_id).eq("status", "approved").lte("start_date", today).gte("end_date", today).limit(1000);
+  const recentLeaveQuery = tab === "leave" || employeeFormOpen
+    ? null
+    : supabase.from("leave_requests").select("id, employee_id, leave_type, start_date, end_date, reason, status, created_at").eq("org_id", profile.org_id).order("created_at", { ascending: false }).limit(3);
   const [
     branchesResult,
     employeesResult,
     rolesResult,
     attendanceResult,
     payrollResult,
-    leaveResult,
+    fullLeaveResult,
+    activeLeaveResult,
+    recentLeaveResult,
   ] = await Promise.all([
     supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name"),
     supabase.from("employee_records").select("id, profile_id, role_id, store_id, employee_code, full_name, email, phone, role, job_title, hired_on, schedule_days, schedule_start, schedule_end, is_active, created_at").eq("org_id", profile.org_id).order("is_active", { ascending: false }).order("full_name").limit(1000),
     supabase.from("employee_roles").select("id, name, slug, description, color, permissions, is_active").eq("org_id", profile.org_id).order("is_active", { ascending: false }).order("name"),
-    supabase.from("attendance_logs").select(attendanceSelect).eq("org_id", profile.org_id).gte("work_date", attendanceFetchStart).lte("work_date", attendanceFetchEnd).order("work_date", { ascending: false }).limit(5000),
-    supabase.from("payroll_records").select(payrollSelect).eq("org_id", profile.org_id).lte("period_start", range.end).gte("period_end", range.start).order("period_start", { ascending: false }).limit(1000),
-    supabase.from("leave_requests").select("id, employee_id, leave_type, start_date, end_date, reason, status, created_at").eq("org_id", profile.org_id).order("created_at", { ascending: false }).limit(1000),
+    attendanceQuery ?? emptyResult,
+    payrollQuery ?? emptyResult,
+    fullLeaveQuery ?? emptyResult,
+    activeLeaveQuery ?? emptyResult,
+    recentLeaveQuery ?? emptyResult,
   ]);
 
   const branches = (branchesResult.data ?? []) as BranchRecord[];
@@ -296,12 +318,18 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   const roles = (rolesResult.data ?? []) as RoleRecord[];
   const attendanceLogs = (attendanceResult.data ?? []) as unknown as AttendanceRecord[];
   const payrollRecords = (payrollResult.data ?? []) as unknown as PayrollRecord[];
-  const leaveRequests = (leaveResult.data ?? []) as LeaveRecord[];
+  const fullLeaveRequests = (fullLeaveResult.data ?? []) as LeaveRecord[];
+  const recentLeaveRequests = (recentLeaveResult.data ?? []) as LeaveRecord[];
+  const activeLeaveRequests = (activeLeaveResult.data ?? []) as Array<Pick<LeaveRecord, "employee_id" | "start_date" | "end_date">>;
+  const leaveRequests = tab === "leave" ? fullLeaveRequests : recentLeaveRequests;
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
   const roleById = new Map(roles.map((role) => [role.id, role]));
   const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
   const selectedAttendanceEmployeeId = employeeById.has(readParam(params, "employee")) ? readParam(params, "employee") : "";
-  const approvedLeaveToday = new Set(leaveRequests.filter((request) => request.status === "approved" && request.start_date <= today && request.end_date >= today).map((request) => request.employee_id));
+  const approvedLeaveToday = new Set(
+    (tab === "leave" ? fullLeaveRequests.filter((request) => request.status === "approved" && request.start_date <= today && request.end_date >= today) : activeLeaveRequests)
+      .map((request) => request.employee_id),
+  );
   const requestedRole = readParam(params, "role");
   const requestedStatus = readParam(params, "status");
   const branchFilter = readParam(params, "branch");
@@ -319,17 +347,22 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   const onLeaveCount = employees.filter((employee) => approvedLeaveToday.has(employee.id)).length;
   const inactiveCount = employees.filter((employee) => !employee.is_active).length;
   const payrollTotalThisWeek = payrollRecords.reduce((total, record) => total + payrollTotal(record), 0);
-  const payrollBreakdown = payrollRecords.reduce((totals, record) => ({
-    regular: totals.regular + Number(record.regular_pay ?? 0),
-    overtime: totals.overtime + Number(record.overtime_pay ?? 0),
-    allowances: totals.allowances + Number(record.allowances ?? 0),
-    deductions: totals.deductions + Number(record.deductions ?? 0),
-  }), { regular: 0, overtime: 0, allowances: 0, deductions: 0 });
+  const payrollBreakdown = { regular: 0, overtime: 0, allowances: 0, deductions: 0 };
+  for (const record of payrollRecords) {
+    payrollBreakdown.regular += Number(record.regular_pay ?? 0);
+    payrollBreakdown.overtime += Number(record.overtime_pay ?? 0);
+    payrollBreakdown.allowances += Number(record.allowances ?? 0);
+    payrollBreakdown.deductions += Number(record.deductions ?? 0);
+  }
   const attendanceSummaryLogs = attendanceLogs.filter((log) => log.work_date >= range.start && log.work_date <= range.end);
-  const attendanceBreakdown = attendanceSummaryLogs.reduce((counts, log) => ({ ...counts, [log.status]: counts[log.status] + 1 }), { present: 0, absent: 0, late: 0, on_leave: 0 });
+  const attendanceBreakdown = { present: 0, absent: 0, late: 0, on_leave: 0 };
+  for (const log of attendanceSummaryLogs) attendanceBreakdown[log.status] += 1;
   const attendanceTotal = Object.values(attendanceBreakdown).reduce((total, value) => total + value, 0);
   const attendanceForDate = new Map(attendanceLogs.filter((log) => log.work_date === attendanceDate).map((log) => [log.employee_id, log]));
-  const selectedAttendanceBreakdown = [...attendanceForDate.values()].filter((log) => !selectedAttendanceEmployeeId || log.employee_id === selectedAttendanceEmployeeId).reduce((counts, log) => ({ ...counts, [log.status]: counts[log.status] + 1 }), { present: 0, absent: 0, late: 0, on_leave: 0 });
+  const selectedAttendanceBreakdown = { present: 0, absent: 0, late: 0, on_leave: 0 };
+  for (const log of attendanceForDate.values()) {
+    if (!selectedAttendanceEmployeeId || log.employee_id === selectedAttendanceEmployeeId) selectedAttendanceBreakdown[log.status] += 1;
+  }
   const totalPages = Math.max(1, Math.ceil(filteredEmployees.length / PAGE_SIZE));
   const requestedPage = Number.parseInt(readParam(params, "page") || "1", 10);
   const currentPage = Number.isFinite(requestedPage) ? Math.min(Math.max(requestedPage, 1), totalPages) : 1;
@@ -340,7 +373,16 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   const editingEmployee = employeeById.get(readParam(params, "edit"));
   const editingPayroll = payrollRecords.find((record) => record.id === readParam(params, "edit_payroll"));
   const filtersOpen = readParam(params, "filters") === "1";
-  const queryWarning = Boolean(branchesResult.error || employeesResult.error || rolesResult.error || attendanceResult.error || payrollResult.error || leaveResult.error);
+  const queryWarning = Boolean(
+    branchesResult.error
+      || employeesResult.error
+      || rolesResult.error
+      || attendanceResult.error
+      || payrollResult.error
+      || fullLeaveResult.error
+      || activeLeaveResult.error
+      || recentLeaveResult.error,
+  );
   const periodLabel = rangeScopeLabel(range);
   const employeeListState = { q: searchQuery, role: requestedRole, status: requestedStatus, branch: branchFilter, start: range.start, end: range.end, filters: filtersOpen ? "1" : undefined };
 
@@ -380,14 +422,14 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
           {queryWarning && <div role="status" className="employee-notice employee-notice--warning"><AdminIcon name="alert" size={17} /> Some employee workspace data could not refresh. Apply migration 0011 to enable all tabs.</div>}
           {!canWrite && <div role="status" className="employee-notice employee-notice--info">This workspace is read-only for your role. Ask an organization admin to change staff access.</div>}
 
-          <div className="employee-body-grid">
+          <div className={`employee-body-grid ${employeeFormOpen ? "employee-body-grid--focused" : ""}`}>
             <div className="min-w-0">
               <section className="employee-kpi-grid" aria-label="Employee overview">
                 <EmployeeMetric label="Total Employees" value={String(employees.length)} detail="All branches" icon="employees" tone="employee-kpi-icon--brown" />
                 <EmployeeMetric label="Active" value={String(activeCount)} detail="Currently working" icon="employees" tone="employee-kpi-icon--green" />
                 <EmployeeMetric label="On Leave" value={String(onLeaveCount)} detail="On approved leave" icon="calendar" tone="employee-kpi-icon--orange" />
                 <EmployeeMetric label="Inactive" value={String(inactiveCount)} detail="Not active" icon="employees" tone="employee-kpi-icon--gray" />
-                <EmployeeMetric label={`Total Payroll (${periodLabel})`} value={formatPeso(payrollTotalThisWeek)} detail={formatDateRange(range.start, range.end)} icon="wallet" tone="employee-kpi-icon--blue" />
+                {!employeeFormOpen && <EmployeeMetric label={`Total Payroll (${periodLabel})`} value={formatPeso(payrollTotalThisWeek)} detail={formatDateRange(range.start, range.end)} icon="wallet" tone="employee-kpi-icon--blue" />}
               </section>
 
               {(readParam(params, "create") === "employee" || editingEmployee) && <EmployeeEditor employee={editingEmployee} branches={branches} roles={roles} today={today} canWrite={canWrite} returnState={employeeListState} />}
@@ -406,12 +448,12 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
               </section>
             </div>
 
-            <aside className="employee-side-rail" aria-label="Employee summaries">
+            {!employeeFormOpen && <aside className="employee-side-rail" aria-label="Employee summaries">
               <PayrollOverview breakdown={payrollBreakdown} total={payrollTotalThisWeek} range={range} />
               <AttendanceOverview breakdown={attendanceBreakdown} total={attendanceTotal} range={range} />
               <RecentLeaveRequests requests={leaveRequests.slice(0, 3)} employeeById={employeeById} />
               <Link href={employeeHref({ tab: "leave" })} className="employee-leave-cta"><AdminIcon name="calendar" size={17} /> Go to Leave Requests <AdminIcon name="arrow" size={16} /></Link>
-            </aside>
+            </aside>}
           </div>
       </div>
     </main>

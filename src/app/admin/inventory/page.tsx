@@ -13,6 +13,7 @@ import {
   stockThreshold,
   type StockMovementType,
 } from "@/lib/inventory";
+import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { recordStockMovement } from "./actions";
 
@@ -26,6 +27,7 @@ type ProfileRecord = {
   role: AdminRole | null;
   org_id: string;
   store_id: string | null;
+  password_change_required: boolean;
   organizations: { name?: string } | null;
 };
 
@@ -318,13 +320,9 @@ export default async function InventoryPage({
 
   if (!user) redirect("/");
 
-  const { data: profileData } = await supabase
-    .from("profiles")
-    .select("full_name, role, org_id, store_id, organizations!profiles_org_id_fkey(name)")
-    .eq("id", user.id)
-    .single();
-  const profile = profileData as ProfileRecord | null;
+  const profile = await getAdminProfile(user.id) as ProfileRecord | null;
 
+  if (profile?.password_change_required) redirect("/account/password?required=1");
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile) return <InventoryProfileMissing />;
 

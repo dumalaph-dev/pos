@@ -416,6 +416,8 @@ textarea.inventory-input {
 
 .admin-sidebar {
   min-width: 0;
+  min-height: 100dvh;
+  align-self: stretch;
   color: var(--text);
   background: #fbf9f5;
   border-right: 1px solid rgba(224, 213, 198, 0.8);
@@ -427,8 +429,10 @@ textarea.inventory-input {
   display: flex;
   width: 100%;
   height: 100dvh;
-  min-height: 720px;
+  min-height: 0;
+  max-height: 100dvh;
   flex-direction: column;
+  overflow: hidden;
   padding: 25px 14px 16px;
 }
 
@@ -512,6 +516,7 @@ textarea.inventory-input {
 }
 
 .admin-nav {
+  flex: 1 1 0%;
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: thin;
@@ -685,6 +690,9 @@ textarea.inventory-input {
 }
 
 .admin-shell {
+  width: 100%;
+  min-width: 0;
+  align-self: center;
   background: #fdfbf8;
 }
 
@@ -694,6 +702,8 @@ textarea.inventory-input {
 
 .admin-route-loading {
   position: relative;
+  width: 100%;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -715,6 +725,33 @@ textarea.inventory-input {
   border-radius: 999px;
   background: var(--accent);
   animation: admin-loading-progress 1.25s ease-in-out infinite;
+}
+
+.admin-navigation-progress {
+  position: fixed;
+  z-index: 60;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 3px;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  background: rgba(139, 76, 22, 0.12);
+  transition: opacity 120ms ease;
+}
+
+.admin-navigation-progress.is-pending {
+  opacity: 1;
+}
+
+.admin-navigation-progress span {
+  display: block;
+  width: 42%;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  animation: admin-loading-progress 1.05s ease-in-out infinite;
 }
 
 .admin-route-loading__spinner {
@@ -5944,6 +5981,10 @@ select:focus-visible {
   grid-template-columns: minmax(0, 1fr) minmax(260px, 278px);
   gap: 14px;
   align-items: start;
+}
+
+.employee-body-grid--focused {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .employee-kpi-grid {
