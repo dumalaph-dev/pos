@@ -423,6 +423,15 @@ textarea.inventory-input {
   border-right: 1px solid rgba(224, 213, 198, 0.8);
 }
 
+/* The rail is sized to fit one viewport without scrolling: it lists 13 nav
+   destinations, so the rows and the chrome around them shrink with viewport
+   height (clamped, so they never fall below a comfortable target size).
+   Measured to fit with room to spare at 720px tall and above.
+
+   Below ~700px the clamps bottom out and the content genuinely cannot fit. The
+   rail scrolls there rather than clipping the connection panel out of reach,
+   but the scrollbar chrome stays hidden so it never sits in the rail as
+   permanent visual noise at the sizes people actually use. */
 .admin-sidebar__inner {
   position: sticky;
   top: 0;
@@ -432,8 +441,13 @@ textarea.inventory-input {
   min-height: 0;
   max-height: 100dvh;
   flex-direction: column;
-  overflow: hidden;
-  padding: 25px 14px 16px;
+  overflow: hidden auto;
+  scrollbar-width: none;
+  padding: clamp(14px, 2.4vh, 25px) 14px clamp(10px, 1.6vh, 16px);
+}
+
+.admin-sidebar__inner::-webkit-scrollbar {
+  display: none;
 }
 
 .admin-brand {
@@ -447,9 +461,9 @@ textarea.inventory-input {
 
 .admin-brand__mark {
   display: grid;
-  width: 54px;
-  height: 54px;
-  flex: 0 0 54px;
+  width: clamp(42px, 5.2vh, 54px);
+  height: clamp(42px, 5.2vh, 54px);
+  flex: 0 0 clamp(42px, 5.2vh, 54px);
   place-items: center;
   border: 1.5px solid var(--primary);
   border-radius: 50%;
@@ -481,8 +495,8 @@ textarea.inventory-input {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 3px 8px;
-  margin: 25px 2px 18px;
-  padding: 11px 12px;
+  margin: clamp(12px, 2.3vh, 25px) 2px clamp(10px, 1.7vh, 18px);
+  padding: clamp(8px, 1.1vh, 11px) 12px;
   border: 1px solid transparent;
   border-radius: 11px;
   color: var(--text);
@@ -515,16 +529,15 @@ textarea.inventory-input {
   color: var(--text-muted);
 }
 
+/* Grows to push the connection panel to the bottom, never shrinks below its
+   own content — every destination stays rendered at full height. */
 .admin-nav {
-  flex: 1 1 0%;
+  flex: 1 0 auto;
   min-height: 0;
-  overflow-y: auto;
-  scrollbar-width: thin;
 }
 
-.admin-nav__label,
-.admin-quick-actions p {
-  margin: 0 12px 8px;
+.admin-nav__label {
+  margin: 0 12px clamp(4px, 0.8vh, 8px);
   color: var(--text-subtle);
   font-size: 10px;
   font-weight: 800;
@@ -533,19 +546,19 @@ textarea.inventory-input {
 }
 
 .admin-nav__label--secondary {
-  margin-top: 22px;
+  margin-top: clamp(10px, 2vh, 22px);
 }
 
 .admin-nav__group {
   display: grid;
-  gap: 3px;
+  gap: clamp(1px, 0.35vh, 3px);
 }
 
 .admin-nav__item {
   display: flex;
-  min-height: 39px;
+  min-height: clamp(28px, 3.85vh, 39px);
   align-items: center;
-  gap: 12px;
+  gap: 11px;
   padding: 0 12px;
   border-radius: 10px;
   color: var(--text);
@@ -602,48 +615,12 @@ textarea.inventory-input {
   text-transform: uppercase;
 }
 
-.admin-quick-actions {
-  display: grid;
-  gap: 7px;
-  margin-top: auto;
-  padding: 14px 10px 10px;
-  border: 1px solid #f0dfcb;
-  border-radius: 13px;
-  background: #fff4e5;
-}
-
-.admin-quick-actions p {
-  margin: 0 2px 4px;
-  color: var(--primary);
-  font-size: 9px;
-}
-
-.admin-quick-actions a {
-  display: flex;
-  min-height: 36px;
-  align-items: center;
-  gap: 9px;
-  padding: 0 10px;
-  border: 1px solid rgba(226, 204, 179, 0.75);
-  border-radius: 9px;
-  color: var(--primary);
-  background: rgba(255, 252, 247, 0.82);
-  font-size: 11px;
-  font-weight: 700;
-  text-decoration: none;
-  transition: background 150ms ease, transform 150ms ease;
-}
-
-.admin-quick-actions a:hover {
-  background: var(--surface);
-  transform: translateX(2px);
-}
-
 .admin-sidebar__footer {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 14px 10px 0;
+  margin-top: clamp(8px, 1.4vh, 14px);
+  padding: 10px;
   color: var(--text-muted);
   border-radius: 10px;
   text-decoration: none;
@@ -1411,9 +1388,9 @@ textarea.inventory-input {
 
 .admin-sidebar__connection {
   display: grid;
-  gap: 7px;
-  margin-top: 14px;
-  padding: 13px 11px;
+  gap: clamp(4px, 0.8vh, 7px);
+  margin-top: clamp(8px, 1.4vh, 14px);
+  padding: clamp(9px, 1.4vh, 13px) 11px;
   border: 1px solid #e7e0d5;
   border-radius: 13px;
   background: #fffdf9;

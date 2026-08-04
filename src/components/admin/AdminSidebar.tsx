@@ -14,12 +14,6 @@ type NavItem = {
   next?: boolean;
 };
 
-type QuickAction = {
-  label: string;
-  href: string;
-  icon: AdminIconName;
-};
-
 export type AdminSidebarConnection = {
   connected: boolean;
   lastSyncedLabel: string | null;
@@ -70,37 +64,6 @@ function activeSectionForPath(pathname: string | null): AdminSection {
 export function AdminSidebar({ branchName, active: activeOverride, connection }: { branchName: string; active?: AdminSection; connection?: AdminSidebarConnection }) {
   const pathname = usePathname();
   const active = activeOverride ?? activeSectionForPath(pathname);
-  const quickActions: QuickAction[] = active === "inventory"
-    ? [
-        { label: "Add item", href: "/products?create=product#product-form", icon: "plus" },
-        { label: "Add category", href: "/products?create=category#category-form", icon: "box" },
-        { label: "Stock in", href: "/admin/inventory?movement=receive#stock-movement", icon: "download" },
-        { label: "Stock out", href: "/admin/inventory?movement=yield_out#stock-movement", icon: "upload" },
-        { label: "Adjust stock", href: "/admin/inventory?movement=adjust#stock-movement", icon: "refresh" },
-        { label: "Import items", href: "/products?import=1#import-items", icon: "box" },
-      ]
-    : active === "products"
-      ? [
-          { label: "Add product", href: "/products?create=product#product-form", icon: "plus" },
-          { label: "Add category", href: "/products?create=category#category-form", icon: "box" },
-          { label: "Import products", href: "/products?import=1#import-items", icon: "upload" },
-          { label: "Bulk update", href: "/products?bulk=1#bulk-update", icon: "refresh" },
-          { label: "Reorder items", href: "/admin/inventory?status=low", icon: "inventory" },
-        ]
-      : active === "employees"
-        ? [
-            { label: "Add Employee", href: "/admin/employees?tab=list&create=employee", icon: "plus" },
-            { label: "Add Role", href: "/admin/employees?tab=roles&create=role", icon: "employees" },
-            { label: "Attendance Log", href: "/admin/employees?tab=attendance", icon: "calendar" },
-            { label: "Process Payroll", href: "/admin/employees?tab=payroll", icon: "wallet" },
-            { label: "Leave Request", href: "/admin/employees?tab=leave&create=leave", icon: "calendar" },
-          ]
-      : [
-          { label: "New sale", href: "/pos", icon: "bag" },
-          { label: "Add product", href: "/products?create=product#product-form", icon: "box" },
-          { label: "Stock count", href: "/admin/inventory", icon: "inventory" },
-          { label: "View reports", href: "/admin/reports", icon: "reports" },
-        ];
 
   return (
     <aside className="admin-sidebar hidden lg:flex">
@@ -155,11 +118,6 @@ export function AdminSidebar({ branchName, active: activeOverride, connection }:
             ))}
           </div>
         </nav>
-
-        <div className="admin-quick-actions">
-          <p>Quick actions</p>
-          {quickActions.map((item) => <Link key={item.label} href={item.href}><AdminIcon name={item.icon} size={17} />{item.label}</Link>)}
-        </div>
 
         {connection ? (
           <div className="admin-sidebar__connection" aria-label={`POS connection: ${connection.connected ? "connected" : "not connected"}`}>
