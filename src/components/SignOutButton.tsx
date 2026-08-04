@@ -1,7 +1,42 @@
 "use client";
 
+import { useFormStatus } from "react-dom";
 import { signOut } from "@/app/actions";
 import { clearOfflineCaches } from "@/lib/offline-cache";
+
+/* Kept as utilities rather than a CSS class: globals.css rules are unlayered
+   and would outrank Tailwind's utilities layer, so a class here would silently
+   beat the `px-2 py-2 text-[10px]` overrides the topbars pass in. */
+const BUTTON_BASE =
+  "rounded-btn bg-secondary px-4 py-2 text-sm font-bold uppercase text-primary " +
+  "transition duration-150 hover:bg-secondary-hover hover:text-primary-hover " +
+  "active:scale-[0.97] active:bg-secondary-hover " +
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary " +
+  "disabled:cursor-not-allowed disabled:opacity-60";
+
+const MENU_BASE = "admin-menu__item admin-menu__item--danger";
+
+/**
+ * Sign out ends a network round trip, so the button reports it: hover, a
+ * pressed state, a visible focus ring, and a pending label while the action
+ * runs. Without those it reads as dead on the first click.
+ *
+ * `useFormStatus` only reports the surrounding form's state from a child
+ * component, hence the split.
+ */
+function SignOutSubmit({ className, variant }: { className: string; variant: "button" | "menu" }) {
+  const { pending } = useFormStatus();
+
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className={`${variant === "menu" ? MENU_BASE : BUTTON_BASE} ${className}`}
+    >
+      {pending ? "Signing out…" : "Sign out"}
+    </button>
+  );
+}
 
 /**
  * Client component so the app-shell caches are wiped *before* the session ends
@@ -9,20 +44,24 @@ import { clearOfflineCaches } from "@/lib/offline-cache";
  * terminal. `signOut` redirects to "/?signed-out=1" as a backstop for the
  * sign-outs that never run this handler (see src/app/page.tsx).
  */
-export function SignOutButton({ className = "" }: { className?: string }) {
+export function SignOutButton({
+  className = "",
+  variant = "button",
+}: {
+  className?: string;
+  variant?: "button" | "menu";
+}) {
   return (
     <form
+      // `contents` keeps the form out of the layout so the button participates
+      // in the menu's own stack directly.
+      className={variant === "menu" ? "contents" : undefined}
       action={async () => {
         await clearOfflineCaches();
         await signOut();
       }}
     >
-      <button
-        type="submit"
-        className={`rounded-btn bg-secondary px-4 py-2 text-sm font-bold uppercase text-primary ${className}`}
-      >
-        Sign out
-      </button>
+      <SignOutSubmit className={className} variant={variant} />
     </form>
   );
 }

@@ -834,6 +834,21 @@ textarea.inventory-input {
   transform: translateY(-1px);
 }
 
+/* Every topbar control needs a pressed state and a visible focus ring —
+   without them a click that navigates or opens a panel reads as a dead tap. */
+.admin-icon-button:active,
+.admin-icon-button[aria-expanded="true"] {
+  color: var(--primary);
+  background: var(--secondary-btn-hover);
+  transform: translateY(0) scale(0.94);
+}
+
+.admin-icon-button:focus-visible,
+.admin-user-chip:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 .admin-icon-button--alert {
   position: relative;
 }
@@ -859,10 +874,31 @@ textarea.inventory-input {
   align-items: center;
   gap: 8px;
   margin-left: 5px;
-  padding-left: 6px;
+  padding: 4px 8px 4px 6px;
+  border: 0;
+  border-radius: 999px;
   color: var(--text);
+  background: transparent;
   font-size: 12px;
   font-weight: 750;
+  text-align: left;
+  transition: background 150ms ease;
+}
+
+.admin-user-chip:hover,
+.admin-user-chip[aria-expanded="true"] {
+  background: var(--primary-soft);
+}
+
+.admin-user-chip__caret {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1;
+  transition: transform 150ms ease;
+}
+
+.admin-user-chip[aria-expanded="true"] .admin-user-chip__caret {
+  transform: rotate(180deg);
 }
 
 .admin-user-chip__avatar {
@@ -891,6 +927,176 @@ textarea.inventory-input {
 
 .admin-user-chip__copy strong {
   font-size: 11px;
+}
+
+/* Topbar dropdowns (notifications, account) — see AdminMenu.tsx */
+.admin-menu {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.admin-menu__panel {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  width: max-content;
+  min-width: 190px;
+  max-width: min(320px, calc(100vw - 32px));
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: #fffdf9;
+  box-shadow: var(--shadow-pop);
+}
+
+.admin-menu__panel--wide {
+  min-width: 274px;
+}
+
+.admin-menu__title {
+  margin: 2px 8px 6px;
+  color: var(--text-subtle);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.admin-menu__item {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  color: var(--text);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 650;
+  text-align: left;
+  text-decoration: none;
+  transition: color 150ms ease, background 150ms ease;
+}
+
+.admin-menu__item:hover {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.admin-menu__item:active {
+  background: var(--secondary-btn-hover);
+}
+
+.admin-menu__item--danger {
+  width: 100%;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 9px 9px;
+  color: var(--danger);
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.admin-menu__item--danger:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.admin-menu__item--danger:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.admin-menu__item:focus-visible,
+.admin-menu__notification:focus-visible,
+.admin-menu__footer-link:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.admin-menu__notification {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  color: var(--text);
+  text-decoration: none;
+  transition: background 150ms ease;
+}
+
+.admin-menu__notification:hover {
+  background: var(--primary-soft);
+}
+
+.admin-menu__notification:active {
+  background: var(--secondary-btn-hover);
+}
+
+.admin-menu__dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  margin-top: 4px;
+  border-radius: 50%;
+}
+
+.admin-menu__dot.is-out {
+  background: var(--danger);
+}
+
+.admin-menu__dot.is-low {
+  background: var(--warning);
+}
+
+.admin-menu__notification-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.admin-menu__notification-copy strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-menu__notification-copy small {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.admin-menu__empty {
+  padding: 10px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.admin-menu__footer-link {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.admin-menu__footer-link:hover {
+  text-decoration: underline;
 }
 
 .admin-panel {

@@ -2,6 +2,7 @@ import Image from "next/image";
 import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
+import { AdminMenu } from "@/components/admin/AdminMenu";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import { formatStockQuantity, salesQuantity, stockStatus, stockThreshold } from "@/lib/inventory";
@@ -338,15 +339,53 @@ export default async function AdminPage() {
               <span className="admin-brand__copy"><strong>Mario&apos;s</strong><small>LECHON HOUSE</small></span>
             </Link>
             <Link href="/products" className="admin-icon-button" aria-label="Open products"><AdminIcon name="box" size={19} /></Link>
-            <Link href="/admin/inventory" className="admin-icon-button admin-icon-button--alert" aria-label={inventoryAlertCount ? `View ${inventoryAlertCount} inventory alerts` : "View inventory status"}>
-              <AdminIcon name="bell" size={19} />
-              {inventoryAlertCount > 0 && <span className="admin-icon-button__badge" aria-hidden="true">{inventoryAlertCount > 9 ? "9+" : inventoryAlertCount}</span>}
-            </Link>
+
+            <AdminMenu
+              triggerClassName="admin-icon-button admin-icon-button--alert"
+              triggerLabel={inventoryAlertCount ? `Notifications: ${inventoryAlertCount} inventory alerts` : "Notifications"}
+              panelTitle="Notifications"
+              panelClassName="admin-menu__panel--wide"
+              trigger={
+                <>
+                  <AdminIcon name="bell" size={19} />
+                  {inventoryAlertCount > 0 && <span className="admin-icon-button__badge" aria-hidden="true">{inventoryAlertCount > 9 ? "9+" : inventoryAlertCount}</span>}
+                </>
+              }
+            >
+              {lowStockRows.length === 0 ? (
+                <p className="admin-menu__empty">Nothing needs attention. Stock levels look good.</p>
+              ) : (
+                lowStockRows.map((row) => (
+                  <Link key={`${row.branch.id}:${row.product.id}`} href={`/admin/inventory?status=${row.status === "out" ? "out" : "low"}`} className="admin-menu__notification">
+                    <span className={`admin-menu__dot ${row.status === "out" ? "is-out" : "is-low"}`} aria-hidden="true" />
+                    <span className="admin-menu__notification-copy">
+                      <strong>{row.product.name}</strong>
+                      <small>{row.status === "out" ? "Out of stock" : `Low: ${formatStockQuantity(row.onHand)} ${row.product.unit} left`} · {row.branch.name}</small>
+                    </span>
+                  </Link>
+                ))
+              )}
+              <Link href="/admin/inventory" className="admin-menu__footer-link">View all inventory</Link>
+            </AdminMenu>
+
             <Link href="#system-status" className="admin-icon-button admin-icon-button--help" aria-label="View system status"><AdminIcon name="help" size={19} /></Link>
-            <div className="admin-user-chip">
-              <span className="admin-user-chip__avatar" aria-hidden="true">{userInitial}</span>
-              <span className="admin-user-chip__copy"><strong>{firstName}</strong><small>{profile.role === "manager" ? "Manager" : "Admin"}⌄</small></span>
-            </div>
+
+            <AdminMenu
+              triggerClassName="admin-user-chip"
+              triggerLabel={`Account menu for ${firstName}`}
+              trigger={
+                <>
+                  <span className="admin-user-chip__avatar" aria-hidden="true">{userInitial}</span>
+                  <span className="admin-user-chip__copy"><strong>{firstName}</strong><small>{profile.role === "manager" ? "Manager" : "Admin"}</small></span>
+                  <span className="admin-user-chip__caret" aria-hidden="true">⌄</span>
+                </>
+              }
+            >
+              <Link href="/admin/settings" className="admin-menu__item">Settings</Link>
+              <Link href="/account/password" className="admin-menu__item">Change password</Link>
+              <SignOutButton variant="menu" />
+            </AdminMenu>
+
             <SignOutButton className="px-2 py-2 text-[10px]" />
           </header>
 
