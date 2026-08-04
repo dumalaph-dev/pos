@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
-import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { ProductFields } from "@/components/admin/ProductFields";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatStockQuantity, salesQuantity, stockMovementDelta, stockStatus, type StockMovementType } from "@/lib/inventory";
@@ -97,7 +96,6 @@ type StockRecord = {
   qty: number;
 };
 
-type DeviceRecord = { is_active: boolean; last_seen_at: string | null };
 
 type ProductRow = {
   product: ProductRecord;
@@ -204,10 +202,6 @@ function formatDateRange(start: Date, endExclusive: Date) {
   const end = new Date(endExclusive.getTime() - DAY_MS);
   const formatter = new Intl.DateTimeFormat("en-PH", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Singapore" });
   return `${formatter.format(start)} – ${formatter.format(end)}`;
-}
-
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("en-PH", { day: "numeric", hour: "numeric", minute: "2-digit", month: "short", timeZone: "Asia/Singapore" }).format(new Date(value));
 }
 
 function shortName(name: string | null, fallback: string) {
@@ -380,13 +374,12 @@ export default async function ProductsPage({
     .lt("created_at", currentStart.toISOString())
     .limit(5000);
 
-  const [branchesResult, categoriesResult, productsResult, suppliersResult, stockResult, devicesResult, currentOrdersResult, previousOrdersResult, orderItemsResult] = await Promise.all([
+  const [branchesResult, categoriesResult, productsResult, suppliersResult, stockResult, currentOrdersResult, previousOrdersResult, orderItemsResult] = await Promise.all([
     supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name"),
     supabase.from("categories").select("id, store_id, name, icon, sort_order, is_active").eq("org_id", profile.org_id).order("sort_order").order("name"),
     supabase.from("products").select("id, store_id, category_id, name, sku, barcode, pricing_mode, price, cost_price, min_stock, unit, supplier_id, track_stock, image_url, is_active, sort_order").eq("org_id", profile.org_id).order("sort_order").order("name").limit(1000),
     supabase.from("suppliers").select("id, name, is_active").eq("org_id", profile.org_id).order("name").limit(1000),
     supabase.rpc("current_stock", { p_org_id: profile.org_id }),
-    supabase.from("devices").select("is_active, last_seen_at").eq("org_id", profile.org_id).limit(100),
     currentOrdersQuery,
     previousOrdersQuery,
     supabase
@@ -431,7 +424,6 @@ export default async function ProductsPage({
   }
   const currentOrders = (currentOrdersResult.data ?? []) as OrderRecord[];
   const previousOrders = (previousOrdersResult.data ?? []) as OrderRecord[];
-  const devices = (devicesResult.data ?? []) as DeviceRecord[];
   const orderItems = (orderItemsResult.data ?? []) as OrderItemRecord[];
   const orderItemsError = Boolean(orderItemsResult.error);
 
@@ -518,10 +510,8 @@ export default async function ProductsPage({
   const orgName = profile.organizations?.name ?? DEFAULT_STORE_NAME;
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
   const userInitial = firstName.charAt(0).toUpperCase();
-  const latestDevice = devices.filter((device) => device.last_seen_at).sort((a, b) => new Date(b.last_seen_at ?? 0).getTime() - new Date(a.last_seen_at ?? 0).getTime())[0];
-  const connected = !devicesResult.error && devices.some((device) => device.is_active);
   const dataWarning = Boolean(
-    branchesResult.error || categoriesResult.error || Boolean(productsResult.error && !productsSchemaWarning) || fallbackProductsError || (suppliersResult.error && !suppliersSchemaWarning) || stockFallbackError || devicesResult.error || currentOrdersResult.error || previousOrdersResult.error || orderItemsError,
+    branchesResult.error || categoriesResult.error || Boolean(productsResult.error && !productsSchemaWarning) || fallbackProductsError || (suppliersResult.error && !suppliersSchemaWarning) || stockFallbackError || currentOrdersResult.error || previousOrdersResult.error || orderItemsError,
   );
   const canWrite = profile.role === "admin";
   const selectedProduct = selectedProductId ? productById.get(selectedProductId) : undefined;
@@ -529,14 +519,7 @@ export default async function ProductsPage({
 
   return (
     <main className="admin-page products-page text-ink">
-      <div className="mx-auto grid min-h-screen max-w-[1700px] lg:grid-cols-[238px_minmax(0,1fr)]">
-        <AdminSidebar
-          branchName={currentBranchName}
-          active="products"
-          connection={{ connected, lastSyncedLabel: latestDevice?.last_seen_at ? formatDateTime(latestDevice.last_seen_at) : null }}
-        />
-
-        <div className="min-w-0 px-4 pb-10 sm:px-6 lg:px-8">
+      <div className="min-w-0 px-4 pb-10 sm:px-6 lg:px-8">
           <header className="admin-topbar products-topbar">
             <Link href="/products" className="admin-mobile-brand" aria-label="Products">
               <span className="admin-brand__mark"><AdminIcon name="pig" size={20} /></span>
@@ -658,7 +641,6 @@ export default async function ProductsPage({
               <section id="product-tips" className="products-tip-card"><span className="products-tip-card__icon"><AdminIcon name="alert" size={15} /></span><h2>Product tips</h2><strong>Keep your menu updated</strong><p>Review prices, POS visibility, and stock thresholds regularly so customers see accurate availability.</p><Link href="/admin/inventory#inventory-help">Learn more <AdminIcon name="arrow" size={13} /></Link></section>
             </aside>
           </div>
-        </div>
       </div>
     </main>
   );

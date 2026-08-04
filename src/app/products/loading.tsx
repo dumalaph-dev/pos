@@ -1,6 +1,7 @@
 export default function ProductsLoading() {
   return (
-    <main className="min-h-screen bg-bg p-4 text-ink sm:p-6 lg:p-8" aria-busy="true" aria-label="Loading products">
+    <main className="admin-route-loading min-h-screen bg-bg p-4 text-ink sm:p-6 lg:p-8" aria-busy="true" aria-label="Loading products">
+      <div className="admin-route-loading__progress" aria-hidden="true"><span /></div>
       <div className="mx-auto max-w-[1680px] animate-pulse">
         <div className="h-14 rounded-card border border-line bg-surface" />
         <div className="mt-6 h-24 max-w-2xl rounded-card bg-surface" />

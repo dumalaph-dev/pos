@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
-import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { BranchProductSelector } from "@/components/admin/BranchProductSelector";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
@@ -537,10 +536,7 @@ export default async function InventoryPage({
 
   return (
     <main className="admin-page text-ink">
-      <div className="mx-auto grid min-h-screen max-w-[1680px] lg:grid-cols-[238px_minmax(0,1fr)]">
-        <AdminSidebar branchName={currentBranchName} active="inventory" />
-
-        <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
+      <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
           <header className="admin-topbar">
             <Link href="/admin" className="admin-mobile-brand" aria-label="Admin dashboard"><span className="admin-brand__mark"><AdminIcon name="pig" size={20} /></span><span className="admin-brand__copy"><strong>Mario&apos;s</strong><small>LECHON HOUSE</small></span></Link>
             <Link href="#inventory-filters-heading" className="admin-icon-button" aria-label="Search inventory"><AdminIcon name="search" size={19} /></Link>
@@ -674,7 +670,6 @@ export default async function InventoryPage({
               <section className="admin-panel p-4"><div className="flex items-center justify-between gap-2"><h2 className="text-sm font-extrabold text-ink">Recent stock movements</h2><Link href="#stock-movement" className="text-[10px] font-extrabold text-primary hover:underline">View all</Link></div>{recentMovements.length === 0 ? <p className="mt-4 rounded-btn border border-dashed border-line-strong px-3 py-5 text-center text-[10px] text-ink-muted">No stock movements yet.</p> : <div className="mt-3 divide-y divide-line/70">{recentMovements.map((movement) => { const product = productById.get(movement.product_id); const delta = stockMovementDelta(movement.type, Number(movement.qty)); return <div key={movement.id} className="flex items-start gap-2 py-3 first:pt-0"><span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-extrabold ${movementClass(movement.type)}`} aria-hidden="true">{delta >= 0 ? "↓" : "↑"}</span><span className="min-w-0 flex-1"><strong className="block truncate text-[10px] font-extrabold text-ink">{movementLabel(movement.type)}</strong><small className="mt-1 block truncate text-[10px] text-ink-muted">{product?.name ?? "Unknown product"}</small><small className="block text-[9px] text-ink-muted">{formatDateTime(movement.created_at)}</small></span><strong className={`tnums whitespace-nowrap text-[10px] font-extrabold ${delta >= 0 ? "text-success" : "text-danger"}`}>{delta >= 0 ? "+" : "−"}{formatStockQuantity(Math.abs(delta))} {movement.unit}</strong></div>; })}</div>}<Link href="/admin/reports" className="inventory-button mt-3 w-full rounded-btn border border-line-strong text-[10px] font-extrabold text-primary transition hover:bg-primary-soft"><AdminIcon name="chart" size={14} />View inventory reports</Link></section>
             </aside>
           </div>
-        </div>
       </div>
     </main>
   );

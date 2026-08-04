@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
-import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { SignOutButton } from "@/components/SignOutButton";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 
@@ -270,10 +269,7 @@ export default async function AuditPage({
 
   return (
     <main className="admin-page text-ink">
-      <div className="mx-auto grid min-h-screen max-w-[1680px] lg:grid-cols-[238px_minmax(0,1fr)]">
-        <AdminSidebar branchName={currentBranchName} active="audit" />
-
-        <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
+      <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
           <header className="admin-reference-header flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-3 shadow-[var(--shadow-card)] sm:px-5">
             <div className="flex min-w-0 items-center gap-3">
               <Link href="/admin" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-primary/25 bg-primary-soft text-primary" aria-label="Back to admin overview"><AdminIcon name="history" size={20} /></Link>
@@ -316,7 +312,6 @@ export default async function AuditPage({
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4"><span className="text-[10px] font-semibold text-ink-muted">Page {requestedPage} of {totalPages} · {totalCount.toLocaleString("en-PH")} total matching events</span><div className="flex items-center gap-1">{requestedPage > 1 ? <Link href={auditHref({ branch: branchFilter, actor: actorFilter, action: actionFilter, dateFrom, dateTo, page: requestedPage - 1 })} className="grid h-8 min-w-8 place-items-center rounded-btn border border-line text-sm font-extrabold text-primary hover:bg-primary-soft" aria-label="Previous audit page">‹</Link> : <span className="grid h-8 min-w-8 place-items-center rounded-btn border border-line text-sm font-extrabold text-ink-subtle" aria-hidden="true">‹</span>}{pageNumbers.map((pageNumber) => <Link key={pageNumber} href={auditHref({ branch: branchFilter, actor: actorFilter, action: actionFilter, dateFrom, dateTo, page: pageNumber })} className={`grid h-8 min-w-8 place-items-center rounded-btn px-2 text-[10px] font-extrabold ${pageNumber === requestedPage ? "bg-primary text-primary-fg" : "border border-line bg-surface text-primary hover:bg-primary-soft"}`}>{pageNumber}</Link>)}{requestedPage < totalPages ? <Link href={auditHref({ branch: branchFilter, actor: actorFilter, action: actionFilter, dateFrom, dateTo, page: requestedPage + 1 })} className="grid h-8 min-w-8 place-items-center rounded-btn border border-line text-sm font-extrabold text-primary hover:bg-primary-soft" aria-label="Next audit page">›</Link> : <span className="grid h-8 min-w-8 place-items-center rounded-btn border border-line text-sm font-extrabold text-ink-subtle" aria-hidden="true">›</span>}</div></div>
             </>}
           </section>
-        </div>
       </div>
     </main>
   );

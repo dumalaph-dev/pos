@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
-import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { SignOutButton } from "@/components/SignOutButton";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { createSupplier, updateSupplier } from "./actions";
@@ -123,10 +122,7 @@ export default async function SuppliersPage({
 
   return (
     <main className="admin-page text-ink">
-      <div className="mx-auto grid min-h-screen max-w-[1680px] lg:grid-cols-[238px_minmax(0,1fr)]">
-        <AdminSidebar branchName={branchByDefault} active="suppliers" />
-
-        <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
+      <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
           <header className="admin-reference-header flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-3 shadow-[var(--shadow-card)] sm:px-5">
             <div className="flex min-w-0 items-center gap-3">
               <Link href="/admin" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-primary/25 bg-primary-soft text-primary" aria-label="Back to admin overview"><AdminIcon name="suppliers" size={20} /></Link>
@@ -169,7 +165,6 @@ export default async function SuppliersPage({
               {filteredSuppliers.length === 0 ? <EmptyDirectory label="No suppliers match these filters" detail="Try a wider search or add the first supplier to build your purchasing directory." /> : <div className="mt-4 overflow-x-auto"><table className="admin-list-table min-w-[760px]"><thead><tr><th>Supplier</th><th>Contact person</th><th>Contact</th><th>Home branch</th><th>Status</th><th>Action</th></tr></thead><tbody>{filteredSuppliers.map((supplier) => <tr key={supplier.id}><td><strong className="font-extrabold">{supplier.name}</strong>{supplier.address && <small className="mt-1 block max-w-[170px] truncate text-[10px] text-ink-muted">{supplier.address}</small>}</td><td className="whitespace-nowrap">{supplier.contact_name || "—"}</td><td><span className="block whitespace-nowrap">{supplier.phone || "—"}</span><small className="mt-1 block max-w-[170px] truncate text-[10px] text-ink-muted">{supplier.email || "No email"}</small></td><td className="whitespace-nowrap">{supplier.store_id ? branchById.get(supplier.store_id)?.name ?? "Unknown branch" : "All branches"}</td><td><span className={`inline-flex rounded-pill px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${supplier.is_active ? "bg-success/10 text-success" : "bg-secondary text-ink-muted"}`}>{supplier.is_active ? "Active" : "Inactive"}</span></td><td>{canWrite ? <Link href={supplierHref({ q: searchQuery, status, edit: supplier.id })} className="font-extrabold text-primary hover:underline">Edit</Link> : <span className="text-ink-muted">View</span>}</td></tr>)}</tbody></table></div>}
             </section>
           </div>
-        </div>
       </div>
     </main>
   );

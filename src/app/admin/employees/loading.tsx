@@ -1,6 +1,7 @@
 export default function EmployeesLoading() {
   return (
-    <main className="admin-page min-h-screen bg-bg p-4 text-ink sm:p-6 lg:p-8" aria-busy="true" aria-label="Loading employees">
+    <main className="admin-page admin-route-loading min-h-screen bg-bg p-4 text-ink sm:p-6 lg:p-8" aria-busy="true" aria-label="Loading employees">
+      <div className="admin-route-loading__progress" aria-hidden="true"><span /></div>
       <div className="mx-auto max-w-[1680px] animate-pulse">
         <div className="flex min-h-[74px] justify-end gap-2">
           <div className="h-10 w-28 rounded-btn bg-surface" />

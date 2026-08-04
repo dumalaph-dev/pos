@@ -2,7 +2,6 @@ import Image from "next/image";
 import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
-import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import { formatStockQuantity, salesQuantity, stockStatus, stockThreshold } from "@/lib/inventory";
@@ -73,7 +72,6 @@ type DeviceRecord = {
   is_active: boolean;
 };
 
-const DEFAULT_STORE_NAME = "Mario's Lechon House";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SINGAPORE_DAY_FORMATTER = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
@@ -240,7 +238,6 @@ export default async function AdminPage() {
   const queryWarning = Boolean(
     branchesResult.error || productsResult.error || categoriesResult.error || ordersResult.error || stockResult.error || devicesResult.error || orderItemsError,
   );
-  const branchById = new Map(branches.map((branch) => [branch.id, branch]));
   const categoryById = new Map(categories.map((category) => [category.id, category]));
   const productById = new Map(products.map((product) => [product.id, product]));
   const completedOrders = todayOrders.filter((order) => order.status === "completed");
@@ -331,16 +328,12 @@ export default async function AdminPage() {
     const totals = branchTotalsById.get(branch.id) ?? { orderCount: 0, sales: 0 };
     return { ...branch, ...totals, average: totals.orderCount ? Math.round(totals.sales / totals.orderCount) : 0 };
   });
-  const currentBranchName = profile.store_id ? branchById.get(profile.store_id)?.name ?? DEFAULT_STORE_NAME : "All branches";
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
   const userInitial = firstName.charAt(0).toUpperCase();
 
   return (
     <main className="admin-page text-ink">
-      <div className="mx-auto grid min-h-screen max-w-[1700px] lg:grid-cols-[238px_minmax(0,1fr)]">
-        <AdminSidebar branchName={currentBranchName} active="overview" />
-
-        <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
+      <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
           <header className="admin-topbar">
             <Link href="/admin" className="admin-mobile-brand" aria-label="Admin dashboard">
               <span className="admin-brand__mark"><AdminIcon name="pig" size={20} /></span>
@@ -454,7 +447,6 @@ export default async function AdminPage() {
               </div>
             </section>
           </div>
-        </div>
       </div>
     </main>
   );

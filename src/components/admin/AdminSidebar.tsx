@@ -1,3 +1,6 @@
+"use client";
+
+import { usePathname } from "next/navigation";
 import { AdminIcon, type AdminIconName } from "./AdminIcon";
 import { AdminLink as Link } from "./AdminLink";
 
@@ -41,7 +44,32 @@ const comingSoonNav: NavItem[] = [
   { label: "Settings", href: "/admin/settings", icon: "settings", active: "settings" },
 ];
 
-export function AdminSidebar({ branchName, active, connection }: { branchName: string; active: AdminSection; connection?: AdminSidebarConnection }) {
+function activeSectionForPath(pathname: string | null): AdminSection {
+  if (pathname === "/products" || pathname?.startsWith("/products/")) return "products";
+  if (!pathname || pathname === "/admin" || pathname === "/admin/") return "overview";
+
+  const routeSections: Array<[string, AdminSection]> = [
+    ["/admin/sales", "sales"],
+    ["/admin/orders", "orders"],
+    ["/admin/inventory", "inventory"],
+    ["/admin/products", "products"],
+    ["/admin/catalog", "products"],
+    ["/admin/customers", "customers"],
+    ["/admin/suppliers", "suppliers"],
+    ["/admin/expenses", "expenses"],
+    ["/admin/employees", "employees"],
+    ["/admin/reports", "reports"],
+    ["/admin/audit", "audit"],
+    ["/admin/settings", "settings"],
+    ["/admin/promotions", "promotions"],
+  ];
+
+  return routeSections.find(([prefix]) => pathname.startsWith(prefix))?.[1] ?? "overview";
+}
+
+export function AdminSidebar({ branchName, active: activeOverride, connection }: { branchName: string; active?: AdminSection; connection?: AdminSidebarConnection }) {
+  const pathname = usePathname();
+  const active = activeOverride ?? activeSectionForPath(pathname);
   const quickActions: QuickAction[] = active === "inventory"
     ? [
         { label: "Add item", href: "/products?create=product#product-form", icon: "plus" },

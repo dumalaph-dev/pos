@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
-import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { SignOutButton } from "@/components/SignOutButton";
 import { salesQuantity } from "@/lib/inventory";
 import { formatPeso } from "@/lib/money";
@@ -70,7 +69,6 @@ type TrendBucket = {
   discounts: number;
 };
 
-const DEFAULT_STORE_NAME = "Mario's Lechon House";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const rangeOptions: Array<{ value: OrderRange; label: string; days?: number }> = [
   { value: "today", label: "Today", days: 1 },
@@ -428,7 +426,6 @@ export default async function OrdersPage({
   const previousSummary = orderSummary(previousOrders);
   const canCompare = range !== "all" && !searchQuery;
   const trendBuckets = buildTrendBuckets(filteredOrders, startDate, todayEnd);
-  const currentBranchName = profile.store_id ? branchById.get(profile.store_id)?.name ?? DEFAULT_STORE_NAME : "All branches";
   const branchLabel = branchFilter ? branchById.get(branchFilter)?.name ?? "Selected branch" : "All branches";
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
   const queryWarning = Boolean(branchesResult.error || cashiersResult.error || productsResult.error || ordersResult.error || previousOrdersResult?.error || orderItemsError || selectedOrderResult?.error);
@@ -441,10 +438,7 @@ export default async function OrdersPage({
 
   return (
     <main className="admin-page text-ink">
-      <div className="mx-auto grid min-h-screen max-w-[1680px] lg:grid-cols-[238px_minmax(0,1fr)]">
-        <AdminSidebar branchName={currentBranchName} active="orders" />
-
-        <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
+      <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
           <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line/70 pb-4 pt-1">
             <div><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Order operations · {branchLabel}</p><h1 className="mt-2 text-3xl font-extrabold tracking-[-0.05em] text-ink sm:text-4xl">Orders</h1><p className="mt-1 text-sm text-ink-muted">Manage and track all customer orders in one place, {firstName}.</p></div>
             <div className="admin-compact-toolbar">
@@ -489,7 +483,6 @@ export default async function OrdersPage({
             <div className="admin-panel__header"><div><p className="admin-panel__eyebrow">Live order register</p><h2 id="orders-table-heading" className="admin-panel__title">All orders</h2><p className="admin-panel__subtitle">{filteredOrders.length} matching order{filteredOrders.length === 1 ? "" : "s"} · {formatDateRange(startDate, todayEnd)}</p></div><span className="rounded-pill bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary">RLS-scoped records</span></div>
             {filteredOrders.length === 0 ? <EmptyOrders /> : selectedOrder ? <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.42fr)]"><OrdersTable orders={visibleOrders} selectedOrderId={selectedOrder.id} range={range} status={status} payment={payment} branch={branchFilter} query={searchQuery} page={page} pageSize={pageSize} branchById={branchById} cashierById={cashierById} itemCountByOrder={itemCountByOrder} itemsByOrder={itemsByOrder} productById={productById} totalOrders={filteredOrders.length} totalPages={totalPages} /><OrderDetail order={selectedOrder} items={itemsByOrder.get(selectedOrder.id) ?? []} productById={productById} branchName={branchById.get(selectedOrder.store_id)?.name ?? "Unknown branch"} cashierName={cashierById.get(selectedOrder.cashier_id)?.full_name ?? "Unknown cashier"} clearHref={buildOrderHref({ range, status, payment, branch: branchFilter, query: searchQuery })} /></div> : <OrdersTable orders={visibleOrders} selectedOrderId={null} range={range} status={status} payment={payment} branch={branchFilter} query={searchQuery} page={page} pageSize={pageSize} branchById={branchById} cashierById={cashierById} itemCountByOrder={itemCountByOrder} itemsByOrder={itemsByOrder} productById={productById} totalOrders={filteredOrders.length} totalPages={totalPages} />}
           </section>
-        </div>
       </div>
     </main>
   );

@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
-import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
@@ -175,10 +174,7 @@ export default async function ExpensesPage({
 
   return (
     <main className="admin-page text-ink">
-      <div className="mx-auto grid min-h-screen max-w-[1680px] lg:grid-cols-[238px_minmax(0,1fr)]">
-        <AdminSidebar branchName={branchByDefault} active="expenses" />
-
-        <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
+      <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
           <header className="admin-reference-header flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-3 shadow-[var(--shadow-card)] sm:px-5">
             <div className="flex min-w-0 items-center gap-3"><Link href="/admin" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-primary/25 bg-primary-soft text-primary" aria-label="Back to admin overview"><AdminIcon name="expenses" size={20} /></Link><div className="min-w-0"><p className="truncate text-[10px] font-extrabold uppercase tracking-[0.16em] text-ink-muted">Admin backoffice</p><h1 className="truncate text-lg font-extrabold text-primary">Expenses</h1></div></div>
             <div className="ml-auto flex items-center gap-2"><Link href="/admin" className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Overview</Link><Link href="/admin/reports" className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Reports</Link><SignOutButton className="px-3 py-2 text-xs" /></div>
@@ -200,7 +196,6 @@ export default async function ExpensesPage({
 
             <section aria-labelledby="expense-ledger-heading" className="admin-panel min-w-0 p-5"><div className="admin-panel__header"><div><p className="admin-panel__eyebrow">Auditable operating costs</p><h2 id="expense-ledger-heading" className="admin-panel__title">Expense ledger</h2><p className="admin-panel__subtitle">{filteredExpenses.length} matching entr{filteredExpenses.length === 1 ? "y" : "ies"}. Records are retained for review; edit details when a correction is needed.</p></div><span className="rounded-pill bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary">Up to 1,000 rows</span></div>{filteredExpenses.length === 0 ? <EmptyLedger /> : <div className="mt-4 overflow-x-auto"><table className="admin-list-table min-w-[820px]"><thead><tr><th>Date</th><th>Expense</th><th>Branch</th><th>Payment</th><th>Recorded</th><th>Amount</th></tr></thead><tbody>{filteredExpenses.map((expense) => <tr key={expense.id}><td className="whitespace-nowrap text-ink-muted">{formatDate(expense.incurred_on)}</td><td><Link href={expenseHref({ range, category: categoryFilter, branch: branchFilter, q: searchQuery, edit: expense.id })} className="font-extrabold text-primary hover:underline">{expense.description}</Link><small className="mt-1 block text-[10px] text-ink-muted">{expense.category}{expense.reference ? ` · ${expense.reference}` : ""}</small></td><td className="whitespace-nowrap">{branchById.get(expense.store_id)?.name ?? "Unknown branch"}</td><td className="whitespace-nowrap">{paymentLabel(expense.payment_method)}</td><td className="whitespace-nowrap text-ink-muted">{formatDateTime(expense.created_at)}</td><td className="tnums whitespace-nowrap text-right font-extrabold">{displayPeso(Number(expense.amount))}</td></tr>)}</tbody></table></div>}</section>
           </div>
-        </div>
       </div>
     </main>
   );

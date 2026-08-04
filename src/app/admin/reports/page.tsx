@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
-import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatStockQuantity, salesQuantity } from "@/lib/inventory";
 import { formatPeso } from "@/lib/money";
@@ -41,7 +40,6 @@ type OrderItemRecord = {
   line_total: number;
 };
 
-const DEFAULT_STORE_NAME = "Mario's Lechon House";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SINGAPORE_DAY_FORMATTER = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
@@ -169,7 +167,6 @@ export default async function ReportsPage({
   const orderItems = (itemsResult.data ?? []) as OrderItemRecord[];
   const orderItemsError = Boolean(itemsResult.error);
 
-  const branchById = new Map(branches.map((branch) => [branch.id, branch]));
   const categoryById = new Map(categories.map((category) => [category.id, category]));
   const productById = new Map(products.map((product) => [product.id, product]));
   const completedOrders = orders.filter((order) => order.status === "completed");
@@ -241,15 +238,11 @@ export default async function ReportsPage({
     .map((branch) => ({ ...branch, ...(branchTotalsById.get(branch.id) ?? { sales: 0, orders: 0 }) }))
     .sort((a, b) => b.sales - a.sales);
   const queryWarning = Boolean(branchesResult.error || categoriesResult.error || productsResult.error || ordersResult.error || orderItemsError);
-  const currentBranchName = profile.store_id ? branchById.get(profile.store_id)?.name ?? DEFAULT_STORE_NAME : "All branches";
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
 
   return (
     <main className="admin-page text-ink">
-      <div className="mx-auto grid min-h-screen max-w-[1680px] lg:grid-cols-[238px_minmax(0,1fr)]">
-        <AdminSidebar branchName={currentBranchName} active="reports" />
-
-        <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
+      <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
           <header className="admin-reference-header flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-3 shadow-[var(--shadow-card)] sm:px-5">
             <div className="flex min-w-0 items-center gap-3">
               <Link href="/admin" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-primary/25 bg-primary-soft text-primary" aria-label="Back to admin overview"><AdminIcon name="reports" size={20} /></Link>
@@ -278,7 +271,6 @@ export default async function ReportsPage({
           </div>
 
           <section aria-labelledby="branch-report-heading" className="admin-panel mt-4 p-5"><div className="admin-panel__header"><div><p className="admin-panel__eyebrow">Branch comparison</p><h2 id="branch-report-heading" className="admin-panel__title">Where sales are happening</h2><p className="admin-panel__subtitle">Completed sales for the selected period</p></div><Link href="/admin/employees" className="admin-kpi-card__link mt-0">Manage staff <AdminIcon name="arrow" size={14} /></Link></div>{branchStats.length === 0 ? <ReportEmpty title="No branches found" detail="Create a branch to compare performance." /> : <div className="mt-4 overflow-x-auto"><table className="admin-list-table min-w-[620px]"><thead><tr><th>Branch</th><th>Orders</th><th>Total sales</th><th>Share</th><th>Average order</th></tr></thead><tbody>{branchStats.map((branch) => <tr key={branch.id}><td><strong>{branch.name}</strong><small className="mt-1 block text-[10px] text-ink-muted">{branch.is_active ? "Active" : "Inactive"}</small></td><td className="tnums">{branch.orders}</td><td className="tnums font-extrabold">{displayPeso(branch.sales)}</td><td className="tnums">{totalSales ? Math.round((branch.sales / totalSales) * 100) : 0}%</td><td className="tnums font-extrabold">{displayPeso(branch.orders ? Math.round(branch.sales / branch.orders) : 0)}</td></tr>)}</tbody></table></div>}</section>
-        </div>
       </div>
     </main>
   );

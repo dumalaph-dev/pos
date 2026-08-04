@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
-import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
@@ -32,7 +31,6 @@ type OrderRecord = {
   created_at: string;
 };
 
-const DEFAULT_STORE_NAME = "Mario's Lechon House";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SINGAPORE_DAY_FORMATTER = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
@@ -192,16 +190,12 @@ export default async function PromotionsPage({
   const maxDiscountDay = Math.max(...discountSeries.map((point) => point.value), 0);
   const recentDiscounts = discountedOrders.slice(0, 8);
   const queryWarning = Boolean(branchesResult.error || ordersResult.error);
-  const currentBranchName = profile.store_id ? branchById.get(profile.store_id)?.name ?? DEFAULT_STORE_NAME : "All branches";
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
   const rangeLabel = rangeOptions.find((option) => option.value === range)?.label ?? "Last 30 days";
 
   return (
     <main className="admin-page text-ink">
-      <div className="mx-auto grid min-h-screen max-w-[1680px] lg:grid-cols-[238px_minmax(0,1fr)]">
-        <AdminSidebar branchName={currentBranchName} active="promotions" />
-
-        <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
+      <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
           <header className="admin-reference-header flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-3 shadow-[var(--shadow-card)] sm:px-5">
             <div className="flex min-w-0 items-center gap-3"><Link href="/admin" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-primary/25 bg-primary-soft text-primary" aria-label="Back to admin overview"><AdminIcon name="promotions" size={20} /></Link><div className="min-w-0"><p className="truncate text-[10px] font-extrabold uppercase tracking-[0.16em] text-ink-muted">Admin backoffice</p><h1 className="truncate text-lg font-extrabold text-primary">Promotions</h1></div></div>
             <div className="ml-auto flex items-center gap-2"><Link href="/pos" className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Open POS</Link><Link href="/admin/reports" className="rounded-btn bg-primary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover">Reports</Link><SignOutButton className="px-3 py-2 text-xs" /></div>
@@ -221,7 +215,6 @@ export default async function PromotionsPage({
           <section aria-labelledby="discounted-orders-heading" className="admin-panel mt-4 p-5"><div className="admin-panel__header"><div><p className="admin-panel__eyebrow">Audit view</p><h2 id="discounted-orders-heading" className="admin-panel__title">Recent discounted orders</h2><p className="admin-panel__subtitle">Verify that discounts are being applied with the expected reference.</p></div><Link href="/admin/orders?status=completed" className="admin-kpi-card__link mt-0">View all orders <AdminIcon name="arrow" size={14} /></Link></div>{recentDiscounts.length === 0 ? <PromotionEmpty title="No discounts used yet" detail="Completed POS orders with Senior, PWD, or Custom discounts will appear here." /> : <div className="mt-4 overflow-x-auto"><table className="admin-list-table min-w-[760px]"><thead><tr><th>Order</th><th>When</th><th>Branch</th><th>Offer</th><th>Reference</th><th>Discount</th><th>Net total</th></tr></thead><tbody>{recentDiscounts.map((order) => <tr key={order.id}><td className="whitespace-nowrap font-extrabold text-primary">{order.order_no}</td><td className="whitespace-nowrap text-ink-muted">{formatDateTime(order.created_at)}</td><td className="whitespace-nowrap">{branchById.get(order.store_id)?.name ?? "Unknown branch"}</td><td><span className={`inline-flex rounded-pill px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${discountClass(order.discount_type as DiscountType)}`}>{discountLabel(order.discount_type)}</span></td><td className="text-ink-muted">{order.discount_ref ? "Reference captured" : "No reference"}</td><td className="tnums whitespace-nowrap font-extrabold text-danger">-{displayPeso(order.discount_amount)}</td><td className="tnums whitespace-nowrap font-extrabold">{displayPeso(order.total)}</td></tr>)}</tbody></table></div>}</section>
 
           <div className="mt-4 grid gap-4 md:grid-cols-3"><PromotionGuide title="Senior citizen" detail="POS applies the configured statutory discount and captures the reference." tone="bg-primary-soft text-primary" /><PromotionGuide title="PWD" detail="Use the POS discount flow so the order retains its discount reference." tone="bg-success/10 text-success" /><PromotionGuide title="Custom" detail="Custom percentage discounts are recorded for reporting and review." tone="bg-warning/15 text-warning" /></div>
-        </div>
       </div>
     </main>
   );

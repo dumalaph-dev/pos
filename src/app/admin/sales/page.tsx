@@ -3,7 +3,6 @@ import { Fragment } from "react";
 import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
-import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import { salesQuantity, stockStatus } from "@/lib/inventory";
@@ -90,7 +89,6 @@ type StockAlertRow = {
   status: "out" | "low";
 };
 
-const DEFAULT_STORE_NAME = "Mario's Lechon House";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const rangeOptions: Array<{ value: SalesRange; label: string; days: number }> = [
   { value: "7d", label: "Last 7 days", days: 7 },
@@ -424,7 +422,6 @@ export default async function SalesPage({
   const peakShare = peakHour && currentSummary.sales > 0 ? Math.round((peakHour.total / currentSummary.sales) * 100) : 0;
 
   const queryWarning = Boolean(branchesResult.error || cashiersResult.error || productsResult.error || stockResult.error || currentOrdersResult.error || previousOrdersResult.error || orderItemsError);
-  const currentBranchName = profile.store_id ? branchById.get(profile.store_id)?.name ?? DEFAULT_STORE_NAME : "All branches";
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
   const branchLabel = branchFilter ? branchById.get(branchFilter)?.name ?? "Selected branch" : "All branches";
   const totalPages = Math.max(1, Math.ceil(currentOrders.length / pageSize));
@@ -435,10 +432,7 @@ export default async function SalesPage({
 
   return (
     <main className="admin-page text-ink">
-      <div className="mx-auto grid min-h-screen max-w-[1680px] lg:grid-cols-[238px_minmax(0,1fr)]">
-        <AdminSidebar branchName={currentBranchName} active="sales" />
-
-        <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
+      <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
           <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line/70 pb-4 pt-1">
             <div><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Performance workspace · {branchLabel}</p><h1 className="mt-2 text-3xl font-extrabold tracking-[-0.05em] text-ink sm:text-4xl">Sales</h1><p className="mt-1 text-sm text-ink-muted">Track your sales performance and grow your business, {firstName}.</p></div>
             <div className="admin-compact-toolbar">
@@ -486,7 +480,6 @@ export default async function SalesPage({
           </div>
 
           <RecentTransactions orders={visibleOrders} totalOrders={currentOrders.length} page={page} pageSize={pageSize} totalPages={totalPages} range={range} branch={branchFilter} branchById={branchById} cashierById={cashierById} itemCountByOrder={itemCountByOrder} />
-        </div>
       </div>
     </main>
   );

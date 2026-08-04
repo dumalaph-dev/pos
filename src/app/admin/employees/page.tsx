@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
-import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
@@ -347,9 +346,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
 
   return (
     <main className="admin-page employee-page text-ink">
-      <div className="mx-auto grid min-h-screen max-w-[1680px] lg:grid-cols-[238px_minmax(0,1fr)]">
-        <AdminSidebar branchName={currentBranchName} active="employees" />
-        <div className="min-w-0 px-4 pb-10 sm:px-6 lg:px-8">
+      <div className="min-w-0 px-4 pb-10 sm:px-6 lg:px-8">
           <header className="employee-topbar">
             <div className="employee-topbar__tools">
               <DateRangeMenu tab={tab} range={range} searchQuery={searchQuery} requestedRole={requestedRole} requestedStatus={requestedStatus} branchFilter={branchFilter} filtersOpen={filtersOpen} />
@@ -416,7 +413,6 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
               <Link href={employeeHref({ tab: "leave" })} className="employee-leave-cta"><AdminIcon name="calendar" size={17} /> Go to Leave Requests <AdminIcon name="arrow" size={16} /></Link>
             </aside>
           </div>
-        </div>
       </div>
     </main>
   );

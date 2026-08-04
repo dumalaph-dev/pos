@@ -684,6 +684,65 @@ textarea.inventory-input {
   background: #fdfbf8;
 }
 
+.admin-shell {
+  background: #fdfbf8;
+}
+
+.admin-shell__content {
+  min-width: 0;
+}
+
+.admin-route-loading {
+  position: relative;
+  overflow: hidden;
+}
+
+.admin-route-loading__progress {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 3px;
+  overflow: hidden;
+  background: rgba(139, 76, 22, 0.12);
+}
+
+.admin-route-loading__progress span {
+  display: block;
+  width: 42%;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  animation: admin-loading-progress 1.25s ease-in-out infinite;
+}
+
+.admin-route-loading__spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(139, 76, 22, 0.2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: admin-loading-spin 700ms linear infinite;
+}
+
+@keyframes admin-loading-progress {
+  0% { transform: translateX(-125%); }
+  55%, 100% { transform: translateX(265%); }
+}
+
+@keyframes admin-loading-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-route-loading__progress span,
+  .admin-route-loading__spinner {
+    animation: none;
+  }
+}
+
 .admin-page .rounded-card {
   border-color: #eee4d7;
   border-radius: 13px;

@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
-import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { SignOutButton } from "@/components/SignOutButton";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { createCustomer, updateCustomer } from "./actions";
@@ -131,10 +130,7 @@ export default async function CustomersPage({
 
   return (
     <main className="admin-page text-ink">
-      <div className="mx-auto grid min-h-screen max-w-[1680px] lg:grid-cols-[238px_minmax(0,1fr)]">
-        <AdminSidebar branchName={branchByDefault} active="customers" />
-
-        <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
+      <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
           <header className="admin-reference-header flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-3 shadow-[var(--shadow-card)] sm:px-5">
             <div className="flex min-w-0 items-center gap-3">
               <Link href="/admin" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-primary/25 bg-primary-soft text-primary" aria-label="Back to admin overview"><AdminIcon name="customers" size={20} /></Link>
@@ -177,7 +173,6 @@ export default async function CustomersPage({
               {filteredCustomers.length === 0 ? <EmptyDirectory label="No customers match these filters" detail="Try a wider search or add the first customer to begin the directory." icon="customers" /> : <div className="mt-4 overflow-x-auto"><table className="admin-list-table min-w-[720px]"><thead><tr><th>Customer</th><th>Contact</th><th>Home branch</th><th>Updated</th><th>Status</th><th>Action</th></tr></thead><tbody>{filteredCustomers.map((customer) => <tr key={customer.id}><td><strong className="font-extrabold">{customer.name}</strong>{customer.address && <small className="mt-1 block max-w-[180px] truncate text-[10px] text-ink-muted">{customer.address}</small>}</td><td><span className="block whitespace-nowrap">{customer.phone || "—"}</span><small className="mt-1 block max-w-[170px] truncate text-[10px] text-ink-muted">{customer.email || "No email"}</small></td><td className="whitespace-nowrap">{customer.store_id ? branchById.get(customer.store_id)?.name ?? "Unknown branch" : "All branches"}</td><td className="whitespace-nowrap text-ink-muted">{formatDate(customer.updated_at)}</td><td><span className={`inline-flex rounded-pill px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${customer.is_active ? "bg-success/10 text-success" : "bg-secondary text-ink-muted"}`}>{customer.is_active ? "Active" : "Inactive"}</span></td><td>{canWrite ? <Link href={customerHref({ q: searchQuery, status, edit: customer.id })} className="font-extrabold text-primary hover:underline">Edit</Link> : <span className="text-ink-muted">View</span>}</td></tr>)}</tbody></table></div>}
             </section>
           </div>
-        </div>
       </div>
     </main>
   );
