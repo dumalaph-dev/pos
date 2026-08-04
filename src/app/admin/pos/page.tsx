@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
+import { POS_PALETTE_IDS } from "@/lib/pos-palette";
+import { POS_THEME_IDS } from "@/lib/pos-theme";
 import PosSettingsScreen, {
   type AdminPosCategory,
   type AdminPosDevice,
@@ -77,9 +79,9 @@ function readPosConfig(store: StoreRecord): PosConfig {
   const configuredDefault = readEnum(source.defaultOrderType, ["Dine In", "Takeout", "Delivery"] as const, "Dine In");
 
   return {
-    palette: readEnum(source.palette, ["brown", "blue", "green", "purple", "custom"] as const, "brown"),
+    palette: readEnum(source.palette, POS_PALETTE_IDS, "brown"),
     customColor: typeof source.customColor === "string" && /^#[0-9a-f]{6}$/i.test(source.customColor) ? source.customColor : "#5b2a0a",
-    uiStyle: readEnum(source.uiStyle, ["modern", "classic", "soft", "dark", "bold"] as const, "modern"),
+    uiStyle: readEnum(source.uiStyle, POS_THEME_IDS, "modern"),
     defaultOrderType: enabledOrderTypes.includes(configuredDefault) ? configuredDefault : enabledOrderTypes[0],
     orderTypes: enabledOrderTypes,
     paymentMethods: {

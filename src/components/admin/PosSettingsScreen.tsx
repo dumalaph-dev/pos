@@ -8,6 +8,7 @@ import { createDeviceSettings, savePosSettings, updateDeviceSettings } from "@/a
 import { buildReceipt } from "@/lib/receipt";
 import { getPrinter, type PrinterSettings } from "@/lib/printer";
 import { getPosTheme, POS_THEME_OPTIONS, type PosThemeId } from "@/lib/pos-theme";
+import { getPosPalette, POS_PALETTE_OPTIONS, type PosPaletteId } from "@/lib/pos-palette";
 
 export type AdminPosProduct = {
   id: string;
@@ -39,7 +40,7 @@ export type AdminPosDevice = {
   last_seen_at: string | null;
 };
 
-export type PaletteId = "brown" | "blue" | "green" | "purple" | "custom";
+export type PaletteId = PosPaletteId;
 export type UiStyleId = PosThemeId;
 export type PaymentMethodId = "cash" | "card" | "gcash" | "maya" | "more";
 
@@ -80,14 +81,6 @@ const PREVIEW_PRODUCTS: AdminPosProduct[] = [
   { id: "preview-softdrinks", name: "Softdrinks (Can)", pricing_mode: "fixed", price: 6000, unit: "can", category_id: "preview-drinks", image_url: "/food/rice-sides.png" },
   { id: "preview-sauce", name: "Lechon Sauce", pricing_mode: "fixed", price: 2500, unit: "cup", category_id: "preview-extras", image_url: "/food/mang-tomas.png" },
   { id: "preview-gravy", name: "Extra Gravy", pricing_mode: "fixed", price: 2000, unit: "cup", category_id: "preview-extras", image_url: "/food/mang-tomas.png" },
-];
-
-const PALETTE_OPTIONS: Array<{ id: PaletteId; label: string; color?: string }> = [
-  { id: "brown", label: "Brown", color: "#5b2a0a" },
-  { id: "blue", label: "Blue", color: "#2f6fb3" },
-  { id: "green", label: "Green", color: "#2f7344" },
-  { id: "purple", label: "Purple", color: "#7450b5" },
-  { id: "custom", label: "Custom" },
 ];
 
 const TABS: Array<{ id: TabId; label: string }> = [
@@ -367,10 +360,20 @@ export default function PosSettingsScreen({
   const changeDue = Math.max(0, tendered - total);
   const availablePaymentMethods = (Object.keys(config.paymentMethods) as PaymentMethodId[]).filter((method) => config.paymentMethods[method]);
   const selectedPaymentMethod = config.paymentMethods[paymentMethod] ? paymentMethod : availablePaymentMethods[0] ?? "cash";
-  const paletteColor = config.palette === "custom" ? config.customColor || "#5b2a0a" : PALETTE_OPTIONS.find((option) => option.id === config.palette)?.color || "#5b2a0a";
+  const palette = getPosPalette(config.palette, config.customColor);
   const previewStyle = {
     ...getPosTheme(config.uiStyle).variables,
-    "--preview-accent": paletteColor,
+    "--pos-theme-highlight": palette.primary,
+    "--pos-theme-highlight-soft": palette.tint,
+    "--pos-theme-primary-soft": palette.soft,
+    "--preview-accent": palette.primary,
+    "--preview-accent-hover": palette.hover,
+    "--preview-accent-deep": palette.deep,
+    "--preview-accent-soft": palette.soft,
+    "--preview-accent-tint": palette.tint,
+    "--preview-accent-glow": palette.glow,
+    "--preview-accent-contrast": palette.contrast,
+    "--preview-accent-gradient": palette.gradient,
   } as CSSProperties;
 
   function updateConfig(patch: Partial<PosConfig>) {
@@ -779,11 +782,28 @@ function PreviewWindow({
 
 function AppearancePanel({ config, choosePalette, updateConfig, customPaletteOpen, setCustomPaletteOpen }: { config: PosConfig; choosePalette: (palette: PaletteId) => void; updateConfig: (patch: Partial<PosConfig>) => void; customPaletteOpen: boolean; setCustomPaletteOpen: (value: boolean) => void }) {
   const activeTheme = getPosTheme(config.uiStyle);
+  const activePalette = getPosPalette(config.palette, config.customColor);
 
   return (
     <aside className="pos-appearance-card">
       <div className="pos-appearance-card__heading"><h2>POS Appearance</h2><p>Customize the look and feel of your POS.</p></div>
-      <div className="pos-appearance-section"><h3>Color Palette</h3><p>Choose a color palette</p><div className="pos-palette-options">{PALETTE_OPTIONS.map((palette) => <button type="button" key={palette.id} className={`pos-palette-option ${config.palette === palette.id ? "is-selected" : ""}`} aria-label={`Use ${palette.label} palette`} onClick={() => choosePalette(palette.id)}>{palette.color ? <span style={{ background: palette.color }} /> : <span className="pos-palette-custom"><MiniIcon name="plus" size={16} /></span>}{config.palette === palette.id ? <b><MiniIcon name="check" size={11} /></b> : null}</button>)}</div>{customPaletteOpen ? <label className="pos-custom-color"><span>Custom accent</span><input type="color" value={config.customColor || "#5b2a0a"} onChange={(event) => updateConfig({ customColor: event.target.value })} /><button type="button" onClick={() => setCustomPaletteOpen(false)}>Done</button></label> : null}</div>
+      <div className="pos-appearance-section pos-palette-section">
+        <div className="pos-palette-section-heading">
+          <div><h3>Color palette</h3><p>Change the full interaction accent, not only the charge action.</p></div>
+          <span className="pos-palette-active-pill" style={{ color: activePalette.deep, background: activePalette.soft }}><i style={{ background: activePalette.gradient }} /> {activePalette.label}</span>
+        </div>
+        <div className="pos-palette-active-summary" style={{ borderColor: activePalette.tint, background: `linear-gradient(145deg, #fffaf6, ${activePalette.soft})` }}>
+          <span className="pos-palette-active-swatch" style={{ background: activePalette.gradient }} aria-hidden="true"><i /><i /><i /></span>
+          <span><small>Active accent system</small><strong>{activePalette.label}</strong><p>{activePalette.description}</p><em style={{ color: activePalette.primary }}>Buttons · selected states · surfaces · focus</em></span>
+        </div>
+        <div className="pos-palette-options" role="radiogroup" aria-label="POS color palette">
+          {POS_PALETTE_OPTIONS.map((paletteOption) => {
+            const optionPalette = getPosPalette(paletteOption.id, config.customColor);
+            return <button type="button" role="radio" aria-checked={config.palette === paletteOption.id} title={paletteOption.description} key={paletteOption.id} className={`pos-palette-option ${config.palette === paletteOption.id ? "is-selected" : ""}`} style={{ "--palette-option-accent": optionPalette.primary } as CSSProperties} aria-label={`Use ${paletteOption.label} palette`} onClick={() => choosePalette(paletteOption.id)}><span style={{ background: optionPalette.gradient }} />{config.palette === paletteOption.id ? <b style={{ color: optionPalette.contrast, background: optionPalette.primary }}><MiniIcon name="check" size={11} /></b> : null}</button>;
+          })}
+        </div>
+        {customPaletteOpen ? <label className="pos-custom-color"><span>Custom accent</span><input type="color" value={config.customColor || "#5b2a0a"} onChange={(event) => updateConfig({ customColor: event.target.value })} /><button type="button" onClick={() => setCustomPaletteOpen(false)}>Done</button></label> : null}
+      </div>
       <div className="pos-appearance-section pos-theme-section">
         <div className="pos-theme-section-heading">
           <div><h3>Interface theme</h3><p>Choose a complete visual system for the cashier workspace.</p></div>

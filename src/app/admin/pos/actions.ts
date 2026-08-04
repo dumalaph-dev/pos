@@ -3,12 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { POS_PALETTE_IDS } from "@/lib/pos-palette";
+import { POS_THEME_IDS } from "@/lib/pos-theme";
 
 type JsonRecord = Record<string, unknown>;
 type PrinterTransport = "network" | "bluetooth" | "usb";
 
-const PALETTES = ["brown", "blue", "green", "purple", "custom"] as const;
-const UI_STYLES = ["modern", "classic", "soft", "dark", "bold"] as const;
+const PALETTES = POS_PALETTE_IDS;
+const UI_STYLES = POS_THEME_IDS;
 const ORDER_TYPES = ["Dine In", "Takeout", "Delivery"] as const;
 const PAYMENT_METHODS = ["cash", "card", "gcash", "maya", "more"] as const;
 

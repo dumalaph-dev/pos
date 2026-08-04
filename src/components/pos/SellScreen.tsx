@@ -33,7 +33,8 @@ import {
   type PrinterSettings,
 } from "@/lib/printer";
 import { buildReceipt } from "@/lib/receipt";
-import { getPosTheme } from "@/lib/pos-theme";
+import { getPosTheme, isPosThemeId, type PosThemeId } from "@/lib/pos-theme";
+import { getPosPalette, isPosPaletteId, type PosPaletteId } from "@/lib/pos-palette";
 
 type Product = {
   id: string;
@@ -93,9 +94,9 @@ type ProfileData = {
 
 type RuntimePaymentMethod = "cash" | "gcash" | "maya" | "card";
 type PosRuntimeConfig = {
-  palette: "brown" | "blue" | "green" | "purple" | "custom";
+  palette: PosPaletteId;
   customColor: string;
-  uiStyle: "modern" | "classic" | "soft" | "dark" | "bold";
+  uiStyle: PosThemeId;
   defaultOrderType: string;
   orderTypes: string[];
   paymentMethods: Record<RuntimePaymentMethod, boolean>;
@@ -126,14 +127,6 @@ const DEFAULT_POS_RUNTIME_CONFIG: PosRuntimeConfig = {
   paperWidth: 58,
 };
 
-const POS_PALETTE_COLORS: Record<PosRuntimeConfig["palette"], { primary: string; hover: string }> = {
-  brown: { primary: "#5b2a0a", hover: "#4a2208" },
-  blue: { primary: "#2f6fb3", hover: "#245b96" },
-  green: { primary: "#2f7344", hover: "#255c36" },
-  purple: { primary: "#7450b5", hover: "#5e3e96" },
-  custom: { primary: "#5b2a0a", hover: "#4a2208" },
-};
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -158,8 +151,8 @@ function normalizePosRuntimeConfig(value: unknown, vatRateFallback = DEFAULT_POS
   const configuredDefault = typeof source.defaultOrderType === "string" && allOrderTypes.includes(source.defaultOrderType)
     ? source.defaultOrderType
     : DEFAULT_POS_RUNTIME_CONFIG.defaultOrderType;
-  const palette = source.palette === "blue" || source.palette === "green" || source.palette === "purple" || source.palette === "custom" ? source.palette : "brown";
-  const uiStyle = source.uiStyle === "classic" || source.uiStyle === "soft" || source.uiStyle === "dark" || source.uiStyle === "bold" ? source.uiStyle : "modern";
+  const palette = isPosPaletteId(source.palette) ? source.palette : "brown";
+  const uiStyle = isPosThemeId(source.uiStyle) ? source.uiStyle : "modern";
   const paymentMethods = {
     cash: readBoolean(paymentSource.cash, DEFAULT_POS_RUNTIME_CONFIG.paymentMethods.cash),
     gcash: readBoolean(paymentSource.gcash, DEFAULT_POS_RUNTIME_CONFIG.paymentMethods.gcash),
@@ -969,8 +962,8 @@ export default function SellScreen() {
     const categoryOptions = categories.some((category) => category.id === "all")
       ? categories
       : [{ id: "all", name: "All Items", icon: "grid" }, ...categories];
-    const palette = POS_PALETTE_COLORS[posConfig.palette];
-    const primary = posConfig.palette === "custom" ? posConfig.customColor : palette.primary;
+    const palette = getPosPalette(posConfig.palette, posConfig.customColor);
+    const primary = palette.primary;
     const theme = getPosTheme(posConfig.uiStyle);
     const themeVars = theme.variables;
     const posAppStyle = {
@@ -986,12 +979,22 @@ export default function SellScreen() {
       "--text-muted": themeVars["--pos-theme-text-muted"],
       "--text-subtle": themeVars["--pos-theme-text-subtle"],
       "--primary": primary,
-      "--primary-hover": posConfig.palette === "custom" ? primary : palette.hover,
-      "--primary-fg": "#ffffff",
-      "--primary-soft": themeVars["--pos-theme-primary-soft"],
+      "--primary-hover": palette.hover,
+      "--primary-deep": palette.deep,
+      "--primary-tint": palette.tint,
+      "--primary-glow": palette.glow,
+      "--primary-fg": palette.contrast,
+      "--primary-soft": palette.soft,
       "--accent": primary,
-      "--accent-hover": posConfig.palette === "custom" ? primary : palette.hover,
-      "--accent-fg": "#ffffff",
+      "--accent-hover": palette.hover,
+      "--accent-deep": palette.deep,
+      "--accent-tint": palette.tint,
+      "--accent-glow": palette.glow,
+      "--accent-gradient": palette.gradient,
+      "--accent-fg": palette.contrast,
+      "--pos-theme-highlight": primary,
+      "--pos-theme-highlight-soft": palette.tint,
+      "--pos-theme-primary-soft": palette.soft,
       "--secondary-btn": themeVars["--pos-theme-secondary"],
       "--secondary-btn-hover": themeVars["--pos-theme-secondary-hover"],
       "--radius-card": themeVars["--pos-theme-radius-card"],
