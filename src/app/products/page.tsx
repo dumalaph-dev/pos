@@ -530,7 +530,7 @@ export default async function ProductsPage({
             </Link>
             <Link href="#product-tips" className="admin-icon-button admin-icon-button--help" aria-label="View product tips"><AdminIcon name="help" size={19} /></Link>
             <div className="admin-user-chip"><span className="admin-user-chip__avatar" aria-hidden="true">{userInitial}</span><span className="admin-user-chip__copy"><strong>{firstName}</strong><small>{profile.role === "manager" ? "Manager" : "Admin"}</small></span></div>
-            <SignOutButton className="px-2 py-2 text-[10px]" />
+            <SignOutButton className="px-2 py-2.5 text-[10px]" />
           </header>
 
           <div className="products-heading">
