@@ -123,7 +123,7 @@ export default async function ReportsPage({
   const range: ReportRange = isReportRange(rangeParam) ? rangeParam : "7d";
   const dayCount = range === "30d" ? 30 : 7;
   const supabase = await createClient();
-  const user = await getAuthenticatedUser(supabase);
+  const user = await getAuthenticatedUser();
 
   if (!user) redirect("/");
 

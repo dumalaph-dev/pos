@@ -13,7 +13,7 @@ function todayInSingapore() {
 
 export async function GET(request: Request) {
   const supabase = await createClient();
-  const user = await getAuthenticatedUser(supabase);
+  const user = await getAuthenticatedUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
 
   const { data: profile } = await supabase.from("profiles").select("org_id, role").eq("id", user.id).single();

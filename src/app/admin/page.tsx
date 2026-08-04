@@ -162,7 +162,7 @@ function productImage(product: { name: string; image_url?: string | null }) {
 
 export default async function AdminPage() {
   const supabase = await createClient();
-  const user = await getAuthenticatedUser(supabase);
+  const user = await getAuthenticatedUser();
 
   if (!user) redirect("/");
 

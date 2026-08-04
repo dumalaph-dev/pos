@@ -119,7 +119,7 @@ export default async function PromotionsPage({
   const requestedRange = readParam(params.range);
   const range: PromotionRange = isPromotionRange(requestedRange) ? requestedRange : "30d";
   const supabase = await createClient();
-  const user = await getAuthenticatedUser(supabase);
+  const user = await getAuthenticatedUser();
 
   if (!user) redirect("/");
 

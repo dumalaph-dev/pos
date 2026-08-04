@@ -77,7 +77,7 @@ export default async function CustomersPage({
 }) {
   const params = await searchParams;
   const supabase = await createClient();
-  const user = await getAuthenticatedUser(supabase);
+  const user = await getAuthenticatedUser();
 
   if (!user) redirect("/");
 

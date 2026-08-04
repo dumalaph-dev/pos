@@ -255,7 +255,7 @@ function savedMessage(value: string) {
 export default async function EmployeesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
   const supabase = await createClient();
-  const user = await getAuthenticatedUser(supabase);
+  const user = await getAuthenticatedUser();
   if (!user) redirect("/");
 
   const profile = await getAdminProfile(user.id) as CurrentProfile | null;

@@ -272,7 +272,7 @@ export default async function SalesPage({
   const pageSize = readPageSize(readParam(params.pageSize));
   const requestedPage = readPage(readParam(params.page));
   const supabase = await createClient();
-  const user = await getAuthenticatedUser(supabase);
+  const user = await getAuthenticatedUser();
 
   if (!user) redirect("/");
 

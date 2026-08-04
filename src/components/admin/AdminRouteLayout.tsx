@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { AdminShell } from "./AdminShell";
-import { getAuthenticatedUser, createClient } from "@/lib/supabase/server";
+import { getAuthenticatedUser } from "@/lib/supabase/server";
 import { getAdminProfile } from "@/lib/admin/profile";
 
 type AdminRole = "admin" | "manager" | "cashier";
@@ -15,8 +15,10 @@ type ShellProfile = {
 const DEFAULT_STORE_NAME = "Mario's Lechon House";
 
 export default async function AdminRouteLayout({ children }: { children: ReactNode }) {
-  const supabase = await createClient();
-  const user = await getAuthenticatedUser(supabase);
+  // No Supabase client here: the identity comes from the check middleware
+  // already performed, and the profile is served from the shared per-request
+  // cache the page is about to read too. The shell costs zero round trips.
+  const user = await getAuthenticatedUser();
 
   if (!user) redirect("/");
 
