@@ -119,7 +119,7 @@ export default async function ExpensesPage({
   const branchFilter = readParam(params.branch);
   const searchQuery = readParam(params.q);
   const supabase = await createClient();
-  const user = await getAuthenticatedUser(supabase);
+  const user = await getAuthenticatedUser();
 
   if (!user) redirect("/");
 

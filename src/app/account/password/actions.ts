@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { invalidateAdminProfile } from "@/lib/admin/profile";
 import { createAdminClient } from "@/lib/employee-auth";
 import { createClient } from "@/lib/supabase/server";
 
@@ -50,6 +51,10 @@ export async function changePassword(_previousState: PasswordState, formData: Fo
     .eq("id", userData.user.id)
     .eq("org_id", profile.org_id);
   if (profileUpdateError) return { message: "Your password changed, but the first-login step could not be completed. Please try again." };
+
+  // The admin layout gates first-login users on the cached profile; drop it so
+  // the redirect below is not bounced straight back to this page.
+  invalidateAdminProfile(userData.user.id);
 
   await supabase.from("audit_logs").insert({
     org_id: profile.org_id,

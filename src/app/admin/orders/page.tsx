@@ -290,7 +290,7 @@ export default async function OrdersPage({
 }) {
   const params = await searchParams;
   const supabase = await createClient();
-  const user = await getAuthenticatedUser(supabase);
+  const user = await getAuthenticatedUser();
 
   if (!user) redirect("/");
 

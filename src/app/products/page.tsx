@@ -340,7 +340,7 @@ export default async function ProductsPage({
   const action: ProductAction = selectedProductId ? "edit" : createAction === "category" ? "category" : createAction === "product" ? "product" : showImport ? "import" : showBulk ? "bulk" : "none";
 
   const supabase = await createClient();
-  const user = await getAuthenticatedUser(supabase);
+  const user = await getAuthenticatedUser();
   if (!user) redirect("/");
 
   const profile = await getAdminProfile(user.id) as ProfileRecord | null;

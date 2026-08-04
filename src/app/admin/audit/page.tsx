@@ -189,7 +189,7 @@ export default async function AuditPage({
   }
 
   const supabase = await createClient();
-  const user = await getAuthenticatedUser(supabase);
+  const user = await getAuthenticatedUser();
 
   if (!user) redirect("/");
 

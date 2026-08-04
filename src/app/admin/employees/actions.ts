@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { invalidateAdminProfile } from "@/lib/admin/profile";
 import {
   createAdminClient,
   configuredEmployeeInitialPassword,
@@ -215,6 +216,7 @@ export async function provisionEmployeeLogin(formData: FormData) {
     if (linkError) {
       await admin.from("profiles").delete().eq("id", profileId);
       await admin.auth.admin.deleteUser(profileId);
+      invalidateAdminProfile(profileId);
       employeesRedirect(linkError.message || "The employee login could not be linked to the directory record.");
     }
   } else {
@@ -231,6 +233,7 @@ export async function provisionEmployeeLogin(formData: FormData) {
       await admin.from("employee_records").update({ profile_id: null, updated_at: new Date().toISOString() }).eq("id", employee.id).eq("org_id", actor.org_id);
       await admin.from("profiles").delete().eq("id", createdAuthUserId);
       await admin.auth.admin.deleteUser(createdAuthUserId);
+      invalidateAdminProfile(createdAuthUserId);
     }
     employeesRedirect(authUpdateError.message || "The employee password could not be initialized.");
   }
@@ -247,6 +250,8 @@ export async function provisionEmployeeLogin(formData: FormData) {
     .eq("id", profileId)
     .eq("org_id", actor.org_id);
   if (profileUpdateError) employeesRedirect(profileUpdateError.message || "The employee password-change requirement could not be saved.");
+
+  invalidateAdminProfile(profileId);
 
   await admin.from("audit_logs").insert({
     org_id: actor.org_id,
@@ -379,6 +384,7 @@ export async function updateEmployee(formData: FormData) {
       .eq("id", employee.profile_id)
       .eq("org_id", actor.org_id);
     if (profileError) employeesRedirect(profileError.message || "The linked sign-in profile could not be synchronized.");
+    invalidateAdminProfile(employee.profile_id);
   }
 
   revalidateEmployees();
