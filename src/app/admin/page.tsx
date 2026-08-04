@@ -551,7 +551,7 @@ function AdminProfileMissing() {
         <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Backoffice setup</p>
         <h1 className="mt-2 text-2xl font-extrabold">Your admin profile is not ready.</h1>
         <p className="mt-3 text-sm leading-6 text-ink-muted">Ask an organization admin to finish the profile and branch assignment, then sign in again.</p>
-        <div className="mt-6 flex justify-center gap-2"><Link href="/pos" className="rounded-btn bg-secondary px-4 py-3 text-sm font-extrabold uppercase text-primary">Open POS</Link><SignOutButton className="px-4 py-2" /></div>
+        <div className="mt-6 flex justify-center gap-2"><Link href="/pos" className="rounded-btn bg-secondary px-4 py-3 text-sm font-extrabold uppercase text-primary">Open POS</Link><SignOutButton className="px-4 py-3" /></div>
       </div>
     </main>
   );
