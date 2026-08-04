@@ -386,7 +386,7 @@ export default async function AdminPage() {
               <SignOutButton variant="menu" />
             </AdminMenu>
 
-            <SignOutButton className="px-2 py-2 text-[10px]" />
+            <SignOutButton className="px-2 py-2.5 text-[10px]" />
           </header>
 
           <div className="flex flex-wrap items-end justify-between gap-5 pt-2">
