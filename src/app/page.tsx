@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useActionState } from "react";
+import { useEffect, useState, useActionState } from "react";
 import { useRouter } from "next/navigation";
 import { loginWithEmployeeId, type LoginState } from "./actions";
 import { createClient } from "@/lib/supabase/client";
+import { clearOfflineCaches } from "@/lib/offline-cache";
 
 type LoginMode = "employee" | "email";
 
@@ -17,6 +18,16 @@ export default function LoginPage() {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [emailLoading, setEmailLoading] = useState(false);
   const [employeeState, employeeAction, employeePending] = useActionState(loginWithEmployeeId, initialEmployeeLoginState);
+
+  // Backstop for every sign-out path that lands here, not just SignOutButton:
+  // wipe the app-shell caches so nothing from the last session is left for the
+  // next person on this terminal. Read off `location` rather than
+  // `useSearchParams` to keep this page out of a Suspense boundary.
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has("signed-out")) return;
+    void clearOfflineCaches();
+    window.history.replaceState(null, "", "/");
+  }, []);
 
   async function onEmailSubmit(event: React.FormEvent) {
     event.preventDefault();
