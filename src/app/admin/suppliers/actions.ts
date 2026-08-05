@@ -127,3 +127,30 @@ export async function updateSupplier(formData: FormData) {
   refreshSuppliers();
   redirect("/admin/suppliers?saved=updated");
 }
+
+export async function deleteSupplier(formData: FormData) {
+  const { supabase, orgId } = await requireAdmin();
+  const supplierId = readText(formData, "supplier_id");
+
+  if (!supplierId) suppliersRedirect("The supplier identifier is missing.");
+
+  const { data: existing } = await supabase
+    .from("suppliers")
+    .select("id")
+    .eq("id", supplierId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (!existing) suppliersRedirect("That supplier is not available in your organization.");
+
+  const { error } = await supabase
+    .from("suppliers")
+    .delete()
+    .eq("id", supplierId)
+    .eq("org_id", orgId);
+
+  if (error) suppliersRedirect(error.message || "The supplier could not be deleted.");
+
+  refreshSuppliers();
+  redirect("/admin/suppliers?saved=deleted");
+}

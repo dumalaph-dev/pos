@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
+import { ProductCreateDialog } from "@/components/admin/ProductCreateDialog";
 import { ProductFields } from "@/components/admin/ProductFields";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatStockQuantity, salesQuantity, stockMovementDelta, stockStatus, type StockMovementType } from "@/lib/inventory";
@@ -14,7 +15,6 @@ import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import {
   bulkUpdateProducts,
   createCategory,
-  createProduct,
   importProducts,
   toggleProductVisibility,
   updateCategory,
@@ -599,11 +599,12 @@ export default async function ProductsPage({
                 </div>
               </details>
               <Link href="#product-filters" className="products-secondary-button"><AdminIcon name="filter" size={15} /> Filters{(searchQuery || categoryFilter !== "all" || status !== "all" || posOnly) && <span className="products-filter-count">!</span>}</Link>
+              <ProductCreateDialog branches={formBranches} categories={categories} suppliers={suppliers} defaultBranch={formDefaultBranch} canWrite={canWrite} orgName={orgName} fromInventory={fromInventory} initialOpen={action === "product"} />
               <details className="products-add-menu">
-                <summary className="products-primary-button"><AdminIcon name="plus" size={15} /> Add product <AdminIcon name="chevron" size={13} /></summary>
+                <summary className="products-secondary-button"><AdminIcon name="more" size={15} /> More</summary>
                 <div className="products-popover products-add-popover">
-                  <Link href="/products?create=product#product-form" className="products-menu-link"><AdminIcon name="plus" size={14} />Add product</Link>
-                  <Link href="/products?create=category#category-form" className="products-menu-link"><AdminIcon name="box" size={14} />Add category</Link>
+                  <p className="products-popover__label">Catalog tools</p>
+                  <Link href="/products?create=category#category-form" className="products-menu-link"><AdminIcon name="box" size={14} />Manage categories</Link>
                   <Link href="/products?import=1#import-items" className="products-menu-link"><AdminIcon name="upload" size={14} />Import products</Link>
                 </div>
               </details>
@@ -616,7 +617,6 @@ export default async function ProductsPage({
           {dataWarning && <div role="status" className="products-alert products-alert--warning">Some product insights could not refresh. The page is showing the data that was available; product edits remain protected by your admin role.</div>}
 
           {action === "edit" && selectedProduct && <ProductEditPanel product={selectedProduct} branches={visibleBranches} categories={categories} suppliers={suppliers} canWrite={canWrite} />}
-          {action === "product" && <ProductCreatePanel branches={formBranches} categories={categories} suppliers={suppliers} defaultBranch={formDefaultBranch} canWrite={canWrite} orgName={orgName} fromInventory={fromInventory} />}
           {action === "category" && <CategoryActionPanel branches={formBranches} categories={categories} defaultBranch={formDefaultBranch} canWrite={canWrite} branchById={branchById} />}
           {action === "import" && <ImportPanel branches={formBranches} defaultBranch={formDefaultBranch} canWrite={canWrite} />}
           {action === "bulk" && <BulkUpdatePanel canWrite={canWrite} />}
@@ -655,7 +655,7 @@ export default async function ProductsPage({
 
                 <div className="products-table-heading"><div><p className="products-table-heading__eyebrow">Menu inventory</p><h2 id="products-table-heading">All products</h2><p>{filteredRows.length} matching product{filteredRows.length === 1 ? "" : "s"} for {currentBranchName}.</p></div><span className="products-table-heading__scope">{canWrite ? "Admin editing enabled" : "Read only"}</span></div>
 
-                {pageRows.length === 0 ? <ProductsEmptyState hasProducts={products.length > 0} href="/products?create=product#product-form" /> : (
+                {pageRows.length === 0 ? <ProductsEmptyState hasProducts={products.length > 0} href="/products?create=product" /> : (
                   <div className="products-table-scroll">
                     <table className="products-table">
                       <thead><tr>{showBulk && <th className="products-select-column"><span className="sr-only">Select</span></th>}<th>Product</th>{columns.has("category") && <th>Category</th>}{columns.has("sku") && <th>SKU / barcode</th>}{columns.has("price") && <th>Price</th>}{columns.has("status") && <th>Status</th>}{columns.has("pos") && <th>POS visibility</th>}{columns.has("stock") && <th>Stock</th>}<th>Actions</th></tr></thead>
@@ -698,10 +698,6 @@ export default async function ProductsPage({
 function ProductKpi({ label, value, detail, icon, tone, href }: { label: string; value: string; detail: string; icon: AdminIconName; tone: "brown" | "green" | "gray" | "red" | "yellow"; href?: string }) {
   const toneClass = { brown: "is-brown", green: "is-green", gray: "is-gray", red: "is-red", yellow: "is-yellow" }[tone];
   return <article className="products-kpi-card"><div className={`products-kpi-card__icon ${toneClass}`}><AdminIcon name={icon} size={17} /></div><div className="products-kpi-card__copy"><span>{label}</span><strong className={label === "Top selling" ? "is-text-value" : "tnums"}>{value}</strong>{href ? <Link href={href}>{detail} <AdminIcon name="arrow" size={12} /></Link> : <small>{detail}</small>}</div></article>;
-}
-
-function ProductCreatePanel({ branches, categories, suppliers, defaultBranch, canWrite, orgName, fromInventory }: { branches: BranchRecord[]; categories: CategoryRecord[]; suppliers: SupplierRecord[]; defaultBranch: string; canWrite: boolean; orgName: string; fromInventory: boolean }) {
-  return <section id="product-form" className="products-action-panel" aria-labelledby="product-form-heading"><div className="products-action-panel__header"><div><p className="products-action-panel__eyebrow">{fromInventory ? "Inventory item setup" : `Catalog entry · ${orgName}`}</p><h2 id="product-form-heading">Add product</h2><p>{fromInventory ? "Create the product master record, then keep Track stock enabled so it appears in Inventory." : "Create a product record that can appear in POS and be connected to inventory."}</p></div><Link href="/products" className="products-icon-button" aria-label="Close add product form">×</Link></div><form action={createProduct} className="products-form-grid">{fromInventory && <input type="hidden" name="return_to" value="inventory" />}<ProductFields branches={branches} categories={categories} suppliers={suppliers} defaultBranch={defaultBranch} canWrite={canWrite} prefix="new-product" /><div className="products-form-actions"><label className="products-checkbox-label"><input type="checkbox" name="track_stock" defaultChecked={fromInventory} disabled={!canWrite} /> Track stock in inventory</label><button type="submit" disabled={!canWrite || branches.length === 0} className="products-primary-button products-form-submit">{fromInventory ? "Create inventory item" : "Create product"}</button></div></form></section>;
 }
 
 function ProductEditPanel({ product, branches, categories, suppliers, canWrite }: { product: ProductRecord; branches: BranchRecord[]; categories: CategoryRecord[]; suppliers: SupplierRecord[]; canWrite: boolean }) {
