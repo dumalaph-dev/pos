@@ -6,6 +6,7 @@ import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { BranchProductSelector } from "@/components/admin/BranchProductSelector";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
+import { isProductImageUrl } from "@/lib/product-images";
 import {
   formatStockQuantity,
   LOW_STOCK_THRESHOLD,
@@ -225,7 +226,7 @@ function getSingaporeDayBounds() {
 }
 
 function productImage(product: ProductRecord) {
-  return product.image_url?.startsWith("/")
+  return isProductImageUrl(product.image_url)
     ? product.image_url
     : LOCAL_PRODUCT_IMAGES[product.name.trim().toLowerCase()] ?? "/food/whole-lechon-small.png";
 }
@@ -557,7 +558,11 @@ export default async function InventoryPage({
     ...categories.filter((item) => item.is_active).map((item) => ({ id: item.id, label: item.name, icon: item.icon ?? "•", count: categoryCounts.get(item.id) ?? 0 })),
     { id: "uncategorized", label: "Others", icon: "⋯", count: categoryCounts.get("uncategorized") ?? 0 },
   ];
-  const savedMessage = readParam(params.saved) === "1" ? "Stock movement recorded. The ledger and POS balance are up to date." : "";
+  const savedMessage = readParam(params.saved) === "1"
+    ? "Stock movement recorded. The ledger and POS balance are up to date."
+    : readParam(params.saved) === "product"
+      ? "Product created with stock tracking enabled. It is now listed in Inventory."
+      : "";
   const baseHref = { q: searchQuery, category, status, supplier, page, pageSize, columns: visibleColumns };
   const posSaleCount = stockResult.error ? movements.filter((movement) => movement.type === "sale").length : posSaleCountResult.count ?? 0;
   const userInitial = firstName.slice(0, 1).toUpperCase();
@@ -588,7 +593,7 @@ export default async function InventoryPage({
               <details className="relative">
                 <summary className="inventory-button list-none cursor-pointer gap-1.5 rounded-btn bg-primary text-[11px] font-extrabold text-primary-fg"><AdminIcon name="plus" size={14} />Add item<AdminIcon name="chevron" size={12} /></summary>
                 <div className="absolute right-0 top-full z-20 mt-1 grid min-w-40 gap-1 rounded-card border border-line bg-surface p-1.5 shadow-[var(--shadow-pop)]">
-                  <Link href="/products?create=product#product-form" className="inventory-menu-item">New product</Link>
+                  <Link href="/products?create=product&inventory=1#product-form" className="inventory-menu-item">New product</Link>
                   <Link href="/products?create=category#category-form" className="inventory-menu-item">New category</Link>
                 </div>
               </details>
@@ -665,7 +670,7 @@ export default async function InventoryPage({
                   <span className="rounded-pill bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary">{canWrite ? "Admin editing enabled" : "Read only"}</span>
                 </div>
                 {pageRows.length === 0 ? (
-                  <EmptyState title="No inventory items match these filters" detail="Try a wider search, choose another category, or add a tracked product from Products." href="/products?create=product#product-form" action="Add item" />
+                  <EmptyState title="No inventory items match these filters" detail="Try a wider search, choose another category, or add a tracked product from Products." href="/products?create=product&inventory=1#product-form" action="Add item" />
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="admin-list-table min-w-[1180px]">
@@ -725,7 +730,7 @@ function StockMovementForm({ branches, products, defaultBranch, defaultProductId
         <div className="mt-4 rounded-btn border border-dashed border-line-strong bg-surface-raised px-4 py-6 text-center">
           <p className="text-sm font-extrabold text-ink">No tracked products yet</p>
           <p className="mt-1 text-xs text-ink-muted">Enable Track stock on a product before recording inventory.</p>
-          <Link href="/products?create=product#product-form" className="inventory-button mt-3 rounded-btn bg-primary text-[11px] font-extrabold text-primary-fg">Add item</Link>
+          <Link href="/products?create=product&inventory=1#product-form" className="inventory-button mt-3 rounded-btn bg-primary text-[11px] font-extrabold text-primary-fg">Add item</Link>
         </div>
       ) : (
         <form action={recordStockMovement} className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">

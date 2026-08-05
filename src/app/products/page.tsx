@@ -7,6 +7,7 @@ import { ProductFields } from "@/components/admin/ProductFields";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatStockQuantity, salesQuantity, stockMovementDelta, stockStatus, type StockMovementType } from "@/lib/inventory";
 import { formatPeso } from "@/lib/money";
+import { isProductImageUrl } from "@/lib/product-images";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
@@ -217,7 +218,7 @@ function displayPeso(value: number) {
 }
 
 function productImage(product: { name: string; image_url?: string | null }) {
-  return product.image_url?.startsWith("/")
+  return isProductImageUrl(product.image_url)
     ? product.image_url
     : LOCAL_PRODUCT_IMAGES[product.name.trim().toLowerCase()] ?? "/food/whole-lechon-small.png";
 }
@@ -317,6 +318,7 @@ export default async function ProductsPage({
     pageSize?: QueryValue;
     columns?: QueryValue;
     create?: QueryValue;
+    inventory?: QueryValue;
     import?: QueryValue;
     bulk?: QueryValue;
     edit?: QueryValue;
@@ -336,6 +338,7 @@ export default async function ProductsPage({
   const columns = readColumns(readParam(params.columns));
   const requestedPage = readPage(readParam(params.page));
   const createAction = readParam(params.create);
+  const fromInventory = readParam(params.inventory) === "1";
   const showImport = readParam(params.import) === "1";
   const showBulk = readParam(params.bulk) === "1";
   const selectedProductId = readParam(params.edit) || readParam(params.product);
@@ -613,7 +616,7 @@ export default async function ProductsPage({
           {dataWarning && <div role="status" className="products-alert products-alert--warning">Some product insights could not refresh. The page is showing the data that was available; product edits remain protected by your admin role.</div>}
 
           {action === "edit" && selectedProduct && <ProductEditPanel product={selectedProduct} branches={visibleBranches} categories={categories} suppliers={suppliers} canWrite={canWrite} />}
-          {action === "product" && <ProductCreatePanel branches={formBranches} categories={categories} suppliers={suppliers} defaultBranch={formDefaultBranch} canWrite={canWrite} orgName={orgName} />}
+          {action === "product" && <ProductCreatePanel branches={formBranches} categories={categories} suppliers={suppliers} defaultBranch={formDefaultBranch} canWrite={canWrite} orgName={orgName} fromInventory={fromInventory} />}
           {action === "category" && <CategoryActionPanel branches={formBranches} categories={categories} defaultBranch={formDefaultBranch} canWrite={canWrite} branchById={branchById} />}
           {action === "import" && <ImportPanel branches={formBranches} defaultBranch={formDefaultBranch} canWrite={canWrite} />}
           {action === "bulk" && <BulkUpdatePanel canWrite={canWrite} />}
@@ -697,8 +700,8 @@ function ProductKpi({ label, value, detail, icon, tone, href }: { label: string;
   return <article className="products-kpi-card"><div className={`products-kpi-card__icon ${toneClass}`}><AdminIcon name={icon} size={17} /></div><div className="products-kpi-card__copy"><span>{label}</span><strong className={label === "Top selling" ? "is-text-value" : "tnums"}>{value}</strong>{href ? <Link href={href}>{detail} <AdminIcon name="arrow" size={12} /></Link> : <small>{detail}</small>}</div></article>;
 }
 
-function ProductCreatePanel({ branches, categories, suppliers, defaultBranch, canWrite, orgName }: { branches: BranchRecord[]; categories: CategoryRecord[]; suppliers: SupplierRecord[]; defaultBranch: string; canWrite: boolean; orgName: string }) {
-  return <section id="product-form" className="products-action-panel" aria-labelledby="product-form-heading"><div className="products-action-panel__header"><div><p className="products-action-panel__eyebrow">Catalog entry · {orgName}</p><h2 id="product-form-heading">Add product</h2><p>Create a product record that can appear in POS and be connected to inventory.</p></div><Link href="/products" className="products-icon-button" aria-label="Close add product form">×</Link></div><form action={createProduct} className="products-form-grid"><ProductFields branches={branches} categories={categories} suppliers={suppliers} defaultBranch={defaultBranch} canWrite={canWrite} prefix="new-product" /><div className="products-form-actions"><label className="products-checkbox-label"><input type="checkbox" name="track_stock" disabled={!canWrite} /> Track stock in inventory</label><button type="submit" disabled={!canWrite || branches.length === 0} className="products-primary-button products-form-submit">Create product</button></div></form></section>;
+function ProductCreatePanel({ branches, categories, suppliers, defaultBranch, canWrite, orgName, fromInventory }: { branches: BranchRecord[]; categories: CategoryRecord[]; suppliers: SupplierRecord[]; defaultBranch: string; canWrite: boolean; orgName: string; fromInventory: boolean }) {
+  return <section id="product-form" className="products-action-panel" aria-labelledby="product-form-heading"><div className="products-action-panel__header"><div><p className="products-action-panel__eyebrow">{fromInventory ? "Inventory item setup" : `Catalog entry · ${orgName}`}</p><h2 id="product-form-heading">Add product</h2><p>{fromInventory ? "Create the product master record, then keep Track stock enabled so it appears in Inventory." : "Create a product record that can appear in POS and be connected to inventory."}</p></div><Link href="/products" className="products-icon-button" aria-label="Close add product form">×</Link></div><form action={createProduct} className="products-form-grid">{fromInventory && <input type="hidden" name="return_to" value="inventory" />}<ProductFields branches={branches} categories={categories} suppliers={suppliers} defaultBranch={defaultBranch} canWrite={canWrite} prefix="new-product" /><div className="products-form-actions"><label className="products-checkbox-label"><input type="checkbox" name="track_stock" defaultChecked={fromInventory} disabled={!canWrite} /> Track stock in inventory</label><button type="submit" disabled={!canWrite || branches.length === 0} className="products-primary-button products-form-submit">{fromInventory ? "Create inventory item" : "Create product"}</button></div></form></section>;
 }
 
 function ProductEditPanel({ product, branches, categories, suppliers, canWrite }: { product: ProductRecord; branches: BranchRecord[]; categories: CategoryRecord[]; suppliers: SupplierRecord[]; canWrite: boolean }) {
@@ -714,7 +717,7 @@ function CategoryEditor({ category, branchName, canWrite }: { category: Category
 }
 
 function ImportPanel({ branches, defaultBranch, canWrite }: { branches: BranchRecord[]; defaultBranch: string; canWrite: boolean }) {
-  return <section id="import-items" className="products-action-panel" aria-labelledby="import-items-heading"><div className="products-action-panel__header"><div><p className="products-action-panel__eyebrow">Bulk catalog action</p><h2 id="import-items-heading">Import products</h2><p>Paste CSV data with name, price, and unit. Optional columns include SKU, barcode, category, supplier, cost price, minimum stock, and image path.</p></div><Link href="/products" className="products-icon-button" aria-label="Close import form">×</Link></div><form action={importProducts} className="products-import-form"><CatalogField label="Default branch" htmlFor="import-store"><select id="import-store" name="store_id" defaultValue={defaultBranch} required disabled={!canWrite || branches.length === 0} className="inventory-input"><option value="">Choose branch</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></CatalogField><CatalogField label="CSV data" htmlFor="import-csv" className="products-import-form__csv"><textarea id="import-csv" name="csv" rows={5} disabled={!canWrite} placeholder="name,price,unit,sku,category,supplier,cost_price,min_stock\nWhole Lechon (Medium),6500,kg,LECHON-MED-001,Lechon,Rico's Farm,5400,5" className="inventory-input min-h-28 resize-y font-mono text-[11px]" /></CatalogField><button type="submit" disabled={!canWrite || branches.length === 0} className="products-primary-button products-form-submit">Import products</button></form></section>;
+  return <section id="import-items" className="products-action-panel" aria-labelledby="import-items-heading"><div className="products-action-panel__header"><div><p className="products-action-panel__eyebrow">Bulk catalog action</p><h2 id="import-items-heading">Import products</h2><p>Paste CSV data with name, price, and unit. Optional columns include SKU, barcode, category, supplier, cost price, and minimum stock. Add photos from the product editor after import.</p></div><Link href="/products" className="products-icon-button" aria-label="Close import form">×</Link></div><form action={importProducts} className="products-import-form"><CatalogField label="Default branch" htmlFor="import-store"><select id="import-store" name="store_id" defaultValue={defaultBranch} required disabled={!canWrite || branches.length === 0} className="inventory-input"><option value="">Choose branch</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></CatalogField><CatalogField label="CSV data" htmlFor="import-csv" className="products-import-form__csv"><textarea id="import-csv" name="csv" rows={5} disabled={!canWrite} placeholder="name,price,unit,sku,category,supplier,cost_price,min_stock\nWhole Lechon (Medium),6500,kg,LECHON-MED-001,Lechon,Rico's Farm,5400,5" className="inventory-input min-h-28 resize-y font-mono text-[11px]" /></CatalogField><button type="submit" disabled={!canWrite || branches.length === 0} className="products-primary-button products-form-submit">Import products</button></form></section>;
 }
 
 function BulkUpdatePanel({ canWrite }: { canWrite: boolean }) {

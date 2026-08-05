@@ -4,6 +4,7 @@ import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { POS_PALETTE_IDS } from "@/lib/pos-palette";
 import { POS_THEME_IDS } from "@/lib/pos-theme";
 import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
+import { isProductImageUrl } from "@/lib/product-images";
 import PosSettingsScreen, {
   type AdminPosCategory,
   type AdminPosDevice,
@@ -104,7 +105,7 @@ function readPosConfig(store: StoreRecord): PosConfig {
 }
 
 function catalogImage(name: string, imageUrl: string | null) {
-  if (imageUrl?.startsWith("/")) return imageUrl;
+  if (isProductImageUrl(imageUrl)) return imageUrl;
   const normalized = name.trim().toLowerCase();
   const imageMap: Record<string, string> = {
     "whole lechon": "/food/whole-lechon-medium.png",

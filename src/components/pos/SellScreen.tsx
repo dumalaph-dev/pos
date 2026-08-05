@@ -11,6 +11,7 @@ import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { formatPeso, weightLineTotal } from "@/lib/money";
 import { formatStockQuantity, stockMovementDelta, stockStatus } from "@/lib/inventory";
+import { isProductImageUrl } from "@/lib/product-images";
 import { AdminMenu } from "@/components/admin/AdminMenu";
 import { SignOutButton } from "@/components/SignOutButton";
 import PrinterSettingsModal from "@/components/pos/PrinterSettings";
@@ -343,7 +344,7 @@ function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
 
 function productImage(product: Product) {
   const localImage = PRODUCT_IMAGES[product.name.trim().toLowerCase()];
-  return product.image_url?.startsWith("/") ? product.image_url : localImage ?? "/food/whole-lechon-small.png";
+  return isProductImageUrl(product.image_url) ? product.image_url : localImage ?? "/food/whole-lechon-small.png";
 }
 
 function categoryIcon(name: string): IconName {

@@ -1,7 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { createCategoryInline } from "@/app/admin/catalog/actions";
+import { AdminIcon } from "@/components/admin/AdminIcon";
+import { ProductImageUpload } from "@/components/admin/ProductImageUpload";
 
 type BranchRecord = { id: string; name: string; is_active: boolean };
 type CategoryRecord = { id: string; store_id: string; name: string };
@@ -38,14 +41,51 @@ export function ProductFields({ product, branches, categories, suppliers, defaul
     : "";
   const [selectedStoreId, setSelectedStoreId] = useState(defaultBranch);
   const [selectedCategoryId, setSelectedCategoryId] = useState(initialCategory);
-  const categoryOptions = categories.filter((category) => category.store_id === selectedStoreId);
+  const [categoryRecords, setCategoryRecords] = useState(categories);
+  const [showInlineCategory, setShowInlineCategory] = useState(false);
+  const [inlineCategoryName, setInlineCategoryName] = useState("");
+  const [inlineCategoryMessage, setInlineCategoryMessage] = useState<string | null>(null);
+  const [isCreatingCategory, startCreatingCategory] = useTransition();
+  const categoryOptions = categoryRecords.filter((category) => category.store_id === selectedStoreId);
 
   function handleStoreChange(storeId: string) {
-    const nextCategories = categories.filter((category) => category.store_id === storeId);
+    const nextCategories = categoryRecords.filter((category) => category.store_id === storeId);
     setSelectedStoreId(storeId);
     if (!nextCategories.some((category) => category.id === selectedCategoryId)) {
       setSelectedCategoryId("");
     }
+    setShowInlineCategory(false);
+    setInlineCategoryName("");
+    setInlineCategoryMessage(null);
+  }
+
+  function handleCreateCategory() {
+    const name = inlineCategoryName.trim();
+    if (!selectedStoreId) {
+      setInlineCategoryMessage("Choose a branch first.");
+      return;
+    }
+    if (name.length < 2 || name.length > 80) {
+      setInlineCategoryMessage("Category names must be between 2 and 80 characters.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.set("store_id", selectedStoreId);
+    formData.set("name", name);
+    setInlineCategoryMessage(null);
+    startCreatingCategory(async () => {
+      const result = await createCategoryInline(formData);
+      if (!result.ok) {
+        setInlineCategoryMessage(result.message);
+        return;
+      }
+      setCategoryRecords((current) => [...current, result.category]);
+      setSelectedCategoryId(result.category.id);
+      setInlineCategoryName("");
+      setShowInlineCategory(false);
+      setInlineCategoryMessage(`Category “${result.category.name}” created and selected.`);
+    });
   }
 
   return <>
@@ -56,10 +96,23 @@ export function ProductFields({ product, branches, categories, suppliers, defaul
       </select>
     </CatalogField>
     <CatalogField label="Category" htmlFor={`${prefix}-category`}>
-      <select id={`${prefix}-category`} name="category_id" value={selectedCategoryId} onChange={(event) => setSelectedCategoryId(event.target.value)} disabled={!canWrite} className="inventory-input">
-        <option value="">Uncategorized</option>
-        {categoryOptions.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-      </select>
+      <div className="products-category-picker">
+        <div className="products-category-picker__row">
+          <select id={`${prefix}-category`} name="category_id" value={selectedCategoryId} onChange={(event) => setSelectedCategoryId(event.target.value)} disabled={!canWrite} className="inventory-input">
+            <option value="">Uncategorized</option>
+            {categoryOptions.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+          </select>
+          <button type="button" onClick={() => { setShowInlineCategory((current) => !current); setInlineCategoryMessage(null); }} disabled={!canWrite || !selectedStoreId} className="products-inline-action">
+            <AdminIcon name="plus" size={12} /> New category
+          </button>
+        </div>
+        {showInlineCategory && <div className="products-inline-category" role="group" aria-label="Create a category">
+          <input value={inlineCategoryName} onChange={(event) => setInlineCategoryName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); handleCreateCategory(); } }} placeholder="New category name" maxLength={80} disabled={isCreatingCategory} className="inventory-input inventory-input--compact" autoFocus />
+          <button type="button" onClick={handleCreateCategory} disabled={isCreatingCategory || !canWrite} className="products-small-primary">{isCreatingCategory ? "Creating…" : "Create"}</button>
+        </div>}
+        {inlineCategoryMessage && <small className="products-inline-category__message" aria-live="polite">{inlineCategoryMessage}</small>}
+        {!canWrite && <small className="products-inline-category__message">Only organization admins can create categories or edit products.</small>}
+      </div>
     </CatalogField>
     <CatalogField label="Product name" htmlFor={`${prefix}-name`} className="sm:col-span-2"><input id={`${prefix}-name`} name="name" defaultValue={product?.name ?? ""} placeholder="e.g. Whole Lechon (Medium)" required disabled={!canWrite} className="inventory-input" /></CatalogField>
     <CatalogField label="SKU" htmlFor={`${prefix}-sku`}><input id={`${prefix}-sku`} name="sku" defaultValue={product?.sku ?? ""} placeholder="e.g. LECHON-MED-001" disabled={!canWrite} className="inventory-input" /></CatalogField>
@@ -71,7 +124,7 @@ export function ProductFields({ product, branches, categories, suppliers, defaul
     <CatalogField label="Minimum stock" htmlFor={`${prefix}-min-stock`}><input id={`${prefix}-min-stock`} name="min_stock" type="number" inputMode="decimal" min="0" step="0.001" defaultValue={product ? Number(product.min_stock ?? 2) : 2} disabled={!canWrite} className="inventory-input tnums" /></CatalogField>
     <CatalogField label="Supplier" htmlFor={`${prefix}-supplier`}><select id={`${prefix}-supplier`} name="supplier_id" defaultValue={product?.supplier_id ?? ""} disabled={!canWrite} className="inventory-input"><option value="">Unassigned</option>{suppliers.filter((supplier) => supplier.is_active).map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></CatalogField>
     <CatalogField label="Sort order" htmlFor={`${prefix}-sort`}><input id={`${prefix}-sort`} name="sort_order" type="number" min="0" step="1" defaultValue={product?.sort_order ?? 0} disabled={!canWrite} className="inventory-input tnums" /></CatalogField>
-    <CatalogField label="Local image path" htmlFor={`${prefix}-image`} className="sm:col-span-2"><input id={`${prefix}-image`} name="image_url" defaultValue={product?.image_url ?? ""} placeholder="/food/whole-lechon-medium.png" disabled={!canWrite} className="inventory-input" /></CatalogField>
+    <ProductImageUpload existingImageUrl={product?.image_url} canWrite={canWrite} prefix={prefix} />
   </>;
 }
 

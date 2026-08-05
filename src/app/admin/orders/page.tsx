@@ -6,6 +6,7 @@ import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
 import { salesQuantity } from "@/lib/inventory";
 import { formatPeso } from "@/lib/money";
+import { isProductImageUrl } from "@/lib/product-images";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
@@ -204,7 +205,7 @@ function statusClass(status: OrderStatus) {
 }
 
 function productImage(product: ProductRecord | undefined) {
-  return product?.image_url?.startsWith("/") ? product.image_url : null;
+  return isProductImageUrl(product?.image_url) ? product.image_url : null;
 }
 
 function orderSummary(orders: OrderRecord[]) {

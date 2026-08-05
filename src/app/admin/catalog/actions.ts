@@ -3,6 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { toCentavos } from "@/lib/money";
+import {
+  PRODUCT_IMAGE_BUCKET,
+  PRODUCT_IMAGE_MAX_BYTES,
+  PRODUCT_IMAGE_MIME_TYPES,
+} from "@/lib/product-images";
 import { createClient } from "@/lib/supabase/server";
 import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
 
@@ -51,10 +56,68 @@ function readMinimumStock(value: string) {
   return parsed;
 }
 
-function readImagePath(value: string) {
+function readImageFile(formData: FormData): File | null | undefined {
+  const value = formData.get("image_file");
+  if (value === null || value === "") return null;
+  if (typeof File === "undefined" || !(value instanceof File)) return undefined;
+  if (value.size === 0) return null;
+  if (value.size > PRODUCT_IMAGE_MAX_BYTES) return undefined;
+  if (!(PRODUCT_IMAGE_MIME_TYPES as readonly string[]).includes(value.type)) return undefined;
+  return value;
+}
+
+function readImportImagePath(value: string) {
   if (!value) return null;
   if (!value.startsWith("/") || value.length > 500) return undefined;
   return value;
+}
+
+function imageFileExtension(contentType: string) {
+  return contentType === "image/jpeg" ? "jpg" : contentType === "image/png" ? "png" : "webp";
+}
+
+async function uploadProductImage(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orgId: string,
+  productId: string,
+  imageFile: File,
+) {
+  const path = `${orgId}/${productId}-${crypto.randomUUID()}.${imageFileExtension(imageFile.type)}`;
+  try {
+    const { error } = await supabase.storage.from(PRODUCT_IMAGE_BUCKET).upload(path, imageFile, {
+      cacheControl: "31536000",
+      contentType: imageFile.type,
+      upsert: false,
+    });
+    if (error) return { path, url: null, error: error.message || "The product photo could not be uploaded." };
+    const { data } = supabase.storage.from(PRODUCT_IMAGE_BUCKET).getPublicUrl(path);
+    return { path, url: data.publicUrl, error: null };
+  } catch {
+    return { path, url: null, error: "The product photo could not be uploaded." };
+  }
+}
+
+async function removeProductImage(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  path: string | null,
+) {
+  if (!path) return;
+  await supabase.storage.from(PRODUCT_IMAGE_BUCKET).remove([path]);
+}
+
+function productImageStoragePath(value: string | null, orgId: string) {
+  if (!value) return null;
+  try {
+    const imageUrl = new URL(value);
+    const configuredSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!configuredSupabaseUrl || imageUrl.origin !== new URL(configuredSupabaseUrl).origin) return null;
+    const marker = `/storage/v1/object/public/${PRODUCT_IMAGE_BUCKET}/`;
+    if (!imageUrl.pathname.startsWith(marker)) return null;
+    const path = decodeURIComponent(imageUrl.pathname.slice(marker.length));
+    return path.startsWith(`${orgId}/`) ? path : null;
+  } catch {
+    return null;
+  }
 }
 
 function splitCsvLine(line: string) {
@@ -210,18 +273,18 @@ async function validCategory(
   return Boolean(data && (!selectedBranchId || storeId === selectedBranchId));
 }
 
-async function readProductStoreId(
+async function readProductContext(
   supabase: Awaited<ReturnType<typeof createClient>>,
   orgId: string,
   productId: string,
 ) {
   const { data } = await supabase
     .from("products")
-    .select("store_id")
+    .select("store_id, image_url")
     .eq("id", productId)
     .eq("org_id", orgId)
     .maybeSingle();
-  return data?.store_id ?? null;
+  return data as { store_id: string; image_url: string | null } | null;
 }
 
 async function validSupplier(
@@ -245,6 +308,34 @@ function refreshCatalog() {
   revalidatePath("/admin/inventory");
   revalidatePath("/admin");
   revalidatePath("/pos");
+}
+
+export type InlineCategoryResult =
+  | { ok: true; category: { id: string; store_id: string; name: string } }
+  | { ok: false; message: string };
+
+export async function createCategoryInline(formData: FormData): Promise<InlineCategoryResult> {
+  const { supabase, orgId, selectedBranchId } = await requireAdmin();
+  const storeId = readText(formData, "store_id");
+  const name = readText(formData, "name");
+
+  if (!storeId || !(await validStore(supabase, orgId, storeId, selectedBranchId, true))) {
+    return { ok: false, message: "Choose a valid branch for this category." };
+  }
+  if (name.length < 2 || name.length > 80) {
+    return { ok: false, message: "Category names must be between 2 and 80 characters." };
+  }
+
+  const { data, error } = await supabase
+    .from("categories")
+    .insert({ org_id: orgId, store_id: storeId, name, icon: null, sort_order: 0, is_active: true })
+    .select("id, store_id, name")
+    .single();
+
+  if (error || !data) return { ok: false, message: error?.message || "The category could not be created." };
+
+  refreshCatalog();
+  return { ok: true, category: data as { id: string; store_id: string; name: string } };
 }
 
 export async function createCategory(formData: FormData) {
@@ -328,7 +419,7 @@ export async function createProduct(formData: FormData) {
   const sku = readText(formData, "sku");
   const barcode = readText(formData, "barcode");
   const supplierId = readText(formData, "supplier_id");
-  const imagePath = readImagePath(readText(formData, "image_url"));
+  const imageFile = readImageFile(formData);
   const sortOrder = readSortOrder(readText(formData, "sort_order"));
 
   if (!storeId || !(await validStore(supabase, orgId, storeId, selectedBranchId, true))) {
@@ -347,10 +438,17 @@ export async function createProduct(formData: FormData) {
   if (minimumStock === null) catalogRedirect("Minimum stock must be a valid non-negative quantity.");
   if (sku.length > 80 || barcode.length > 80) catalogRedirect("SKU and barcode must be 80 characters or fewer.");
   if (supplierId && !(await validSupplier(supabase, orgId, supplierId))) catalogRedirect("Choose a supplier from your organization.");
-  if (imagePath === undefined) catalogRedirect("Image paths must be local paths such as /food/product.png.");
+  if (imageFile === undefined) catalogRedirect("Choose a JPG, PNG, or WebP product photo under 900 KB.");
   if (sortOrder === null) catalogRedirect("Sort order must be a whole number greater than or equal to zero.");
 
+  const productId = crypto.randomUUID();
+  const uploadedImage = imageFile ? await uploadProductImage(supabase, orgId, productId, imageFile) : null;
+  if (uploadedImage?.error || (uploadedImage && !uploadedImage.url)) {
+    catalogRedirect("Product photo upload failed. Check that product image storage is configured, then try again.");
+  }
+
   const baseRecord = {
+    id: productId,
     org_id: orgId,
     store_id: storeId,
     category_id: categoryId || null,
@@ -359,7 +457,7 @@ export async function createProduct(formData: FormData) {
     price,
     unit,
     track_stock: readBoolean(formData, "track_stock"),
-    image_url: imagePath,
+    image_url: uploadedImage?.url ?? null,
     is_active: true,
     sort_order: sortOrder,
   };
@@ -372,9 +470,15 @@ export async function createProduct(formData: FormData) {
     supplier_id: supplierId || null,
   });
 
-  if (result.error) catalogRedirect(result.error.message || "The product could not be created.");
+  if (result.error) {
+    await removeProductImage(supabase, uploadedImage?.path ?? null);
+    catalogRedirect(result.error.message || "The product could not be created.");
+  }
 
   refreshCatalog();
+  if (readText(formData, "return_to") === "inventory") {
+    redirect(`/admin/inventory?saved=product${result.usedLegacySchema ? "&legacy=1" : ""}`);
+  }
   redirect(`/products?saved=product${result.usedLegacySchema ? "&legacy=1" : ""}`);
 }
 
@@ -392,10 +496,11 @@ export async function updateProduct(formData: FormData) {
   const sku = readText(formData, "sku");
   const barcode = readText(formData, "barcode");
   const supplierId = readText(formData, "supplier_id");
-  const imagePath = readImagePath(readText(formData, "image_url"));
+  const imageFile = readImageFile(formData);
   const sortOrder = readSortOrder(readText(formData, "sort_order"));
 
-  const currentStoreId = productId ? await readProductStoreId(supabase, orgId, productId) : null;
+  const currentProduct = productId ? await readProductContext(supabase, orgId, productId) : null;
+  const currentStoreId = currentProduct?.store_id ?? null;
   if (!productId || !currentStoreId || (selectedBranchId && currentStoreId !== selectedBranchId) || !storeId || !(await validStore(supabase, orgId, storeId, selectedBranchId, true))) {
     catalogRedirect("Choose a valid branch for this product.");
   }
@@ -412,10 +517,15 @@ export async function updateProduct(formData: FormData) {
   if (minimumStock === null) catalogRedirect("Minimum stock must be a valid non-negative quantity.");
   if (sku.length > 80 || barcode.length > 80) catalogRedirect("SKU and barcode must be 80 characters or fewer.");
   if (supplierId && !(await validSupplier(supabase, orgId, supplierId))) catalogRedirect("Choose a supplier from your organization.");
-  if (imagePath === undefined) catalogRedirect("Image paths must be local paths such as /food/product.png.");
+  if (imageFile === undefined) catalogRedirect("Choose a JPG, PNG, or WebP product photo under 900 KB.");
   if (sortOrder === null) catalogRedirect("Sort order must be a whole number greater than or equal to zero.");
 
-  const result = await updateProductRecord(supabase, orgId, productId, currentStoreId, {
+  const uploadedImage = imageFile ? await uploadProductImage(supabase, orgId, productId, imageFile) : null;
+  if (uploadedImage?.error || (uploadedImage && !uploadedImage.url)) {
+    catalogRedirect("Product photo upload failed. Check that product image storage is configured, then try again.");
+  }
+
+  const updateFields: Record<string, unknown> = {
     store_id: storeId,
     category_id: categoryId || null,
     name,
@@ -428,12 +538,20 @@ export async function updateProduct(formData: FormData) {
     unit,
     supplier_id: supplierId || null,
     track_stock: readBoolean(formData, "track_stock"),
-    image_url: imagePath,
     is_active: readBoolean(formData, "is_active"),
     sort_order: sortOrder,
-  });
+  };
+  if (uploadedImage?.url) updateFields.image_url = uploadedImage.url;
 
-  if (result.error) catalogRedirect(result.error.message || "The product could not be updated.");
+  const result = await updateProductRecord(supabase, orgId, productId, currentStoreId, updateFields);
+
+  if (result.error) {
+    await removeProductImage(supabase, uploadedImage?.path ?? null);
+    catalogRedirect(result.error.message || "The product could not be updated.");
+  }
+  if (uploadedImage?.url) {
+    await removeProductImage(supabase, productImageStoragePath(currentProduct?.image_url ?? null, orgId));
+  }
 
   refreshCatalog();
   redirect(`/products?saved=product${result.usedLegacySchema ? "&legacy=1" : ""}`);
@@ -488,9 +606,9 @@ export async function importProducts(formData: FormData) {
     const price = readPrice(String(row.price ?? ""));
     const costPrice = readOptionalCostPrice(String(row.cost_price ?? ""));
     const minimumStock = readMinimumStock(String(row.min_stock ?? ""));
-    const imagePath = readImagePath(String(row.image_url ?? "").trim());
+    const imagePath = readImportImagePath(String(row.image_url ?? "").trim());
     if (name.length < 2 || name.length > 120 || !unit || unit.length > 24 || !pricingMode || price === null) catalogRedirect(`Row ${index + 1}: name, unit, pricing_mode, and a valid price are required.`);
-    if (costPrice === undefined || minimumStock === null || imagePath === undefined) catalogRedirect(`Row ${index + 1}: cost, minimum stock, or image path is invalid.`);
+    if (costPrice === undefined || minimumStock === null || imagePath === undefined) catalogRedirect(`Row ${index + 1}: cost, minimum stock, or legacy image value is invalid.`);
     records.push({
       org_id: orgId,
       store_id: store.id,
@@ -528,7 +646,8 @@ export async function toggleProductVisibility(formData: FormData) {
     catalogRedirect("That product visibility change is invalid.");
   }
 
-  const currentStoreId = await readProductStoreId(supabase, orgId, productId);
+  const currentProduct = await readProductContext(supabase, orgId, productId);
+  const currentStoreId = currentProduct?.store_id ?? null;
   if (!currentStoreId || (selectedBranchId && currentStoreId !== selectedBranchId) || !(await validStore(supabase, orgId, currentStoreId, selectedBranchId, true))) {
     catalogRedirect("That product is outside the selected branch.");
   }
