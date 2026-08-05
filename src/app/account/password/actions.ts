@@ -5,7 +5,7 @@ import { invalidateAdminProfile } from "@/lib/admin/profile";
 import { createAdminClient } from "@/lib/employee-auth";
 import { createClient } from "@/lib/supabase/server";
 
-export type PasswordState = { message: string };
+export type PasswordState = { message: string; success?: boolean };
 
 type PasswordProfile = {
   org_id: string;
@@ -20,6 +20,7 @@ function destinationFor(role: PasswordProfile["role"]) {
 export async function changePassword(_previousState: PasswordState, formData: FormData): Promise<PasswordState> {
   const password = String(formData.get("password") ?? "");
   const confirmation = String(formData.get("password_confirmation") ?? "");
+  const settingsMode = String(formData.get("mode") ?? "") === "settings";
 
   if (password.length < 8) return { message: "Your new password must be at least 8 characters." };
   if (password !== confirmation) return { message: "The passwords do not match." };
@@ -35,22 +36,24 @@ export async function changePassword(_previousState: PasswordState, formData: Fo
     .single();
   const profile = profileData as PasswordProfile | null;
   if (profileError || !profile) redirect("/");
-  if (!profile.password_change_required) redirect(destinationFor(profile.role));
+  if (!profile.password_change_required && !settingsMode) redirect(destinationFor(profile.role));
 
   const { error: passwordError } = await supabase.auth.updateUser({ password });
   if (passwordError) return { message: passwordError.message || "Your password could not be updated." };
 
-  const admin = createAdminClient();
-  if (!admin) {
-    return { message: "Your password changed, but the employee access flag could not be cleared. Ask an administrator to finish the setup." };
-  }
+  if (profile.password_change_required) {
+    const admin = createAdminClient();
+    if (!admin) {
+      return { message: "Your password changed, but the employee access flag could not be cleared. Ask an administrator to finish the setup." };
+    }
 
-  const { error: profileUpdateError } = await admin
-    .from("profiles")
-    .update({ password_change_required: false })
-    .eq("id", userData.user.id)
-    .eq("org_id", profile.org_id);
-  if (profileUpdateError) return { message: "Your password changed, but the first-login step could not be completed. Please try again." };
+    const { error: profileUpdateError } = await admin
+      .from("profiles")
+      .update({ password_change_required: false })
+      .eq("id", userData.user.id)
+      .eq("org_id", profile.org_id);
+    if (profileUpdateError) return { message: "Your password changed, but the first-login step could not be completed. Please try again." };
+  }
 
   // The admin layout gates first-login users on the cached profile; drop it so
   // the redirect below is not bounced straight back to this page.
@@ -63,9 +66,10 @@ export async function changePassword(_previousState: PasswordState, formData: Fo
     action: "auth.password.changed",
     entity: "profiles",
     entity_id: userData.user.id,
-    before: { password_change_required: true },
+    before: { password_change_required: profile.password_change_required },
     after: { password_change_required: false },
   });
 
+  if (settingsMode) return { message: "Password updated successfully.", success: true };
   redirect(destinationFor(profile.role));
 }
