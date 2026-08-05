@@ -46,6 +46,11 @@ SQL lives in `supabase/migrations/` (run in order):
 
 11. `0011_employee_workspace.sql` - employee directory, roles, attendance, payroll, and leave records
 12. `0012_employee_id_login.sql` - first-login password-change flag and employee-code lookup index
+13. `0013_current_stock_rpc.sql` - current stock aggregation RPC
+14. `0014_latency_indexes.sql` - backoffice latency indexes
+15. `0015_admin_navigation_latency.sql` - admin navigation indexes
+16. `0016_p4_branch_workflows.sql` - branch workflow and clone metadata
+17. `0017_product_images.sql` - public product photo bucket and admin storage policies
 
 **Apply them** either way:
 - **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push`

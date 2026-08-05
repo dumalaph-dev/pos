@@ -6,6 +6,7 @@ import { AdminMenu } from "@/components/admin/AdminMenu";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import { formatStockQuantity, salesQuantity, stockStatus, stockThreshold } from "@/lib/inventory";
+import { isProductImageUrl } from "@/lib/product-images";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
@@ -158,7 +159,7 @@ function paymentLabel(method: PaymentMethod) {
 }
 
 function productImage(product: { name: string; image_url?: string | null }) {
-  return product.image_url?.startsWith("/")
+  return isProductImageUrl(product.image_url)
     ? product.image_url
     : LOCAL_PRODUCT_IMAGES[product.name.trim().toLowerCase()] ?? "/food/whole-lechon-small.png";
 }

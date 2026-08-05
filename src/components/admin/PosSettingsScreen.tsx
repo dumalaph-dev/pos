@@ -9,6 +9,7 @@ import { buildReceipt } from "@/lib/receipt";
 import { getPrinter, type PrinterSettings } from "@/lib/printer";
 import { getPosTheme, POS_THEME_OPTIONS, type PosThemeId } from "@/lib/pos-theme";
 import { getPosPalette, POS_PALETTE_OPTIONS, type PosPaletteId } from "@/lib/pos-palette";
+import { isProductImageUrl } from "@/lib/product-images";
 
 export type AdminPosProduct = {
   id: string;
@@ -175,7 +176,7 @@ function buildCatalog(products: AdminPosProduct[]) {
   const normalized = products.map((product) => ({
     ...product,
     price: Number(product.price),
-    image_url: product.image_url?.startsWith("/") ? product.image_url : IMAGE_FALLBACK,
+    image_url: isProductImageUrl(product.image_url) ? product.image_url : IMAGE_FALLBACK,
   }));
   if (normalized.length >= PREVIEW_PRODUCTS.length) return normalized.slice(0, 12);
 
