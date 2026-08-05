@@ -26,6 +26,7 @@ import {
   saveCatalogCache,
   watchPending,
 } from "@/lib/offline";
+import { POS_DEVICE_BINDING_KEY, type PosDeviceBinding } from "@/lib/device-binding";
 import {
   getPrinter,
   loadPrinterSettings,
@@ -90,6 +91,7 @@ type ProfileData = {
   store_tin: string | null;
   full_name: string | null;
   role: "admin" | "manager" | "cashier" | null;
+  device_id?: string | null;
   pos_config?: PosRuntimeConfig;
 };
 
@@ -210,6 +212,20 @@ function branchPrefix(storeName: string | null): string {
   const words = (storeName ?? "").trim().split(/\s+/).filter(Boolean);
   const letters = words.map((w) => w[0]?.toUpperCase() ?? "").join("").slice(0, 3);
   return letters || "POS";
+}
+
+function readDeviceBinding(): PosDeviceBinding | null {
+  try {
+    const raw = localStorage.getItem(POS_DEVICE_BINDING_KEY);
+    if (!raw) return null;
+    const value: unknown = JSON.parse(raw);
+    if (typeof value !== "object" || value === null) return null;
+    const binding = value as Partial<PosDeviceBinding>;
+    if (typeof binding.deviceId !== "string" || typeof binding.storeId !== "string" || typeof binding.devicePrefix !== "string") return null;
+    return { deviceId: binding.deviceId, storeId: binding.storeId, devicePrefix: binding.devicePrefix, boundAt: typeof binding.boundAt === "string" ? binding.boundAt : "" };
+  } catch {
+    return null;
+  }
 }
 
 const DEMO_PROFILE: ProfileData = {
@@ -438,6 +454,7 @@ export default function SellScreen() {
   const refreshCatalog = useCallback(async () => {
     let profileData: ProfileData | null = null;
     let databasePrinterSettings: PrinterSettings | undefined;
+    let databaseDeviceId: string | null = null;
 
     try {
       const {
@@ -450,12 +467,32 @@ export default function SellScreen() {
           .eq("id", session.user.id)
           .single();
         if (prof) {
-          const store = readStorePosConfig(prof.stores);
-          if (prof.store_id) {
+          const binding = readDeviceBinding();
+          let effectiveStoreId = prof.store_id as string | null;
+          let effectiveStore = prof.stores;
+          if (binding) {
+            const { data: boundDevice } = await supabase
+              .from("devices")
+              .select("id, store_id, printer_transport, printer_config, stores(name, address, tin, vat_registered, vat_rate, settings)")
+              .eq("id", binding.deviceId)
+              .eq("org_id", prof.org_id)
+              .eq("is_active", true)
+              .maybeSingle();
+            if (boundDevice && (prof.role === "admin" || !prof.store_id || prof.store_id === boundDevice.store_id)) {
+              effectiveStoreId = boundDevice.store_id;
+              effectiveStore = boundDevice.stores;
+              databaseDeviceId = boundDevice.id;
+              databasePrinterSettings = readDevicePrinterSettings(boundDevice) ?? undefined;
+            } else {
+              localStorage.removeItem(POS_DEVICE_BINDING_KEY);
+            }
+          }
+          const store = readStorePosConfig(effectiveStore);
+          if (effectiveStoreId && !databasePrinterSettings) {
             const { data: terminal } = await supabase
               .from("devices")
-              .select("printer_transport, printer_config")
-              .eq("store_id", prof.store_id)
+              .select("id, printer_transport, printer_config")
+              .eq("store_id", effectiveStoreId)
               .eq("is_active", true)
               .order("last_seen_at", { ascending: false })
               .order("name")
@@ -466,12 +503,13 @@ export default function SellScreen() {
           profileData = {
             id: prof.id,
             org_id: prof.org_id,
-            store_id: prof.store_id,
+            store_id: effectiveStoreId,
             store_name: store.name,
             store_address: store.address,
             store_tin: store.tin,
             full_name: (prof.full_name as string | null) ?? null,
             role: (prof.role as ProfileData["role"]) ?? null,
+            device_id: databaseDeviceId,
             pos_config: store.posConfig,
           };
         }
@@ -482,7 +520,7 @@ export default function SellScreen() {
 
     // Offline (session refresh or profile fetch failed): serve the cache.
     if (!profileData) {
-      const cached = await loadCachedCatalog();
+      const cached = await loadCachedCatalog(readDeviceBinding()?.storeId);
       if (cached) {
         profileData = cached.profile as ProfileData;
         applyProfile(profileData);
@@ -506,6 +544,14 @@ export default function SellScreen() {
       return;
     }
     applyProfile(profileData, databasePrinterSettings);
+    if (profileData.device_id && profileData.store_id) {
+      void supabase
+        .from("devices")
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq("id", profileData.device_id)
+        .eq("org_id", profileData.org_id)
+        .eq("store_id", profileData.store_id);
+    }
 
     try {
       const scope = profileData.store_id
@@ -561,7 +607,7 @@ export default function SellScreen() {
       }
       setOffline(false);
     } catch {
-      const cached = await loadCachedCatalog();
+      const cached = await loadCachedCatalog(profileData?.store_id ?? readDeviceBinding()?.storeId);
       if (cached) {
         applyProfile(cached.profile as ProfileData);
         setCategories(cached.categories as Category[]);
@@ -787,7 +833,7 @@ export default function SellScreen() {
       local_uuid: crypto.randomUUID(),
       org_id: profile.org_id,
       store_id: profile.store_id,
-      device_id: "",
+      device_id: profile.device_id ?? "",
       order_no: orderNo,
       cashier_id: profile.id,
       status: "completed",
@@ -903,24 +949,28 @@ export default function SellScreen() {
     setPrinterSettings(s);
     // Admins also persist the row to the devices table (follows the tablet).
     if (profile?.role === "admin" && profile.store_id) {
-      const deviceId = getDeviceId();
-      const { error } = await supabase.from("devices").upsert(
-        {
-          org_id: profile.org_id,
-          store_id: profile.store_id,
-          name: `Tablet ${deviceId}`,
-          device_prefix: deviceId,
-          printer_transport: s.transport,
-          printer_config: {
-            ip: s.ip,
-            port: s.port,
-            paper_width: s.paperWidth,
-            bridge_host: s.bridgeHost,
-            bridge_port: s.bridgePort,
-          },
-        },
-        { onConflict: "store_id,device_prefix" },
-      );
+      const binding = readDeviceBinding();
+      const printerConfig = {
+        ip: s.ip,
+        port: s.port,
+        paper_width: s.paperWidth,
+        bridge_host: s.bridgeHost,
+        bridge_port: s.bridgePort,
+      };
+      const { error } = binding && profile.device_id === binding.deviceId
+        ? await supabase.from("devices").update({ printer_transport: s.transport, printer_config: printerConfig, last_seen_at: new Date().toISOString() }).eq("id", binding.deviceId).eq("org_id", profile.org_id).eq("store_id", profile.store_id)
+        : await supabase.from("devices").upsert(
+            {
+              org_id: profile.org_id,
+              store_id: profile.store_id,
+              name: `Tablet ${getDeviceId()}`,
+              device_prefix: getDeviceId(),
+              printer_transport: s.transport,
+              printer_config: printerConfig,
+              last_seen_at: new Date().toISOString(),
+            },
+            { onConflict: "store_id,device_prefix" },
+          );
       if (error) throw error;
     }
   };

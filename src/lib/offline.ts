@@ -217,23 +217,51 @@ export async function saveCatalogCache(
   stock?: Record<string, number>,
 ): Promise<void> {
   const db = getDb();
+  const profileRecord = typeof profile === "object" && profile !== null ? profile as { store_id?: unknown; org_id?: unknown } : {};
+  const scope = typeof profileRecord.store_id === "string" && profileRecord.store_id
+    ? profileRecord.store_id
+    : typeof profileRecord.org_id === "string" && profileRecord.org_id
+      ? profileRecord.org_id
+      : "default";
   const rows = [
-    { key: "products", json: JSON.stringify(products) },
-    { key: "categories", json: JSON.stringify(categories) },
+    { key: `products:${scope}`, json: JSON.stringify(products) },
+    { key: `categories:${scope}`, json: JSON.stringify(categories) },
     { key: "profile", json: JSON.stringify(profile) },
   ];
-  if (stock) rows.push({ key: "stock", json: JSON.stringify(stock) });
+  if (stock) rows.push({ key: `stock:${scope}`, json: JSON.stringify(stock) });
   await db.catalog.bulkPut(rows);
 }
 
-export async function loadCachedCatalog(): Promise<CachedCatalog | null> {
+export async function loadCachedCatalog(scopeKey?: string): Promise<CachedCatalog | null> {
   const db = getDb();
-  const rows = await db.catalog.bulkGet(["products", "categories", "profile"]);
-  if (!rows[0] || !rows[1] || !rows[2]) return null;
+  const profileRow = await db.catalog.get("profile");
+  let inferredScope = scopeKey;
+  if (!inferredScope && profileRow) {
+    try {
+      const cachedProfile = JSON.parse(profileRow.json) as { store_id?: unknown; org_id?: unknown };
+      inferredScope = typeof cachedProfile.store_id === "string" && cachedProfile.store_id
+        ? cachedProfile.store_id
+        : typeof cachedProfile.org_id === "string" && cachedProfile.org_id
+          ? cachedProfile.org_id
+          : "default";
+    } catch {
+      inferredScope = "default";
+    }
+  }
+  const scope = inferredScope || "default";
+  const rows = await db.catalog.bulkGet([`products:${scope}`, `categories:${scope}`, "profile", `stock:${scope}`]);
+  // Never fall back to an unscoped legacy catalog when the caller supplied a
+  // tablet/branch binding; that could render another branch's menu offline.
+  const legacyRows = rows[0] && rows[1]
+    ? rows
+    : scopeKey
+      ? rows
+      : await db.catalog.bulkGet(["products", "categories", "profile", "stock"]);
+  if (!legacyRows[0] || !legacyRows[1] || !legacyRows[2]) return null;
   return {
-    products: JSON.parse(rows[0].json),
-    categories: JSON.parse(rows[1].json),
-    profile: JSON.parse(rows[2].json),
-    stock: rows[3]?.json ? JSON.parse(rows[3].json) : undefined,
+    products: JSON.parse(legacyRows[0].json),
+    categories: JSON.parse(legacyRows[1].json),
+    profile: JSON.parse(legacyRows[2].json),
+    stock: legacyRows[3]?.json ? JSON.parse(legacyRows[3].json) : undefined,
   };
 }

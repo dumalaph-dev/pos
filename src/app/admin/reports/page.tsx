@@ -4,6 +4,7 @@ import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatStockQuantity, salesQuantity } from "@/lib/inventory";
 import { formatPeso } from "@/lib/money";
+import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 
@@ -21,8 +22,8 @@ type ProfileRecord = {
 };
 
 type BranchRecord = { id: string; name: string; is_active: boolean };
-type CategoryRecord = { id: string; name: string };
-type ProductRecord = { id: string; name: string; category_id: string | null; unit: string };
+type CategoryRecord = { id: string; store_id: string; name: string };
+type ProductRecord = { id: string; name: string; store_id: string; category_id: string | null; unit: string };
 type OrderRecord = {
   id: string;
   store_id: string;
@@ -116,10 +117,11 @@ function formatReportDate(value: Date) {
 export default async function ReportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string | string[] }>;
+  searchParams: Promise<{ range?: string | string[]; branch?: string | string[] }>;
 }) {
   const params = await searchParams;
   const rangeParam = readParam(params.range);
+  const requestedBranchFilter = readParam(params.branch);
   const range: ReportRange = isReportRange(rangeParam) ? rangeParam : "7d";
   const dayCount = range === "30d" ? 30 : 7;
   const supabase = await createClient();
@@ -135,33 +137,53 @@ export default async function ReportsPage({
 
   const { start: todayStart, end: todayEnd } = getSingaporeDayBounds();
   const startDate = new Date(todayStart.getTime() - DAY_MS * (dayCount - 1));
-  const [branchesResult, categoriesResult, productsResult, ordersResult, itemsResult] = await Promise.all([
-    supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name"),
-    supabase.from("categories").select("id, name").eq("org_id", profile.org_id).order("sort_order").order("name"),
-    supabase.from("products").select("id, name, category_id, unit").eq("org_id", profile.org_id).limit(1000),
-    supabase
-      .from("orders")
-      .select("id, store_id, status, discount_amount, vat_amount, total, payment_method, created_at")
-      .eq("org_id", profile.org_id)
-      .gte("created_at", startDate.toISOString())
-      .lt("created_at", todayEnd.toISOString())
-      .order("created_at", { ascending: false })
-      .limit(2000),
+  const branchesResult = await supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name");
+  const branches = (branchesResult.data ?? []) as BranchRecord[];
+  const selectedBranchId = profile.role === "admin"
+    ? await getSelectedAdminBranchId(branches, profile.store_id)
+    : profile.store_id;
+  const branchFilter = selectedBranchId ?? (branches.some((branch) => branch.id === requestedBranchFilter) ? requestedBranchFilter : "");
+  const visibleBranches = branchFilter ? branches.filter((branch) => branch.id === branchFilter) : branches;
+
+  let categoriesQuery = supabase.from("categories").select("id, store_id, name").eq("org_id", profile.org_id);
+  let productsQuery = supabase.from("products").select("id, name, store_id, category_id, unit").eq("org_id", profile.org_id);
+  let ordersQuery = supabase
+    .from("orders")
+    .select("id, store_id, status, discount_amount, vat_amount, total, payment_method, created_at")
+    .eq("org_id", profile.org_id);
+  let itemsQuery = supabase
+    .from("order_items")
+    .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status)")
+    .eq("orders.org_id", profile.org_id)
+    .eq("orders.status", "completed")
+    .gte("orders.created_at", startDate.toISOString())
+    .lt("orders.created_at", todayEnd.toISOString());
+  if (branchFilter) {
+    categoriesQuery = categoriesQuery.eq("store_id", branchFilter);
+    productsQuery = productsQuery.eq("store_id", branchFilter);
+    ordersQuery = ordersQuery.eq("store_id", branchFilter);
+    itemsQuery = itemsQuery.eq("orders.store_id", branchFilter);
+  }
+  categoriesQuery = categoriesQuery.order("sort_order").order("name");
+  productsQuery = productsQuery.limit(1000);
+  ordersQuery = ordersQuery
+    .gte("created_at", startDate.toISOString())
+    .lt("created_at", todayEnd.toISOString())
+    .order("created_at", { ascending: false })
+    .limit(2000);
+
+  const [categoriesResult, productsResult, ordersResult, itemsResult] = await Promise.all([
+    categoriesQuery,
+    productsQuery,
+    ordersQuery,
     // Items are joined straight to the range's completed orders so they run
     // in the same round trip as the batch instead of a second .in() query.
-    supabase
-      .from("order_items")
-      .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status)")
-      .eq("orders.org_id", profile.org_id)
-      .eq("orders.status", "completed")
-      .gte("orders.created_at", startDate.toISOString())
-      .lt("orders.created_at", todayEnd.toISOString()),
+    itemsQuery,
   ]);
 
-  const branches = (branchesResult.data ?? []) as BranchRecord[];
-  const categories = (categoriesResult.data ?? []) as CategoryRecord[];
-  const products = (productsResult.data ?? []) as ProductRecord[];
-  const orders = (ordersResult.data ?? []) as OrderRecord[];
+  const categories = ((categoriesResult.data ?? []) as CategoryRecord[]).filter((category) => !branchFilter || category.store_id === branchFilter);
+  const products = ((productsResult.data ?? []) as ProductRecord[]).filter((product) => !branchFilter || product.store_id === branchFilter);
+  const orders = ((ordersResult.data ?? []) as OrderRecord[]).filter((order) => !branchFilter || order.store_id === branchFilter);
   const orderItems = (itemsResult.data ?? []) as OrderItemRecord[];
   const orderItemsError = Boolean(itemsResult.error);
 
@@ -232,11 +254,15 @@ export default async function ReportsPage({
     const value = salesByDay.get(dayKey(date)) ?? 0;
     return { label: dayLabel(date, range), value };
   });
-  const branchStats = branches
+  const branchStats = visibleBranches
     .map((branch) => ({ ...branch, ...(branchTotalsById.get(branch.id) ?? { sales: 0, orders: 0 }) }))
     .sort((a, b) => b.sales - a.sales);
   const queryWarning = Boolean(branchesResult.error || categoriesResult.error || productsResult.error || ordersResult.error || orderItemsError);
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
+  const currentBranchName = branchFilter
+    ? branches.find((branch) => branch.id === branchFilter)?.name ?? "Selected branch"
+    : "All branches";
+  const branchQuery = branchFilter ? `&branch=${encodeURIComponent(branchFilter)}` : "";
 
   return (
     <main className="admin-page text-ink">
@@ -246,12 +272,12 @@ export default async function ReportsPage({
               <Link href="/admin" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-primary/25 bg-primary-soft text-primary" aria-label="Back to admin overview"><AdminIcon name="reports" size={20} /></Link>
               <div className="min-w-0"><p className="truncate text-[10px] font-extrabold uppercase tracking-[0.16em] text-ink-muted">Admin backoffice</p><h1 className="truncate text-lg font-extrabold text-primary">Reports</h1></div>
             </div>
-            <div className="ml-auto flex items-center gap-2"><Link href={`/admin/report?range=${range}`} className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Export CSV</Link><Link href="/admin/orders" className="rounded-btn bg-primary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover">View orders</Link><SignOutButton className="px-3 py-2 text-xs" /></div>
+            <div className="ml-auto flex items-center gap-2"><Link href={`/admin/report?range=${range}${branchQuery}`} className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Export CSV</Link><Link href={`/admin/orders?range=${range}${branchQuery}`} className="rounded-btn bg-primary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover">View orders</Link><SignOutButton className="px-3 py-2 text-xs" /></div>
           </header>
 
           <div className="mt-6 flex flex-wrap items-end justify-between gap-4">
-            <div><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Business intelligence &middot; {range === "7d" ? "Last 7 days" : "Last 30 days"}</p><h2 className="mt-2 text-3xl font-extrabold tracking-[-0.04em] text-ink sm:text-4xl">Know what is moving the business.</h2><p className="mt-2 max-w-2xl text-sm text-ink-muted">A live view of completed sales, menu performance, and branch contribution, {firstName}.</p></div>
-            <div className="flex items-center gap-2">{rangeOptions.map((option) => <Link key={option.value} href={`/admin/reports?range=${option.value}`} className={`rounded-btn border px-3 py-2 text-xs font-extrabold transition ${range === option.value ? "border-primary bg-primary text-primary-fg" : "border-line bg-surface text-primary hover:bg-primary-soft"}`}>{option.label}</Link>)}</div>
+            <div><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Business intelligence &middot; {range === "7d" ? "Last 7 days" : "Last 30 days"} &middot; {currentBranchName}</p><h2 className="mt-2 text-3xl font-extrabold tracking-[-0.04em] text-ink sm:text-4xl">Know what is moving the business.</h2><p className="mt-2 max-w-2xl text-sm text-ink-muted">A live view of completed sales, menu performance, and branch contribution, {firstName}.</p></div>
+            <div className="flex items-center gap-2">{rangeOptions.map((option) => <Link key={option.value} href={`/admin/reports?range=${option.value}${branchQuery}`} className={`rounded-btn border px-3 py-2 text-xs font-extrabold transition ${range === option.value ? "border-primary bg-primary text-primary-fg" : "border-line bg-surface text-primary hover:bg-primary-soft"}`}>{option.label}</Link>)}</div>
           </div>
 
           {queryWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink">Some report data could not refresh. The panels are showing the data that was available.</div>}
@@ -268,7 +294,7 @@ export default async function ReportsPage({
             <ReportListPanel title="Sales by category" subtitle="Menu families driving item sales" emptyTitle="No category sales yet" emptyDetail="Category performance will appear after completed orders." items={categorySales.map((item) => ({ label: item.name, detail: `${formatStockQuantity(item.qty)} ${item.unit} sold`, value: displayPeso(item.total) }))} />
           </div>
 
-          <section aria-labelledby="branch-report-heading" className="admin-panel mt-4 p-5"><div className="admin-panel__header"><div><p className="admin-panel__eyebrow">Branch comparison</p><h2 id="branch-report-heading" className="admin-panel__title">Where sales are happening</h2><p className="admin-panel__subtitle">Completed sales for the selected period</p></div><Link href="/admin/employees" className="admin-kpi-card__link mt-0">Manage staff <AdminIcon name="arrow" size={14} /></Link></div>{branchStats.length === 0 ? <ReportEmpty title="No branches found" detail="Create a branch to compare performance." /> : <div className="mt-4 overflow-x-auto"><table className="admin-list-table min-w-[620px]"><thead><tr><th>Branch</th><th>Orders</th><th>Total sales</th><th>Share</th><th>Average order</th></tr></thead><tbody>{branchStats.map((branch) => <tr key={branch.id}><td><strong>{branch.name}</strong><small className="mt-1 block text-[10px] text-ink-muted">{branch.is_active ? "Active" : "Inactive"}</small></td><td className="tnums">{branch.orders}</td><td className="tnums font-extrabold">{displayPeso(branch.sales)}</td><td className="tnums">{totalSales ? Math.round((branch.sales / totalSales) * 100) : 0}%</td><td className="tnums font-extrabold">{displayPeso(branch.orders ? Math.round(branch.sales / branch.orders) : 0)}</td></tr>)}</tbody></table></div>}</section>
+          <section aria-labelledby="branch-report-heading" className="admin-panel mt-4 p-5"><div className="admin-panel__header"><div><p className="admin-panel__eyebrow">{branchFilter ? "Selected branch" : "Branch comparison"}</p><h2 id="branch-report-heading" className="admin-panel__title">{branchFilter ? `${currentBranchName} performance` : "Where sales are happening"}</h2><p className="admin-panel__subtitle">Completed sales for the selected period</p></div><Link href="/admin/employees" className="admin-kpi-card__link mt-0">Manage staff <AdminIcon name="arrow" size={14} /></Link></div>{branchStats.length === 0 ? <ReportEmpty title="No branches found" detail="Create a branch to compare performance." /> : <div className="mt-4 overflow-x-auto"><table className="admin-list-table min-w-[620px]"><thead><tr><th>Branch</th><th>Orders</th><th>Total sales</th><th>Share</th><th>Average order</th></tr></thead><tbody>{branchStats.map((branch) => <tr key={branch.id}><td><strong>{branch.name}</strong><small className="mt-1 block text-[10px] text-ink-muted">{branch.is_active ? "Active" : "Inactive"}</small></td><td className="tnums">{branch.orders}</td><td className="tnums font-extrabold">{displayPeso(branch.sales)}</td><td className="tnums">{totalSales ? Math.round((branch.sales / totalSales) * 100) : 0}%</td><td className="tnums font-extrabold">{displayPeso(branch.orders ? Math.round(branch.sales / branch.orders) : 0)}</td></tr>)}</tbody></table></div>}</section>
       </div>
     </main>
   );

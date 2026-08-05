@@ -3,6 +3,7 @@ import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { POS_PALETTE_IDS } from "@/lib/pos-palette";
 import { POS_THEME_IDS } from "@/lib/pos-theme";
+import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
 import PosSettingsScreen, {
   type AdminPosCategory,
   type AdminPosDevice,
@@ -145,16 +146,25 @@ export default async function AdminPosPage({ searchParams }: { searchParams: Pro
   ]);
 
   const stores = (storesResult.data ?? []) as StoreRecord[];
-  const store = stores.find((candidate) => candidate.id === (profile.store_id ?? requestedStoreId)) ?? stores[0] ?? null;
+  const branchOptions = stores.map((candidate) => ({ id: candidate.id, name: candidate.name }));
+  const selectedBranchId = profile.role === "admin"
+    ? await getSelectedAdminBranchId(stores.map((store) => ({ id: store.id, name: store.name, is_active: true })) as AdminBranchOption[], profile.store_id)
+    : profile.store_id;
+  const requestedStore = stores.find((candidate) => candidate.id === requestedStoreId);
+  const editingStoreId = selectedBranchId ?? requestedStore?.id ?? (profile.store_id && stores.some((candidate) => candidate.id === profile.store_id) ? profile.store_id : stores[0]?.id) ?? "";
+  const store = stores.find((candidate) => candidate.id === editingStoreId) ?? null;
   const storeId = store?.id ?? "";
+  const deviceScopeId = selectedBranchId ?? (requestedStore ? requestedStore.id : null);
 
+  let devicesQuery = supabase.from("devices").select("id, store_id, name, device_prefix, printer_transport, printer_config, is_active, last_seen_at").eq("org_id", profile.org_id).order("name");
+  if (deviceScopeId) devicesQuery = devicesQuery.eq("store_id", deviceScopeId);
   const [categoriesResult, productsResult, devicesResult] = storeId
     ? await Promise.all([
         supabase.from("categories").select("id, name, icon").eq("store_id", storeId).eq("is_active", true).order("sort_order"),
         supabase.from("products").select("id, name, pricing_mode, price, unit, category_id, image_url, track_stock, min_stock").eq("store_id", storeId).eq("is_active", true).order("sort_order"),
-        supabase.from("devices").select("id, store_id, name, device_prefix, printer_transport, printer_config, is_active, last_seen_at").eq("store_id", storeId).order("name"),
+        devicesQuery,
       ])
-    : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
+    : [{ data: [], error: null }, { data: [], error: null }, await devicesQuery];
 
   const stockResult = storeId
     ? await supabase.rpc("current_stock", { p_org_id: profile.org_id })
@@ -178,9 +188,9 @@ export default async function AdminPosPage({ searchParams }: { searchParams: Pro
   const branchName = store?.name || profile.stores?.name || DEFAULT_STORE_NAME;
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
   const savedMessage = saved === "settings" ? "POS settings saved." : saved === "branch" ? "Receipt and tax details saved." : saved === "device" ? "Terminal settings saved." : "";
-  const deviceBranchOptions = profile.store_id
+  const deviceBranchOptions = selectedBranchId
     ? store ? [{ id: store.id, name: store.name }] : []
-    : stores.map((candidate) => ({ id: candidate.id, name: candidate.name }));
+    : branchOptions;
 
   return (
     <PosSettingsScreen
@@ -191,7 +201,7 @@ export default async function AdminPosPage({ searchParams }: { searchParams: Pro
       storeId={storeId}
       cashierName={firstName}
       canWrite={profile.role === "admin"}
-      branchOptions={profile.store_id ? [] : stores.map((candidate) => ({ id: candidate.id, name: candidate.name }))}
+      branchOptions={selectedBranchId ? [] : branchOptions}
       deviceBranchOptions={deviceBranchOptions}
       queryWarning={queryWarning}
       initialTab={initialTab}

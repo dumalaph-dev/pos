@@ -35,7 +35,8 @@ export type AdminIconName =
   | "edit"
   | "more"
   | "refresh"
-  | "history";
+  | "history"
+  | "branches";
 
 export function AdminIcon({ name, size = 18 }: { name: AdminIconName; size?: number }) {
   const common = {
@@ -125,5 +126,7 @@ export function AdminIcon({ name, size = 18 }: { name: AdminIconName; size?: num
       return <svg {...common}><path d="M20 7v5h-5M4 17v-5h5" /><path d="M6.2 9A7 7 0 0 1 18.6 7M17.8 15A7 7 0 0 1 5.4 17" /></svg>;
     case "history":
       return <svg {...common}><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5M12 7v5l3 2" /></svg>;
+    case "branches":
+      return <svg {...common}><path d="M4 21V5l8-3 8 3v16" /><path d="M8 21v-5h8v5M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01" /></svg>;
   }
 }

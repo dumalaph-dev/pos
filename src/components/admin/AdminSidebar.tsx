@@ -3,8 +3,10 @@
 import { usePathname } from "next/navigation";
 import { AdminIcon, type AdminIconName } from "./AdminIcon";
 import { AdminLink as Link } from "./AdminLink";
+import { AdminBranchSwitcher } from "./AdminBranchSwitcher";
+import type { AdminBranchOption } from "@/lib/admin/branch-context";
 
-export type AdminSection = "overview" | "sales" | "pos" | "orders" | "inventory" | "products" | "catalog" | "customers" | "suppliers" | "expenses" | "employees" | "reports" | "audit" | "settings" | "promotions";
+export type AdminSection = "overview" | "sales" | "pos" | "orders" | "inventory" | "products" | "catalog" | "customers" | "suppliers" | "expenses" | "employees" | "reports" | "audit" | "settings" | "promotions" | "branches";
 
 type NavItem = {
   label: string;
@@ -36,6 +38,7 @@ const comingSoonNav: NavItem[] = [
   { label: "Promotions", href: "/admin/promotions", icon: "promotions", active: "promotions" },
   { label: "Reports", href: "/admin/reports", icon: "reports", active: "reports" },
   { label: "Audit log", href: "/admin/audit", icon: "history", active: "audit" },
+  { label: "Branches", href: "/admin/branches", icon: "branches", active: "branches" },
   { label: "Settings", href: "/admin/settings", icon: "settings", active: "settings" },
 ];
 
@@ -56,6 +59,7 @@ function activeSectionForPath(pathname: string | null): AdminSection {
     ["/admin/employees", "employees"],
     ["/admin/reports", "reports"],
     ["/admin/audit", "audit"],
+    ["/admin/branches", "branches"],
     ["/admin/settings", "settings"],
     ["/admin/promotions", "promotions"],
   ];
@@ -63,7 +67,7 @@ function activeSectionForPath(pathname: string | null): AdminSection {
   return routeSections.find(([prefix]) => pathname.startsWith(prefix))?.[1] ?? "overview";
 }
 
-export function AdminSidebar({ branchName, active: activeOverride, connection }: { branchName: string; active?: AdminSection; connection?: AdminSidebarConnection }) {
+export function AdminSidebar({ branchName, active: activeOverride, connection, branches = [], selectedBranchId = null, canSwitchBranches = false, canManageBranches = false }: { branchName: string; active?: AdminSection; connection?: AdminSidebarConnection; branches?: AdminBranchOption[]; selectedBranchId?: string | null; canSwitchBranches?: boolean; canManageBranches?: boolean }) {
   const pathname = usePathname();
   const active = activeOverride ?? activeSectionForPath(pathname);
 
@@ -78,10 +82,7 @@ export function AdminSidebar({ branchName, active: activeOverride, connection }:
           </span>
         </Link>
 
-        <div className="admin-branch-switcher" aria-label={`Current branch: ${branchName}`}>
-          <strong>{branchName}</strong>
-          <span className="admin-branch-switcher__chevron" aria-hidden="true">⌄</span>
-        </div>
+        <AdminBranchSwitcher branchName={branchName} branches={branches} selectedBranchId={selectedBranchId} canSwitch={canSwitchBranches} />
 
         <nav aria-label="Admin navigation" className="admin-nav">
           <div className="admin-nav__group">
@@ -99,7 +100,7 @@ export function AdminSidebar({ branchName, active: activeOverride, connection }:
           </div>
 
           <div className="admin-nav__group admin-nav__group--secondary">
-            {comingSoonNav.map((item) => item.href ? (
+            {comingSoonNav.filter((item) => item.active !== "branches" || canManageBranches).map((item) => item.href ? (
               <Link
                 key={item.label}
                 href={item.href}

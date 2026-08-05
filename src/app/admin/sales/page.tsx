@@ -6,6 +6,7 @@ import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import { salesQuantity, stockStatus } from "@/lib/inventory";
+import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 
@@ -268,7 +269,7 @@ export default async function SalesPage({
   const params = await searchParams;
   const requestedRange = readParam(params.range);
   const range: SalesRange = isSalesRange(requestedRange) ? requestedRange : "7d";
-  const branchFilter = readParam(params.branch);
+  const requestedBranchFilter = readParam(params.branch);
   const pageSize = readPageSize(readParam(params.pageSize));
   const requestedPage = readPage(readParam(params.page));
   const supabase = await createClient();
@@ -284,6 +285,12 @@ export default async function SalesPage({
 
   const { start: todayStart } = getSingaporeDayBounds();
   const window = rangeWindow(range, todayStart);
+  const branchesResult = await supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name");
+  const branches = (branchesResult.data ?? []) as BranchRecord[];
+  const selectedBranchId = profile.role === "admin"
+    ? await getSelectedAdminBranchId(branches, profile.store_id)
+    : profile.store_id;
+  const branchFilter = selectedBranchId ?? (branches.some((branch) => branch.id === requestedBranchFilter) ? requestedBranchFilter : "");
   let currentOrdersQuery = supabase
     .from("orders")
     .select("id, order_no, store_id, cashier_id, status, subtotal, discount_amount, vat_amount, total, payment_method, created_at")
@@ -311,31 +318,35 @@ export default async function SalesPage({
     productsQuery = productsQuery.eq("store_id", branchFilter);
   }
 
-  const [branchesResult, cashiersResult, productsResult, stockResult, itemsResult, currentOrdersResult, previousOrdersResult] = await Promise.all([
-    supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name"),
-    supabase.from("profiles").select("id, full_name, role").eq("org_id", profile.org_id).order("full_name").limit(200),
+  let itemsQuery = supabase
+    .from("order_items")
+    .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status)")
+    .eq("orders.org_id", profile.org_id)
+    .gte("orders.created_at", window.currentStart.toISOString())
+    .lt("orders.created_at", window.currentEnd.toISOString());
+  if (branchFilter) itemsQuery = itemsQuery.eq("orders.store_id", branchFilter);
+  let cashiersQuery = supabase.from("profiles").select("id, full_name, role").eq("org_id", profile.org_id);
+  if (branchFilter) cashiersQuery = cashiersQuery.eq("store_id", branchFilter);
+  cashiersQuery = cashiersQuery.order("full_name").limit(200);
+
+  const [cashiersResult, productsResult, stockResult, itemsResult, currentOrdersResult, previousOrdersResult] = await Promise.all([
+    cashiersQuery,
     productsQuery,
     // Aggregate the stock ledger in Postgres instead of shipping up to 10,000
     // raw movement rows to the browser on every sales-page load.
     supabase.rpc("current_stock", { p_org_id: profile.org_id }),
     // Items join straight to the current window's orders so this runs in the
     // same round trip as the batch instead of a second sequential .in() query.
-    supabase
-      .from("order_items")
-      .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status)")
-      .eq("orders.org_id", profile.org_id)
-      .gte("orders.created_at", window.currentStart.toISOString())
-      .lt("orders.created_at", window.currentEnd.toISOString()),
+    itemsQuery,
     currentOrdersQuery,
     previousOrdersQuery,
   ]);
 
-  const branches = (branchesResult.data ?? []) as BranchRecord[];
   const cashiers = (cashiersResult.data ?? []) as CashierRecord[];
-  const products = (productsResult.data ?? []) as ProductRecord[];
-  const stock = (stockResult.data ?? []) as StockRow[];
-  const currentOrders = (currentOrdersResult.data ?? []) as SalesOrder[];
-  const previousOrders = (previousOrdersResult.data ?? []) as SalesOrder[];
+  const products = ((productsResult.data ?? []) as ProductRecord[]).filter((product) => !branchFilter || product.store_id === branchFilter);
+  const stock = ((stockResult.data ?? []) as StockRow[]).filter((row) => !branchFilter || row.store_id === branchFilter);
+  const currentOrders = ((currentOrdersResult.data ?? []) as SalesOrder[]).filter((order) => !branchFilter || order.store_id === branchFilter);
+  const previousOrders = ((previousOrdersResult.data ?? []) as SalesOrder[]).filter((order) => !branchFilter || order.store_id === branchFilter);
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
   const cashierById = new Map(cashiers.map((cashier) => [cashier.id, cashier]));
   const productById = new Map(products.map((product) => [product.id, product]));
@@ -442,7 +453,7 @@ export default async function SalesPage({
                   <option value="90d">Last 90 days</option>
                 </select>
                 <label className="sr-only" htmlFor="sales-branch">Sales branch</label>
-                <select id="sales-branch" name="branch" defaultValue={branchFilter} className="inventory-input admin-compact-toolbar__select bg-surface font-bold">
+                <select id="sales-branch" name="branch" defaultValue={branchFilter} disabled={Boolean(selectedBranchId)} className="inventory-input admin-compact-toolbar__select bg-surface font-bold">
                   <option value="">All branches</option>
                   {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.is_active ? "" : " · inactive"}</option>)}
                 </select>

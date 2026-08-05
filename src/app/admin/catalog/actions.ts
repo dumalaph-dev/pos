@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { toCentavos } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
+import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
 
 type PricingMode = "fixed" | "per_kg";
 
@@ -118,13 +119,15 @@ async function updateProductRecord(
   supabase: Awaited<ReturnType<typeof createClient>>,
   orgId: string,
   productId: string,
+  expectedStoreId: string,
   fields: Record<string, unknown>,
 ) {
   const result = await supabase
     .from("products")
     .update(fields)
     .eq("id", productId)
-    .eq("org_id", orgId);
+    .eq("org_id", orgId)
+    .eq("store_id", expectedStoreId);
   if (!result.error || !isMissingOptionalProductColumn(result.error)) {
     return { error: result.error, usedLegacySchema: false };
   }
@@ -133,7 +136,8 @@ async function updateProductRecord(
     .from("products")
     .update(baseProductRecord(fields))
     .eq("id", productId)
-    .eq("org_id", orgId);
+    .eq("org_id", orgId)
+    .eq("store_id", expectedStoreId);
   return { error: fallback.error, usedLegacySchema: !fallback.error };
 }
 
@@ -147,7 +151,7 @@ async function requireAdmin() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("org_id, role")
+    .select("org_id, role, store_id")
     .eq("id", user.id)
     .single();
 
@@ -155,17 +159,38 @@ async function requireAdmin() {
     catalogRedirect("Only organization admins can manage the product catalog.");
   }
 
-  return { supabase, orgId: profile.org_id };
+  const { data: branches, error: branchesError } = await supabase
+    .from("stores")
+    .select("id, name, is_active")
+    .eq("org_id", profile.org_id)
+    .eq("is_active", true);
+
+  if (branchesError) {
+    catalogRedirect("We could not verify the selected branch. Try again.");
+  }
+
+  const selectedBranchId = await getSelectedAdminBranchId(
+    (branches ?? []) as AdminBranchOption[],
+    profile.store_id,
+  );
+
+  return { supabase, orgId: profile.org_id, selectedBranchId };
 }
 
-async function validStore(supabase: Awaited<ReturnType<typeof createClient>>, orgId: string, storeId: string) {
+async function validStore(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orgId: string,
+  storeId: string,
+  selectedBranchId: string | null,
+  requireActive = false,
+) {
   const { data } = await supabase
     .from("stores")
-    .select("id")
+    .select("id, is_active")
     .eq("id", storeId)
     .eq("org_id", orgId)
     .maybeSingle();
-  return Boolean(data);
+  return Boolean(data && (!selectedBranchId || data.id === selectedBranchId) && (!requireActive || data.is_active));
 }
 
 async function validCategory(
@@ -173,6 +198,7 @@ async function validCategory(
   orgId: string,
   storeId: string,
   categoryId: string,
+  selectedBranchId: string | null,
 ) {
   const { data } = await supabase
     .from("categories")
@@ -181,7 +207,21 @@ async function validCategory(
     .eq("store_id", storeId)
     .eq("org_id", orgId)
     .maybeSingle();
-  return Boolean(data);
+  return Boolean(data && (!selectedBranchId || storeId === selectedBranchId));
+}
+
+async function readProductStoreId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orgId: string,
+  productId: string,
+) {
+  const { data } = await supabase
+    .from("products")
+    .select("store_id")
+    .eq("id", productId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  return data?.store_id ?? null;
 }
 
 async function validSupplier(
@@ -208,13 +248,13 @@ function refreshCatalog() {
 }
 
 export async function createCategory(formData: FormData) {
-  const { supabase, orgId } = await requireAdmin();
+  const { supabase, orgId, selectedBranchId } = await requireAdmin();
   const storeId = readText(formData, "store_id");
   const name = readText(formData, "name");
   const icon = readText(formData, "icon");
   const sortOrder = readSortOrder(readText(formData, "sort_order"));
 
-  if (!storeId || !(await validStore(supabase, orgId, storeId))) {
+  if (!storeId || !(await validStore(supabase, orgId, storeId, selectedBranchId, true))) {
     catalogRedirect("Choose a valid branch for this category.");
   }
   if (name.length < 2 || name.length > 80) {
@@ -240,14 +280,14 @@ export async function createCategory(formData: FormData) {
 }
 
 export async function updateCategory(formData: FormData) {
-  const { supabase, orgId } = await requireAdmin();
+  const { supabase, orgId, selectedBranchId } = await requireAdmin();
   const categoryId = readText(formData, "category_id");
   const storeId = readText(formData, "store_id");
   const name = readText(formData, "name");
   const icon = readText(formData, "icon");
   const sortOrder = readSortOrder(readText(formData, "sort_order"));
 
-  if (!categoryId || !storeId || !(await validCategory(supabase, orgId, storeId, categoryId))) {
+  if (!categoryId || !storeId || !(await validStore(supabase, orgId, storeId, selectedBranchId, true)) || !(await validCategory(supabase, orgId, storeId, categoryId, selectedBranchId))) {
     catalogRedirect("That category is not available in your organization.");
   }
   if (name.length < 2 || name.length > 80) {
@@ -266,7 +306,8 @@ export async function updateCategory(formData: FormData) {
       is_active: readBoolean(formData, "is_active"),
     })
     .eq("id", categoryId)
-    .eq("org_id", orgId);
+    .eq("org_id", orgId)
+    .eq("store_id", storeId);
 
   if (error) catalogRedirect(error.message || "The category could not be updated.");
 
@@ -275,7 +316,7 @@ export async function updateCategory(formData: FormData) {
 }
 
 export async function createProduct(formData: FormData) {
-  const { supabase, orgId } = await requireAdmin();
+  const { supabase, orgId, selectedBranchId } = await requireAdmin();
   const storeId = readText(formData, "store_id");
   const categoryId = readText(formData, "category_id");
   const name = readText(formData, "name");
@@ -290,10 +331,10 @@ export async function createProduct(formData: FormData) {
   const imagePath = readImagePath(readText(formData, "image_url"));
   const sortOrder = readSortOrder(readText(formData, "sort_order"));
 
-  if (!storeId || !(await validStore(supabase, orgId, storeId))) {
+  if (!storeId || !(await validStore(supabase, orgId, storeId, selectedBranchId, true))) {
     catalogRedirect("Choose a valid branch for this product.");
   }
-  if (categoryId && !(await validCategory(supabase, orgId, storeId, categoryId))) {
+  if (categoryId && !(await validCategory(supabase, orgId, storeId, categoryId, selectedBranchId))) {
     catalogRedirect("Choose a category from the selected branch.");
   }
   if (name.length < 2 || name.length > 120) {
@@ -338,7 +379,7 @@ export async function createProduct(formData: FormData) {
 }
 
 export async function updateProduct(formData: FormData) {
-  const { supabase, orgId } = await requireAdmin();
+  const { supabase, orgId, selectedBranchId } = await requireAdmin();
   const productId = readText(formData, "product_id");
   const storeId = readText(formData, "store_id");
   const categoryId = readText(formData, "category_id");
@@ -354,10 +395,11 @@ export async function updateProduct(formData: FormData) {
   const imagePath = readImagePath(readText(formData, "image_url"));
   const sortOrder = readSortOrder(readText(formData, "sort_order"));
 
-  if (!productId || !storeId || !(await validStore(supabase, orgId, storeId))) {
+  const currentStoreId = productId ? await readProductStoreId(supabase, orgId, productId) : null;
+  if (!productId || !currentStoreId || (selectedBranchId && currentStoreId !== selectedBranchId) || !storeId || !(await validStore(supabase, orgId, storeId, selectedBranchId, true))) {
     catalogRedirect("Choose a valid branch for this product.");
   }
-  if (categoryId && !(await validCategory(supabase, orgId, storeId, categoryId))) {
+  if (categoryId && !(await validCategory(supabase, orgId, storeId, categoryId, selectedBranchId))) {
     catalogRedirect("Choose a category from the selected branch.");
   }
   if (name.length < 2 || name.length > 120) {
@@ -373,7 +415,7 @@ export async function updateProduct(formData: FormData) {
   if (imagePath === undefined) catalogRedirect("Image paths must be local paths such as /food/product.png.");
   if (sortOrder === null) catalogRedirect("Sort order must be a whole number greater than or equal to zero.");
 
-  const result = await updateProductRecord(supabase, orgId, productId, {
+  const result = await updateProductRecord(supabase, orgId, productId, currentStoreId, {
     store_id: storeId,
     category_id: categoryId || null,
     name,
@@ -398,11 +440,11 @@ export async function updateProduct(formData: FormData) {
 }
 
 export async function importProducts(formData: FormData) {
-  const { supabase, orgId } = await requireAdmin();
+  const { supabase, orgId, selectedBranchId } = await requireAdmin();
   const defaultStoreId = readText(formData, "store_id");
   const csv = readText(formData, "csv");
 
-  if (!defaultStoreId || !(await validStore(supabase, orgId, defaultStoreId))) {
+  if (!defaultStoreId || !(await validStore(supabase, orgId, defaultStoreId, selectedBranchId, true))) {
     catalogRedirect("Choose a valid default branch for the import.");
   }
   if (!csv) catalogRedirect("Paste a CSV file before importing items.");
@@ -416,11 +458,11 @@ export async function importProducts(formData: FormData) {
   }
 
   const [storesResult, categoriesResult, suppliersResult] = await Promise.all([
-    supabase.from("stores").select("id, name").eq("org_id", orgId),
+    supabase.from("stores").select("id, name, is_active").eq("org_id", orgId),
     supabase.from("categories").select("id, store_id, name").eq("org_id", orgId),
     supabase.from("suppliers").select("id, name").eq("org_id", orgId),
   ]);
-  const stores = (storesResult.data ?? []) as Array<{ id: string; name: string }>;
+  const stores = (storesResult.data ?? []) as Array<{ id: string; name: string; is_active: boolean }>;
   const categories = (categoriesResult.data ?? []) as Array<{ id: string; store_id: string; name: string }>;
   const suppliers = (suppliersResult.data ?? []) as Array<{ id: string; name: string }>;
   const defaultStore = stores.find((store) => store.id === defaultStoreId);
@@ -432,6 +474,8 @@ export async function importProducts(formData: FormData) {
     const storeId = row.store_id || defaultStoreId;
     const store = stores.find((item) => item.id === storeId || item.name.toLowerCase() === String(storeId).toLowerCase());
     if (!store) catalogRedirect(`Row ${index + 1}: choose a valid store_id or branch name.`);
+    if (!store.is_active) catalogRedirect(`Row ${index + 1}: products can only be added to an active branch.`);
+    if (selectedBranchId && store.id !== selectedBranchId) catalogRedirect(`Row ${index + 1}: the selected branch is ${selectedBranchId === defaultStoreId ? "required" : "not available"} for this import.`);
     const categoryValue = String(row.category_id ?? row.category ?? "").trim();
     const category = categoryValue ? categories.find((item) => item.id === categoryValue || (item.store_id === store.id && item.name.toLowerCase() === categoryValue.toLowerCase())) : undefined;
     if (categoryValue && !category) catalogRedirect(`Row ${index + 1}: category does not belong to the selected branch.`);
@@ -460,9 +504,9 @@ export async function importProducts(formData: FormData) {
       cost_price: costPrice,
       min_stock: minimumStock,
       unit,
-      track_stock: readImportBoolean(String(row.track_stock ?? ""), true),
+      track_stock: readImportBoolean(typeof row.track_stock === "string" ? row.track_stock : "", true),
       image_url: imagePath,
-      is_active: readImportBoolean(String(row.is_active ?? ""), true),
+      is_active: readImportBoolean(typeof row.is_active === "string" ? row.is_active : "", true),
       sort_order: Number.isInteger(Number(row.sort_order)) && Number(row.sort_order) >= 0 ? Number(row.sort_order) : 0,
     });
   }
@@ -475,7 +519,7 @@ export async function importProducts(formData: FormData) {
 }
 
 export async function toggleProductVisibility(formData: FormData) {
-  const { supabase, orgId } = await requireAdmin();
+  const { supabase, orgId, selectedBranchId } = await requireAdmin();
   const productId = readText(formData, "product_id");
   const requestedValue = readText(formData, "is_active");
   const isActive = requestedValue === "true";
@@ -484,11 +528,17 @@ export async function toggleProductVisibility(formData: FormData) {
     catalogRedirect("That product visibility change is invalid.");
   }
 
+  const currentStoreId = await readProductStoreId(supabase, orgId, productId);
+  if (!currentStoreId || (selectedBranchId && currentStoreId !== selectedBranchId) || !(await validStore(supabase, orgId, currentStoreId, selectedBranchId, true))) {
+    catalogRedirect("That product is outside the selected branch.");
+  }
+
   const { error } = await supabase
     .from("products")
     .update({ is_active: isActive })
     .eq("id", productId)
-    .eq("org_id", orgId);
+    .eq("org_id", orgId)
+    .eq("store_id", currentStoreId);
 
   if (error) catalogRedirect(error.message || "The product visibility could not be updated.");
 
@@ -497,7 +547,7 @@ export async function toggleProductVisibility(formData: FormData) {
 }
 
 export async function bulkUpdateProducts(formData: FormData) {
-  const { supabase, orgId } = await requireAdmin();
+  const { supabase, orgId, selectedBranchId } = await requireAdmin();
   const selectedIds = formData.getAll("product_ids").filter((value): value is string => typeof value === "string" && value.trim().length > 0);
   const productIds = Array.from(new Set(selectedIds)).slice(0, 100);
   const isActive = readText(formData, "is_active");
@@ -513,11 +563,28 @@ export async function bulkUpdateProducts(formData: FormData) {
   if (trackStock !== "leave") fields.track_stock = trackStock === "true";
   if (Object.keys(fields).length === 0) catalogRedirect("Choose at least one field to update.");
 
-  const { error } = await supabase
+  const { data: selectedProducts, error: selectedProductsError } = await supabase
+    .from("products")
+    .select("id, store_id")
+    .eq("org_id", orgId)
+    .in("id", productIds);
+
+  const selectedStoreIds = Array.from(new Set((selectedProducts ?? []).map((product) => product.store_id)));
+  const { data: activeStores, error: activeStoresError } = selectedStoreIds.length
+    ? await supabase.from("stores").select("id").eq("org_id", orgId).eq("is_active", true).in("id", selectedStoreIds)
+    : { data: [], error: null };
+  const activeStoreIds = new Set((activeStores ?? []).map((store) => store.id));
+  if (selectedProductsError || selectedProducts?.length !== productIds.length || selectedProducts.some((product) => selectedBranchId && product.store_id !== selectedBranchId) || activeStoresError || activeStoreIds.size !== selectedStoreIds.length) {
+    catalogRedirect("One or more selected products are outside the current branch context.");
+  }
+
+  let productUpdate = supabase
     .from("products")
     .update(fields)
     .eq("org_id", orgId)
     .in("id", productIds);
+  if (selectedBranchId) productUpdate = productUpdate.eq("store_id", selectedBranchId);
+  const { error } = await productUpdate;
 
   if (error) catalogRedirect(error.message || "The selected products could not be updated.");
 

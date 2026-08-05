@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import { createClient } from "@/lib/supabase/server";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -28,13 +29,22 @@ export async function GET(request: Request) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("org_id, role")
+    .select("org_id, role, store_id")
     .eq("id", user.id)
     .single();
 
   if (!profile || profile.role === "cashier") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  const { data: branches } = await supabase
+    .from("stores")
+    .select("id, name, is_active")
+    .eq("org_id", profile.org_id);
+  const branchOptions = (branches ?? []) as Array<{ id: string; name: string; is_active: boolean }>;
+  const selectedBranchId = profile.role === "admin"
+    ? await getSelectedAdminBranchId(branchOptions, profile.store_id)
+    : profile.store_id;
 
   const url = new URL(request.url);
   const requestedRange = url.searchParams.get("range");
@@ -50,7 +60,8 @@ export async function GET(request: Request) {
   if (requestedRange !== "all") {
     ordersQuery = ordersQuery.gte("created_at", start.toISOString()).lt("created_at", new Date(end.getTime() + DAY_MS).toISOString());
   }
-  const branchFilter = url.searchParams.get("branch");
+  const requestedBranchFilter = url.searchParams.get("branch") ?? "";
+  const branchFilter = selectedBranchId ?? (branchOptions.some((branch) => branch.id === requestedBranchFilter) ? requestedBranchFilter : "");
   if (branchFilter) ordersQuery = ordersQuery.eq("store_id", branchFilter);
   const statusFilter = url.searchParams.get("status");
   if (statusFilter === "completed" || statusFilter === "voided" || statusFilter === "refunded") {

@@ -9,6 +9,7 @@ import { formatStockQuantity, salesQuantity, stockMovementDelta, stockStatus, ty
 import { formatPeso } from "@/lib/money";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
+import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import {
   bulkUpdateProducts,
   createCategory,
@@ -71,6 +72,7 @@ type LegacyProductRecord = Omit<ProductRecord, "sku" | "barcode" | "cost_price" 
 
 type OrderRecord = {
   id: string;
+  store_id: string;
   total: number;
   status: "completed" | "voided" | "refunded";
   created_at: string;
@@ -354,74 +356,118 @@ export default async function ProductsPage({
   const currentStart = new Date(todayStart.getTime() - DAY_MS * (selectedDays - 1));
   const previousStart = new Date(currentStart.getTime() - DAY_MS * selectedDays);
 
-  const currentOrdersQuery = supabase
+  const branchesResult = await supabase
+    .from("stores")
+    .select("id, name, is_active")
+    .eq("org_id", profile.org_id)
+    .order("name");
+  const branches = (branchesResult.data ?? []) as BranchRecord[];
+  const selectedBranchId = profile.role === "admin"
+    ? await getSelectedAdminBranchId(branches, profile.store_id)
+    : profile.store_id;
+  const visibleBranches = selectedBranchId
+    ? branches.filter((branch) => branch.id === selectedBranchId)
+    : branches;
+
+  let currentOrdersQuery = supabase
     .from("orders")
-    .select("id, total, status, created_at")
+    .select("id, store_id, total, status, created_at")
     .eq("org_id", profile.org_id)
     .eq("status", "completed")
     .gte("created_at", currentStart.toISOString())
     .lt("created_at", todayEnd.toISOString())
     .order("created_at", { ascending: false })
     .limit(5000);
-  const previousOrdersQuery = supabase
+  let previousOrdersQuery = supabase
     .from("orders")
-    .select("id, total, status, created_at")
+    .select("id, store_id, total, status, created_at")
     .eq("org_id", profile.org_id)
     .eq("status", "completed")
     .gte("created_at", previousStart.toISOString())
     .lt("created_at", currentStart.toISOString())
     .limit(5000);
 
-  const [branchesResult, categoriesResult, productsResult, suppliersResult, stockResult, currentOrdersResult, previousOrdersResult, orderItemsResult] = await Promise.all([
-    supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name"),
-    supabase.from("categories").select("id, store_id, name, icon, sort_order, is_active").eq("org_id", profile.org_id).order("sort_order").order("name"),
-    supabase.from("products").select("id, store_id, category_id, name, sku, barcode, pricing_mode, price, cost_price, min_stock, unit, supplier_id, track_stock, image_url, is_active, sort_order").eq("org_id", profile.org_id).order("sort_order").order("name").limit(1000),
+  let categoriesQuery = supabase
+    .from("categories")
+    .select("id, store_id, name, icon, sort_order, is_active")
+    .eq("org_id", profile.org_id)
+    .order("sort_order")
+    .order("name");
+  let productsQuery = supabase
+    .from("products")
+    .select("id, store_id, category_id, name, sku, barcode, pricing_mode, price, cost_price, min_stock, unit, supplier_id, track_stock, image_url, is_active, sort_order")
+    .eq("org_id", profile.org_id)
+    .order("sort_order")
+    .order("name")
+    .limit(1000);
+  let orderItemsQuery = supabase
+    .from("order_items")
+    .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status)")
+    .eq("orders.org_id", profile.org_id)
+    .eq("orders.status", "completed")
+    .gte("orders.created_at", currentStart.toISOString())
+    .lt("orders.created_at", todayEnd.toISOString());
+  if (selectedBranchId) {
+    currentOrdersQuery = currentOrdersQuery.eq("store_id", selectedBranchId);
+    previousOrdersQuery = previousOrdersQuery.eq("store_id", selectedBranchId);
+    categoriesQuery = categoriesQuery.eq("store_id", selectedBranchId);
+    productsQuery = productsQuery.eq("store_id", selectedBranchId);
+    orderItemsQuery = orderItemsQuery.eq("orders.store_id", selectedBranchId);
+  }
+
+  const [categoriesResult, productsResult, suppliersResult, stockResult, currentOrdersResult, previousOrdersResult, orderItemsResult] = await Promise.all([
+    categoriesQuery,
+    productsQuery,
     supabase.from("suppliers").select("id, name, is_active").eq("org_id", profile.org_id).order("name").limit(1000),
     supabase.rpc("current_stock", { p_org_id: profile.org_id }),
     currentOrdersQuery,
     previousOrdersQuery,
-    supabase
-      .from("order_items")
-      .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status)")
-      .eq("orders.org_id", profile.org_id)
-      .eq("orders.status", "completed")
-      .gte("orders.created_at", currentStart.toISOString())
-      .lt("orders.created_at", todayEnd.toISOString()),
+    orderItemsQuery,
   ]);
 
-  const branches = (branchesResult.data ?? []) as BranchRecord[];
-  const categories = (categoriesResult.data ?? []) as CategoryRecord[];
+  const allCategories = (categoriesResult.data ?? []) as CategoryRecord[];
+  const categories = selectedBranchId
+    ? allCategories.filter((category) => category.store_id === selectedBranchId)
+    : allCategories;
   let products = (productsResult.data ?? []) as ProductRecord[];
   let fallbackProductsError = false;
   const productsSchemaWarning = isMissingOptionalProductField(productsResult.error);
   const suppliersSchemaWarning = isMissingSupplierSchema(suppliersResult.error);
   if (productsResult.error) {
-    const fallbackProductsResult = await supabase
+    let fallbackProductsQuery = supabase
       .from("products")
       .select("id, store_id, category_id, name, pricing_mode, price, unit, track_stock, image_url, is_active, sort_order")
       .eq("org_id", profile.org_id)
       .order("sort_order")
       .order("name")
       .limit(1000);
+    if (selectedBranchId) fallbackProductsQuery = fallbackProductsQuery.eq("store_id", selectedBranchId);
+    const fallbackProductsResult = await fallbackProductsQuery;
     fallbackProductsError = Boolean(fallbackProductsResult.error);
     const fallbackProducts = (fallbackProductsResult.data ?? []) as LegacyProductRecord[];
     products = fallbackProducts.map((product) => ({ ...product, sku: null, barcode: null, cost_price: null, min_stock: 2, supplier_id: null }));
+  }
+
+  if (selectedBranchId) {
+    products = products.filter((product) => product.store_id === selectedBranchId);
   }
 
   const suppliers = (suppliersResult.data ?? []) as SupplierRecord[];
   let fallbackMovements: MovementRecord[] = [];
   let stockFallbackError = false;
   if (stockResult.error) {
-    const fallbackMovementsResult = await supabase
+    let fallbackMovementsQuery = supabase
       .from("stock_movements")
       .select("store_id, product_id, type, qty")
       .eq("org_id", profile.org_id)
       .limit(10000);
+    if (selectedBranchId) fallbackMovementsQuery = fallbackMovementsQuery.eq("store_id", selectedBranchId);
+    const fallbackMovementsResult = await fallbackMovementsQuery;
     fallbackMovements = (fallbackMovementsResult.data ?? []) as MovementRecord[];
     stockFallbackError = Boolean(fallbackMovementsResult.error);
   }
-  const currentOrders = (currentOrdersResult.data ?? []) as OrderRecord[];
-  const previousOrders = (previousOrdersResult.data ?? []) as OrderRecord[];
+  const currentOrders = ((currentOrdersResult.data ?? []) as OrderRecord[]).filter((order) => !selectedBranchId || order.store_id === selectedBranchId);
+  const previousOrders = ((previousOrdersResult.data ?? []) as OrderRecord[]).filter((order) => !selectedBranchId || order.store_id === selectedBranchId);
   const orderItems = (orderItemsResult.data ?? []) as OrderItemRecord[];
   const orderItemsError = Boolean(orderItemsResult.error);
 
@@ -504,7 +550,7 @@ export default async function ProductsPage({
     ...(categoryCounts.get("uncategorized") ? [{ id: "uncategorized", name: "Uncategorized", icon: "•", count: categoryCounts.get("uncategorized") ?? 0 }] : []),
   ];
   const categoryOverview = categories.map((category) => ({ ...category, count: categoryCounts.get(category.id) ?? 0 })).filter((category) => category.count > 0 || category.is_active);
-  const currentBranchName = profile.store_id ? branchById.get(profile.store_id)?.name ?? DEFAULT_STORE_NAME : "All branches";
+  const currentBranchName = selectedBranchId ? branchById.get(selectedBranchId)?.name ?? DEFAULT_STORE_NAME : "All branches";
   const orgName = profile.organizations?.name ?? DEFAULT_STORE_NAME;
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
   const userInitial = firstName.charAt(0).toUpperCase();
@@ -513,6 +559,8 @@ export default async function ProductsPage({
   );
   const canWrite = profile.role === "admin";
   const selectedProduct = selectedProductId ? productById.get(selectedProductId) : undefined;
+  const formBranches = visibleBranches.filter((branch) => branch.is_active);
+  const formDefaultBranch = selectedBranchId ?? formBranches[0]?.id ?? "";
   const baseHref = { q: searchQuery, category: categoryFilter, status, posOnly, range, pageSize, columns };
 
   return (
@@ -564,10 +612,10 @@ export default async function ProductsPage({
           {(productsSchemaWarning || suppliersSchemaWarning) && <div role="status" className="products-alert products-alert--warning"><strong>Some product fields are unavailable.</strong> Ensure <code>0009_admin_business_records.sql</code> is applied before <code>0010_inventory_catalog_fields.sql</code> in Supabase to enable suppliers and advanced inventory fields.</div>}
           {dataWarning && <div role="status" className="products-alert products-alert--warning">Some product insights could not refresh. The page is showing the data that was available; product edits remain protected by your admin role.</div>}
 
-          {action === "edit" && selectedProduct && <ProductEditPanel product={selectedProduct} branches={branches} categories={categories} suppliers={suppliers} canWrite={canWrite} />}
-          {action === "product" && <ProductCreatePanel branches={branches} categories={categories} suppliers={suppliers} defaultBranch={profile.store_id ?? branches[0]?.id ?? ""} canWrite={canWrite} orgName={orgName} />}
-          {action === "category" && <CategoryActionPanel branches={branches} categories={categories} defaultBranch={profile.store_id ?? branches[0]?.id ?? ""} canWrite={canWrite} branchById={branchById} />}
-          {action === "import" && <ImportPanel branches={branches} defaultBranch={profile.store_id ?? branches[0]?.id ?? ""} canWrite={canWrite} />}
+          {action === "edit" && selectedProduct && <ProductEditPanel product={selectedProduct} branches={visibleBranches} categories={categories} suppliers={suppliers} canWrite={canWrite} />}
+          {action === "product" && <ProductCreatePanel branches={formBranches} categories={categories} suppliers={suppliers} defaultBranch={formDefaultBranch} canWrite={canWrite} orgName={orgName} />}
+          {action === "category" && <CategoryActionPanel branches={formBranches} categories={categories} defaultBranch={formDefaultBranch} canWrite={canWrite} branchById={branchById} />}
+          {action === "import" && <ImportPanel branches={formBranches} defaultBranch={formDefaultBranch} canWrite={canWrite} />}
           {action === "bulk" && <BulkUpdatePanel canWrite={canWrite} />}
 
           <section aria-label="Product performance" className="products-kpi-grid">
@@ -662,7 +710,7 @@ function CategoryActionPanel({ branches, categories, defaultBranch, canWrite, br
 }
 
 function CategoryEditor({ category, branchName, canWrite }: { category: CategoryRecord; branchName: string; canWrite: boolean }) {
-  return <form action={updateCategory} className="products-existing-category"><input type="hidden" name="category_id" value={category.id} /><input type="hidden" name="store_id" value={category.store_id} /><span className="products-category-row__icon">{category.icon || "•"}</span><div className="products-existing-category__copy"><strong>{category.name}</strong><small>{branchName}</small></div><input name="name" aria-label={`Name for ${category.name}`} defaultValue={category.name} disabled={!canWrite} className="inventory-input inventory-input--compact" /><input name="sort_order" aria-label={`Sort order for ${category.name}`} type="number" min="0" step="1" defaultValue={category.sort_order} disabled={!canWrite} className="inventory-input inventory-input--compact w-16 text-center tnums" /><label className="products-checkbox-label"><input type="checkbox" name="is_active" defaultChecked={category.is_active} disabled={!canWrite} /> Visible</label><button type="submit" disabled={!canWrite} className="products-small-primary">Save</button></form>;
+  return <form action={updateCategory} className="products-existing-category"><input type="hidden" name="category_id" value={category.id} /><input type="hidden" name="store_id" value={category.store_id} /><input type="hidden" name="icon" value={category.icon ?? ""} /><span className="products-category-row__icon">{category.icon || "•"}</span><div className="products-existing-category__copy"><strong>{category.name}</strong><small>{branchName}</small></div><input name="name" aria-label={`Name for ${category.name}`} defaultValue={category.name} disabled={!canWrite} className="inventory-input inventory-input--compact" /><input name="sort_order" aria-label={`Sort order for ${category.name}`} type="number" min="0" step="1" defaultValue={category.sort_order} disabled={!canWrite} className="inventory-input inventory-input--compact w-16 text-center tnums" /><label className="products-checkbox-label"><input type="checkbox" name="is_active" defaultChecked={category.is_active} disabled={!canWrite} /> Visible</label><button type="submit" disabled={!canWrite} className="products-small-primary">Save</button></form>;
 }
 
 function ImportPanel({ branches, defaultBranch, canWrite }: { branches: BranchRecord[]; defaultBranch: string; canWrite: boolean }) {

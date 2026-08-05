@@ -143,6 +143,12 @@ function devicePaperWidth(config: Record<string, unknown>) {
   return config.paper_width === 80 || config.paper_width === "80" ? "80" : "58";
 }
 
+function deviceLastSeen(value: string | null) {
+  if (!value) return "Never connected";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Last seen unavailable" : `Last seen ${formatDateTime(date)}`;
+}
+
 function formatDateTime(value: Date) {
   return new Intl.DateTimeFormat("en-PH", {
     month: "short",
@@ -413,8 +419,9 @@ export default function PosSettingsScreen({
     try {
       const settings = devicePrinterSettings(device);
       const printer = await getPrinter(settings);
+      const deviceBranchName = deviceBranchOptions.find((branch) => branch.id === device.store_id)?.name ?? currentBranchName;
       await printer.print(buildReceipt({
-        storeName: currentBranchName,
+        storeName: deviceBranchName,
         storeAddress: currentAddress,
         storeTin: currentTin,
         orderNo: "POS-TEST",
@@ -878,7 +885,8 @@ function HardwarePanel({ devices, deviceBranches, currentStoreId, canWrite, devi
   const defaultBranch = currentStoreId || deviceBranches[0]?.id || "";
   return (
     <div className="pos-config-panel">
-      <PanelHeading eyebrow="Terminal connections" title="POS terminals and printers" description="Register and maintain the physical counters that print orders and open the cash drawer for this branch." />
+      <PanelHeading eyebrow="Terminal connections" title="POS terminals and printers" description="Register, configure, and retire the physical tablets that print orders and open the cash drawer for the selected branch context." />
+      <div className="mt-3 flex flex-wrap items-center gap-3 text-xs"><span className="text-ink-muted">For a fresh tablet:</span><Link href="/setup" className="font-extrabold text-primary hover:underline">Open guided onboarding <MiniIcon name="arrow" size={13} /></Link></div>
       <div className="pos-hardware-layout">
         <form action={createDeviceSettings} className="pos-hardware-form">
           <div className="pos-hardware-form__heading"><div><p>New terminal</p><h3>Register a POS device</h3><span>Give each counter a unique prefix for order numbers.</span></div><span className="pos-hardware-badge">Admin only</span></div>
@@ -913,5 +921,5 @@ function DevicePrinterFields({ prefix, config, transport, canWrite }: { prefix: 
 function DeviceEditor({ device, deviceBranches, canWrite, deviceTest, onTestDevice }: { device: AdminPosDevice; deviceBranches: Array<{ id: string; name: string }>; canWrite: boolean; deviceTest: string | null; onTestDevice: (device: AdminPosDevice) => void }) {
   const branchName = deviceBranches.find((branch) => branch.id === device.store_id)?.name ?? "Selected branch";
   const transport = device.printer_transport ?? "network";
-  return <form action={updateDeviceSettings} className="pos-device-editor"><div className="pos-device-editor__header"><div className="pos-device-editor__identity"><span className={`pos-hardware-status ${device.is_active ? "is-active" : ""}`} /><span className="pos-hardware-icon"><MiniIcon name="desktop" size={18} /></span><div><strong>{device.name}</strong><small>{branchName} · {transport[0].toUpperCase() + transport.slice(1)} printer · {device.is_active ? "Active" : "Disabled"}</small></div></div><button type="button" className="pos-outline-button pos-device-test" onClick={() => onTestDevice(device)} disabled={deviceTest !== null}>{deviceTest === device.id ? "Testing..." : "Test receipt"}</button></div><input type="hidden" name="device_id" value={device.id} /><div className="pos-config-grid"><DeviceBranchField id={`device-${device.id}-store`} name="store_id" value={device.store_id} branches={deviceBranches} canWrite={canWrite} /><label className="pos-config-field"><span>Terminal name</span><input name="name" defaultValue={device.name} disabled={!canWrite} required maxLength={80} /></label><label className="pos-config-field"><span>Device prefix</span><input name="device_prefix" defaultValue={device.device_prefix} disabled={!canWrite} required maxLength={12} /></label></div><DevicePrinterFields prefix={`device-${device.id}`} config={device.printer_config ?? {}} transport={transport} canWrite={canWrite} /><div className="pos-device-editor__footer"><label className="pos-checkbox"><input type="checkbox" name="is_active" defaultChecked={device.is_active} disabled={!canWrite} /><span>Terminal active</span></label><button type="submit" className="pos-outline-button" disabled={!canWrite}>Save terminal settings</button></div></form>;
+  return <form action={updateDeviceSettings} className="pos-device-editor"><div className="pos-device-editor__header"><div className="pos-device-editor__identity"><span className={`pos-hardware-status ${device.is_active ? "is-active" : ""}`} /><span className="pos-hardware-icon"><MiniIcon name="desktop" size={18} /></span><div><strong>{device.name}</strong><small>{branchName} · {transport[0].toUpperCase() + transport.slice(1)} printer · {device.is_active ? "Active" : "Disabled"} · {deviceLastSeen(device.last_seen_at)}</small></div></div><button type="button" className="pos-outline-button pos-device-test" onClick={() => onTestDevice(device)} disabled={deviceTest !== null || !device.is_active}>{deviceTest === device.id ? "Testing..." : "Test receipt"}</button></div><input type="hidden" name="device_id" value={device.id} /><div className="pos-config-grid"><DeviceBranchField id={`device-${device.id}-store`} name="store_id" value={device.store_id} branches={deviceBranches} canWrite={canWrite} /><label className="pos-config-field"><span>Terminal name</span><input name="name" defaultValue={device.name} disabled={!canWrite} required maxLength={80} /></label><label className="pos-config-field"><span>Device prefix</span><input name="device_prefix" defaultValue={device.device_prefix} disabled={!canWrite} required maxLength={12} /></label></div><DevicePrinterFields prefix={`device-${device.id}`} config={device.printer_config ?? {}} transport={transport} canWrite={canWrite} /><div className="pos-device-editor__footer"><label className="pos-checkbox"><input type="checkbox" name="is_active" defaultChecked={device.is_active} disabled={!canWrite} /><span>{device.is_active ? "Terminal active" : "Terminal retired"}</span></label><button type="submit" className="pos-outline-button" disabled={!canWrite}>Save terminal settings</button></div></form>;
 }

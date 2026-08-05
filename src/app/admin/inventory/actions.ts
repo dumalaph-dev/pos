@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { toCentavos } from "@/lib/money";
 import { STOCK_MOVEMENT_TYPES, type StockMovementType } from "@/lib/inventory";
 import { createClient } from "@/lib/supabase/server";
+import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
 
 function inventoryRedirect(message: string): never {
   redirect(`/admin/inventory?error=${encodeURIComponent(message)}`);
@@ -30,13 +31,26 @@ export async function recordStockMovement(formData: FormData) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("org_id, role")
+    .select("org_id, role, store_id")
     .eq("id", user.id)
     .single();
 
   if (!profile || profile.role !== "admin") {
     inventoryRedirect("Only organization admins can record stock movements.");
   }
+
+  const { data: branches, error: branchesError } = await supabase
+    .from("stores")
+    .select("id, name, is_active")
+    .eq("org_id", profile.org_id)
+    .eq("is_active", true);
+
+  if (branchesError) inventoryRedirect("We could not verify the selected branch. Try again.");
+
+  const selectedBranchId = await getSelectedAdminBranchId(
+    (branches ?? []) as AdminBranchOption[],
+    profile.store_id,
+  );
 
   const storeId = readText(formData, "store_id");
   const productId = readText(formData, "product_id");
@@ -47,6 +61,28 @@ export async function recordStockMovement(formData: FormData) {
 
   if (!storeId || !productId || !movementType || !Number.isFinite(quantity)) {
     inventoryRedirect("Choose a branch, tracked product, movement type, and valid quantity.");
+  }
+
+  if (selectedBranchId && storeId !== selectedBranchId) {
+    inventoryRedirect("Choose the branch currently selected in the workspace.");
+  }
+
+  const { data: branch } = await supabase
+    .from("stores")
+    .select("id")
+    .eq("id", storeId)
+    .eq("org_id", profile.org_id)
+    .eq("is_active", true)
+    .maybeSingle();
+  const { data: product } = await supabase
+    .from("products")
+    .select("id, store_id, track_stock")
+    .eq("id", productId)
+    .eq("org_id", profile.org_id)
+    .maybeSingle();
+
+  if (!branch || !product || product.store_id !== storeId || !product.track_stock) {
+    inventoryRedirect("Choose an active branch and a tracked product from that branch.");
   }
 
   if (quantity === 0 || (movementType !== "adjust" && quantity < 0)) {

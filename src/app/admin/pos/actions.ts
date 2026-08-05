@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { POS_PALETTE_IDS } from "@/lib/pos-palette";
 import { POS_THEME_IDS } from "@/lib/pos-theme";
+import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
 
 type JsonRecord = Record<string, unknown>;
 type PrinterTransport = "network" | "bluetooth" | "usb";
@@ -69,22 +70,31 @@ async function requireAdminStore(storeId: string) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("org_id, role")
+    .select("org_id, role, store_id")
     .eq("id", user.id)
     .single();
 
   if (!profile || profile.role !== "admin") posRedirect("Only organization admins can save POS settings.");
+
+  const { data: branches, error: branchesError } = await supabase
+    .from("stores")
+    .select("id, name, is_active")
+    .eq("org_id", profile.org_id)
+    .eq("is_active", true);
+  if (branchesError) posRedirect("We could not verify the selected branch. Try again.", "receipts");
+  const selectedBranchId = await getSelectedAdminBranchId((branches ?? []) as AdminBranchOption[], profile.store_id);
 
   const { data: store } = await supabase
     .from("stores")
     .select("id, name, address, tin, settings, vat_rate, vat_registered")
     .eq("id", storeId)
     .eq("org_id", profile.org_id)
+    .eq("is_active", true)
     .maybeSingle();
 
-  if (!store) posRedirect("Choose a valid branch before saving POS settings.");
+  if (!store || (selectedBranchId && selectedBranchId !== storeId)) posRedirect("Choose the branch currently selected in the workspace.", "receipts");
 
-  return { supabase, store };
+  return { supabase, store, orgId: profile.org_id };
 }
 
 function normalizePosSettings(value: JsonRecord, fallback: JsonRecord, fallbackVatRate: number, fallbackShowVat: boolean): JsonRecord {
@@ -130,7 +140,7 @@ export async function savePosSettings(formData: FormData) {
   const incoming = readSettings(serialized);
   if (!incoming) return { ok: false, message: "POS settings could not be read." };
 
-  const { supabase, store } = await requireAdminStore(storeId);
+  const { supabase, store, orgId } = await requireAdminStore(storeId);
   const branchName = formData.has("branch_name") ? readText(formData, "branch_name") : String(store.name ?? "");
   const address = formData.has("address") ? readText(formData, "address") : String(store.address ?? "");
   const tin = formData.has("tin") ? readText(formData, "tin") : String(store.tin ?? "");
@@ -164,7 +174,9 @@ export async function savePosSettings(formData: FormData) {
       vat_rate: nextPosSettings.vatRate,
       vat_registered: nextPosSettings.showVat,
     })
-    .eq("id", storeId);
+    .eq("id", storeId)
+    .eq("org_id", orgId)
+    .eq("is_active", true);
 
   if (error) return { ok: false, message: error.message || "POS settings could not be saved." };
 
@@ -217,35 +229,68 @@ async function requireAdmin() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("org_id, role")
+    .select("org_id, role, store_id")
     .eq("id", user.id)
     .single();
 
   if (!profile || profile.role !== "admin") posRedirect("Only organization admins can manage terminals.", "hardware");
-  return { supabase, orgId: profile.org_id };
+  const { data: branches, error: branchesError } = await supabase
+    .from("stores")
+    .select("id, name, is_active")
+    .eq("org_id", profile.org_id)
+    .eq("is_active", true);
+  if (branchesError) posRedirect("We could not verify the selected branch. Try again.", "hardware");
+  const selectedBranchId = await getSelectedAdminBranchId((branches ?? []) as AdminBranchOption[], profile.store_id);
+  return { supabase, orgId: profile.org_id, userId: user.id, selectedBranchId };
 }
 
-async function validStore(supabase: Awaited<ReturnType<typeof createClient>>, orgId: string, storeId: string) {
-  const { data } = await supabase.from("stores").select("id").eq("id", storeId).eq("org_id", orgId).maybeSingle();
-  return Boolean(data);
+async function validStore(supabase: Awaited<ReturnType<typeof createClient>>, orgId: string, storeId: string, selectedBranchId: string | null) {
+  const { data } = await supabase.from("stores").select("id").eq("id", storeId).eq("org_id", orgId).eq("is_active", true).maybeSingle();
+  return Boolean(data && (!selectedBranchId || selectedBranchId === storeId));
 }
 
-async function validDeviceStore(supabase: Awaited<ReturnType<typeof createClient>>, orgId: string, storeId: string) {
-  if (!(await validStore(supabase, orgId, storeId))) posRedirect("Choose a branch from your organization.", "hardware");
+async function validDeviceStore(supabase: Awaited<ReturnType<typeof createClient>>, orgId: string, storeId: string, selectedBranchId: string | null) {
+  if (!(await validStore(supabase, orgId, storeId, selectedBranchId))) posRedirect("Choose the active branch selected in the workspace.", "hardware");
 }
 
 function refreshPos() {
   revalidatePath("/admin/pos");
+  revalidatePath("/admin");
+  revalidatePath("/admin/branches");
+  revalidatePath("/admin/audit");
   revalidatePath("/admin/settings");
   revalidatePath("/pos");
 }
 
-export async function createDeviceSettings(formData: FormData) {
-  const { supabase, orgId } = await requireAdmin();
-  const fields = readDeviceFields(formData);
-  await validDeviceStore(supabase, orgId, fields.storeId);
+async function writeDeviceAudit(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orgId: string,
+  userId: string,
+  deviceId: string,
+  storeId: string,
+  action: "device.created" | "device.updated",
+  before: unknown,
+  after: unknown,
+) {
+  await supabase.from("audit_logs").insert({
+    org_id: orgId,
+    store_id: storeId,
+    actor_id: userId,
+    action,
+    entity: "devices",
+    entity_id: deviceId,
+    device_id: deviceId,
+    before,
+    after,
+  });
+}
 
-  const { error } = await supabase.from("devices").insert({
+export async function createDeviceSettings(formData: FormData) {
+  const { supabase, orgId, userId, selectedBranchId } = await requireAdmin();
+  const fields = readDeviceFields(formData);
+  await validDeviceStore(supabase, orgId, fields.storeId, selectedBranchId);
+
+  const { data: device, error } = await supabase.from("devices").insert({
     org_id: orgId,
     store_id: fields.storeId,
     name: fields.name,
@@ -259,27 +304,29 @@ export async function createDeviceSettings(formData: FormData) {
       bridge_port: fields.bridgePort,
     },
     is_active: true,
-  });
+  }).select("id").maybeSingle();
   if (error) posRedirect(error.message || "The terminal could not be created.", "hardware");
+  if (device) await writeDeviceAudit(supabase, orgId, userId, device.id, fields.storeId, "device.created", null, { name: fields.name, device_prefix: fields.devicePrefix, is_active: true });
 
   refreshPos();
   posSaved("device", "hardware");
 }
 
 export async function updateDeviceSettings(formData: FormData) {
-  const { supabase, orgId } = await requireAdmin();
+  const { supabase, orgId, userId, selectedBranchId } = await requireAdmin();
   const deviceId = readText(formData, "device_id");
   const fields = readDeviceFields(formData);
-  await validDeviceStore(supabase, orgId, fields.storeId);
+  await validDeviceStore(supabase, orgId, fields.storeId, selectedBranchId);
   if (!deviceId) posRedirect("The terminal identifier is missing.", "hardware");
 
   const { data: existing } = await supabase
     .from("devices")
-    .select("printer_config")
+    .select("store_id, name, device_prefix, printer_transport, printer_config, is_active")
     .eq("id", deviceId)
     .eq("org_id", orgId)
     .maybeSingle();
   if (!existing) posRedirect("That terminal is not available in your organization.", "hardware");
+  if (selectedBranchId && existing.store_id !== selectedBranchId) posRedirect("That terminal is outside the selected branch.", "hardware");
 
   const currentConfig = isRecord(existing.printer_config) ? existing.printer_config : {};
   const printerConfig = {
@@ -303,6 +350,7 @@ export async function updateDeviceSettings(formData: FormData) {
     .eq("id", deviceId)
     .eq("org_id", orgId);
   if (error) posRedirect(error.message || "The terminal settings could not be saved.", "hardware");
+  await writeDeviceAudit(supabase, orgId, userId, deviceId, fields.storeId, "device.updated", existing, { name: fields.name, device_prefix: fields.devicePrefix, is_active: readFormBoolean(formData, "is_active") });
 
   refreshPos();
   posSaved("device", "hardware");

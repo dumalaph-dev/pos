@@ -4,6 +4,7 @@ import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
+import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 
 type AdminRole = "admin" | "manager" | "cashier";
 
@@ -174,7 +175,7 @@ export default async function AuditPage({
   }>;
 }) {
   const params = await searchParams;
-  const branchFilter = readParam(params.branch);
+  const requestedBranchFilter = readParam(params.branch);
   const actorFilter = readParam(params.actor);
   const actionFilter = readParam(params.action);
   const requestedPage = readPage(params.page);
@@ -198,6 +199,17 @@ export default async function AuditPage({
   if (profile?.password_change_required) redirect("/account/password?required=1");
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile) return <AuditProfileMissing />;
+
+  const branchesResult = await supabase
+    .from("stores")
+    .select("id, name, is_active")
+    .eq("org_id", profile.org_id)
+    .order("name");
+  const branches = (branchesResult.data ?? []) as BranchRecord[];
+  const selectedBranchId = profile.role === "admin"
+    ? await getSelectedAdminBranchId(branches, profile.store_id)
+    : profile.store_id;
+  const branchFilter = selectedBranchId ?? (branches.some((branch) => branch.id === requestedBranchFilter) ? requestedBranchFilter : "");
 
   let auditQuery = supabase
     .from("audit_logs")
@@ -229,14 +241,12 @@ export default async function AuditPage({
   }
 
   const offset = (requestedPage - 1) * PAGE_SIZE;
-  const [branchesResult, actorsResult, auditResult, actionResult] = await Promise.all([
-    supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name"),
+  const [actorsResult, auditResult, actionResult] = await Promise.all([
     supabase.from("profiles").select("id, full_name, role, store_id").eq("org_id", profile.org_id).order("full_name").limit(200),
     auditQuery.order("created_at", { ascending: false }).range(offset, offset + PAGE_SIZE - 1),
     actionQuery.order("action").limit(ACTION_LOOKUP_LIMIT),
   ]);
 
-  const branches = (branchesResult.data ?? []) as BranchRecord[];
   const actors = (actorsResult.data ?? []) as ActorRecord[];
   const auditLogs = (auditResult.data ?? []) as AuditLogRecord[];
   const totalCount = auditResult.count ?? 0;
@@ -255,7 +265,7 @@ export default async function AuditPage({
 
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
   const actorById = new Map(actors.map((actor) => [actor.id, actor]));
-  const currentBranchName = profile.store_id ? branchById.get(profile.store_id)?.name ?? "Current branch" : "All branches";
+  const currentBranchName = branchFilter ? branchById.get(branchFilter)?.name ?? "Selected branch" : "All branches";
   const firstName = profile.full_name?.trim().split(/\s+/)[0] || user.email?.split("@")[0] || "Admin";
   const queryWarning = Boolean(branchesResult.error || actorsResult.error || auditResult.error || actionResult.error);
   const allTime = hasExplicitDateRange && !dateFrom && !dateTo;
@@ -293,7 +303,7 @@ export default async function AuditPage({
           <section aria-labelledby="audit-filters-heading" className="admin-panel mt-6 p-5">
             <div className="admin-panel__header"><div><p className="admin-panel__eyebrow">Activity review</p><h2 id="audit-filters-heading" className="admin-panel__title">Filter the audit trail</h2><p className="admin-panel__subtitle">Branch, actor, action, and date filters are applied in the database before pagination.</p></div>{hasFilters && <Link href="/admin/audit" className="admin-kpi-card__link mt-0">Reset filters <AdminIcon name="arrow" size={14} /></Link>}</div>
             <form action="/admin/audit" method="get" className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(155px,1fr)_minmax(155px,1fr)_minmax(170px,1fr)_145px_145px_auto] xl:items-end">
-              <label className="block"><span className="mb-1.5 block text-xs font-extrabold uppercase tracking-[0.12em] text-ink-muted">Branch</span><select name="branch" defaultValue={branchFilter} className="inventory-input"><option value="">All accessible branches</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.is_active ? "" : " · inactive"}</option>)}</select></label>
+              <label className="block"><span className="mb-1.5 block text-xs font-extrabold uppercase tracking-[0.12em] text-ink-muted">Branch</span><select name="branch" defaultValue={branchFilter} disabled={Boolean(selectedBranchId)} className="inventory-input"><option value="">All accessible branches</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.is_active ? "" : " · inactive"}</option>)}</select></label>
               <label className="block"><span className="mb-1.5 block text-xs font-extrabold uppercase tracking-[0.12em] text-ink-muted">Actor</span><select name="actor" defaultValue={actorFilter} className="inventory-input"><option value="">All visible actors</option>{actors.map((actor) => <option key={actor.id} value={actor.id}>{actor.full_name || "Unnamed staff"}{actor.role ? ` · ${labelize(actor.role)}` : ""}</option>)}</select></label>
               <label className="block"><span className="mb-1.5 block text-xs font-extrabold uppercase tracking-[0.12em] text-ink-muted">Action</span><select name="action" defaultValue={actionFilter} className="inventory-input"><option value="">All actions</option>{actionOptions.map((action) => <option key={action} value={action}>{labelize(action)}</option>)}</select></label>
               <label className="block"><span className="mb-1.5 block text-xs font-extrabold uppercase tracking-[0.12em] text-ink-muted">From</span><input name="from" type="date" defaultValue={dateFrom ?? ""} className="inventory-input" /></label>

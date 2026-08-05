@@ -3468,6 +3468,7 @@ textarea.inventory-input {
 }
 
 .admin-branch-switcher {
+  width: 100%;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -3479,11 +3480,28 @@ textarea.inventory-input {
   color: var(--text);
   background: transparent;
   font-size: 12px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .admin-branch-switcher:hover {
   border-color: var(--border);
   background: var(--surface);
+}
+
+.admin-branch-switcher:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.admin-branch-switcher.is-static {
+  cursor: default;
+}
+
+.admin-branch-switcher.is-static:hover {
+  border-color: transparent;
+  background: transparent;
 }
 
 .admin-branch-switcher__label {
@@ -3504,6 +3522,62 @@ textarea.inventory-input {
 
 .admin-branch-switcher svg {
   color: var(--text-muted);
+}
+
+.admin-branch-menu__panel {
+  left: 0;
+  right: auto;
+  width: min(270px, calc(100vw - 32px));
+  min-width: 0;
+}
+
+.admin-branch-menu__hint {
+  margin: 0 8px 5px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.admin-branch-menu__item {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.admin-branch-menu__item span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-branch-menu__item svg:last-child {
+  color: var(--primary);
+}
+
+.admin-branch-menu__item.is-selected {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.admin-mobile-context {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .admin-mobile-context {
+    display: block;
+    padding: 8px 16px 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+
+  .admin-mobile-context .admin-branch-switcher {
+    margin: 0 0 8px;
+    padding: 9px 10px;
+    border-color: var(--border);
+    background: var(--surface);
+  }
 }
 
 /* Grows to push the connection panel to the bottom, never shrinks below its

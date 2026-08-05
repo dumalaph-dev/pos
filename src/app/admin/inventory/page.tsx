@@ -15,6 +15,7 @@ import {
 } from "@/lib/inventory";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
+import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import { recordStockMovement } from "./actions";
 
 type AdminRole = "admin" | "manager" | "cashier";
@@ -327,55 +328,75 @@ export default async function InventoryPage({
   if (!profile) return <InventoryProfileMissing />;
 
   const { start: todayStart, end: todayEnd } = getSingaporeDayBounds();
-  const [branchesResult, categoriesResult, suppliersResult, productsResult, recentMovementsResult, stockResult, movedTodayResult, posSaleCountResult] = await Promise.all([
-    supabase
-      .from("stores")
-      .select("id, name, is_active")
-      .eq("org_id", profile.org_id)
-      .order("name"),
-    supabase
-      .from("categories")
-      .select("id, store_id, name, icon, sort_order, is_active")
-      .eq("org_id", profile.org_id)
-      .order("sort_order")
-      .order("name"),
+  const branchesResult = await supabase
+    .from("stores")
+    .select("id, name, is_active")
+    .eq("org_id", profile.org_id)
+    .order("name");
+  const branches = (branchesResult.data ?? []) as BranchRecord[];
+  const selectedBranchId = profile.role === "admin"
+    ? await getSelectedAdminBranchId(branches, profile.store_id)
+    : profile.store_id;
+  const visibleBranches = selectedBranchId
+    ? branches.filter((branch) => branch.id === selectedBranchId)
+    : branches;
+
+  let categoriesQuery = supabase
+    .from("categories")
+    .select("id, store_id, name, icon, sort_order, is_active")
+    .eq("org_id", profile.org_id)
+    .order("sort_order")
+    .order("name");
+  let productsQuery = supabase
+    .from("products")
+    .select("id, store_id, category_id, supplier_id, name, sku, barcode, pricing_mode, price, cost_price, unit, min_stock, track_stock, image_url, is_active, sort_order")
+    .eq("org_id", profile.org_id)
+    .order("sort_order")
+    .order("name")
+    .limit(2000);
+  let recentMovementsQuery = supabase
+    .from("stock_movements")
+    .select("id, store_id, product_id, type, qty, unit, unit_cost, reason, ref_order_id, created_at")
+    .eq("org_id", profile.org_id)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  let movedTodayQuery = supabase
+    .from("stock_movements")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", profile.org_id)
+    .gte("created_at", todayStart.toISOString())
+    .lt("created_at", todayEnd.toISOString());
+  let posSaleCountQuery = supabase
+    .from("stock_movements")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", profile.org_id)
+    .eq("type", "sale");
+  if (selectedBranchId) {
+    categoriesQuery = categoriesQuery.eq("store_id", selectedBranchId);
+    productsQuery = productsQuery.eq("store_id", selectedBranchId);
+    recentMovementsQuery = recentMovementsQuery.eq("store_id", selectedBranchId);
+    movedTodayQuery = movedTodayQuery.eq("store_id", selectedBranchId);
+    posSaleCountQuery = posSaleCountQuery.eq("store_id", selectedBranchId);
+  }
+
+  const [categoriesResult, suppliersResult, productsResult, recentMovementsResult, stockResult, movedTodayResult, posSaleCountResult] = await Promise.all([
+    categoriesQuery,
     supabase
       .from("suppliers")
       .select("id, store_id, name, is_active")
       .eq("org_id", profile.org_id)
       .order("name")
       .limit(1000),
-    supabase
-      .from("products")
-      .select("id, store_id, category_id, supplier_id, name, sku, barcode, pricing_mode, price, cost_price, unit, min_stock, track_stock, image_url, is_active, sort_order")
-      .eq("org_id", profile.org_id)
-      .order("sort_order")
-      .order("name")
-      .limit(2000),
-    supabase
-      .from("stock_movements")
-      .select("id, store_id, product_id, type, qty, unit, unit_cost, reason, ref_order_id, created_at")
-      .eq("org_id", profile.org_id)
-      .order("created_at", { ascending: false })
-      .limit(100),
+    productsQuery,
+    recentMovementsQuery,
     // On-hand totals come from the server-side ledger aggregation. The raw
     // movement query is intentionally small for the history preview and is
     // expanded only if the RPC is unavailable.
     supabase.rpc("current_stock", { p_org_id: profile.org_id }),
-    supabase
-      .from("stock_movements")
-      .select("id", { count: "exact", head: true })
-      .eq("org_id", profile.org_id)
-      .gte("created_at", todayStart.toISOString())
-      .lt("created_at", todayEnd.toISOString()),
-    supabase
-      .from("stock_movements")
-      .select("id", { count: "exact", head: true })
-      .eq("org_id", profile.org_id)
-      .eq("type", "sale"),
+    movedTodayQuery,
+    posSaleCountQuery,
   ]);
 
-  const branches = (branchesResult.data ?? []) as BranchRecord[];
   const categories = (categoriesResult.data ?? []) as CategoryRecord[];
   const suppliers = (suppliersResult.data ?? []) as SupplierRecord[];
   let products = (productsResult.data ?? []) as ProductRecord[];
@@ -383,13 +404,15 @@ export default async function InventoryPage({
   let productsSchemaWarning = isInventorySchemaError(productsResult.error);
 
   if (productsResult.error) {
-    const fallbackProductsResult = await supabase
+    let fallbackProductsQuery = supabase
       .from("products")
       .select("id, store_id, category_id, name, pricing_mode, price, unit, track_stock, image_url, is_active, sort_order")
       .eq("org_id", profile.org_id)
       .order("sort_order")
       .order("name")
       .limit(2000);
+    if (selectedBranchId) fallbackProductsQuery = fallbackProductsQuery.eq("store_id", selectedBranchId);
+    const fallbackProductsResult = await fallbackProductsQuery;
     const fallbackProducts = (fallbackProductsResult.data ?? []) as BaseProductRecord[];
     productsSchemaWarning = productsSchemaWarning || isInventorySchemaError(fallbackProductsResult.error);
     products = fallbackProducts.map((product) => ({
@@ -403,17 +426,26 @@ export default async function InventoryPage({
     productsQueryWarning = true;
   }
 
+  if (selectedBranchId) {
+    products = products.filter((product) => product.store_id === selectedBranchId);
+  }
+
   let movements = (recentMovementsResult.data ?? []) as MovementRecord[];
   let movementQueryError = Boolean(recentMovementsResult.error);
   if (stockResult.error) {
-    const fallbackMovementsResult = await supabase
+    let fallbackMovementsQuery = supabase
       .from("stock_movements")
       .select("id, store_id, product_id, type, qty, unit, unit_cost, reason, ref_order_id, created_at")
       .eq("org_id", profile.org_id)
       .order("created_at", { ascending: false })
       .limit(5000);
+    if (selectedBranchId) fallbackMovementsQuery = fallbackMovementsQuery.eq("store_id", selectedBranchId);
+    const fallbackMovementsResult = await fallbackMovementsQuery;
     movements = (fallbackMovementsResult.data ?? []) as MovementRecord[];
     movementQueryError = Boolean(fallbackMovementsResult.error);
+  }
+  if (selectedBranchId) {
+    movements = movements.filter((movement) => movement.store_id === selectedBranchId);
   }
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
   const categoryById = new Map(categories.map((category) => [category.id, category]));
@@ -501,15 +533,16 @@ export default async function InventoryPage({
       || (suppliersResult.error && !catalogFieldsWarning),
   );
   const canWrite = profile.role === "admin";
-  const currentBranchName = profile.store_id
-    ? branchById.get(profile.store_id)?.name ?? DEFAULT_STORE_NAME
+  const currentBranchName = selectedBranchId
+    ? branchById.get(selectedBranchId)?.name ?? DEFAULT_STORE_NAME
     : "All branches";
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
-  const activeBranches = branches.filter((branch) => branch.is_active);
-  const formProducts = trackedProducts.filter((product) => product.is_active);
+  const activeBranches = visibleBranches.filter((branch) => branch.is_active);
+  const activeBranchIds = new Set(activeBranches.map((branch) => branch.id));
+  const formProducts = trackedProducts.filter((product) => product.is_active && activeBranchIds.has(product.store_id));
   const selectedMovementProduct = selectedProductId ? productById.get(selectedProductId) : undefined;
-  const defaultProduct = selectedMovementProduct ?? formProducts[0];
-  const defaultBranch = defaultProduct?.store_id ?? profile.store_id ?? activeBranches[0]?.id ?? branches[0]?.id ?? "";
+  const defaultProduct = formProducts.find((product) => product.id === selectedMovementProduct?.id) ?? formProducts[0];
+  const defaultBranch = selectedBranchId ?? defaultProduct?.store_id ?? activeBranches[0]?.id ?? visibleBranches[0]?.id ?? "";
   const requestedMovement = readParam(params.movement);
   const defaultMovement = movementOptions.some((option) => option.value === requestedMovement)
     ? (requestedMovement as Exclude<StockMovementType, "sale">)
@@ -547,7 +580,7 @@ export default async function InventoryPage({
             <div>
               <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Inventory control · {currentBranchName}</p>
               <h1 className="mt-2 text-3xl font-extrabold tracking-[-0.05em] text-ink sm:text-4xl">Inventory</h1>
-              <p className="mt-1 max-w-2xl text-sm text-ink-muted">Manage your inventory items, stock levels, and track usage across all branches, {firstName}.</p>
+              <p className="mt-1 max-w-2xl text-sm text-ink-muted">Manage inventory items, stock levels, and usage for {currentBranchName}, {firstName}.</p>
             </div>
             <div className="admin-compact-toolbar">
               <Link href={buildInventoryHref({ ...baseHref, page: 1, movement: "receive" }) + "#stock-movement"} className="inventory-button gap-1.5 rounded-btn bg-secondary text-[11px] font-extrabold text-primary transition hover:bg-secondary-hover"><AdminIcon name="download" size={14} />Stock in<AdminIcon name="chevron" size={12} /></Link>
@@ -569,7 +602,7 @@ export default async function InventoryPage({
           {!canWrite && <div role="status" className="mt-5 rounded-card border border-line bg-secondary px-4 py-3 text-sm font-semibold text-primary">This inventory view is read-only for your role. Ask an organization admin to record stock movements or edit catalog fields.</div>}
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <InventoryMetric label="Total items" value={String(allRows.length)} detail="Tracked across all branches" tone="bg-primary text-primary-fg" icon="box" />
+            <InventoryMetric label="Total items" value={String(allRows.length)} detail={`Tracked for ${currentBranchName}`} tone="bg-primary text-primary-fg" icon="box" />
             <InventoryMetric label="Low stock items" value={String(lowStockCount)} detail="Need to reorder soon" tone="bg-accent text-accent-fg" icon="inventory" />
             <InventoryMetric label="Out of stock" value={String(outOfStockCount)} detail="Require immediate attention" tone="bg-warning text-white" icon="alert" />
             <InventoryMetric label="Total inventory value" value={estimatedValue ? formatPeso(Math.round(estimatedValue)) : "₱0.00"} detail={estimatedValueItems ? `Estimated for ${estimatedValueItems} item${estimatedValueItems === 1 ? "" : "s"}` : "Based on cost price"} tone="bg-success text-white" icon="wallet" />
@@ -659,7 +692,7 @@ export default async function InventoryPage({
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3"><span className="text-[10px] font-semibold text-ink-muted">Showing {firstRow} to {lastRow} of {filteredRows.length} items</span><div className="flex items-center gap-1">{page > 1 ? <Link href={buildInventoryHref({ ...baseHref, page: page - 1 })} className="inventory-icon-button border border-line text-primary hover:bg-primary-soft" aria-label="Previous page">‹</Link> : <span className="inventory-icon-button border border-line text-ink-subtle" aria-hidden="true">‹</span>}{Array.from({ length: Math.min(totalPages, 5) }, (_, index) => index + 1).map((pageNumber) => <Link key={pageNumber} href={buildInventoryHref({ ...baseHref, page: pageNumber })} className={`inventory-page-button ${pageNumber === page ? "is-active" : ""}`}>{pageNumber}</Link>)}{page < totalPages ? <Link href={buildInventoryHref({ ...baseHref, page: page + 1 })} className="inventory-icon-button border border-line text-primary hover:bg-primary-soft" aria-label="Next page">›</Link> : <span className="inventory-icon-button border border-line text-ink-subtle" aria-hidden="true">›</span>}</div><form action="/admin/inventory" method="get" className="flex items-center gap-2"><input type="hidden" name="q" value={searchQuery} /><input type="hidden" name="category" value={category} /><input type="hidden" name="status" value={status} /><input type="hidden" name="supplier" value={supplier} /><input type="hidden" name="columns" value={[...visibleColumns].join(",")} /><label htmlFor="inventory-page-size" className="text-[10px] font-semibold text-ink-muted">Rows per page:</label><select id="inventory-page-size" name="pageSize" defaultValue={String(pageSize)} className="inventory-input inventory-input--compact w-auto text-[10px]"><option value="10">10</option><option value="25">25</option><option value="50">50</option></select><button type="submit" className="inventory-button inventory-button--ghost">Apply</button></form></div>
               </section>
 
-              <StockMovementForm branches={branches} products={formProducts} defaultBranch={defaultBranch} defaultProductId={defaultProduct?.id ?? ""} defaultMovement={defaultMovement} canWrite={canWrite} open={Boolean(readParam(params.movement) || selectedProductId || readParam(params.error))} />
+              <StockMovementForm branches={activeBranches} products={formProducts} defaultBranch={defaultBranch} defaultProductId={defaultProduct?.id ?? ""} defaultMovement={defaultMovement} canWrite={canWrite} open={Boolean(readParam(params.movement) || selectedProductId || readParam(params.error))} />
             </div>
 
             <aside className="grid content-start gap-3">

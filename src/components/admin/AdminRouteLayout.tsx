@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { AdminShell } from "./AdminShell";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { getAdminProfile } from "@/lib/admin/profile";
+import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
 
 type AdminRole = "admin" | "manager" | "cashier";
 type ShellProfile = {
@@ -35,6 +36,7 @@ async function readConnection(orgId: string, storeId: string | null) {
       .from("devices")
       .select("is_active, last_seen_at")
       .eq("org_id", orgId)
+      .eq("is_active", true)
       .order("last_seen_at", { ascending: false, nullsFirst: false })
       .limit(1);
     if (storeId) query = query.eq("store_id", storeId);
@@ -46,6 +48,14 @@ async function readConnection(orgId: string, storeId: string | null) {
   } catch {
     return { connected: false, lastSyncedLabel: null };
   }
+}
+
+async function readBranchOptions(orgId: string, storeId: string | null, canSwitch: boolean) {
+  const supabase = await createClient();
+  let query = supabase.from("stores").select("id, name, is_active").eq("org_id", orgId).eq("is_active", true).order("name");
+  if (!canSwitch && storeId) query = query.eq("id", storeId);
+  const { data } = await query;
+  return (data ?? []) as AdminBranchOption[];
 }
 
 export default async function AdminRouteLayout({ children }: { children: ReactNode }) {
@@ -61,8 +71,11 @@ export default async function AdminRouteLayout({ children }: { children: ReactNo
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile) return children;
 
-  const branchName = profile.store_id ? profile.stores?.name ?? DEFAULT_STORE_NAME : "All branches";
-  const connection = await readConnection(profile.org_id, profile.store_id);
+  const canSwitchBranches = profile.role === "admin";
+  const branches = await readBranchOptions(profile.org_id, profile.store_id, canSwitchBranches);
+  const selectedBranchId = canSwitchBranches ? await getSelectedAdminBranchId(branches, profile.store_id) : profile.store_id;
+  const branchName = selectedBranchId ? branches.find((branch) => branch.id === selectedBranchId)?.name ?? profile.stores?.name ?? DEFAULT_STORE_NAME : "All branches";
+  const connection = await readConnection(profile.org_id, selectedBranchId);
 
-  return <AdminShell branchName={branchName} connection={connection}>{children}</AdminShell>;
+  return <AdminShell branchName={branchName} connection={connection} branches={branches} selectedBranchId={selectedBranchId} canSwitchBranches={canSwitchBranches} canManageBranches={canSwitchBranches}>{children}</AdminShell>;
 }

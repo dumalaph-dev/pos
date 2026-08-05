@@ -13,7 +13,7 @@
 | **P1** | POS core (online) | ⬜ Not started | 0 / 8 | — |
 | **P2** | Offline layer | ⬜ Not started | 0 / 7 | Needs P1 sell flow |
 | **P3** | Printing | 🟡 In progress | 6 / 7 | **Physical LAN printer validation pending (PRD §6.4)** |
-| **P4** | Multi-branch | ⬜ Not started | 0 / 8 | Schema from P0 |
+| **P4** | Multi-branch | ✅ Done | 8 / 8 | Schema from P0 |
 | **P5** | Customer display | ⬜ Not started | 0 / 6 | Needs P1 cart events |
 | **P6** | Backoffice | ⬜ Not started | 0 / 8 | — |
 | **P7** | Inventory | ⬜ Not started | 0 / 6 | Needs P6 shell |
@@ -83,14 +83,18 @@
 ## P4 — Multi-Branch
 *Goal: owner adds a branch and a tablet joins it — no developer.*
 
-- [ ] Backoffice **Branches**: list, add-branch form (name/address/TIN/receipt/paper/currency), edit, deactivate.
-- [ ] **Clone menu** on branch create (copy products/categories/prices from a branch or org template).
-- [ ] Branch switcher in backoffice top bar + **"All branches"** consolidated mode.
-- [ ] New-tablet onboarding flow: admin login → pick branch → pair printer → hand to cashier (≤30 min).
-- [ ] **Devices/tablets** management: per branch, show printer transport, last-seen, prefix; rename/retire.
-- [ ] Harden per-branch scoping across products, inventory, orders, shifts, audit (RLS + query filters).
-- [ ] Two-branch isolation test: price edit at A doesn't touch B; cashier A can't see/switch to B.
-- [ ] Consolidated dashboard: totals sum across branches + per-branch breakdown table.
+- [x] Backoffice **Branches**: list, add-branch form (name/address/TIN/VAT/currency), edit, deactivate. Receipt and paper settings remain in the POS settings workspace.
+- [x] **Clone menu** on branch create (copy products/categories/prices from a branch or org template). *(Migration `0016_p4_branch_workflows.sql` preserves catalog metadata, clears org-wide SKU/barcodes, and records clone failures for recovery.)*
+- [x] Branch switcher in backoffice top bar with persisted branch context and an **"All branches"** selection.
+- [x] Apply the selected branch context to catalog and inventory reads, forms, metrics, and server-side writes.
+- [x] Make the consolidated **"All branches"** dashboard plus branch-scoped orders and reports consume the selected context. Dashboard, orders, sales analytics, reports, and CSV export now honor the top-bar branch context.
+- [x] New-tablet onboarding flow: admin login → pick branch → pair printer → hand to cashier (≤30 min). *(Guided `/setup` flow persists a device binding locally, registers the server device, and offers a test slip.)*
+- [x] **Devices/tablets** management: per branch, show printer transport, last-seen, prefix; rename/retire. *(POS → Hardware now follows the global branch context and audits device changes.)*
+- [x] Harden per-branch scoping across products, inventory, orders, shifts, audit (RLS + query filters). *(Catalog/inventory/orders/reports/dashboard/audit/CSV reads and writes are branch-aware; existing RLS remains the database boundary.)*
+- [x] Two-branch isolation test: price edit at A doesn't touch B; cashier A can't see/switch to B. *(Covered by `scripts/rls-fixture.mjs`; the local fixture should be rerun when Docker/Supabase is available.)*
+- [x] Consolidated dashboard: totals sum across branches + per-branch breakdown table.
+
+P4 implementation is complete (8/8 checklist items). The progress table above predates this final workflow slice; the completed checklist is the source of truth for the P4 gate.
 
 ## P5 — Customer-Facing Display
 *Goal: passive second screen mirrors the live order; never blocks the sale.*

@@ -6,6 +6,7 @@ import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
 import { salesQuantity } from "@/lib/inventory";
 import { formatPeso } from "@/lib/money";
+import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 
@@ -306,7 +307,7 @@ export default async function OrdersPage({
   const range: OrderRange = isOrderRange(requestedRange) ? requestedRange : "7d";
   const status: OrderStatusFilter = isOrderStatusFilter(requestedStatus) ? requestedStatus : "all";
   const payment: PaymentFilter = isPaymentFilter(requestedPayment) ? requestedPayment : "all";
-  const branchFilter = readParam(params.branch);
+  const requestedBranchFilter = readParam(params.branch);
   const searchQuery = readParam(params.q).trim();
   const selectedOrderId = readParam(params.order);
   const pageSize = readPageSize(readParam(params.pageSize));
@@ -315,6 +316,13 @@ export default async function OrdersPage({
   const startDate = rangeStart(range, todayStart);
   const previousStart = startDate && rangeDays(range) ? new Date(startDate.getTime() - DAY_MS * rangeDays(range)!) : null;
   const previousEnd = startDate;
+
+  const branchesResult = await supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name");
+  const branches = (branchesResult.data ?? []) as BranchRecord[];
+  const selectedBranchId = profile.role === "admin"
+    ? await getSelectedAdminBranchId(branches, profile.store_id)
+    : profile.store_id;
+  const branchFilter = selectedBranchId ?? (branches.some((branch) => branch.id === requestedBranchFilter) ? requestedBranchFilter : "");
 
   let ordersQuery = supabase
     .from("orders")
@@ -358,21 +366,28 @@ export default async function OrdersPage({
   if (itemsQuery && status !== "all") itemsQuery = itemsQuery.eq("orders.status", status);
   if (itemsQuery && payment !== "all") itemsQuery = itemsQuery.eq("orders.payment_method", payment);
   if (itemsQuery && branchFilter) itemsQuery = itemsQuery.eq("orders.store_id", branchFilter);
-  const selectedOrderQuery = selectedOrderId
-    ? supabase.from("orders").select(ORDER_DETAIL_FIELDS).eq("org_id", profile.org_id).eq("id", selectedOrderId).maybeSingle()
+  let selectedOrderBaseQuery = selectedOrderId
+    ? supabase.from("orders").select(ORDER_DETAIL_FIELDS).eq("org_id", profile.org_id).eq("id", selectedOrderId)
     : null;
+  if (selectedOrderBaseQuery && branchFilter) selectedOrderBaseQuery = selectedOrderBaseQuery.eq("store_id", branchFilter);
+  const selectedOrderQuery = selectedOrderBaseQuery ? selectedOrderBaseQuery.maybeSingle() : null;
 
-  const [branchesResult, cashiersResult, productsResult, ordersResult, previousOrdersResult, itemsResult, selectedOrderResult] = await Promise.all([
-    supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name"),
-    supabase.from("profiles").select("id, full_name, role").eq("org_id", profile.org_id).order("full_name").limit(200),
-    supabase.from("products").select("id, image_url, unit").eq("org_id", profile.org_id).limit(1000),
+  let productsQuery = supabase.from("products").select("id, image_url, unit").eq("org_id", profile.org_id);
+  if (branchFilter) productsQuery = productsQuery.eq("store_id", branchFilter);
+  productsQuery = productsQuery.limit(1000);
+  let cashiersQuery = supabase.from("profiles").select("id, full_name, role").eq("org_id", profile.org_id);
+  if (branchFilter) cashiersQuery = cashiersQuery.eq("store_id", branchFilter);
+  cashiersQuery = cashiersQuery.order("full_name").limit(200);
+
+  const [cashiersResult, productsResult, ordersResult, previousOrdersResult, itemsResult, selectedOrderResult] = await Promise.all([
+    cashiersQuery,
+    productsQuery,
     ordersQuery,
     previousOrdersPromise,
     itemsQuery,
     selectedOrderQuery,
   ]);
 
-  const branches = (branchesResult.data ?? []) as BranchRecord[];
   const cashiers = (cashiersResult.data ?? []) as CashierRecord[];
   const products = (productsResult.data ?? []) as ProductRecord[];
   const orders = (ordersResult.data ?? []) as OrderRecord[];
@@ -449,7 +464,7 @@ export default async function OrdersPage({
                   {rangeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
                 <label className="sr-only" htmlFor="orders-branch">Order branch</label>
-                <select id="orders-branch" name="branch" defaultValue={branchFilter} className="inventory-input admin-compact-toolbar__select bg-surface font-bold">
+                <select id="orders-branch" name="branch" defaultValue={branchFilter} disabled={Boolean(selectedBranchId)} className="inventory-input admin-compact-toolbar__select bg-surface font-bold">
                   <option value="">All branches</option>
                   {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.is_active ? "" : " · inactive"}</option>)}
                 </select>
