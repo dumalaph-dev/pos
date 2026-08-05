@@ -17,10 +17,10 @@ export type StockMovementLike = {
 /** The first backoffice signal for products without a configured threshold. */
 export const LOW_STOCK_THRESHOLD = 2;
 
-export function stockThreshold(minStock: number | string | null | undefined): number {
-  if (minStock === null || minStock === undefined || (typeof minStock === "string" && minStock.trim() === "")) return LOW_STOCK_THRESHOLD;
+export function stockThreshold(minStock: number | string | null | undefined, fallback = LOW_STOCK_THRESHOLD): number {
+  if (minStock === null || minStock === undefined || (typeof minStock === "string" && minStock.trim() === "")) return fallback;
   const value = Number(minStock);
-  return Number.isFinite(value) && value >= 0 ? value : LOW_STOCK_THRESHOLD;
+  return Number.isFinite(value) && value >= 0 ? value : fallback;
 }
 
 export function stockMovementDelta(type: string, qty: number): number {
@@ -43,10 +43,10 @@ export function formatStockQuantity(value: number): string {
   return value.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
 }
 
-export function stockStatus(value: number | undefined, minStock?: number | string | null): "unknown" | "out" | "low" | "ok" {
+export function stockStatus(value: number | undefined, minStock?: number | string | null, fallback = LOW_STOCK_THRESHOLD): "unknown" | "out" | "low" | "ok" {
   if (value === undefined) return "unknown";
   if (value <= 0) return "out";
-  if (value <= stockThreshold(minStock)) return "low";
+  if (value <= stockThreshold(minStock, fallback)) return "low";
   return "ok";
 }
 

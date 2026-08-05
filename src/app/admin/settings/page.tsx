@@ -11,6 +11,7 @@ import {
   readAdminBranding,
   type AdminBranding,
 } from "@/lib/admin/branding";
+import { readAdminInventorySettings } from "@/lib/admin/inventory-settings";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { updateOrganizationSettings } from "./actions";
 
@@ -58,6 +59,7 @@ export default async function SettingsPage({
     .maybeSingle();
   const organization = data as OrganizationRecord | null;
   const branding = readAdminBranding(organization?.settings);
+  const inventorySettings = readAdminInventorySettings(organization?.settings);
   const canWrite = profile.role === "admin";
   const saved = readParam(params.saved);
   const savedMessage = saved === "organization" ? "Dashboard settings saved." : "";
@@ -100,6 +102,13 @@ export default async function SettingsPage({
               <SettingsField label="Brand name" htmlFor="brand-name"><input id="brand-name" name="brand_name" defaultValue={branding.brandName || DEFAULT_ADMIN_BRANDING.brandName} disabled={!canWrite} required maxLength={48} placeholder="e.g. Rico&apos;s" className="inventory-input" /><span className="mt-1.5 block text-xs text-ink-muted">The prominent name in the admin sidebar.</span></SettingsField>
               <SettingsField label="Brand tagline" htmlFor="brand-tagline"><input id="brand-tagline" name="brand_tagline" defaultValue={branding.brandTagline} disabled={!canWrite} maxLength={48} placeholder="e.g. LECHON HOUSE" className="inventory-input" /><span className="mt-1.5 block text-xs text-ink-muted">Optional supporting line below the brand name.</span></SettingsField>
               <SettingsField label="Currency" htmlFor="organization-currency"><select id="organization-currency" name="currency" defaultValue={organization?.currency ?? "PHP"} disabled={!canWrite} className="inventory-input"><option value="PHP">PHP · Philippine peso</option><option value="USD">USD · US dollar</option><option value="SGD">SGD · Singapore dollar</option></select></SettingsField>
+              <div className="admin-settings-inventory sm:col-span-2">
+                <div className="admin-settings-inventory__copy"><p className="admin-panel__eyebrow">Inventory alerts</p><h3 className="mt-1 text-base font-extrabold text-ink">Keep a shared low-stock floor on the dashboard</h3><p className="mt-1 text-xs leading-5 text-ink-muted">Use this as the organization-wide alert floor. Products with a higher minimum keep their higher threshold.</p></div>
+                <div className="admin-settings-inventory__controls">
+                  <label htmlFor="low-stock-alerts-enabled" className="admin-settings-switch"><input id="low-stock-alerts-enabled" type="checkbox" name="low_stock_alerts_enabled" defaultChecked={inventorySettings.lowStockAlertsEnabled} disabled={!canWrite || !organization} /><span><strong>Show low-stock alerts</strong><small>Dashboard notifications and alert list</small></span></label>
+                  <label htmlFor="default-low-stock-threshold" className="block"><span className="mb-1.5 block text-xs font-extrabold uppercase tracking-[0.12em] text-ink-muted">Alert floor</span><span className="flex items-center gap-2"><input id="default-low-stock-threshold" name="default_low_stock_threshold" type="number" min="0" max="100000" step="0.001" defaultValue={inventorySettings.defaultLowStockThreshold} required disabled={!canWrite || !organization} className="inventory-input tnums" /><span className="text-xs font-semibold text-ink-muted">units</span></span></label>
+                </div>
+              </div>
             </div>
 
             <div className="mt-7 border-t border-line pt-6">
