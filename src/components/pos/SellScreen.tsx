@@ -11,6 +11,7 @@ import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { formatPeso, weightLineTotal } from "@/lib/money";
 import { formatStockQuantity, stockMovementDelta, stockStatus } from "@/lib/inventory";
+import { AdminMenu } from "@/components/admin/AdminMenu";
 import { SignOutButton } from "@/components/SignOutButton";
 import PrinterSettingsModal from "@/components/pos/PrinterSettings";
 import OrderHistory from "@/components/pos/OrderHistory";
@@ -290,7 +291,8 @@ type IconName =
   | "sparkle"
   | "heart"
   | "close"
-  | "printer";
+  | "printer"
+  | "settings";
 
 function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
   const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
@@ -318,6 +320,7 @@ function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
     heart: <path d="M20.8 8.6c0 4.8-8.8 10.3-8.8 10.3S3.2 13.4 3.2 8.6A4.5 4.5 0 0 1 12 6.5a4.5 4.5 0 0 1 8.8 2.1Z" />,
     close: <><path d="m7 7 10 10M17 7 7 17" /></>,
     printer: <><path d="M6 9V4h12v5M6 17H4V9h16v8h-2" /><path d="M7 14h10v6H7z" /><path d="M17 11h.1" /></>,
+    settings: <><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" /><circle cx="12" cy="12" r="3.5" /></>,
   };
   return <svg {...common}>{paths[name]}</svg>;
 }
@@ -1082,12 +1085,29 @@ export default function SellScreen() {
                 </button>
               </div>
 
-              <div className="pos-topbar__account">
-                <div className="profile-avatar" aria-hidden="true">{initials}</div>
-                <span className="profile-name">{displayName}</span>
-                <Icon name="chevron" size={16} />
-              </div>
-              <SignOutButton className="pos-signout" />
+              <AdminMenu
+                triggerLabel="Open account menu"
+                triggerClassName="pos-account-trigger"
+                panelTitle={displayName}
+                panelClassName="pos-account-menu__panel"
+                trigger={
+                  <>
+                    <span className="profile-avatar" aria-hidden="true">{initials}</span>
+                    <span className="profile-name">{displayName}</span>
+                    <Icon name="chevron" size={16} />
+                  </>
+                }
+              >
+                <div className="pos-account-menu__meta">
+                  <span>{profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1) : "POS user"}</span>
+                  <small>{storeName}</small>
+                </div>
+                <a className="admin-menu__item pos-account-menu__item" href="/account">
+                  <Icon name="settings" size={16} />
+                  <span>Account settings</span>
+                </a>
+                <SignOutButton variant="menu" className="pos-account-menu__signout" />
+              </AdminMenu>
               <button
                 type="button"
                 className="pos-topbar__collapse"
