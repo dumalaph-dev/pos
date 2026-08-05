@@ -8,6 +8,7 @@ import { getAdminProfile } from "@/lib/admin/profile";
 import { formatStockQuantity, stockMovementDelta } from "@/lib/inventory";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { recordInventoryCount } from "../actions";
+import { OwnerGuidance } from "@/components/admin/OwnerOnboardingPanel";
 
 type AdminRole = "admin" | "manager" | "cashier";
 type ProfileRecord = {
@@ -200,6 +201,7 @@ export default async function InventoryVariancePage({
         {queryWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink"><strong className="font-extrabold">Some count data could not be loaded.</strong> {countsResult.error ? "Apply the inventory workflow migration before saving counts." : "The available ledger data is still shown."}</div>}
         {expectedWarning && !queryWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink">The aggregate stock function is not available yet, so this report is using the raw ledger as a fallback.</div>}
         {!canWrite && <div role="status" className="mt-5 rounded-card border border-line bg-secondary px-4 py-3 text-sm font-semibold text-primary">This report is read-only for your role. Ask an organization admin to save the physical count.</div>}
+        {canWrite && <div className="mt-5"><OwnerGuidance topic="variance" /></div>}
 
         <form action="/admin/inventory/variance" method="get" className="admin-panel mt-6 grid gap-3 p-4 sm:grid-cols-[minmax(190px,1fr)_minmax(190px,1fr)_auto] sm:items-end">
           <label className="block"><span className="mb-1.5 block text-xs font-extrabold uppercase tracking-[0.12em] text-ink-muted">Business date</span><input type="date" name="date" defaultValue={countDate} className="inventory-input" /></label>
