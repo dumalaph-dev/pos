@@ -4,6 +4,7 @@ import { AdminShell } from "./AdminShell";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
+import { readAdminBranding } from "@/lib/admin/branding";
 
 type AdminRole = "admin" | "manager" | "cashier";
 type ShellProfile = {
@@ -12,6 +13,7 @@ type ShellProfile = {
   store_id: string | null;
   password_change_required: boolean;
   stores: { name?: string } | null;
+  organizations: { settings?: unknown } | null;
 };
 
 const DEFAULT_STORE_NAME = "Mario's Lechon House";
@@ -76,6 +78,7 @@ export default async function AdminRouteLayout({ children }: { children: ReactNo
   const selectedBranchId = canSwitchBranches ? await getSelectedAdminBranchId(branches, profile.store_id) : profile.store_id;
   const branchName = selectedBranchId ? branches.find((branch) => branch.id === selectedBranchId)?.name ?? profile.stores?.name ?? DEFAULT_STORE_NAME : "All branches";
   const connection = await readConnection(profile.org_id, selectedBranchId);
+  const branding = readAdminBranding(profile.organizations?.settings);
 
-  return <AdminShell branchName={branchName} connection={connection} branches={branches} selectedBranchId={selectedBranchId} canSwitchBranches={canSwitchBranches} canManageBranches={canSwitchBranches}>{children}</AdminShell>;
+  return <AdminShell branding={branding} branchName={branchName} connection={connection} branches={branches} selectedBranchId={selectedBranchId} canSwitchBranches={canSwitchBranches} canManageBranches={canSwitchBranches}>{children}</AdminShell>;
 }

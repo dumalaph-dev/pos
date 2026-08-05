@@ -10,6 +10,7 @@ import { formatStockQuantity, salesQuantity, stockMovementDelta, stockStatus, ty
 import { formatPeso } from "@/lib/money";
 import { isProductImageUrl } from "@/lib/product-images";
 import { getAdminProfile } from "@/lib/admin/profile";
+import { readAdminBranding } from "@/lib/admin/branding";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import {
@@ -34,7 +35,7 @@ type ProfileRecord = {
   org_id: string;
   store_id: string | null;
   password_change_required: boolean;
-  organizations: { name?: string } | null;
+  organizations: { name?: string; settings?: unknown } | null;
 };
 
 type BranchRecord = { id: string; name: string; is_active: boolean };
@@ -557,6 +558,7 @@ export default async function ProductsPage({
   const orgName = profile.organizations?.name ?? DEFAULT_STORE_NAME;
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
   const userInitial = firstName.charAt(0).toUpperCase();
+  const branding = readAdminBranding(profile.organizations?.settings);
   const dataWarning = Boolean(
     branchesResult.error || categoriesResult.error || Boolean(productsResult.error && !productsSchemaWarning) || fallbackProductsError || (suppliersResult.error && !suppliersSchemaWarning) || stockFallbackError || currentOrdersResult.error || previousOrdersResult.error || orderItemsError,
   );
@@ -567,12 +569,12 @@ export default async function ProductsPage({
   const baseHref = { q: searchQuery, category: categoryFilter, status, posOnly, range, pageSize, columns };
 
   return (
-    <main className="admin-page products-page text-ink">
+    <main data-admin-theme={branding.theme} className="admin-page products-page text-ink">
       <div className="min-w-0 px-4 pb-10 sm:px-6 lg:px-8">
           <header className="admin-topbar products-topbar">
-            <Link href="/products" className="admin-mobile-brand" aria-label="Products">
+            <Link href="/products" className="admin-mobile-brand" aria-label={`${branding.brandName} ${branding.brandTagline} products`}>
               <span className="admin-brand__mark"><AdminIcon name="pig" size={20} /></span>
-              <span className="admin-brand__copy"><strong>Mario&apos;s</strong><small>LECHON HOUSE</small></span>
+              <span className="admin-brand__copy"><strong>{branding.brandName}</strong><small>{branding.brandTagline}</small></span>
             </Link>
             <Link href="#product-filters" className="admin-icon-button" aria-label="Search products"><AdminIcon name="search" size={19} /></Link>
             <Link href="/admin/inventory?status=out" className="admin-icon-button admin-icon-button--alert" aria-label={outOfStockProducts ? `View ${outOfStockProducts} out of stock products` : "View inventory status"}>
@@ -599,7 +601,7 @@ export default async function ProductsPage({
                 </div>
               </details>
               <Link href="#product-filters" className="products-secondary-button"><AdminIcon name="filter" size={15} /> Filters{(searchQuery || categoryFilter !== "all" || status !== "all" || posOnly) && <span className="products-filter-count">!</span>}</Link>
-              <ProductCreateDialog branches={formBranches} categories={categories} suppliers={suppliers} defaultBranch={formDefaultBranch} canWrite={canWrite} orgName={orgName} fromInventory={fromInventory} initialOpen={action === "product"} />
+              <ProductCreateDialog key={action === "product" ? "product-create-open" : "product-create-closed"} branches={formBranches} categories={categories} suppliers={suppliers} defaultBranch={formDefaultBranch} canWrite={canWrite} orgName={orgName} fromInventory={fromInventory} initialOpen={action === "product"} />
               <details className="products-add-menu">
                 <summary className="products-secondary-button"><AdminIcon name="more" size={15} /> More</summary>
                 <div className="products-popover products-add-popover">
