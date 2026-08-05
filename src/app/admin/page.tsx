@@ -5,11 +5,12 @@ import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { AdminMenu } from "@/components/admin/AdminMenu";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
-import { formatStockQuantity, salesQuantity, stockStatus, stockThreshold } from "@/lib/inventory";
+import { formatStockQuantity, salesQuantity, stockStatus } from "@/lib/inventory";
 import { isProductImageUrl } from "@/lib/product-images";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { readAdminBranding } from "@/lib/admin/branding";
+import { dashboardLowStockThreshold, readAdminInventorySettings } from "@/lib/admin/inventory-settings";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 
 type AdminRole = "admin" | "manager" | "cashier";
@@ -178,6 +179,7 @@ export default async function AdminPage() {
   if (profile?.password_change_required) redirect("/account/password?required=1");
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile) return <AdminProfileMissing />;
+  const inventorySettings = readAdminInventorySettings(profile.organizations?.settings);
 
   const branchesResult = await supabase
     .from("stores")
@@ -285,13 +287,15 @@ export default async function AdminPage() {
     (trackedProductsByStore.get(branch.id) ?? [])
       .map((product) => {
         const onHand = stockByKey.get(`${branch.id}:${product.id}`) ?? 0;
-        return { branch, product, onHand, status: stockStatus(onHand, product.min_stock) };
+        return { branch, product, onHand, status: stockStatus(onHand, dashboardLowStockThreshold(product.min_stock, inventorySettings.defaultLowStockThreshold)) };
       }),
   );
-  const lowStockRows = stockRows
-    .filter((row) => row.status === "low" || row.status === "out")
-    .sort((a, b) => a.onHand - b.onHand)
-    .slice(0, 5);
+  const lowStockRows = inventorySettings.lowStockAlertsEnabled
+    ? stockRows
+      .filter((row) => row.status === "low" || row.status === "out")
+      .sort((a, b) => a.onHand - b.onHand)
+      .slice(0, 5)
+    : [];
   const lowStockCount = stockRows.filter((row) => row.status === "low").length;
   const outOfStockCount = stockRows.filter((row) => row.status === "out").length;
   const inventoryAlertCount = lowStockCount + outOfStockCount;
@@ -385,7 +389,9 @@ export default async function AdminPage() {
                 </>
               }
             >
-              {lowStockRows.length === 0 ? (
+              {!inventorySettings.lowStockAlertsEnabled ? (
+                <p className="admin-menu__empty">Inventory alerts are turned off. <Link href="/admin/settings#dashboard-settings" className="font-extrabold text-primary hover:underline">Configure them in Settings</Link>.</p>
+              ) : lowStockRows.length === 0 ? (
                 <p className="admin-menu__empty">Nothing needs attention. Stock levels look good.</p>
               ) : (
                 lowStockRows.map((row) => (
@@ -487,7 +493,7 @@ export default async function AdminPage() {
 
             <section id="low-stock-alerts" aria-labelledby="low-stock-heading" className="admin-panel min-w-0 p-5">
               <div className="admin-panel__header"><div><h2 id="low-stock-heading" className="admin-panel__title">Low Stock Alerts</h2><p className="admin-panel__subtitle">Items that need to be restocked</p></div><Link href="/admin/inventory" className="admin-kpi-card__link mt-0">View all</Link></div>
-              <div className="mt-3">{lowStockRows.length === 0 ? <EmptyState title="Stock levels look good" detail="Tracked products will appear here when they reach their configured minimum." /> : lowStockRows.map((row) => <StockAlert key={`${row.branch.id}:${row.product.id}`} name={row.product.name} detail={`${row.branch.name} · Stock: ${formatStockQuantity(row.onHand)} ${row.product.unit}`} minimum={`Min: ${formatStockQuantity(stockThreshold(row.product.min_stock))} ${row.product.unit}`} threshold={stockThreshold(row.product.min_stock)} onHand={row.onHand} image={productImage(row.product)} danger={row.status === "out"} />)}</div>
+              <div className="mt-3">{!inventorySettings.lowStockAlertsEnabled ? <div className="rounded-btn border border-dashed border-line-strong bg-surface-raised px-4 py-5"><p className="text-sm font-extrabold text-ink">Alerts are turned off</p><p className="mt-1 text-xs leading-5 text-ink-muted">Low-stock notifications are disabled for this dashboard. Inventory counts remain available.</p><Link href="/admin/settings#dashboard-settings" className="mt-3 inline-flex text-xs font-extrabold text-primary hover:underline">Configure alert settings <AdminIcon name="arrow" size={13} /></Link></div> : lowStockRows.length === 0 ? <EmptyState title="Stock levels look good" detail="Tracked products will appear here when they reach their configured minimum." /> : lowStockRows.map((row) => <StockAlert key={`${row.branch.id}:${row.product.id}`} name={row.product.name} detail={`${row.branch.name} · Stock: ${formatStockQuantity(row.onHand)} ${row.product.unit}`} minimum={`Min: ${formatStockQuantity(dashboardLowStockThreshold(row.product.min_stock, inventorySettings.defaultLowStockThreshold))} ${row.product.unit}`} threshold={dashboardLowStockThreshold(row.product.min_stock, inventorySettings.defaultLowStockThreshold)} onHand={row.onHand} image={productImage(row.product)} danger={row.status === "out"} />)}</div>
             </section>
 
             <section aria-labelledby="today-heading" className="admin-panel min-w-0 p-5">

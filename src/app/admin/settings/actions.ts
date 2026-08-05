@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { invalidateAdminProfile } from "@/lib/admin/profile";
 import { isAdminThemeId, mergeAdminBrandingSettings } from "@/lib/admin/branding";
+import { mergeAdminInventorySettings, readAdminInventorySettings } from "@/lib/admin/inventory-settings";
 import { createClient } from "@/lib/supabase/server";
 
 function settingsRedirect(message: string): never {
@@ -53,11 +54,16 @@ export async function updateOrganizationSettings(formData: FormData) {
   const brandName = readText(formData, "brand_name");
   const brandTagline = readText(formData, "brand_tagline");
   const theme = readText(formData, "admin_theme");
+  const lowStockAlertsEnabled = formData.get("low_stock_alerts_enabled") === "on";
+  const defaultLowStockThreshold = Number(readText(formData, "default_low_stock_threshold"));
   validateRequiredText(name, "Organization name", 120);
   validateRequiredText(brandName, "Brand name", 48);
   if (brandTagline.length > 48) settingsRedirect("Brand tagline must be at most 48 characters.");
   if (!/^[A-Z]{3}$/.test(currency)) settingsRedirect("Currency must be a three-letter code such as PHP.");
   if (!isAdminThemeId(theme)) settingsRedirect("Choose a valid dashboard theme.");
+  if (!Number.isFinite(defaultLowStockThreshold) || defaultLowStockThreshold < 0 || defaultLowStockThreshold > 100000) {
+    settingsRedirect("The default low-stock threshold must be a number from 0 to 100,000.");
+  }
 
   const { data: organization, error: organizationError } = await supabase
     .from("organizations")
@@ -67,10 +73,17 @@ export async function updateOrganizationSettings(formData: FormData) {
   if (organizationError) settingsRedirect(organizationError.message || "Organization settings could not be read.");
   if (!organization) settingsRedirect("Organization settings could not be found.");
 
-  const settings = mergeAdminBrandingSettings(organization?.settings, {
+  const brandingSettings = mergeAdminBrandingSettings(organization?.settings, {
     brandName,
     brandTagline,
     theme,
+  });
+  const currentInventorySettings = readAdminInventorySettings(organization?.settings);
+  const settings = mergeAdminInventorySettings(brandingSettings, {
+    lowStockAlertsEnabled,
+    defaultLowStockThreshold: Number.isFinite(defaultLowStockThreshold)
+      ? defaultLowStockThreshold
+      : currentInventorySettings.defaultLowStockThreshold,
   });
 
   const { error } = await supabase.from("organizations").update({ name, currency, settings }).eq("id", orgId);
