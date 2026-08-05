@@ -8,7 +8,7 @@ export type AdminProfile = {
   org_id: string;
   store_id: string | null;
   password_change_required: boolean;
-  organizations: { name?: string } | null;
+  organizations: { name?: string; settings?: unknown } | null;
   stores: { name?: string } | null;
 };
 
@@ -38,7 +38,7 @@ export const getAdminProfile = cache(async (userId: string): Promise<AdminProfil
       const supabase = await createClient();
       const { data, error } = await supabase
         .from("profiles")
-        .select("full_name, role, org_id, store_id, password_change_required, organizations!profiles_org_id_fkey(name), stores(name)")
+        .select("full_name, role, org_id, store_id, password_change_required, organizations!profiles_org_id_fkey(name, settings), stores(name)")
         .eq("id", userId)
         .maybeSingle();
 

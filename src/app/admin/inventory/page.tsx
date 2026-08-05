@@ -15,6 +15,7 @@ import {
   type StockMovementType,
 } from "@/lib/inventory";
 import { getAdminProfile } from "@/lib/admin/profile";
+import { readAdminBranding } from "@/lib/admin/branding";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import { recordStockMovement } from "./actions";
@@ -30,7 +31,7 @@ type ProfileRecord = {
   org_id: string;
   store_id: string | null;
   password_change_required: boolean;
-  organizations: { name?: string } | null;
+  organizations: { name?: string; settings?: unknown } | null;
 };
 
 type BranchRecord = {
@@ -569,12 +570,13 @@ export default async function InventoryPage({
   const inventoryAlertCount = lowStockCount + outOfStockCount;
   const activeFilterCount = [category !== "all", status !== "all", Boolean(supplier)].filter(Boolean).length;
   const hiddenColumnCount = columnOptions.length - visibleColumns.size;
+  const branding = readAdminBranding(profile.organizations?.settings);
 
   return (
-    <main className="admin-page text-ink">
+    <main data-admin-theme={branding.theme} className="admin-page text-ink">
       <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
           <header className="admin-topbar">
-            <Link href="/admin" className="admin-mobile-brand" aria-label="Admin dashboard"><span className="admin-brand__mark"><AdminIcon name="pig" size={20} /></span><span className="admin-brand__copy"><strong>Mario&apos;s</strong><small>LECHON HOUSE</small></span></Link>
+            <Link href="/admin" className="admin-mobile-brand" aria-label={`${branding.brandName} ${branding.brandTagline} dashboard`}><span className="admin-brand__mark"><AdminIcon name="pig" size={20} /></span><span className="admin-brand__copy"><strong>{branding.brandName}</strong><small>{branding.brandTagline}</small></span></Link>
             <Link href="#inventory-filters-heading" className="admin-icon-button" aria-label="Search inventory"><AdminIcon name="search" size={19} /></Link>
             <Link href="#inventory-table" className="admin-icon-button admin-icon-button--alert" aria-label={inventoryAlertCount ? `View ${inventoryAlertCount} inventory alerts` : "View inventory status"}><AdminIcon name="bell" size={19} />{inventoryAlertCount > 0 && <span className="admin-icon-button__badge" aria-hidden="true">{inventoryAlertCount > 9 ? "9+" : inventoryAlertCount}</span>}</Link>
             <Link href="#inventory-help" className="admin-icon-button admin-icon-button--help" aria-label="View inventory help"><AdminIcon name="help" size={19} /></Link>

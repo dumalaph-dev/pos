@@ -3,8 +3,10 @@ import { AdminSidebar, type AdminSidebarConnection } from "./AdminSidebar";
 import { AdminNavigationProgress } from "./AdminNavigationProgress";
 import { AdminBranchSwitcher } from "./AdminBranchSwitcher";
 import type { AdminBranchOption } from "@/lib/admin/branch-context";
+import type { AdminBranding } from "@/lib/admin/branding";
 
 export function AdminShell({
+  branding,
   branchName,
   connection,
   branches,
@@ -13,6 +15,7 @@ export function AdminShell({
   canManageBranches,
   children,
 }: {
+  branding: AdminBranding;
   branchName: string;
   connection?: AdminSidebarConnection;
   branches?: AdminBranchOption[];
@@ -22,9 +25,9 @@ export function AdminShell({
   children: ReactNode;
 }) {
   return (
-    <div className="admin-shell mx-auto grid min-h-screen w-full max-w-[1700px] lg:grid-cols-[minmax(0,198px)_minmax(0,1fr)]">
+    <div data-admin-theme={branding.theme} className="admin-shell mx-auto grid min-h-screen w-full max-w-[1700px] lg:grid-cols-[minmax(0,198px)_minmax(0,1fr)]">
       <AdminNavigationProgress />
-      <AdminSidebar branchName={branchName} connection={connection} branches={branches} selectedBranchId={selectedBranchId} canSwitchBranches={canSwitchBranches} canManageBranches={canManageBranches} />
+      <AdminSidebar branding={branding} branchName={branchName} connection={connection} branches={branches} selectedBranchId={selectedBranchId} canSwitchBranches={canSwitchBranches} canManageBranches={canManageBranches} />
       <div className="admin-shell__content min-w-0">
         <div className="admin-mobile-context">
           <AdminBranchSwitcher branchName={branchName} branches={branches ?? []} selectedBranchId={selectedBranchId ?? null} canSwitch={Boolean(canSwitchBranches)} canManageBranches={Boolean(canManageBranches)} />

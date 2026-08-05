@@ -5,6 +5,7 @@ import { AdminIcon, type AdminIconName } from "./AdminIcon";
 import { AdminLink as Link } from "./AdminLink";
 import { AdminBranchSwitcher } from "./AdminBranchSwitcher";
 import type { AdminBranchOption } from "@/lib/admin/branch-context";
+import type { AdminBranding } from "@/lib/admin/branding";
 
 export type AdminSection = "overview" | "sales" | "pos" | "orders" | "inventory" | "products" | "catalog" | "customers" | "suppliers" | "expenses" | "employees" | "reports" | "audit" | "settings" | "promotions" | "branches";
 
@@ -67,18 +68,18 @@ function activeSectionForPath(pathname: string | null): AdminSection {
   return routeSections.find(([prefix]) => pathname.startsWith(prefix))?.[1] ?? "overview";
 }
 
-export function AdminSidebar({ branchName, active: activeOverride, connection, branches = [], selectedBranchId = null, canSwitchBranches = false, canManageBranches = false }: { branchName: string; active?: AdminSection; connection?: AdminSidebarConnection; branches?: AdminBranchOption[]; selectedBranchId?: string | null; canSwitchBranches?: boolean; canManageBranches?: boolean }) {
+export function AdminSidebar({ branding, branchName, active: activeOverride, connection, branches = [], selectedBranchId = null, canSwitchBranches = false, canManageBranches = false }: { branding: AdminBranding; branchName: string; active?: AdminSection; connection?: AdminSidebarConnection; branches?: AdminBranchOption[]; selectedBranchId?: string | null; canSwitchBranches?: boolean; canManageBranches?: boolean }) {
   const pathname = usePathname();
   const active = activeOverride ?? activeSectionForPath(pathname);
 
   return (
     <aside className="admin-sidebar hidden lg:flex">
       <div className="admin-sidebar__inner">
-        <Link href="/admin" className="admin-brand" aria-label="Rico's Lechon House dashboard">
+        <Link href="/admin" className="admin-brand" aria-label={`${branding.brandName} ${branding.brandTagline} dashboard`}>
           <span className="admin-brand__mark"><AdminIcon name="pig" size={30} /></span>
           <span className="admin-brand__copy">
-            <strong>Rico&apos;s</strong>
-            <small>LECHON HOUSE</small>
+            <strong>{branding.brandName}</strong>
+            <small>{branding.brandTagline}</small>
           </span>
         </Link>
 
