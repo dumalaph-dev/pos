@@ -7,6 +7,7 @@ import { SignOutButton } from "@/components/SignOutButton";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { createSupplier, updateSupplier } from "./actions";
+import { OwnerGuidance } from "@/components/admin/OwnerOnboardingPanel";
 
 type AdminRole = "admin" | "manager" | "cashier";
 type SupplierStatus = "all" | "active" | "inactive";
@@ -139,6 +140,7 @@ export default async function SuppliersPage({
           {readParam(params.error) && <div role="alert" className="mt-5 rounded-card border border-danger/25 bg-danger-soft px-4 py-3 text-sm font-semibold text-danger">{readParam(params.error)}</div>}
           {queryWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink">Some supplier data could not refresh. Check that the business-record migration is applied in Supabase.</div>}
           {!canWrite && <div role="status" className="mt-5 rounded-card border border-line bg-secondary px-4 py-3 text-sm font-semibold text-primary">This directory is read-only for your role. Ask an organization admin to add or edit suppliers.</div>}
+          {canWrite && <div className="mt-5"><OwnerGuidance topic="suppliers" /></div>}
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <SupplierMetric label="Suppliers" value={String(suppliers.length)} detail="In this organization" tone="bg-primary text-primary-fg" icon="suppliers" />

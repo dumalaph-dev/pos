@@ -11,7 +11,9 @@ import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { readAdminBranding } from "@/lib/admin/branding";
 import { dashboardLowStockThreshold, readAdminInventorySettings } from "@/lib/admin/inventory-settings";
+import { buildOwnerOnboardingState, hasConfiguredOwnerBusinessProfile, hasConfiguredOwnerDashboardSettings } from "@/lib/admin/onboarding";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
+import { OwnerGuidance, OwnerOnboardingPanel } from "@/components/admin/OwnerOnboardingPanel";
 
 type AdminRole = "admin" | "manager" | "cashier";
 type OrderStatus = "completed" | "voided" | "refunded";
@@ -219,6 +221,22 @@ export default async function AdminPage() {
     .eq("org_id", profile.org_id)
     .limit(100);
 
+  const onboardingStaffQuery = profile.role === "admin"
+    ? supabase.from("employee_records").select("id, role").eq("org_id", profile.org_id).eq("is_active", true).limit(100)
+    : null;
+  const onboardingInventoryQuery = profile.role === "admin"
+    ? supabase.from("stock_movements").select("id").eq("org_id", profile.org_id).in("type", ["receive", "yield_in", "adjust"]).limit(1)
+    : null;
+  const onboardingDevicesQuery = profile.role === "admin"
+    ? supabase.from("devices").select("id").eq("org_id", profile.org_id).eq("is_active", true).limit(1)
+    : null;
+  const onboardingCategoriesQuery = profile.role === "admin"
+    ? supabase.from("categories").select("id").eq("org_id", profile.org_id).eq("is_active", true).limit(1)
+    : null;
+  const onboardingProductsQuery = profile.role === "admin"
+    ? supabase.from("products").select("id").eq("org_id", profile.org_id).eq("is_active", true).limit(1)
+    : null;
+
   if (selectedBranchId) {
     productsQuery = productsQuery.eq("store_id", selectedBranchId);
     categoriesQuery = categoriesQuery.eq("store_id", selectedBranchId);
@@ -235,7 +253,7 @@ export default async function AdminPage() {
     .order("created_at", { ascending: false })
     .limit(2000);
 
-  const [productsResult, categoriesResult, ordersResult, stockResult, itemsResult, devicesResult] = await Promise.all([
+  const [productsResult, categoriesResult, ordersResult, stockResult, itemsResult, devicesResult, onboardingStaffResult, onboardingInventoryResult, onboardingDevicesResult, onboardingCategoriesResult, onboardingProductsResult] = await Promise.all([
     productsQuery,
     categoriesQuery,
     ordersQuery,
@@ -247,6 +265,11 @@ export default async function AdminPage() {
     // sequential query with a huge .in() filter.
     itemsQuery,
     devicesQuery,
+    onboardingStaffQuery ?? Promise.resolve({ data: [], error: null }),
+    onboardingInventoryQuery ?? Promise.resolve({ data: [], error: null }),
+    onboardingDevicesQuery ?? Promise.resolve({ data: [], error: null }),
+    onboardingCategoriesQuery ?? Promise.resolve({ data: [], error: null }),
+    onboardingProductsQuery ?? Promise.resolve({ data: [], error: null }),
   ]);
 
   const products = ((productsResult.data ?? []) as ProductRecord[]).filter((product) => !selectedBranchId || product.store_id === selectedBranchId);
@@ -260,6 +283,19 @@ export default async function AdminPage() {
   });
   const orderItems = (itemsResult.data ?? []) as OrderItemRecord[];
   const orderItemsError = Boolean(itemsResult.error);
+  const onboardingStaff = (onboardingStaffResult.data ?? []) as Array<{ id: string; role: string }>;
+  const onboardingQueries = [onboardingStaffResult, onboardingInventoryResult, onboardingDevicesResult, onboardingCategoriesResult, onboardingProductsResult];
+  const onboardingState = profile.role === "admin" && onboardingQueries.every((result) => !result.error)
+    ? buildOwnerOnboardingState({
+      hasBusinessProfile: hasConfiguredOwnerBusinessProfile(profile.organizations?.settings, profile.organizations?.name),
+      hasBranch: branches.some((branch) => branch.is_active),
+      hasPosDevice: (onboardingDevicesResult.data ?? []).length > 0,
+      hasCatalog: (onboardingCategoriesResult.data ?? []).length > 0 && (onboardingProductsResult.data ?? []).length > 0,
+      hasOpeningInventory: (onboardingInventoryResult.data ?? []).length > 0,
+      hasStaff: onboardingStaff.some((member) => member.role !== "admin"),
+      hasDashboardSettings: hasConfiguredOwnerDashboardSettings(profile.organizations?.settings),
+    })
+    : null;
 
   const queryWarning = Boolean(
     branchesResult.error || productsResult.error || categoriesResult.error || ordersResult.error || stockResult.error || devicesResult.error || orderItemsError,
@@ -444,6 +480,9 @@ export default async function AdminPage() {
 
           {queryWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink">Some data could not refresh. The dashboard is showing the data that was available; the POS remains available.</div>}
 
+          {onboardingState && <div className="mt-5"><OwnerOnboardingPanel state={onboardingState} /></div>}
+          {profile.role === "admin" && <div className="mt-5"><OwnerGuidance topic="dashboard" /></div>}
+
           <section aria-label="Key performance indicators" className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
             <KpiCard label="Total sales" value={displayPeso(totalSales)} detail={completedOrders.length ? `${completedOrders.length} completed orders` : "No sales yet"} trend={weekSeries[6].value > weekSeries[5].value ? "Today is up" : undefined} icon="wallet" tone="brown" spark={weekSeries.map((point) => point.value)} />
             <KpiCard label="Orders" value={String(completedOrders.length)} detail={todayOrders.length ? "Completed today" : "No orders yet"} trend={todayOrders.length ? "Live from orders" : undefined} icon="bag" tone="orange" spark={weekSeries.map((point) => point.value ? point.value / weekPeak : 0)} />
@@ -493,7 +532,7 @@ export default async function AdminPage() {
 
             <section id="low-stock-alerts" aria-labelledby="low-stock-heading" className="admin-panel min-w-0 p-5">
               <div className="admin-panel__header"><div><h2 id="low-stock-heading" className="admin-panel__title">Low Stock Alerts</h2><p className="admin-panel__subtitle">Items that need to be restocked</p></div><Link href="/admin/inventory" className="admin-kpi-card__link mt-0">View all</Link></div>
-              <div className="mt-3">{!inventorySettings.lowStockAlertsEnabled ? <div className="rounded-btn border border-dashed border-line-strong bg-surface-raised px-4 py-5"><p className="text-sm font-extrabold text-ink">Alerts are turned off</p><p className="mt-1 text-xs leading-5 text-ink-muted">Low-stock notifications are disabled for this dashboard. Inventory counts remain available.</p><Link href="/admin/settings#dashboard-settings" className="mt-3 inline-flex text-xs font-extrabold text-primary hover:underline">Configure alert settings <AdminIcon name="arrow" size={13} /></Link></div> : lowStockRows.length === 0 ? <EmptyState title="Stock levels look good" detail="Tracked products will appear here when they reach their configured minimum." /> : lowStockRows.map((row) => <StockAlert key={`${row.branch.id}:${row.product.id}`} name={row.product.name} detail={`${row.branch.name} · Stock: ${formatStockQuantity(row.onHand)} ${row.product.unit}`} minimum={`Min: ${formatStockQuantity(dashboardLowStockThreshold(row.product.min_stock, inventorySettings.defaultLowStockThreshold))} ${row.product.unit}`} threshold={dashboardLowStockThreshold(row.product.min_stock, inventorySettings.defaultLowStockThreshold)} onHand={row.onHand} image={productImage(row.product)} danger={row.status === "out"} />)}</div>
+              <div className="mt-3">{profile.role === "admin" && <OwnerGuidance topic="low-stock" compact />}{!inventorySettings.lowStockAlertsEnabled ? <div className="rounded-btn border border-dashed border-line-strong bg-surface-raised px-4 py-5"><p className="text-sm font-extrabold text-ink">Alerts are turned off</p><p className="mt-1 text-xs leading-5 text-ink-muted">Low-stock notifications are disabled for this dashboard. Inventory counts remain available.</p><Link href="/admin/settings#dashboard-settings" className="mt-3 inline-flex text-xs font-extrabold text-primary hover:underline">Configure alert settings <AdminIcon name="arrow" size={13} /></Link></div> : lowStockRows.length === 0 ? <EmptyState title="Stock levels look good" detail="Tracked products will appear here when they reach their configured minimum." /> : lowStockRows.map((row) => <StockAlert key={`${row.branch.id}:${row.product.id}`} name={row.product.name} detail={`${row.branch.name} · Stock: ${formatStockQuantity(row.onHand)} ${row.product.unit}`} minimum={`Min: ${formatStockQuantity(dashboardLowStockThreshold(row.product.min_stock, inventorySettings.defaultLowStockThreshold))} ${row.product.unit}`} threshold={dashboardLowStockThreshold(row.product.min_stock, inventorySettings.defaultLowStockThreshold)} onHand={row.onHand} image={productImage(row.product)} danger={row.status === "out"} />)}</div>
             </section>
 
             <section aria-labelledby="today-heading" className="admin-panel min-w-0 p-5">

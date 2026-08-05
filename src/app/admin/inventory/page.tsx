@@ -19,6 +19,7 @@ import { dashboardLowStockThreshold, readAdminInventorySettings } from "@/lib/ad
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import { recordStockMovement } from "./actions";
+import { OwnerGuidance } from "@/components/admin/OwnerOnboardingPanel";
 
 type AdminRole = "admin" | "manager" | "cashier";
 type PricingMode = "fixed" | "per_kg";
@@ -615,6 +616,7 @@ export default async function InventoryPage({
           {catalogFieldsWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-3 py-2.5 text-xs text-ink"><strong className="font-extrabold">Some inventory fields are unavailable.</strong> Ensure <code className="font-bold">0009_admin_business_records.sql</code> is applied before <code className="font-bold">0010_inventory_catalog_fields.sql</code> in Supabase to enable suppliers and advanced inventory fields.</div>}
           {queryWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-3 py-2.5 text-xs text-ink">Some inventory data could not refresh. Check the connection and try again.</div>}
           {!canWrite && <div role="status" className="mt-5 rounded-card border border-line bg-secondary px-4 py-3 text-sm font-semibold text-primary">This inventory view is read-only for your role. Ask an organization admin to record stock movements or edit catalog fields.</div>}
+          {canWrite && <div className="mt-5"><OwnerGuidance topic="yield" /></div>}
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <InventoryMetric label="Total items" value={String(allRows.length)} detail={`Tracked for ${currentBranchName}`} tone="bg-primary text-primary-fg" icon="box" />
