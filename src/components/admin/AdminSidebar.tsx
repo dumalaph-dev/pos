@@ -82,7 +82,7 @@ export function AdminSidebar({ branchName, active: activeOverride, connection, b
           </span>
         </Link>
 
-        <AdminBranchSwitcher branchName={branchName} branches={branches} selectedBranchId={selectedBranchId} canSwitch={canSwitchBranches} />
+        <AdminBranchSwitcher branchName={branchName} branches={branches} selectedBranchId={selectedBranchId} canSwitch={canSwitchBranches} canManageBranches={canManageBranches} />
 
         <nav aria-label="Admin navigation" className="admin-nav">
           <div className="admin-nav__group">

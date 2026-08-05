@@ -27,7 +27,7 @@ export function AdminShell({
       <AdminSidebar branchName={branchName} connection={connection} branches={branches} selectedBranchId={selectedBranchId} canSwitchBranches={canSwitchBranches} canManageBranches={canManageBranches} />
       <div className="admin-shell__content min-w-0">
         <div className="admin-mobile-context">
-          <AdminBranchSwitcher branchName={branchName} branches={branches ?? []} selectedBranchId={selectedBranchId ?? null} canSwitch={Boolean(canSwitchBranches)} />
+          <AdminBranchSwitcher branchName={branchName} branches={branches ?? []} selectedBranchId={selectedBranchId ?? null} canSwitch={Boolean(canSwitchBranches)} canManageBranches={Boolean(canManageBranches)} />
         </div>
         {children}
       </div>

@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
+
+type PortalPosition = {
+  top: number;
+  left: number;
+  maxHeight: number;
+  openAbove: boolean;
+};
 
 /**
  * Disclosure dropdown for the admin topbar (notifications, account menu).
@@ -20,6 +28,7 @@ export function AdminMenu({
   triggerLabel,
   panelTitle,
   panelClassName = "",
+  portal = false,
   children,
 }: {
   trigger: ReactNode;
@@ -27,18 +36,44 @@ export function AdminMenu({
   triggerLabel: string;
   panelTitle?: string;
   panelClassName?: string;
+  portal?: boolean;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [portalPosition, setPortalPosition] = useState<PortalPosition | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const panelId = useId();
+
+  const updatePortalPosition = useCallback(() => {
+    if (!portal || !triggerRef.current || typeof window === "undefined") return;
+
+    const triggerRect = triggerRef.current.getBoundingClientRect();
+    const viewportPadding = 12;
+    const panelWidth = Math.min(300, window.innerWidth - viewportPadding * 2);
+    const left = Math.min(
+      Math.max(viewportPadding, triggerRect.left),
+      Math.max(viewportPadding, window.innerWidth - panelWidth - viewportPadding),
+    );
+    const spaceBelow = window.innerHeight - triggerRect.bottom - viewportPadding;
+    const spaceAbove = triggerRect.top - viewportPadding;
+    const openAbove = spaceBelow < 280 && spaceAbove > spaceBelow;
+
+    setPortalPosition({
+      top: openAbove ? triggerRect.top - 8 : triggerRect.bottom + 8,
+      left,
+      maxHeight: Math.max(160, (openAbove ? spaceAbove : spaceBelow) - 8),
+      openAbove,
+    });
+  }, [portal]);
 
   useEffect(() => {
     if (!open) return;
 
     function onPointerDown(event: PointerEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !panelRef.current?.contains(target)) setOpen(false);
     }
     function onKeyDown(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
@@ -55,6 +90,50 @@ export function AdminMenu({
     };
   }, [open]);
 
+  useEffect(() => {
+    if (!open || !portal) return;
+
+    updatePortalPosition();
+    window.addEventListener("resize", updatePortalPosition);
+    window.addEventListener("scroll", updatePortalPosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePortalPosition);
+      window.removeEventListener("scroll", updatePortalPosition, true);
+    };
+  }, [open, portal, updatePortalPosition]);
+
+  function toggleMenu() {
+    if (!open && portal) updatePortalPosition();
+    setOpen((previous) => !previous);
+  }
+
+  const panelStyle: CSSProperties | undefined = portal && portalPosition
+    ? {
+        top: portalPosition.top,
+        left: portalPosition.left,
+        maxHeight: portalPosition.maxHeight,
+        transform: portalPosition.openAbove ? "translateY(-100%)" : undefined,
+      }
+    : undefined;
+
+  const panel = open && (!portal || portalPosition) ? (
+    <div
+      ref={panelRef}
+      id={panelId}
+      aria-label={triggerLabel}
+      className={`admin-menu__panel ${panelClassName} ${portal ? "admin-menu__panel--portal" : ""}`}
+      style={panelStyle}
+      // Close once the user commits to something, but leave plain clicks
+      // inside the panel (selecting text, scrolling) alone.
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest("a, button")) setOpen(false);
+      }}
+    >
+      {panelTitle && <p className="admin-menu__title">{panelTitle}</p>}
+      {children}
+    </div>
+  ) : null;
+
   return (
     <div className="admin-menu" ref={rootRef}>
       <button
@@ -64,26 +143,12 @@ export function AdminMenu({
         aria-expanded={open}
         aria-controls={panelId}
         aria-label={triggerLabel}
-        onClick={() => setOpen((previous) => !previous)}
+        onClick={toggleMenu}
       >
         {trigger}
       </button>
 
-      {open && (
-        <div
-          id={panelId}
-          aria-label={triggerLabel}
-          className={`admin-menu__panel ${panelClassName}`}
-          // Close once the user commits to something, but leave plain clicks
-          // inside the panel (selecting text, scrolling) alone.
-          onClick={(event) => {
-            if ((event.target as HTMLElement).closest("a, button")) setOpen(false);
-          }}
-        >
-          {panelTitle && <p className="admin-menu__title">{panelTitle}</p>}
-          {children}
-        </div>
-      )}
+      {portal && panel && typeof document !== "undefined" ? createPortal(panel, document.body) : panel}
     </div>
   );
 }

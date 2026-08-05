@@ -3538,6 +3538,22 @@ textarea.inventory-input {
   line-height: 1.45;
 }
 
+.admin-branch-menu__divider {
+  height: 1px;
+  margin: 5px 8px;
+  background: var(--border);
+}
+
+.admin-branch-menu__action {
+  color: var(--primary);
+  font-weight: 750;
+}
+
+.admin-branch-menu__manage {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
 .admin-branch-menu__item {
   width: 100%;
   justify-content: flex-start;
@@ -3984,6 +4000,16 @@ textarea.inventory-input {
   border-radius: 13px;
   background: #fffdf9;
   box-shadow: var(--shadow-pop);
+}
+
+.admin-menu__panel--portal {
+  position: fixed;
+  z-index: 100;
+  top: auto;
+  right: auto;
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .admin-menu__panel--wide {
