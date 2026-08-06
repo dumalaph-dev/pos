@@ -5,19 +5,58 @@
 
 ---
 
+## Current project status
+
+**Last updated:** 2026-08-06
+
+This section is the current source of truth for delivered work and the next gate. Keep it updated in the same change as every feature, migration, QA pass, commit, or deployment.
+
+| Workstream | Current status | Next gate |
+|---|---|---|
+| Foundation and infrastructure | Complete (9/9 checklist items) | Keep CI and preview deployments green |
+| POS online core | Complete | Pilot validation |
+| Offline layer | Complete | Full 15-sale pilot drill |
+| Printing | In progress (6/7) | Physical LAN printer slip validation |
+| Multi-branch | Complete | Production second-branch sign-off |
+| Customer display | Not started | Build `/display` pairing and live cart mirror |
+| Admin backoffice | In progress (Orders operations added locally) | Apply migration, verify hosted/browser void-refund-reprint flow, then finish remaining P6 slices |
+| Inventory workflow | Complete | Maintain regression coverage |
+| Inventory reporting and exports | Implemented | End-to-end filter, permissions, totals, CSV, and responsive-layout QA |
+| Store-owner onboarding and guidance | Implemented | Verify first-run and mobile behavior on the deployed app |
+| Admin workspace themes | Implemented locally | Commit, push, deploy, then verify Classic/Light/Dark/Retro live |
+| Production pilot | Not started | Production Supabase, device setup, pilot week, and branch #2 |
+
+### Recent delivery log
+
+- **2026-08-05 — Admin workspace theme polish (working tree):** Added immediate theme preview on the Settings page, save pending feedback, shared `/admin` layout revalidation, more readable Classic/Light/Dark palettes, a new Retro theme, and updated swatches/previews. `npx tsc --noEmit`, `npm run lint`, `npm run build`, and `git diff --check` pass. The changes are currently uncommitted on `main`.
+- **2026-08-05 — P6 Orders operations (working tree):** Added migration `0020_order_actions.sql` for immutable, one-time admin void/refund reversals that restore tracked stock and write an audit event. The Orders detail now supports browser-configured reprint with post-print audit logging, reason-required admin actions, success/error feedback, and manager read-only messaging. `npm run typecheck` and `npm run lint` pass; migration application and hosted/browser verification remain pending.
+- **2026-08-05 — P0 foundation completion (working tree):** Confirmed the existing `/setup` flow completes branch-scoped device binding, stores the local binding, registers printer settings, and writes an audit event. Added `npm run typecheck` and `.github/workflows/ci.yml` for PR/main typecheck, lint, and production-build validation. Vercel preview deployments remain managed by the linked Vercel project and are part of deployment verification.
+- **2026-08-05 — Inventory reporting and exports:** Merged as `68e8eb9`. Inventory, movement, yield/waste, low/out-of-stock, and expected-versus-counted variance report views include branch/date/product/category/supplier filters and CSV export paths. End-to-end QA is the next reporting gate.
+- **2026-08-05 — Store-owner onboarding and guidance:** Merged as `25d9ffa`. The compact checklist, progress indicator, unfinished-setup suggestions, contextual feature help, dismissible tips, and Settings restore action are in place.
+- **2026-08-05 — Inventory workflow:** Merged as `208b76c`. Whole-lechon yield/waste entry, configurable dashboard low-stock alerts, and end-of-day count/variance adjustments are implemented.
+- **2026-08-05 — Admin dashboard settings baseline:** Merged as `e7fa396`. Organization branding, dashboard identity, and persisted workspace theme settings are available to admins.
+
+### Immediate next task
+
+1. Apply `supabase/migrations/0020_order_actions.sql` to the linked Supabase project.
+2. Deploy and verify the P6 Orders workflow: admin void/refund, reason validation, stock restoration, audit entries, browser reprint, manager read-only access, and mobile detail layout.
+3. Continue the remaining P6 backoffice gaps and then return to the pending Inventory Reporting & Export QA pass.
+
+---
+
 ## 📊 Progress Tracker
 
 | Phase | Name | Status | Progress | Gate |
 |---|---|:--:|:--:|---|
-| **P0** | Foundation & infra | 🟡 In progress | 5 / 9 | Schema + auth must exist before any feature |
-| **P1** | POS core (online) | ⬜ Not started | 0 / 8 | — |
-| **P2** | Offline layer | ⬜ Not started | 0 / 7 | Needs P1 sell flow |
+| **P0** | Foundation & infra | ✅ Done | 9 / 9 | Device binding and CI are implemented; deployment verification remains in P9 |
+| **P1** | POS core (online) | ✅ Done | 8 / 8 | — |
+| **P2** | Offline layer | ✅ Done | 7 / 7 | — |
 | **P3** | Printing | 🟡 In progress | 6 / 7 | **Physical LAN printer validation pending (PRD §6.4)** |
 | **P4** | Multi-branch | ✅ Done | 8 / 8 | Schema from P0 |
 | **P5** | Customer display | ⬜ Not started | 0 / 6 | Needs P1 cart events |
-| **P6** | Backoffice | ⬜ Not started | 0 / 8 | — |
-| **P7** | Inventory | ⬜ Not started | 0 / 6 | Needs P6 shell |
-| **P8** | Shifts & reports | ⬜ Not started | 0 / 6 | — |
+| **P6** | Backoffice | 🟡 In progress | Core admin slices implemented | Hosted/browser QA and production hardening |
+| **P7** | Inventory | ✅ Done | 6 / 6 | Maintain regression coverage |
+| **P8** | Shifts & reports | 🟡 In progress | Inventory reporting slice implemented | Reporting QA; shifts and till reports remain |
 | **P9** | Pilot & production deploy | ⬜ Not started | 0 / 8 | Everything above |
 
 **Status legend:** ⬜ Not started · 🟡 In progress · ✅ Done · 🔴 Blocked
@@ -36,9 +75,11 @@
 - [x] Enable **RLS on every table**; policies (admins by `org_id`, cashiers by `store_id`; append-only audit/stock + triggers). → `0002_rls.sql`. *(Two-branch test fixture still TODO — TEST_PLAN §1.)* *(✅ applied + verified on local stack 2026-07-31: 11 tables RLS-on, 29 policies, 4 triggers)*
 - [x] Supabase Auth: email+password login page at root; `profiles` row created on invite. *(Client/server helpers ready; login UI pending.)* *(✅ first login verified on hosted 2026-07-31 — admin lands on /admin.)*
 - [x] Protected routing skeleton via Next 16 `proxy.ts`: guards `/pos` `/admin`, cashier→`/pos`. *(Audit-log-on-violation TODO.)*
-- [ ] Device binding: on first setup, bind tablet to a branch; persist locally; seed `devices` row.
+- [x] Device binding: on first setup, bind tablet to a branch; persist locally; seed `devices` row. *(Implemented in `/setup`: branch-scoped `devices` insert, local binding, printer settings, and `device.created` audit event.)*
 - [x] Design tokens wired to Tailwind v4 from `ui.png` (globals.css `@theme` + IBM Plex Sans + `money.ts`). Smoke page verifies render; `npm run build` green.
-- [ ] CI: lint + typecheck on PR; Vercel preview deploys per branch.
+- [x] CI: lint + typecheck on PR; Vercel preview deploys per branch. *(`.github/workflows/ci.yml` now runs typecheck, lint, and build on pull requests and `main`; Vercel preview behavior still needs live verification after the next push.)*
+
+P0 implementation is complete in source (9/9). Production preview deployment verification remains part of P9.
 
 ## P1 — POS Core (Online)
 *Goal: ring up a real sale online and write it to the DB.*
@@ -112,12 +153,20 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 - [ ] Backoffice shell: responsive layout, branch switcher, nav, auth guards.
 - [ ] Dashboard: today's sales, orders, avg ticket, cash vs. e-wallet, top items, kg sold, low-stock alerts (per branch + consolidated). *(Overview slice implemented: live sales, payment mix, top items, branch pulse, and recent orders; kg and inventory alerts remain pending.)*
 - [ ] Products CRUD (per branch): pricing mode, price, image, active/track-stock toggles; copy to another branch; price changes versioned in audit.
-- [ ] Orders: filterable list (branch/date/cashier/method/status), detail drawer, void/refund (admin, reason), reprint.
+- [x] Orders: filterable list (branch/date/cashier/method/status), detail drawer, admin-only reason-required immutable void/refund reversals with tracked-stock restoration and audit logging, browser reprint with audit.
 - [ ] Staff: invite/create, assign branch + role, set/reset PIN, deactivate.
 - [x] Employee workspace slice: reference-matched Employees dashboard with live employee KPIs, searchable/paginated directory, roles & permissions, attendance, payroll, leave requests, quick actions, and CSV export. *(Implemented 2026-08-03; employee records can exist before an auth invite, while linked profiles stay synchronized on edits.)*
 - [x] Audit log viewer: append-only, filter by branch/actor/action/date. *(Implemented 2026-08-03; reads the live append-only audit ledger with database pagination and read-only before/after payload details.)*
 - [ ] Settings split: **org** / **branch** / **device** (per PRD §6.6).
 - [ ] Empty/loading/error states + mobile pass (owner uses a phone).
+
+### P6 Orders operations implementation — 2026-08-05
+
+- `0020_order_actions.sql` adds `orders.reversal_of`, a unique reversal guard, and the `record_order_action` RPC. The original completed order is never updated or deleted; the linked void/refund row and stock adjustment are append-only.
+- `/admin/orders` keeps filters and detail context after an action, surfaces database errors, identifies a prior reversal, and passes branch receipt metadata into the action panel.
+- Admins can submit a reason-required void or refund. Managers can reprint but cannot see or submit reversal controls. Reprint uses the terminal printer settings and writes `order.reprint` only after the printer confirms delivery.
+- The migration must be applied before the new Orders action can run in a deployed environment. Hosted role/branch/mobile QA is the next P6 gate.
+- Application checks pass: `npm run typecheck`, `npm run lint`, `npm run build`, and `git diff --check`. Linked remote `supabase db lint --linked --fail-on error` is clean; `supabase migration list` confirms remote is at `0019` and `0020_order_actions.sql` is still pending. Local `supabase db lint --local --fail-on error` remains blocked by the pre-existing `get_available_slots` ambiguous `resource_id` error and unrelated warnings.
 
 ### Employee workspace implementation — 2026-08-03
 
@@ -132,10 +181,10 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 
 - [x] Stock model on `stock_movements` (on-hand always derived from the ledger, per branch). *(✅ `/admin/inventory` derives balances from the append-only ledger.)*
 - [x] Stock In (whole lechon: units + gross kg + cost; packaged goods). *(✅ first movement form supports branch, unit quantity, unit cost, and reference.)*
-- [ ] Yield entry (whole → chopped kg + waste kg). *(Yield in/out movement types are available; a guided whole-to-yield workflow remains for a later slice.)*
+- [x] Yield entry (whole → chopped kg + waste kg). *(Guided whole-lechon yield conversion records usable yield and waste with audited stock movements.)*
 - [x] Wastage/spoilage entry (reason) + stock adjustment (mandatory reason). *(✅ audited `record_stock_movement` RPC.)*
-- [ ] Low-stock alerts wired to dashboard; sell-with-zero-stock warns, never blocks. *(POS stock badges/toasts and the inventory low/out view are live; configurable thresholds and dashboard cards remain next.)*
-- [ ] End-of-day variance view: opening + received − sold − wasted = expected vs. counted.
+- [x] Low-stock alerts wired to dashboard; sell-with-zero-stock warns, never blocks. *(Organization-level alert settings, product minimums, dashboard cards, and POS warnings are live.)*
+- [x] End-of-day variance view: opening + received − sold − wasted = expected vs. counted. *(Counts can be saved and revised with variance adjustments and audit history.)*
 
 ### Hosted Supabase migration and catalog verification — 2026-08-03
 
@@ -200,3 +249,13 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 - [ ] Accessibility & tap-target sizing on every POS screen.
 - [x] Test data: keep a two-branch, multi-cashier fixture for every RLS/scope test. *(✅ `supabase/seed.sql` + `scripts/rls-fixture.mjs`, 18/18 §1 assertions green 2026-07-31)*
 - [ ] Update [MVP.md](MVP.md) done-criteria and this tracker as phases complete.
+
+### Hosted Supabase product-image migration and authenticated flow - 2026-08-06
+
+- Local Docker context was corrected first: the SKED project was stopped with its data volume preserved, then the existing POS project from H:/pos was started. supabase_db_pos was healthy on 54322; Kong/API was on 54321 and Auth was healthy. The CLI health wait still reported the known local storage, pg-meta, and Studio health warnings, but the POS stack remained running.
+- Hosted migration check: npx supabase migration list --linked showed local and remote 0017 matching (remote migrations through 0019; unrelated 0020 remains pending). A linked SQL query returned supabase_migrations.schema_migrations.version = 0017, so 0017_product_images.sql was already applied before this run and no duplicate push was attempted.
+- Hosted storage verification passed: bucket product-images is public, file_size_limit = 921600, and allowed_mime_types = {image/jpeg,image/png,image/webp}. All four expected policies are present: public select plus authenticated-admin insert, update, and delete, each scoped to the organization-prefixed storage path.
+- Authenticated browser flow passed at http://127.0.0.1:3000 as admin Klein on Main Branch. From /admin/inventory, Add item opened the inventory product form; inline category creation returned Category "Codex Image QA 20260806" created and selected. Product Codex Image QA Product 20260806 was created with SKU CODEX-IMG-20260806, price 123.45, cost 80.00, unit pcs, and stock tracking enabled. Product id: 62c4d353-6e4f-4cc6-820f-898908aea861; category id: 7653e1fb-18a8-4480-b753-b106c990d9ef.
+- Initial photo compression passed: source public/food/whole-lechon-small.png was 2,473,703 bytes; the UI reported Optimized photo - 2.4 MB -> 205 KB. Hosted storage recorded WebP path 8d453c86-4db6-4356-b9fa-1cc36fd830d6/62c4d353-6e4f-4cc6-820f-898908aea861-6b115e77-a27a-4e81-aeae-73ea556e518b.webp, MIME image/webp, 210026 bytes. The product image rendered in both Inventory and Products using that same public Supabase Storage URL.
+- Replacement photo flow passed: editing the product and replacing with public/food/lechon-paksiw.png (2,674,721 bytes) reported Optimized photo - 2.6 MB -> 252 KB. The final hosted object is WebP path 8d453c86-4db6-4356-b9fa-1cc36fd830d6/62c4d353-6e4f-4cc6-820f-898908aea861-2e039903-678d-45d7-b0b1-4fc0a42c4b16.webp, MIME image/webp, 257628 bytes. After reload, both Inventory and Products rendered the new public URL. The old object was absent from storage.objects; its public URL returned HTTP 400, while the new URL returned HTTP 200 with image/webp.
+- The edit server action committed the database and storage change even though this local production runner did not navigate away from the editor within the browser wait window; refreshed Inventory and Products reads confirmed the final URL and image state. No unrelated migration was applied.

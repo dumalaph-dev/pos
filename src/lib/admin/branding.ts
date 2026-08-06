@@ -1,4 +1,4 @@
-export const ADMIN_THEME_IDS = ["current", "light", "dark"] as const;
+export const ADMIN_THEME_IDS = ["current", "light", "dark", "retro"] as const;
 
 export type AdminThemeId = (typeof ADMIN_THEME_IDS)[number];
 
@@ -7,9 +7,10 @@ export const ADMIN_THEME_OPTIONS: Array<{
   label: string;
   description: string;
 }> = [
-  { id: "current", label: "Current", description: "Warm paper and lechon brown" },
-  { id: "light", label: "Light", description: "Clean white and soft blue" },
-  { id: "dark", label: "Dark", description: "Low-glare espresso workspace" },
+  { id: "current", label: "Classic", description: "Warm paper, cocoa, and cream" },
+  { id: "light", label: "Light", description: "Soft neutrals with sage accents" },
+  { id: "dark", label: "Dark", description: "Charcoal surfaces with calm mint" },
+  { id: "retro", label: "Retro", description: "Market green, mustard, and cream" },
 ];
 
 export const DEFAULT_ORGANIZATION_NAME = "Rico's Lechon House";
