@@ -340,6 +340,7 @@ export default async function AdminPage() {
   const topItemsByName = new Map<string, { name: string; qty: number; unit: string; total: number }>();
   const categorySalesById = new Map<string, { id: string; name: string; qty: number; total: number }>();
   let itemsSold = 0;
+  let kgSold = 0;
   for (const item of orderItems) {
     if (!completedOrderIds.has(item.order_id)) continue;
     const product = productById.get(item.product_id);
@@ -355,6 +356,8 @@ export default async function AdminPage() {
     categoryItem.total += Number(item.line_total);
     categorySalesById.set(categoryKey, categoryItem);
     itemsSold += salesQuantity(item);
+    const weightKg = Number(item.weight_kg);
+    if (Number.isFinite(weightKg) && weightKg > 0) kgSold += weightKg;
   }
 
   const topItems = Array.from(topItemsByName.values())
@@ -483,9 +486,10 @@ export default async function AdminPage() {
           {onboardingState && <div className="mt-5"><OwnerOnboardingPanel state={onboardingState} /></div>}
           {profile.role === "admin" && <div className="mt-5"><OwnerGuidance topic="dashboard" /></div>}
 
-          <section aria-label="Key performance indicators" className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          <section aria-label="Key performance indicators" className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
             <KpiCard label="Total sales" value={displayPeso(totalSales)} detail={completedOrders.length ? `${completedOrders.length} completed orders` : "No sales yet"} trend={weekSeries[6].value > weekSeries[5].value ? "Today is up" : undefined} icon="wallet" tone="brown" spark={weekSeries.map((point) => point.value)} />
             <KpiCard label="Orders" value={String(completedOrders.length)} detail={todayOrders.length ? "Completed today" : "No orders yet"} trend={todayOrders.length ? "Live from orders" : undefined} icon="bag" tone="orange" spark={weekSeries.map((point) => point.value ? point.value / weekPeak : 0)} />
+            <KpiCard label="Kg sold" value={formatStockQuantity(kgSold)} detail={kgSold ? "Per-kilogram sales today" : "No per-kilogram sales yet"} icon="box" tone="yellow" />
             <KpiCard label="Net revenue" value={displayPeso(totalSales)} detail="Completed order total" trend={completedOrders.length ? "After discounts" : undefined} icon="wallet" tone="green" spark={weekSeries.map((point) => point.value)} />
             <KpiCard label="Avg. order value" value={displayPeso(averageTicket)} detail={completedOrders.length ? "Per completed order" : "After first sale"} icon="chart" tone="purple" spark={weekSeries.map((point) => point.value ? point.value / Math.max(completedOrders.length, 1) : 0)} />
             <KpiCard label="Low stock items" value={String(lowStockCount)} detail="Needs restocking" icon="box" tone="yellow" href="/admin/inventory" />

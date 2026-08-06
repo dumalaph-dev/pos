@@ -19,9 +19,9 @@ This section is the current source of truth for delivered work and the next gate
 | Printing | In progress (6/7) | Physical LAN printer slip validation |
 | Multi-branch | Complete | Production second-branch sign-off |
 | Customer display | Not started | Build `/display` pairing and live cart mirror |
-| Admin backoffice | In progress (Orders operations merged and hosted QA passed) | Manager-role QA, physical printer validation, then finish remaining P6 slices |
+| Admin backoffice | In progress (manager QA, employee save-flow, price-audit hardening, and kg metric verified) | Reachable LAN printer, staff-login configuration, and remaining P6 polish |
 | Inventory workflow | Complete | Maintain regression coverage |
-| Inventory reporting and exports | Implemented | End-to-end filter, permissions, totals, CSV, and responsive-layout QA |
+| Inventory reporting and exports | Authenticated admin and manager QA passed | Reconciliation against broader live data |
 | Store-owner onboarding and guidance | Implemented | Verify first-run and mobile behavior on the deployed app |
 | Admin workspace themes | Merged in PR #2 | Verify Classic/Light/Dark/Retro on the live main deployment |
 | Production pilot | Not started | Production Supabase, device setup, pilot week, and branch #2 |
@@ -35,12 +35,14 @@ This section is the current source of truth for delivered work and the next gate
 - **2026-08-05 — Store-owner onboarding and guidance:** Merged as `25d9ffa`. The compact checklist, progress indicator, unfinished-setup suggestions, contextual feature help, dismissible tips, and Settings restore action are in place.
 - **2026-08-05 — Inventory workflow:** Merged as `208b76c`. Whole-lechon yield/waste entry, configurable dashboard low-stock alerts, and end-of-day count/variance adjustments are implemented.
 - **2026-08-05 — Admin dashboard settings baseline:** Merged as `e7fa396`. Organization branding, dashboard identity, and persisted workspace theme settings are available to admins.
+- **2026-08-06 — P6 backoffice hardening + Inventory Reporting QA:** Added and applied `0021_product_price_audit.sql`; the hosted `product_price_audit` trigger is present and records price changes in the append-only audit ledger. Authenticated admin route checks passed for Employees, Roles & Permissions, Attendance, Payroll, Leave Requests, and Audit Log. Inventory Reporting QA passed for category/product/supplier filters, clear state, totals, movements, three CSV download endpoints, and a 390x844 viewport with no horizontal overflow. Exact evidence is recorded below.
+- **2026-08-06 — Remaining P6 gate pass:** Temporary hosted manager read-only QA passed across Orders, Inventory, Products, Settings, Employees, and Inventory Reports; the temporary Auth/profile was deleted after the pass. The admin employee save-flow passed with a reversible Juan Dela Cruz job-title change and restore. The dashboard now exposes an explicit `Kg sold` metric from `order_items.weight_kg`; the 390x844 dashboard check passed with no horizontal overflow. Software printer validation passed, but the real LAN target remained unreachable.
 
 ### Immediate next task
 
-1. Add or use a safe hosted manager account and complete the manager read-only Orders pass; the current hosted project has only admin Klein and cashier Juan Dela Cruz.
-2. Verify the merged main deployment and perform physical LAN-printer receipt validation with the store hardware.
-3. Continue the remaining P6 backoffice gaps and then return to the pending Inventory Reporting & Export QA pass.
+1. Put the real LAN printer on the same network and provide/confirm its reachable IP; rerun the physical ESC/POS validation and observe the slip.
+2. Finish the remaining P6 configuration/polish: hosted employee-login provisioning needs a valid project service key plus `EMPLOYEE_INITIAL_PASSWORD`; the dashboard cash/e-wallet breakdown, settings split, and full-phone pass remain open.
+3. Reconcile reporting against a broader real-day data set; shifts and till reports remain P8 work.
 
 ---
 
@@ -151,14 +153,31 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 *Goal: enough tooling to run the business from a phone.*
 
 - [ ] Backoffice shell: responsive layout, branch switcher, nav, auth guards.
-- [ ] Dashboard: today's sales, orders, avg ticket, cash vs. e-wallet, top items, kg sold, low-stock alerts (per branch + consolidated). *(Overview slice implemented: live sales, payment mix, top items, branch pulse, and recent orders; kg and inventory alerts remain pending.)*
-- [ ] Products CRUD (per branch): pricing mode, price, image, active/track-stock toggles; copy to another branch; price changes versioned in audit.
+- [ ] Dashboard: today's sales, orders, avg ticket, cash vs. e-wallet, top items, kg sold, low-stock alerts (per branch + consolidated). *(Overview slice implemented: live sales, top items, branch pulse, recent orders, low/out-of-stock alerts, and an explicit kg-sold metric; the cash/e-wallet breakdown remains pending.)*
+- [x] Products CRUD (per branch): pricing mode, price, image, active/track-stock toggles; copy to another branch; price changes versioned in audit. *(Hosted `0021_product_price_audit.sql` is applied; the `product_price_audit` trigger is present on `public.products`.)*
 - [x] Orders: filterable list (branch/date/cashier/method/status), detail drawer, admin-only reason-required immutable void/refund reversals with tracked-stock restoration and audit logging, browser reprint with audit.
 - [ ] Staff: invite/create, assign branch + role, set/reset PIN, deactivate.
-- [x] Employee workspace slice: reference-matched Employees dashboard with live employee KPIs, searchable/paginated directory, roles & permissions, attendance, payroll, leave requests, quick actions, and CSV export. *(Implemented 2026-08-03; employee records can exist before an auth invite, while linked profiles stay synchronized on edits.)*
-- [x] Audit log viewer: append-only, filter by branch/actor/action/date. *(Implemented 2026-08-03; reads the live append-only audit ledger with database pagination and read-only before/after payload details.)*
+- [x] Employee workspace slice: reference-matched Employees dashboard with live employee KPIs, searchable/paginated directory, roles & permissions, attendance, payroll, leave requests, quick actions, and CSV export. *(Implemented 2026-08-03; authenticated route and reversible admin save/restore checks passed 2026-08-06; employee-login provisioning still needs valid server configuration.)*
+- [x] Audit log viewer: append-only, filter by branch/actor/action/date. *(Implemented 2026-08-03; authenticated browser route check passed 2026-08-06 and showed existing order events.)*
 - [ ] Settings split: **org** / **branch** / **device** (per PRD §6.6).
 - [ ] Empty/loading/error states + mobile pass (owner uses a phone).
+
+### P6 backoffice and Inventory Reporting QA — 2026-08-06
+
+- Hosted P6 hardening: `supabase/migrations/0021_product_price_audit.sql` applied successfully. `npx --yes supabase migration list --linked` reports local `0021` = remote `0021`. Hosted verification found `public.audit_product_price_change()` and the `product_price_audit` trigger: `AFTER UPDATE OF price`, guarded by `old.price IS DISTINCT FROM new.price`, writing `product.price_changed` audit entries.
+- Authenticated P6 route checks passed as Klein / Admin / Main Branch. Roles & Permissions showed `Admin editing enabled`; Attendance showed date controls and employee rows; Payroll showed period `2026-08-03` through `2026-08-09`, a `Record payroll` form, and no payroll records; Leave Requests showed `No leave requests yet`; Audit Log showed the existing `order.created`, `order.voided`, and `order.reprint` events. No protected write/save was performed.
+- Inventory Reporting opened at `/admin/reports/inventory` for `2026-07-08` through `2026-08-06`, Main Branch (`83d485dd-bd00-4ffa-a3f2-344566177baf`). The authenticated admin badge and filters were visible. Category `Codex Image QA 20260806`, the matching product, and supplier `Pork Farm` each preserved the expected row; clearing filters returned to the unfiltered report with only the branch/date scope active.
+- Exact report result: 1 tracked product, 0 low stock, 1 out of stock, estimated value `₱0`; the row was `Codex Image QA Product 20260806`, `0 pcs` on hand, minimum `2 pcs`, Out of stock, `₱0`. Movements contained 2 records: POS sale net `-1 pcs` and manual adjustment net `+1 pcs`; yield entries were 0 and variance count lines were 0.
+- CSV export checks initiated all three browser downloads using the filter-preserving endpoints `kind=inventory`, `kind=movements`, and `kind=variance`. The in-app browser returned `net::ERR_ABORTED` for each download response (expected browser behavior for a file download); the report page remained available after each attempt. File contents were not inspected through the in-app browser API.
+- Responsive check passed at `390x844`: report and filter content remained available in the accessibility snapshot, document/body width was `375px`, and horizontal overflow was false. The viewport was restored afterward.
+- Follow-up gates: physical printer validation, hosted employee-login provisioning, dashboard cash/e-wallet breakdown, settings split, and the remaining full-phone polish checklist. Broader real-day report reconciliation and shifts/till reports remain P8 work.
+
+### Remaining P6 gate pass — 2026-08-06
+
+- Manager permission QA passed in an isolated local app session on port `3001` using a temporary confirmed hosted profile scoped to Main Branch. Orders showed `Manager access is read-only for order operations.` with zero `Void order` and `Refund order` controls while `Reprint` remained available. Inventory showed the read-only status and no stock-write submit control. Products showed `Create product` disabled and the POS-visibility switch disabled. Settings showed `Manager view only`, five editable controls disabled, and `Save dashboard settings` disabled. Employees showed `Manager view only`. Inventory Reports loaded with the `Manager read-only` badge and all report exports. The temporary Auth user/profile was deleted afterward; no test manager account remains.
+- Employee save-flow passed as admin using Juan Dela Cruz: changed `Job title` from `Cashier` to the temporary marker `Cashier QA`, received the `saved=employee-updated` redirect, confirmed the changed row, then restored `Cashier` and received the same successful redirect. No net employee data change remains.
+- P6 dashboard polish: added the explicit `Kg sold` KPI from completed `order_items.weight_kg` values in `src/app/admin/page.tsx`. The rebuilt authenticated dashboard displayed `Kg sold`; at `390x844`, the dashboard rendered without horizontal overflow. `npm run typecheck`, `npm run lint`, `npm run build`, and `git diff --check` passed after the change.
+- Physical printer result: `npm run printer:validate:mock` passed the 988-byte ESC/POS receipt, all 8 capture checks, unreachable-target handling, and retry delivery in 4ms. The real run against `192.168.254.116:9100` could not complete; a direct 2-second TCP probe returned `connected=False`, and the real bridge path timed out before acknowledging a print. No physical slip was observed. Re-run `node --experimental-strip-types scripts/validate-printer.mjs --printer-ip <reachable-printer-ip>` once the printer is powered on and reachable from the POS workstation.
 
 ### P6 Orders operations implementation — 2026-08-05
 
