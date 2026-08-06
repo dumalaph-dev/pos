@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useActionState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { loginWithEmployeeId, type LoginState } from "./actions";
 import { createClient } from "@/lib/supabase/client";
@@ -16,6 +17,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [emailPassword, setEmailPassword] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [emailLoading, setEmailLoading] = useState(false);
   const [employeeState, employeeAction, employeePending] = useActionState(loginWithEmployeeId, initialEmployeeLoginState);
 
@@ -24,9 +26,16 @@ export default function LoginPage() {
   // next person on this terminal. Read off `location` rather than
   // `useSearchParams` to keep this page out of a Suspense boundary.
   useEffect(() => {
-    if (!new URLSearchParams(window.location.search).has("signed-out")) return;
-    void clearOfflineCaches();
-    window.history.replaceState(null, "", "/");
+    const params = new URLSearchParams(window.location.search);
+    const signedOut = params.has("signed-out");
+    const authError = params.get("auth_error");
+    let noticeTimer: number | undefined;
+    if (signedOut) void clearOfflineCaches();
+    if (authError) noticeTimer = window.setTimeout(() => setAuthNotice(authError), 0);
+    if (signedOut || authError) window.history.replaceState(null, "", "/");
+    return () => {
+      if (noticeTimer !== undefined) window.clearTimeout(noticeTimer);
+    };
   }, []);
 
   async function onEmailSubmit(event: React.FormEvent) {
@@ -66,6 +75,7 @@ export default function LoginPage() {
   function selectMode(nextMode: LoginMode) {
     setMode(nextMode);
     setEmailError(null);
+    setAuthNotice(null);
   }
 
   return (
@@ -73,7 +83,8 @@ export default function LoginPage() {
       <div className="w-full max-w-sm rounded-card border border-line bg-surface p-8 shadow-[var(--shadow-card)]">
         <p className="text-sm font-semibold uppercase tracking-wide text-ink-muted">Lechon POS</p>
         <h1 className="mt-1 text-2xl font-extrabold text-ink">Sign in</h1>
-        <p className="mt-2 text-sm leading-6 text-ink-muted">Use your employee ID for POS access, or use email for an administrator account.</p>
+        <p className="mt-2 text-sm leading-6 text-ink-muted">Use your employee ID for POS access, or use email for an owner or administrator account.</p>
+        {authNotice && <p role="alert" className="mt-4 rounded-btn border border-danger/25 bg-danger-soft px-4 py-3 text-sm font-semibold text-danger">{authNotice}</p>}
 
         <div className="mt-6 grid grid-cols-2 rounded-btn bg-raised p-1" role="tablist" aria-label="Sign-in method">
           <button type="button" role="tab" aria-selected={mode === "employee"} onClick={() => selectMode("employee")} className={`rounded-[10px] px-3 py-2 text-xs font-extrabold transition ${mode === "employee" ? "bg-primary text-primary-fg shadow-sm" : "text-ink-muted hover:text-ink"}`}>Employee ID</button>
@@ -113,6 +124,11 @@ export default function LoginPage() {
             <button type="submit" disabled={emailLoading} className="mt-6 w-full rounded-btn bg-accent px-6 py-3 font-bold uppercase text-accent-fg disabled:opacity-50">{emailLoading ? "Signing in…" : "Sign in"}</button>
           </form>
         )}
+
+        <div className="mt-7 border-t border-line pt-5 text-center">
+          <p className="text-sm text-ink-muted">Are you a store owner?</p>
+          <Link href="/signup" className="mt-2 inline-flex rounded-btn bg-secondary px-4 py-2.5 text-sm font-extrabold text-primary transition hover:bg-secondary-hover">Create your POS account</Link>
+        </div>
       </div>
     </main>
   );

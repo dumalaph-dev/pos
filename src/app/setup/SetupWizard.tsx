@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useState } from "react";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { buildReceipt } from "@/lib/receipt";
@@ -13,6 +14,7 @@ type BranchOption = { id: string; name: string; address: string | null };
 const INITIAL_STATE: SetupState = { ok: false, message: "" };
 
 export function SetupWizard({ branches }: { branches: BranchOption[] }) {
+  const router = useRouter();
   const [state, formAction, pending] = useActionState(onboardTablet, INITIAL_STATE);
   const [step, setStep] = useState<1 | 2>(1);
   const [storeId, setStoreId] = useState(branches[0]?.id ?? "");
@@ -32,8 +34,8 @@ export function SetupWizard({ branches }: { branches: BranchOption[] }) {
     };
     localStorage.setItem(POS_DEVICE_BINDING_KEY, JSON.stringify(binding));
     savePrinterSettings(printer);
-    window.location.assign("/pos?setup=1");
-  }, [printer, state]);
+    router.replace("/pos?setup=1");
+  }, [printer, router, state]);
 
   async function testPrint() {
     setTesting(true);

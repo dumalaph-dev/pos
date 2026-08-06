@@ -23,6 +23,7 @@ The home page (`/`) is a foundation smoke test — it renders the palette and th
 Fill `.env.local` from Supabase → **Settings → API**:
 | Var | Where | Exposure |
 |---|---|---|
+| `NEXT_PUBLIC_SITE_URL` | public app origin for email-confirmation redirects (required on deployed environments) | client + server |
 | `NEXT_PUBLIC_SUPABASE_URL` | Project URL | client + server |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon/public key | client + server |
 | `SUPABASE_SERVICE_ROLE_KEY` | service_role key | **server only — never ship to client** |
@@ -51,10 +52,22 @@ SQL lives in `supabase/migrations/` (run in order):
 15. `0015_admin_navigation_latency.sql` - admin navigation indexes
 16. `0016_p4_branch_workflows.sql` - branch workflow and clone metadata
 17. `0017_product_images.sql` - public product photo bucket and admin storage policies
+18. `0018_inventory_workflows.sql` - inventory workflow records and policies
+19. `0019_manager_inventory_counts_read.sql` - manager inventory-count read access
+20. `0020_order_actions.sql` - order action records and policies
+21. `0021_product_price_audit.sql` - product price audit records
+22. `0022_owner_signup.sql` - self-service store-owner workspace creation
 
 **Apply them** either way:
 - **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push`
 - **Dashboard:** SQL Editor → paste each file in order → Run
+
+Store owners can register from `/signup`. The flow uses Supabase Auth and the
+`0022_owner_signup.sql` trigger to create a private organization, first branch,
+and admin profile atomically. Set `NEXT_PUBLIC_SITE_URL` to the Vercel origin
+and add `<your-site-origin>/auth/callback` to Supabase Authentication URL
+Configuration Redirect URLs. If email confirmations are enabled, the owner
+must confirm the email before opening the admin workspace.
 
 **Connect the hosted project** (this project: ref `uzavkjftwcuixidxyopr`):
 ```bash

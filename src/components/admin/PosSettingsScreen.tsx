@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition, type CSSProperties, type SVGProps } from "react";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
@@ -303,6 +304,7 @@ export default function PosSettingsScreen({
   devices: AdminPosDevice[];
   initialSettings: PosConfig;
 }) {
+  const router = useRouter();
   const catalog = useMemo(() => buildCatalog(products), [products]);
   const categoryOptions = useMemo(() => buildCategories(categories), [categories]);
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
@@ -501,7 +503,7 @@ export default function PosSettingsScreen({
 
   function changeBranch(value: string) {
     if (!value || value === storeId) return;
-    window.location.assign(`/admin/pos?store=${encodeURIComponent(value)}`);
+    router.push(`/admin/pos?store=${encodeURIComponent(value)}`);
   }
 
   function toggleOrderType(value: string) {
