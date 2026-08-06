@@ -132,7 +132,7 @@ The order is **immutable truth**. Server stock is decremented from synced orders
 
 - **Employee sign-in:** Staff may use their `EMP-####` employee code instead of typing email. The server resolves the code to the Supabase Auth identity, provisions accounts with a server-only temporary password, and requires a password change before `/pos` or `/admin`.
 
-- **Auth:** Supabase email+password. After first online login, store a **device-bound unlock credential**; offline re-entry via 4–6 digit **PIN** (`profiles.pin_hash`, hashed server-side; PIN verify works offline against the cached credential). 5 wrong PINs → 60s lockout.
+- **Auth:** Supabase email+password. After first online login, store a **device-local unlock credential**: a salted PBKDF2 verifier in IndexedDB (never the raw PIN). Offline re-entry uses a 4–6 digit **PIN** against that cached credential; `profiles.pin_hash` remains reserved for future server-managed PIN governance. 5 wrong PINs → 60s lockout. The device PIN unlocks cached POS data but does not replace the authenticated session required to sync queued sales when connectivity returns.
 - **Authorization:** RLS is the source of truth. App-layer role checks are UX only, never the security boundary.
 - **Append-only:** `audit_logs`, `stock_movements`, and order immutability enforced by absent UPDATE/DELETE policies + triggers (SCHEMA §4).
 - **Secrets:** service-role key server-only (Vercel env, never shipped to client). Client uses the anon key + RLS.

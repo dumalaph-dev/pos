@@ -1,8 +1,10 @@
 "use client";
 
 import { useFormStatus } from "react-dom";
+import { useRouter } from "next/navigation";
 import { signOut } from "@/app/actions";
 import { clearOfflineCaches } from "@/lib/offline-cache";
+import { clearOfflineSession } from "@/lib/offline";
 
 /* Kept as utilities rather than a CSS class: most of globals.css is unlayered
    and would outrank Tailwind's utilities layer, so a class here would silently
@@ -57,14 +59,23 @@ export function SignOutButton({
   className?: string;
   variant?: "button" | "menu";
 }) {
+  const router = useRouter();
+
   return (
     <form
       // `contents` keeps the form out of the layout so the button participates
       // in the menu's own stack directly.
       className={variant === "menu" ? "contents" : undefined}
       action={async () => {
+        await clearOfflineSession();
         await clearOfflineCaches();
-        await signOut();
+        try {
+          await signOut();
+        } catch {
+          // A cashier must be able to leave a shared terminal while offline;
+          // the local session/cache wipe above is the important boundary.
+          router.replace("/?signed-out=1");
+        }
       }}
     >
       <SignOutSubmit className={className} variant={variant} />

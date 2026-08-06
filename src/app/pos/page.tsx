@@ -5,7 +5,7 @@ import SellScreen from "@/components/pos/SellScreen";
 
 // P1+P2 sell screen. Auth guard is lenient: if the auth service is
 // unreachable (offline), render anyway — the client checks the cached
-// session. Only a definitive "no user" redirects to login.
+// offline PIN and branch catalog. Only a definitive "no user" redirects to login.
 export default async function PosPage() {
   const supabase = await createClient();
   let checked = false;

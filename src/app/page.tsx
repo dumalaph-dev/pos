@@ -6,6 +6,9 @@ import { useRouter } from "next/navigation";
 import { loginWithEmployeeId, type LoginState } from "./actions";
 import { createClient } from "@/lib/supabase/client";
 import { clearOfflineCaches } from "@/lib/offline-cache";
+import { clearOfflineSession, getOfflineCredential, loadCachedCatalog, type OfflineCredential, type OfflineProfileSnapshot } from "@/lib/offline";
+import SellScreen from "@/components/pos/SellScreen";
+import OfflinePinUnlock from "@/components/OfflinePinUnlock";
 
 type LoginMode = "employee" | "email";
 
@@ -19,6 +22,11 @@ export default function LoginPage() {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [emailLoading, setEmailLoading] = useState(false);
+  const [posPath, setPosPath] = useState(false);
+  const [browserOffline, setBrowserOffline] = useState(false);
+  const [offlineCredential, setOfflineCredential] = useState<OfflineCredential | null>(null);
+  const [offlineCatalogReady, setOfflineCatalogReady] = useState(false);
+  const [offlineProfile, setOfflineProfile] = useState<OfflineProfileSnapshot | null>(null);
   const [employeeState, employeeAction, employeePending] = useActionState(loginWithEmployeeId, initialEmployeeLoginState);
 
   // Backstop for every sign-out path that lands here, not just SignOutButton:
@@ -30,13 +38,67 @@ export default function LoginPage() {
     const signedOut = params.has("signed-out");
     const authError = params.get("auth_error");
     let noticeTimer: number | undefined;
-    if (signedOut) void clearOfflineCaches();
+    if (signedOut) {
+      void clearOfflineSession();
+      void clearOfflineCaches();
+    }
     if (authError) noticeTimer = window.setTimeout(() => setAuthNotice(authError), 0);
     if (signedOut || authError) window.history.replaceState(null, "", "/");
     return () => {
       if (noticeTimer !== undefined) window.clearTimeout(noticeTimer);
     };
   }, []);
+
+  // When the service worker has to serve the public shell for an offline
+  // /pos reload, recover the POS from the device-local PIN credential and its
+  // matching branch-scoped catalog cache. Private HTML never enters Cache Storage.
+  useEffect(() => {
+    let active = true;
+    const pathIsPos = window.location.pathname.startsWith("/pos");
+    const browserIsOffline = !navigator.onLine;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- this reads browser-owned navigation state once.
+    setPosPath(pathIsPos);
+    setBrowserOffline(browserIsOffline);
+    const onOffline = () => {
+      setBrowserOffline(true);
+      void checkOfflineAccess();
+    };
+    const onOnline = () => setBrowserOffline(false);
+    window.addEventListener("offline", onOffline);
+    window.addEventListener("online", onOnline);
+    if (!pathIsPos && !browserIsOffline) {
+      return () => {
+        active = false;
+        window.removeEventListener("offline", onOffline);
+        window.removeEventListener("online", onOnline);
+      };
+    }
+
+    async function checkOfflineAccess() {
+      const credential = await getOfflineCredential();
+      const cached = credential
+        ? await loadCachedCatalog(credential.profile.store_id ?? credential.profile.org_id, credential.user_id).catch(() => null)
+        : null;
+      if (!active) return;
+      setOfflineCredential(credential);
+      setOfflineCatalogReady(Boolean(cached));
+    }
+
+    void checkOfflineAccess();
+    return () => {
+      active = false;
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("online", onOnline);
+    };
+  }, []);
+
+  async function openOfflinePos(credential: OfflineCredential) {
+    const cached = await loadCachedCatalog(credential.profile.store_id ?? credential.profile.org_id, credential.user_id).catch(() => null);
+    if (!cached) throw new Error("Offline POS is not ready yet. Sign in online and open POS once to cache this branch menu.");
+    setOfflineProfile(cached.profile);
+  }
+
+  if (offlineProfile) return <SellScreen offlineProfile={offlineProfile} />;
 
   async function onEmailSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -85,6 +147,13 @@ export default function LoginPage() {
         <h1 className="mt-1 text-2xl font-extrabold text-ink">Sign in</h1>
         <p className="mt-2 text-sm leading-6 text-ink-muted">Use your employee ID for POS access, or use email for an owner or administrator account.</p>
         {authNotice && <p role="alert" className="mt-4 rounded-btn border border-danger/25 bg-danger-soft px-4 py-3 text-sm font-semibold text-danger">{authNotice}</p>}
+        {(browserOffline || posPath) && offlineCredential && offlineCatalogReady && (
+          <OfflinePinUnlock credential={offlineCredential} onUnlock={openOfflinePos} />
+        )}
+        {(browserOffline || posPath) && offlineCredential && !offlineCatalogReady && (
+          <p role="status" className="mt-4 rounded-btn border border-warning/35 bg-warning/10 px-4 py-3 text-sm font-semibold text-ink">An offline PIN is saved, but this branch menu is not cached yet. Sign in online and open POS once.</p>
+        )}
+        {(browserOffline || posPath) && !offlineCredential && <p role="status" className="mt-4 rounded-btn border border-warning/35 bg-warning/10 px-4 py-3 text-sm font-semibold text-ink">This tablet is offline or the POS server cannot be reached. Sign in online once, open POS, and create an offline PIN before the next offline shift.</p>}
 
         <div className="mt-6 grid grid-cols-2 rounded-btn bg-raised p-1" role="tablist" aria-label="Sign-in method">
           <button type="button" role="tab" aria-selected={mode === "employee"} onClick={() => selectMode("employee")} className={`rounded-[10px] px-3 py-2 text-xs font-extrabold transition ${mode === "employee" ? "bg-primary text-primary-fg shadow-sm" : "text-ink-muted hover:text-ink"}`}>Employee ID</button>

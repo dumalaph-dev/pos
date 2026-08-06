@@ -1,4 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Lechon POS</title>
   <rect width="512" height="512" rx="96" fill="#9a2e13"/>
-  <text x="256" y="330" font-size="280" text-anchor="middle">🐷</text>
+  <path d="M115 275c0-72 62-130 153-130 40 0 75 12 103 34l43-14 11 42-32 22c3 10 5 22 5 34 0 72-64 119-151 119h-67l-43 22 6-55c-18-17-28-42-28-74Z" fill="#f5ecdf"/>
+  <circle cx="318" cy="235" r="13" fill="#9a2e13"/>
+  <path d="M158 258h-33c-18 0-30-16-24-33 4-12 17-19 30-16l35 8M225 375l-13 38M332 375l13 38" fill="none" stroke="#f5ecdf" stroke-linecap="round" stroke-width="18"/>
+  <path d="M254 291c18 20 45 20 63 0" fill="none" stroke="#9a2e13" stroke-linecap="round" stroke-width="12"/>
 </svg>

@@ -16,6 +16,8 @@ import { readAdminBranding } from "@/lib/admin/branding";
 import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminMenu } from "@/components/admin/AdminMenu";
 import { SignOutButton } from "@/components/SignOutButton";
+import OfflinePinSetup from "@/components/OfflinePinSetup";
+import OfflinePinUnlock from "@/components/OfflinePinUnlock";
 import PrinterSettingsModal from "@/components/pos/PrinterSettings";
 import OrderHistory from "@/components/pos/OrderHistory";
 import {
@@ -24,10 +26,14 @@ import {
   flushAuditOutbox,
   flushOutbox,
   getDeviceId,
+  getOfflineCredential,
   loadCachedCatalog,
+  OFFLINE_PARKED_ORDER_KEY,
   pendingCount,
   saveCatalogCache,
   watchPending,
+  type OfflineCredential,
+  type OfflineProfileSnapshot,
 } from "@/lib/offline";
 import { POS_DEVICE_BINDING_KEY, type PosDeviceBinding } from "@/lib/device-binding";
 import {
@@ -78,26 +84,12 @@ type ParkedOrder = {
   discount: DiscountState;
 };
 
-const PARK_KEY = "pos.parked.v1";
+const PARK_KEY = OFFLINE_PARKED_ORDER_KEY;
 const MAX_PARKED = 10;
 const DEFAULT_STORE_NAME = "Mario's Lechon House";
 
 const round = (n: number) => Math.round(n);
 const displayPeso = (cents: number) => formatPeso(cents).replace(/\.00$/, "");
-
-type ProfileData = {
-  id: string;
-  org_id: string;
-  store_id: string | null;
-  store_name: string | null;
-  store_address: string | null;
-  store_tin: string | null;
-  brand_logo_url: string | null;
-  full_name: string | null;
-  role: "admin" | "manager" | "cashier" | null;
-  device_id?: string | null;
-  pos_config?: PosRuntimeConfig;
-};
 
 type RuntimePaymentMethod = "cash" | "gcash" | "maya" | "card";
 type PosRuntimeConfig = {
@@ -115,6 +107,10 @@ type PosRuntimeConfig = {
   receiptFooter: string;
   showCashier: boolean;
   paperWidth: 58 | 80;
+};
+
+type ProfileData = Omit<OfflineProfileSnapshot, "pos_config"> & {
+  pos_config?: PosRuntimeConfig;
 };
 
 const DEFAULT_POS_RUNTIME_CONFIG: PosRuntimeConfig = {
@@ -232,51 +228,6 @@ function readDeviceBinding(): PosDeviceBinding | null {
   }
 }
 
-const DEMO_PROFILE: ProfileData = {
-  id: "00000000-0000-0000-0000-000000000001",
-  org_id: "00000000-0000-0000-0000-000000000002",
-  store_id: "00000000-0000-0000-0000-000000000003",
-  store_name: DEFAULT_STORE_NAME,
-  store_address: null,
-  store_tin: null,
-  brand_logo_url: null,
-  full_name: "Admin",
-  role: "admin",
-  pos_config: DEFAULT_POS_RUNTIME_CONFIG,
-};
-
-const DEMO_CATEGORIES: Category[] = [
-  { id: "all", name: "All Items", icon: "grid" },
-  { id: "whole-lechon", name: "Whole Lechon", icon: "pig" },
-  { id: "lechon-belly", name: "Lechon Belly", icon: "belly" },
-  { id: "lechon-paksiw", name: "Lechon Paksiw", icon: "bowl" },
-  { id: "lechon-kawali", name: "Lechon Kawali", icon: "kawali" },
-  { id: "rice-sides", name: "Rice & Sides", icon: "rice" },
-  { id: "drinks", name: "Drinks", icon: "drink" },
-  { id: "extras", name: "Extras", icon: "extras" },
-  { id: "packages", name: "Packages", icon: "package" },
-  { id: "sauces", name: "Sauces", icon: "sauce" },
-];
-
-const DEMO_PRODUCTS: Product[] = [
-  { id: "demo-whole-small", name: "Whole Lechon (Small)", pricing_mode: "fixed", price: 550000, unit: "pcs", category_id: "whole-lechon" },
-  { id: "demo-whole-medium", name: "Whole Lechon (Medium)", pricing_mode: "fixed", price: 650000, unit: "pcs", category_id: "whole-lechon" },
-  { id: "demo-whole-large", name: "Whole Lechon (Large)", pricing_mode: "fixed", price: 750000, unit: "pcs", category_id: "whole-lechon" },
-  { id: "demo-belly-half", name: "Lechon Belly (1/2kg)", pricing_mode: "fixed", price: 28000, unit: "tray", category_id: "lechon-belly" },
-  { id: "demo-belly-one", name: "Lechon Belly (1kg)", pricing_mode: "fixed", price: 52000, unit: "tray", category_id: "lechon-belly" },
-  { id: "demo-paksiw", name: "Lechon Paksiw (1/2kg)", pricing_mode: "fixed", price: 25000, unit: "tray", category_id: "lechon-paksiw" },
-  { id: "demo-kawali", name: "Lechon Kawali (1/2kg)", pricing_mode: "fixed", price: 23000, unit: "tray", category_id: "lechon-kawali" },
-  { id: "demo-rice", name: "Java Rice", pricing_mode: "fixed", price: 5000, unit: "cup", category_id: "rice-sides" },
-  { id: "demo-sauce", name: "Mang Tomas (Small)", pricing_mode: "fixed", price: 2000, unit: "bottle", category_id: "sauces" },
-];
-
-const DEMO_CART: CartLine[] = [
-  { key: "demo-whole-medium", product: DEMO_PRODUCTS[1], qty: 1, weightKg: null, lineTotal: 650000 },
-  { key: "demo-belly-half", product: DEMO_PRODUCTS[3], qty: 1, weightKg: null, lineTotal: 28000 },
-  { key: "demo-rice", product: DEMO_PRODUCTS[7], qty: 2, weightKg: null, lineTotal: 10000 },
-  { key: "demo-sauce", product: DEMO_PRODUCTS[8], qty: 2, weightKg: null, lineTotal: 4000 },
-];
-
 const PRODUCT_IMAGES: Record<string, string> = {
   "whole lechon (small)": "/food/whole-lechon-small.png",
   "whole lechon (medium)": "/food/whole-lechon-medium.png",
@@ -362,7 +313,7 @@ function categoryIcon(name: string): IconName {
   return "grid";
 }
 
-export default function SellScreen() {
+export default function SellScreen({ offlineProfile: initialOfflineProfile }: { offlineProfile?: OfflineProfileSnapshot } = {}) {
   const supabase = useMemo(() => createClient(), []);
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -389,6 +340,10 @@ export default function SellScreen() {
   const [success, setSuccess] = useState<{ orderNo: string; change: number | null } | null>(null);
   const [toast, setToast] = useState<{ msg: string; retry?: boolean } | null>(null);
   const [offline, setOffline] = useState(false);
+  const [requiresOfflineUnlock, setRequiresOfflineUnlock] = useState(false);
+  const [unlockedOfflineProfile, setUnlockedOfflineProfile] = useState<OfflineProfileSnapshot | null>(null);
+  const [offlineCredential, setOfflineCredential] = useState<OfflineCredential | null>(null);
+  const [offlineCatalogReady, setOfflineCatalogReady] = useState(false);
   const [pending, setPending] = useState(0);
   const [printerSettings, setPrinterSettings] = useState<PrinterSettings>(() =>
     loadPrinterSettings(),
@@ -402,16 +357,26 @@ export default function SellScreen() {
   const navWasOpen = useRef(false);
   const lastReceipt = useRef<Uint8Array | null>(null);
   const [hasReceipt, setHasReceipt] = useState(false);
-  const demoSeeded = useRef(false);
   const orderTypeScope = useRef<string | null>(null);
+  const offlineProfile = initialOfflineProfile ?? unlockedOfflineProfile;
+  const syncProfile = offlineProfile ?? profile;
+  const syncUserId = syncProfile?.id ?? null;
+  const syncOrgId = syncProfile?.org_id ?? null;
+  const syncStoreId = syncProfile?.store_id ?? null;
 
-  const applyProfile = useCallback((nextProfile: ProfileData, nextPrinterSettings?: PrinterSettings) => {
+  const applyProfile = useCallback((nextProfile: ProfileData | OfflineProfileSnapshot, nextPrinterSettings?: PrinterSettings) => {
     const nextConfig = normalizePosRuntimeConfig(nextProfile.pos_config);
     const normalizedProfile: ProfileData = {
-      ...nextProfile,
+      id: nextProfile.id,
+      org_id: nextProfile.org_id,
+      store_id: nextProfile.store_id,
+      store_name: nextProfile.store_name,
       store_address: nextProfile.store_address ?? null,
       store_tin: nextProfile.store_tin ?? null,
       brand_logo_url: nextProfile.brand_logo_url ?? null,
+      full_name: nextProfile.full_name,
+      role: nextProfile.role,
+      device_id: nextProfile.device_id ?? null,
       pos_config: nextConfig,
     };
     setProfile(normalizedProfile);
@@ -458,7 +423,40 @@ export default function SellScreen() {
   // NOTE: postgrest-js THROWS on network failures (fetch rejects) and only
   // resolves `{error}` for HTTP errors — both must be treated as offline.
   const refreshCatalog = useCallback(async () => {
+    if (offlineProfile) {
+      const cached = await loadCachedCatalog(offlineProfile.store_id ?? offlineProfile.org_id, offlineProfile.id).catch(() => null);
+      if (cached) {
+        applyProfile(cached.profile);
+        setCategories(cached.categories as Category[]);
+        setProducts(cached.products as Product[]);
+        setStockByProductId(cached.stock ?? {});
+      } else {
+        applyProfile(offlineProfile);
+        setCategories([]);
+        setProducts([]);
+        setStockByProductId({});
+      }
+      setRequiresOfflineUnlock(false);
+      setOffline(true);
+      setLoading(false);
+      return;
+    }
+
+    if (!navigator.onLine) {
+      const credential = await getOfflineCredential();
+      const cached = credential
+        ? await loadCachedCatalog(credential.profile.store_id ?? credential.profile.org_id, credential.user_id).catch(() => null)
+        : null;
+      setOfflineCredential(credential);
+      setOfflineCatalogReady(Boolean(cached));
+      setRequiresOfflineUnlock(true);
+      setOffline(true);
+      setLoading(false);
+      return;
+    }
+
     let profileData: ProfileData | null = null;
+    let sessionUserId: string | null = null;
     let databasePrinterSettings: PrinterSettings | undefined;
     let databaseDeviceId: string | null = null;
 
@@ -466,6 +464,7 @@ export default function SellScreen() {
       const {
         data: { session },
       } = await supabase.auth.getSession();
+      sessionUserId = session?.user.id ?? null;
       if (session) {
         const { data: prof } = await supabase
           .from("profiles")
@@ -529,25 +528,15 @@ export default function SellScreen() {
 
     // Offline (session refresh or profile fetch failed): serve the cache.
     if (!profileData) {
-      const cached = await loadCachedCatalog(readDeviceBinding()?.storeId);
+      const cached = await loadCachedCatalog(readDeviceBinding()?.storeId, sessionUserId ?? undefined);
       if (cached) {
-        profileData = cached.profile as ProfileData;
-        applyProfile(profileData);
-        setCategories(cached.categories as Category[]);
-        setProducts(cached.products as Product[]);
-        setStockByProductId(cached.stock ?? {});
+        setOfflineCredential(await getOfflineCredential());
+        setOfflineCatalogReady(true);
       } else {
-        // Keep the shell inspectable in a fresh local install. Once the first
-        // real catalog is cached, the demo never replaces it.
-        applyProfile(DEMO_PROFILE);
-        setCategories(DEMO_CATEGORIES);
-        setProducts(DEMO_PRODUCTS);
-        setStockByProductId({});
-        if (!demoSeeded.current) {
-          setCart(DEMO_CART);
-          demoSeeded.current = true;
-        }
+        setOfflineCredential(null);
+        setOfflineCatalogReady(false);
       }
+      setRequiresOfflineUnlock(true);
       setOffline(true);
       setLoading(false);
       return;
@@ -609,33 +598,36 @@ export default function SellScreen() {
         // A catalog can still be useful when the ledger query is unavailable;
         // keep tracked tiles in the unknown state instead of falsely showing 0.
         setStockByProductId({});
-        await saveCatalogCache(prodRes.data ?? [], catRes.data ?? [], profileData);
       } else {
         setStockByProductId(nextStock);
-        await saveCatalogCache(prodRes.data ?? [], catRes.data ?? [], profileData, nextStock);
       }
+      try {
+        await saveCatalogCache(
+          prodRes.data ?? [],
+          catRes.data ?? [],
+          profileData,
+          stockError ? undefined : nextStock,
+        );
+      } catch {
+        // IndexedDB is an offline enhancement. Keep the online catalog usable
+        // when browser storage is blocked or temporarily out of space.
+      }
+      setRequiresOfflineUnlock(false);
       setOffline(false);
     } catch {
-      const cached = await loadCachedCatalog(profileData?.store_id ?? readDeviceBinding()?.storeId);
-      if (cached) {
-        applyProfile(cached.profile as ProfileData);
-        setCategories(cached.categories as Category[]);
-        setProducts(cached.products as Product[]);
-        setStockByProductId(cached.stock ?? {});
-      } else {
-        applyProfile(DEMO_PROFILE);
-        setCategories(DEMO_CATEGORIES);
-        setProducts(DEMO_PRODUCTS);
-        setStockByProductId({});
-        if (!demoSeeded.current) {
-          setCart(DEMO_CART);
-          demoSeeded.current = true;
-        }
-      }
+      // A successful profile read does not prove that the catalog is safe to
+      // use offline. Require the same device PIN before serving cached menu
+      // data after a catalog/API failure, including a stale browser session.
+      const cached = await loadCachedCatalog(profileData.store_id ?? readDeviceBinding()?.storeId, profileData.id).catch(() => null);
+      setOfflineCredential(cached ? await getOfflineCredential() : null);
+      setOfflineCatalogReady(Boolean(cached));
+      setRequiresOfflineUnlock(true);
       setOffline(true);
+      setLoading(false);
+      return;
     }
     setLoading(false);
-  }, [applyProfile, supabase]);
+  }, [applyProfile, offlineProfile, supabase]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- catalog hydration is the external cache/network boundary.
@@ -643,43 +635,82 @@ export default function SellScreen() {
   }, [refreshCatalog]);
 
   // ── Offline sync: pending counter, retry with backoff (P2) ───────────
-  useEffect(() => watchPending(setPending), []);
+  useEffect(() => {
+    if (!syncUserId || !syncOrgId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the previous cashier's scoped counter.
+      setPending(0);
+      return;
+    }
+    return watchPending(setPending, {
+      userId: syncUserId,
+      orgId: syncOrgId,
+      storeId: syncStoreId,
+    });
+  }, [syncOrgId, syncStoreId, syncUserId]);
 
   const retryMs = useRef(2000);
   const flush = useCallback(async () => {
-    if (!navigator.onLine) return;
-    const synced = await flushOutbox(supabase);
-    const auditSynced = await flushAuditOutbox(supabase);
+    if (requiresOfflineUnlock || !navigator.onLine) return;
+    if (!syncUserId || !syncOrgId) return;
+    const scope = { userId: syncUserId, orgId: syncOrgId, storeId: syncStoreId };
+    if (offlineProfile) {
+      let sessionUserId: string | null = null;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        sessionUserId = session?.user.id ?? null;
+      } catch {
+        return;
+      }
+      // Offline PIN unlock is device-local. Only replay queued sales when the
+      // matching authenticated user is available again.
+      if (sessionUserId !== syncUserId) return;
+    }
+    const synced = await flushOutbox(supabase, scope);
+    const auditSynced = await flushAuditOutbox(supabase, scope);
     if (synced > 0 || auditSynced > 0) {
-      // Network is back — refresh catalog + flip the pill back to Online.
+      // A normal session can refresh its catalog. Offline PIN sessions keep
+      // serving their device-local catalog until the cashier re-authenticates.
       retryMs.current = 2000;
-      void refreshCatalog();
+      if (!offlineProfile) setOffline(false);
+      if (!offlineProfile) void refreshCatalog();
     } else {
       retryMs.current =
-        (await pendingCount()) === 0 ? 2000 : Math.min(60000, retryMs.current * 2);
+        (await pendingCount(scope)) === 0 ? 2000 : Math.min(60000, retryMs.current * 2);
     }
-  }, [supabase, refreshCatalog]);
+  }, [offlineProfile, requiresOfflineUnlock, supabase, refreshCatalog, syncOrgId, syncStoreId, syncUserId]);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const tick = () => {
-      void flush().then(() => {
-        timer = setTimeout(tick, retryMs.current);
-      });
+      void flush().then(
+        () => {
+          timer = setTimeout(tick, retryMs.current);
+        },
+        () => {
+          // Keep retrying after an IndexedDB/storage failure; a transient
+          // local failure must not permanently stop outbox synchronization.
+          timer = setTimeout(tick, retryMs.current);
+        },
+      );
     };
     tick();
     const onOnline = () => {
       retryMs.current = 2000;
-      setOffline(false);
-      void refreshCatalog();
+      if (!offlineProfile) {
+        setOffline(false);
+        void refreshCatalog();
+      }
       void flush();
     };
+    const onOffline = () => setOffline(true);
     window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
     return () => {
       if (timer) clearTimeout(timer);
       window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
     };
-  }, [flush, refreshCatalog]);
+  }, [flush, offlineProfile, refreshCatalog]);
 
   // ── Park tray persistence ─────────────────────────────────────────────
   useEffect(() => {
@@ -1008,8 +1039,32 @@ export default function SellScreen() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [navOpen]);
 
+  async function openCachedOfflineProfile(credential: OfflineCredential) {
+    const cached = await loadCachedCatalog(credential.profile.store_id ?? credential.profile.org_id, credential.user_id).catch(() => null);
+    if (!cached) throw new Error("Offline POS is not ready yet. Sign in online and open POS once to cache this branch menu.");
+    setLoading(true);
+    setUnlockedOfflineProfile(cached.profile);
+  }
+
+  if (!loading && !offlineProfile && requiresOfflineUnlock) {
+    return (
+      <main className="min-h-full flex items-center justify-center bg-bg p-6">
+        <div className="w-full max-w-sm rounded-card border border-line bg-surface p-8 shadow-[var(--shadow-card)]">
+          <p className="text-sm font-semibold uppercase tracking-wide text-ink-muted">Lechon POS</p>
+          <h1 className="mt-1 text-2xl font-extrabold text-ink">Offline POS</h1>
+          {offlineCredential && offlineCatalogReady ? (
+            <OfflinePinUnlock credential={offlineCredential} onUnlock={openCachedOfflineProfile} />
+          ) : (
+            <p role="status" className="mt-4 rounded-btn border border-warning/35 bg-warning/10 px-4 py-3 text-sm font-semibold text-ink">
+              Offline access is not set up on this tablet. Sign in online, open POS, and create an offline PIN first.
+            </p>
+          )}
+        </div>
+      </main>
+    );
+  }
+
   if (!loading) {
-    const isDemo = profile?.id === DEMO_PROFILE.id;
     const brandName = storeName.replace(/\s+lechon\s+house$/i, "").trim() || storeName;
     const displayName = profile?.full_name?.split(/\s+/)[0] ?? "Admin";
     const initials = displayName.slice(0, 1).toUpperCase();
@@ -1067,6 +1122,9 @@ export default function SellScreen() {
 
     return (
       <main className={`pos-app pos-app--${posConfig.uiStyle}`} style={posAppStyle}>
+        {profile && !offline && (
+          <OfflinePinSetup profile={profile} />
+        )}
         <header className={"pos-topbar" + (navOpen ? " is-open" : "")}>
           {!navOpen ? (
             <button
@@ -1273,6 +1331,7 @@ export default function SellScreen() {
                           alt=""
                           fill
                           loading="eager"
+                          unoptimized={productImage(product).startsWith("/food/")}
                           sizes="(max-width: 640px) 50vw, (max-width: 980px) 24vw, 18vw"
                           className="product-card__image-media"
                         />
@@ -1305,7 +1364,6 @@ export default function SellScreen() {
                   <Icon name="list" size={19} /> List
                 </button>
               </div>
-              {isDemo && <span className="preview-note">Preview menu · offline ready</span>}
             </div>
           </section>
 

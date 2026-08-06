@@ -232,6 +232,7 @@ function pendingOrder(row: PendingOrder, profile: OrderHistoryProfile): OrderHis
   const raw = row.p_order;
   const localUuid = readString(raw.local_uuid, row.local_uuid);
   if (!localUuid) return null;
+  if (readString(raw.cashier_id) !== profile.id) return null;
   const createdAt = readString(raw.created_at_device, row.created_at);
   const rawStoreId = raw.store_id === null ? null : readString(raw.store_id) || null;
   if (profile.store_id && rawStoreId !== profile.store_id) return null;
@@ -368,7 +369,11 @@ export default function OrderHistory({
 
     let localRows: OrderHistoryRecord[] = [];
     try {
-      const pendingRows = await listPendingOrders();
+      const pendingRows = await listPendingOrders({
+        userId: profile.id,
+        orgId: profile.org_id,
+        storeId: profile.store_id,
+      });
       localRows = pendingRows
         .map((row) => pendingOrder(row, profile))
         .filter((row): row is OrderHistoryRecord => row !== null);

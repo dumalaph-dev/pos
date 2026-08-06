@@ -12,7 +12,7 @@
  * and falls back to the login shell when the network is down. This is an
  * allowlist: a new route is uncacheable until deliberately added below.
  */
-const VERSION = "pos-shell-v2";
+const VERSION = "pos-shell-v4";
 
 /* The login page at "/" is the only document safe to serve to anyone.
  * /pos and /admin are deliberately NOT precached: they 302 to "/" when
@@ -23,6 +23,12 @@ const VERSION = "pos-shell-v2";
  * renders from Dexie, not from server-rendered HTML. */
 const PUBLIC_SHELL = "/";
 const SHELL = [PUBLIC_SHELL];
+const PUBLIC_ASSETS = [
+  "/manifest.webmanifest",
+  "/icon.svg",
+  "/icon-192x192.png",
+  "/icon-512x512.png",
+];
 
 /** Only the public login document may enter the cache; query string ignored. */
 function isPublicShell(url) {
@@ -34,8 +40,51 @@ function isCacheableShellResponse(res) {
   return res.ok && !res.redirected && res.type === "basic";
 }
 
+function isPublicAsset(url) {
+  if (url.pathname.startsWith("/food/")) return true;
+  if (["/manifest.webmanifest", "/icon.svg", "/icon-192x192.png", "/icon-512x512.png"].includes(url.pathname)) return true;
+  // Next Image proxies the local demo/catalog images through this route. Only
+  // allow the public /food source path; remote product images stay uncached.
+  return url.pathname === "/_next/image" && (url.searchParams.get("url") || "").startsWith("/food/");
+}
+
+function cacheFirst(req) {
+  return caches.open(VERSION).then((cache) =>
+    cache.match(req).then((hit) =>
+      hit ||
+      fetch(req).then((res) => {
+        if (res.ok) cache.put(req, res.clone());
+        return res;
+      }),
+    ),
+  );
+}
+
+function cacheCurrentAssets(urls) {
+  if (!Array.isArray(urls)) return Promise.resolve();
+  return caches.open(VERSION).then((cache) =>
+    Promise.all(
+      urls.slice(0, 250).map((rawUrl) => {
+        try {
+          const url = new URL(rawUrl, self.location.origin);
+          if (url.origin !== self.location.origin) return null;
+          if (!url.pathname.startsWith("/_next/static/") && !isPublicAsset(url)) return null;
+          return fetch(url.href)
+            .then((res) => {
+              if (res.ok) return cache.put(url.href, res.clone());
+              return null;
+            })
+            .catch(() => null);
+        } catch {
+          return null;
+        }
+      }),
+    ),
+  );
+}
+
 function precacheShell() {
-  return caches.open(VERSION).then((cache) => cache.addAll(SHELL));
+  return caches.open(VERSION).then((cache) => cache.addAll([...SHELL, ...PUBLIC_ASSETS]));
 }
 
 self.addEventListener("install", (event) => {
@@ -47,7 +96,11 @@ self.addEventListener("activate", (event) => {
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))),
+        Promise.all(
+          keys
+            .filter((k) => k.startsWith("pos-shell-") && k !== VERSION)
+            .map((k) => caches.delete(k)),
+        ),
       )
       .then(() => self.clients.claim()),
   );
@@ -63,6 +116,10 @@ self.addEventListener("message", (event) => {
   // can still boot offline for the next shift. See src/lib/offline-cache.ts.
   if (type === "PRECACHE_SHELL") {
     event.waitUntil(precacheShell().catch(() => {}));
+    return;
+  }
+  if (type === "CACHE_ASSETS") {
+    event.waitUntil(cacheCurrentAssets(event.data.urls).catch(() => {}));
   }
 });
 
@@ -98,20 +155,9 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Hashed static assets: cache-first (immutable), fill on first visit. These
-  // URLs are content-addressed, so they carry nothing session-specific.
-  if (url.pathname.startsWith("/_next/static/")) {
-    event.respondWith(
-      caches.open(VERSION).then((c) =>
-        c.match(req).then(
-          (hit) =>
-            hit ||
-            fetch(req).then((res) => {
-              if (res.ok) c.put(req, res.clone());
-              return res;
-            }),
-        ),
-      ),
-    );
+  // Hashed static assets are immutable and contain no session data. Local
+  // food/icon assets are public too, so the cached POS can render its tiles.
+  if (url.pathname.startsWith("/_next/static/") || isPublicAsset(url)) {
+    event.respondWith(cacheFirst(req));
   }
 });

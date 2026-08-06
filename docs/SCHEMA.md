@@ -339,4 +339,4 @@ Seed **two orgs**, each with **two branches**, each with a cashier + admin, and 
 - **Void/refund modeling:** linked reversing order vs. status column with an append-only history table? (Leaning: a `order_events` append-only table so `orders.status` is a projection, keeping BIR-CAS path open — PRD §8.)
 - **VAT computation:** store computed at sale time (snapshot) — confirm SC/PWD VAT-exempt split formula with the owner.
 - **Product images:** Supabase Storage bucket per org; cache in the PWA for offline tiles.
-- **`profiles.pin_hash`:** hash algorithm + device-bound unlock credential storage (see ARCHITECTURE security).
+- **`profiles.pin_hash`:** reserved for a future server-managed staff PIN; the current offline unlock stores only a salted device-local PBKDF2 verifier in IndexedDB (see ARCHITECTURE security).

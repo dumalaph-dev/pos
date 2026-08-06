@@ -29,6 +29,10 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "2mb",
     },
+    // Let soft navigations, prefetches, and Server Actions remain pending
+    // across a connectivity drop. The service worker below handles full
+    // document reloads; this flag covers the in-app path.
+    useOffline: true,
     /**
      * Admin pages are all dynamic and all sit behind a `loading.tsx`, so
      * Next only prefetches the loading boundary and — with the default
@@ -45,6 +49,21 @@ const nextConfig: NextConfig = {
       dynamic: 30,
       static: 180,
     },
+  },
+  async headers() {
+    return [
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        ],
+      },
+      {
+        source: "/manifest.webmanifest",
+        headers: [{ key: "Cache-Control", value: "no-cache, must-revalidate" }],
+      },
+    ];
   },
 };
 
