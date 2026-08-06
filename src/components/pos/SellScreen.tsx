@@ -20,6 +20,7 @@ import OfflinePinSetup from "@/components/OfflinePinSetup";
 import OfflinePinUnlock from "@/components/OfflinePinUnlock";
 import PrinterSettingsModal from "@/components/pos/PrinterSettings";
 import OrderHistory from "@/components/pos/OrderHistory";
+import ShiftPanel, { useActiveShift } from "@/components/pos/ShiftPanel";
 import {
   buildOrderNo,
   enqueueOrder,
@@ -264,6 +265,7 @@ type IconName =
   | "heart"
   | "close"
   | "printer"
+  | "cash"
   | "settings";
 
 function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
@@ -292,6 +294,7 @@ function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
     heart: <path d="M20.8 8.6c0 4.8-8.8 10.3-8.8 10.3S3.2 13.4 3.2 8.6A4.5 4.5 0 0 1 12 6.5a4.5 4.5 0 0 1 8.8 2.1Z" />,
     close: <><path d="m7 7 10 10M17 7 7 17" /></>,
     printer: <><path d="M6 9V4h12v5M6 17H4V9h16v8h-2" /><path d="M7 14h10v6H7z" /><path d="M17 11h.1" /></>,
+    cash: <><rect x="3" y="6.5" width="18" height="11" rx="1.5" /><circle cx="12" cy="12" r="2.6" /><path d="M6.5 10v4M17.5 10v4" /></>,
     settings: <><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" /><circle cx="12" cy="12" r="3.5" /></>,
   };
   return <svg {...common}>{paths[name]}</svg>;
@@ -349,6 +352,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     loadPrinterSettings(),
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shiftOpen, setShiftOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -363,6 +367,10 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
   const syncUserId = syncProfile?.id ?? null;
   const syncOrgId = syncProfile?.org_id ?? null;
   const syncStoreId = syncProfile?.store_id ?? null;
+
+  // P8: the till this terminal is ringing into. Cached on the device so an
+  // offline sale still carries its shift through the outbox.
+  const { shift: activeShift, setShift: setActiveShift } = useActiveShift(profile, offline);
 
   const applyProfile = useCallback((nextProfile: ProfileData | OfflineProfileSnapshot, nextPrinterSettings?: PrinterSettings) => {
     const nextConfig = normalizePosRuntimeConfig(nextProfile.pos_config);
@@ -875,6 +883,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
       store_id: profile.store_id,
       device_id: profile.device_id ?? "",
       order_no: orderNo,
+      shift_id: activeShift?.id ?? null,
       cashier_id: profile.id,
       status: "completed",
       subtotal,
@@ -1196,6 +1205,10 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                   <Icon name="receipt" size={24} />
                   <span>Receipts</span>
                 </button>
+                <button type="button" className={"pos-tool" + (activeShift ? " is-active" : "")} onClick={() => setShiftOpen(true)}>
+                  <Icon name="cash" size={24} />
+                  <span>{activeShift ? "Till open" : "Open till"}</span>
+                </button>
                 <button type="button" className="pos-tool" onClick={() => setSettingsOpen(true)}>
                   <Icon name="more" size={24} />
                   <span>More</span>
@@ -1514,6 +1527,19 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
           />
         )}
 
+        {shiftOpen && profile && (
+          <ShiftPanel
+            profile={profile}
+            offline={offline}
+            shift={activeShift}
+            onShiftChange={setActiveShift}
+            receiptSettings={{ paperWidth: posConfig.paperWidth, vatRate: posConfig.vatRate, showVat: posConfig.showVat }}
+            onPrint={doPrint}
+            onToast={(msg) => setToast({ msg })}
+            onClose={() => setShiftOpen(false)}
+          />
+        )}
+
         {success && (
           <div className="pos-success-overlay">
             <div className="pos-success-card">
@@ -1591,6 +1617,13 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
           className="rounded-btn bg-secondary px-3 py-1.5 text-sm font-semibold text-ink"
         >
           Orders / Receipts
+        </button>
+        <button
+          onClick={() => setShiftOpen(true)}
+          className="rounded-btn bg-secondary px-3 py-1.5 text-sm font-semibold text-ink"
+          title="Shift and till"
+        >
+          {activeShift ? "Till open" : "Open till"}
         </button>
         <button
           onClick={() => setSettingsOpen(true)}
@@ -1821,6 +1854,20 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
           onSave={savePrinter}
           onClose={() => setSettingsOpen(false)}
           onToast={(msg) => setToast({ msg })}
+        />
+      )}
+
+      {/* Shift and till (P8) */}
+      {shiftOpen && profile && (
+        <ShiftPanel
+          profile={profile}
+          offline={offline}
+          shift={activeShift}
+          onShiftChange={setActiveShift}
+          receiptSettings={{ paperWidth: posConfig.paperWidth, vatRate: posConfig.vatRate, showVat: posConfig.showVat }}
+          onPrint={doPrint}
+          onToast={(msg) => setToast({ msg })}
+          onClose={() => setShiftOpen(false)}
         />
       )}
 

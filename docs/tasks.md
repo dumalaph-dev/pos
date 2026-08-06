@@ -7,7 +7,7 @@
 
 ## Current project status
 
-**Last updated:** 2026-08-06
+**Last updated:** 2026-08-07
 
 This section is the current source of truth for delivered work and the next gate. Keep it updated in the same change as every feature, migration, QA pass, commit, or deployment.
 
@@ -22,6 +22,7 @@ This section is the current source of truth for delivered work and the next gate
 | Admin backoffice | In progress (manager QA, employee save-flow, price-audit hardening, and kg metric verified) | Reachable LAN printer, staff-login configuration, and remaining P6 polish |
 | Inventory workflow | Complete | Maintain regression coverage |
 | Inventory reporting and exports | Authenticated admin and manager QA passed | Reconciliation against broader live data |
+| Shifts, till, and Z-readings | Implemented and verified on the local stack | Apply `0024` to the hosted project, then authenticated till QA |
 | Store-owner onboarding and guidance | Implemented | Verify first-run and mobile behavior on the deployed app |
 | Admin workspace themes | Merged in PR #2 | Verify Classic/Light/Dark/Retro on the live main deployment |
 | Production pilot | Not started | Production Supabase, device setup, pilot week, and branch #2 |
@@ -40,9 +41,10 @@ This section is the current source of truth for delivered work and the next gate
 
 ### Immediate next task
 
-1. Put the real LAN printer on the same network and provide/confirm its reachable IP; rerun the physical ESC/POS validation and observe the slip.
-2. Finish the remaining P6 configuration/polish: hosted employee-login provisioning needs a valid project service key plus `EMPLOYEE_INITIAL_PASSWORD`; the dashboard cash/e-wallet breakdown, settings split, and full-phone pass remain open.
-3. Reconcile reporting against a broader real-day data set; shifts and till reports remain P8 work.
+1. Apply `0024_shifts_and_z_readings.sql` to the hosted project, then run authenticated till QA: open a shift on the POS, ring a sale, read the X-reading, close with a counted drawer, and generate the Z-reading from `/admin/shifts`.
+2. Put the real LAN printer on the same network and provide/confirm its reachable IP; rerun the physical ESC/POS validation and observe the slip, including the new X/Z reading slips.
+3. Finish the remaining P6 configuration/polish: hosted employee-login provisioning needs a valid project service key plus `EMPLOYEE_INITIAL_PASSWORD`; the dashboard cash/e-wallet breakdown, settings split, and full-phone pass remain open.
+4. Reconcile reporting against a broader real-day data set; the remaining P8 sales/discount/branch-comparison reports are still open.
 
 ---
 
@@ -58,7 +60,7 @@ This section is the current source of truth for delivered work and the next gate
 | **P5** | Customer display | ⬜ Not started | 0 / 6 | Needs P1 cart events |
 | **P6** | Backoffice | 🟡 In progress | Core admin slices implemented | Hosted/browser QA and production hardening |
 | **P7** | Inventory | ✅ Done | 6 / 6 | Maintain regression coverage |
-| **P8** | Shifts & reports | 🟡 In progress | Inventory reporting slice implemented | Reporting QA; shifts and till reports remain |
+| **P8** | Shifts & reports | 🟡 In progress | Shifts, X/Z readings, and inventory reporting implemented | Hosted `0024` + authenticated till QA; sales/discount reports remain |
 | **P9** | Pilot & production deploy | ⬜ Not started | 0 / 8 | Everything above |
 
 **Status legend:** ⬜ Not started · 🟡 In progress · ✅ Done · 🔴 Blocked
@@ -216,8 +218,22 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 ## P8 — Shifts & Reports
 *Goal: trustworthy till + numbers the owner reads weekly.*
 
-- [ ] Shift open (declared cash) / close (counted vs. expected, variance, note over threshold), per branch/device.
-- [ ] X-reading (cashier) / Z-reading (admin), per branch.
+### Shift and Z-reading slice — 2026-08-07
+
+- `supabase/migrations/0024_shifts_and_z_readings.sql` adds the whole slice: shift hardening (`shift_no`, `closed_by`, a partial unique index enforcing one open till per cashier per branch, a manager read policy matching 0019), `shift_variance_threshold`, `shift_reading`, `shift_reading_list`, `open_shift`, `close_shift`, the append-only `z_readings` table, `record_z_reading`, and a replacement `place_order`.
+- **`place_order` now stamps `shift_id`.** The device sends the till it captured at sale time, so an order queued offline still belongs to the shift that rang it up instead of whichever shift is open when it syncs; a closed shift is therefore still a valid target. If the client sends nothing, or a shift outside the branch, the RPC falls back to the caller's open till and otherwise writes `null` — a sale is never rejected over shift attribution. Every other part of the sale path (local_uuid idempotency, order items, stock movements, audit) is unchanged.
+- Readings are computed from the order ledger, never from a mutable counter. Reversal rows from 0020 copy the original's `shift_id` and `payment_method`, so a void or refund lands in the same till; net figures exclude any sale that has a reversal and report the reversals on their own lines.
+- "Resetting the counters" is expressed as sealing a shift into `z_readings` and starting the next one, which keeps the append-only guarantees of 0002 intact. A Z stores a snapshot, so a void taken after the Z does not rewrite it; the admin detail panel surfaces the resulting gap instead of hiding it.
+- App surface: POS till panel (`src/components/pos/ShiftPanel.tsx`) for open / live X-reading / counted-cash close, `/admin/shifts` for the till register, full reading, admin close-out, Z generation, and the sealed archive, plus a `Shifts & Z-readings` sidebar entry. `buildReadingSlip` in `src/lib/receipt.ts` prints X and Z slips; the shared ESC/POS writer extracted for it leaves receipt bytes identical (`npm run printer:validate:mock` still delivers the same 988-byte payload, 8/8 capture checks).
+- Local verification passed against the two-branch RLS fixture on the local stack, run in a transaction and rolled back so no fixture rows remain: shift label `SH-260807-001` generated; second open rejected; three sales stamped to the shift and a fourth with no `shift_id` correctly fell back to the open till; X-reading returned net `₱1,930.00`, cash `₱1,630.00`, expected cash `₱2,630.00`; an admin void moved the GCash sale out of net sales into `void_total` with cash untouched; closing with a large variance and no note was rejected; closing with `₱2,620.00` counted produced variance `−₱10.00` stored on the shift; a cashier was blocked from generating a Z; the admin Z sealed as `#1` with grand total `₱1,630.00`; a duplicate Z was rejected; `authenticated` has no UPDATE/DELETE privilege on `z_readings` and even the table owner is blocked by the append-only trigger; audit rows `shift.opened`, `shift.closed`, and `shift.z_reading` were written; a second shift sealed as `#2` and accumulated the grand total to `₱1,730.00`; and a Beta-org admin saw zero Alpha shifts and zero Z-readings.
+- Privilege note found during that pass: hosted Supabase default privileges grant `anon` and `authenticated` full DML on new `public` tables (this is what 0004 documents for `anon`), so a bare `grant select, insert` is a no-op on top of an existing `grant all`. `0024` explicitly revokes on `z_readings` before granting. The same gap still exists on the older append-only tables — `authenticated` currently holds UPDATE/DELETE privileges on `orders`, `order_items`, `stock_movements`, and `audit_logs`, where only RLS and the `forbid_mutation` triggers stand in the way. Worth a follow-up hardening migration.
+- `npm run typecheck`, `npm run lint`, `npm run build`, `npm run printer:validate:mock`, and `git diff --check` pass. The build exposes `/admin/shifts`.
+- **Hosted migration applied 2026-08-07.** `npx supabase db push --linked` applied `0024`; `migration list --linked` now reports local `0024` = remote `0024`. The push printed a `Warning: failed to cache migrations catalog: error exporting pg-delta catalog ... timeout exceeded when trying to connect`, followed by edge-runtime `event loop error` / `main worker has been destroyed` lines. That is the CLI's optional post-apply schema-snapshot step (pg-delta, used for declarative-schema diffing) failing inside its sandbox, not the migration — the CLI reported it as a warning, then `Finished supabase db push`, and only records the ledger row after a successful apply.
+- Hosted verification passed by probing the project API with the public anon key: `z_readings` returned `42501 permission denied for table z_readings`, which proves both that the table exists and that the `revoke ... from anon` in `0024` took effect. All five new RPCs resolve through PostgREST with no `PGRST202`, so the schema cache picked them up: `shift_reading`, `shift_reading_list`, `open_shift`, `close_shift`, and `record_z_reading` — the last reaching its guard and raising `P0001 only organization admins can generate a Z-reading`. `place_order` is in the same single-transaction migration file as those objects, so it was replaced with them; the first hosted sale carrying a non-null `shift_id` is the direct confirmation.
+- Authenticated browser QA of the till flow is still pending.
+
+- [x] Shift open (declared cash) / close (counted vs. expected, variance, note over threshold), per branch/device. *(`0024_shifts_and_z_readings.sql`: `open_shift` / `close_shift`, one open till per cashier per branch, expected cash = opening + cash sales − cash refunds, note enforced above the org threshold. POS till panel + admin close-out.)*
+- [x] X-reading (cashier) / Z-reading (admin), per branch. *(One `shift_reading` RPC feeds both. X is live and non-resetting in the POS; Z is admin-only, sealed into the append-only `z_readings` archive with a per-branch sequence and running grand total. Both print as ESC/POS slips.)*
 - [ ] Reports: sales by day/week/month, item, category, cashier; hourly heatmap.
 - [ ] Discount report; branch-vs-branch comparison.
 - [ ] CSV export.
