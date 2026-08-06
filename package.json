@@ -7,6 +7,7 @@
     "build": "next build && opennextjs-cloudflare build --skipNextBuild && node scripts/stage-sites-dist.mjs",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "printer:validate": "node --experimental-strip-types scripts/validate-printer.mjs",
     "printer:validate:mock": "node --experimental-strip-types scripts/validate-printer.mjs --mock"
   },

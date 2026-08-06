@@ -11025,60 +11025,120 @@ body.products-modal-open {
 /* Admin dashboard identity and themes                                        */
 /* -------------------------------------------------------------------------- */
 
+[data-admin-theme="current"] {
+  color-scheme: light;
+  --bg: #f4eddf;
+  --surface: #fcf8f0;
+  --surface-panel: #f7efe4;
+  --surface-raised: #fffaf2;
+  --sidebar: #eee3d3;
+  --border: #ddceb8;
+  --border-strong: #bea88c;
+  --text: #2f231a;
+  --text-muted: #685a4c;
+  --text-subtle: #8e7c69;
+  --primary: #6a3514;
+  --primary-hover: #52270e;
+  --primary-fg: #fff8ee;
+  --primary-soft: #eee0cd;
+  --accent: #a74e2c;
+  --accent-hover: #8c3e20;
+  --accent-fg: #fff7ee;
+  --secondary-btn: #e8dac7;
+  --secondary-btn-hover: #d9c7ae;
+  --success: #3f7657;
+  --warning: #a96f1e;
+  --danger: #b34b3a;
+  --danger-soft: #f7e2dc;
+  --shadow-card: 0 1px 2px rgba(55, 35, 19, 0.07);
+  --shadow-pop: 0 10px 26px rgba(55, 35, 19, 0.14);
+}
+
 [data-admin-theme="light"] {
-  --bg: #f4f7fb;
-  --surface: #ffffff;
-  --surface-panel: #f8fafc;
+  color-scheme: light;
+  --bg: #f5f6f3;
+  --surface: #fffefa;
+  --surface-panel: #f1f4f0;
   --surface-raised: #ffffff;
-  --sidebar: #ffffff;
-  --border: #dce4ee;
-  --border-strong: #c3cfdd;
-  --text: #1f2937;
-  --text-muted: #64748b;
-  --text-subtle: #94a3b8;
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
+  --sidebar: #e9efeb;
+  --border: #d6dfd9;
+  --border-strong: #aabbb0;
+  --text: #25332d;
+  --text-muted: #5b6c63;
+  --text-subtle: #82928a;
+  --primary: #2f6f62;
+  --primary-hover: #24594f;
   --primary-fg: #ffffff;
-  --primary-soft: #eaf1ff;
-  --accent: #0f766e;
-  --accent-hover: #0d665f;
+  --primary-soft: #e2efe9;
+  --accent: #a25b32;
+  --accent-hover: #874824;
   --accent-fg: #ffffff;
-  --secondary-btn: #e9eef6;
-  --secondary-btn-hover: #dce6f2;
-  --success: #2f855a;
-  --warning: #b7791f;
-  --danger: #c2413c;
-  --danger-soft: #fce8e7;
-  --shadow-card: 0 1px 2px rgba(30, 64, 95, 0.06);
-  --shadow-pop: 0 12px 28px rgba(30, 64, 95, 0.14);
+  --secondary-btn: #e6ece8;
+  --secondary-btn-hover: #d6e2db;
+  --success: #2f7a53;
+  --warning: #9a681c;
+  --danger: #b34b42;
+  --danger-soft: #f8e5e2;
+  --shadow-card: 0 1px 2px rgba(37, 51, 45, 0.07);
+  --shadow-pop: 0 12px 28px rgba(37, 51, 45, 0.14);
 }
 
 [data-admin-theme="dark"] {
-  --bg: #171411;
-  --surface: #211d19;
-  --surface-panel: #28221d;
-  --surface-raised: #302820;
-  --sidebar: #1c1815;
-  --border: #493b2f;
-  --border-strong: #6a5541;
-  --text: #f6eee4;
-  --text-muted: #c4b3a1;
-  --text-subtle: #927e6a;
-  --primary: #d58a43;
-  --primary-hover: #e49a52;
-  --primary-fg: #24170e;
-  --primary-soft: #3b2d21;
-  --accent: #f29a64;
-  --accent-hover: #ffad76;
-  --accent-fg: #28170e;
-  --secondary-btn: #3a2f25;
-  --secondary-btn-hover: #4a3b2e;
-  --success: #80c68a;
-  --warning: #e0a74f;
-  --danger: #f07a6e;
-  --danger-soft: #4b2926;
-  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.22);
-  --shadow-pop: 0 16px 36px rgba(0, 0, 0, 0.34);
+  color-scheme: dark;
+  --bg: #12191b;
+  --surface: #1a2426;
+  --surface-panel: #202c2e;
+  --surface-raised: #273638;
+  --sidebar: #161f21;
+  --border: #3b4c4e;
+  --border-strong: #607577;
+  --text: #edf5f1;
+  --text-muted: #b5c7c1;
+  --text-subtle: #8ba19a;
+  --primary: #83c7b4;
+  --primary-hover: #a0d8c7;
+  --primary-fg: #10201c;
+  --primary-soft: #23433e;
+  --accent: #efb47d;
+  --accent-hover: #ffc995;
+  --accent-fg: #2b1a0e;
+  --secondary-btn: #2a3a3c;
+  --secondary-btn-hover: #35494b;
+  --success: #8ed19a;
+  --warning: #e5b765;
+  --danger: #f18a7d;
+  --danger-soft: #4a292a;
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.24);
+  --shadow-pop: 0 16px 36px rgba(0, 0, 0, 0.38);
+}
+
+[data-admin-theme="retro"] {
+  color-scheme: light;
+  --bg: #efe4cc;
+  --surface: #fff8e9;
+  --surface-panel: #f7edd7;
+  --surface-raised: #fffdf4;
+  --sidebar: #e4d5af;
+  --border: #ccb98b;
+  --border-strong: #a88e5f;
+  --text: #2f3829;
+  --text-muted: #60684e;
+  --text-subtle: #8b9273;
+  --primary: #3e6b45;
+  --primary-hover: #315538;
+  --primary-fg: #fffdf3;
+  --primary-soft: #dfe8cc;
+  --accent: #d8892f;
+  --accent-hover: #b66e20;
+  --accent-fg: #2e1b08;
+  --secondary-btn: #eadfbe;
+  --secondary-btn-hover: #ddce9f;
+  --success: #4f8058;
+  --warning: #af6f1e;
+  --danger: #b94d3e;
+  --danger-soft: #f7ddd4;
+  --shadow-card: 0 2px 4px rgba(70, 55, 22, 0.1);
+  --shadow-pop: 0 12px 28px rgba(70, 55, 22, 0.18);
 }
 
 .admin-shell[data-admin-theme="light"],
@@ -11197,6 +11257,99 @@ body.products-modal-open {
   border-color: var(--border);
 }
 
+/* Keep the shared component surfaces in step with every persisted palette.
+   The original light/dark selectors remain for compatibility with older
+   markup, while this generic layer also covers Classic and Retro previews. */
+.admin-shell[data-admin-theme],
+.admin-page[data-admin-theme] {
+  background: var(--bg);
+}
+
+.admin-shell[data-admin-theme] .admin-sidebar {
+  background: var(--sidebar);
+  border-right-color: var(--border);
+}
+
+.admin-shell[data-admin-theme] .admin-page {
+  background: var(--bg);
+}
+
+.admin-shell[data-admin-theme] .admin-brand__mark,
+.admin-page[data-admin-theme] .admin-brand__mark {
+  background: var(--surface-raised);
+}
+
+.admin-shell[data-admin-theme] .admin-quick-actions,
+.admin-shell[data-admin-theme] .admin-system-info {
+  border-color: var(--border);
+  background: var(--surface-panel);
+}
+
+.admin-shell[data-admin-theme] .admin-panel,
+.admin-page[data-admin-theme] .admin-panel,
+.admin-page[data-admin-theme] .products-table-card,
+.admin-page[data-admin-theme] .products-side-card,
+.admin-page[data-admin-theme] .products-action-panel {
+  border-color: var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.admin-page[data-admin-theme] .rounded-card {
+  border-color: var(--border);
+  box-shadow: var(--shadow-card);
+}
+
+.admin-shell[data-admin-theme] .admin-kpi-card {
+  border-color: var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.admin-shell[data-admin-theme] .admin-menu__panel,
+.admin-page[data-admin-theme] .admin-menu__panel {
+  background: var(--surface-raised);
+}
+
+.admin-shell[data-admin-theme] .admin-reference-header > div:last-child > a,
+.admin-page[data-admin-theme] .admin-reference-header > div:last-child > a,
+.admin-page[data-admin-theme] .products-icon-button,
+.admin-page[data-admin-theme] .products-search-field input,
+.admin-page[data-admin-theme] .products-filter-bar select,
+.admin-page[data-admin-theme] .products-page-size select,
+.admin-page[data-admin-theme] .products-bulk-form select {
+  border-color: var(--border);
+  color: var(--text);
+  background: var(--surface-raised);
+}
+
+.admin-shell[data-admin-theme] .admin-status-card {
+  border-color: var(--border);
+  background: var(--surface-raised);
+}
+
+.admin-shell[data-admin-theme] .admin-category-bar__track,
+.admin-shell[data-admin-theme] .admin-stock-alert__bar > div {
+  background: var(--secondary-btn);
+}
+
+.admin-shell[data-admin-theme] .admin-list-table td,
+.admin-page[data-admin-theme] .products-table td {
+  border-bottom-color: var(--border);
+}
+
+.admin-page[data-admin-theme] .bg-surface {
+  background: var(--surface);
+}
+
+.admin-page[data-admin-theme] .bg-surface-raised {
+  background: var(--surface-raised);
+}
+
+.admin-page[data-admin-theme] .border-line {
+  border-color: var(--border);
+}
+
 .admin-theme-option {
   display: block;
   min-width: 0;
@@ -11252,46 +11405,59 @@ body.products-modal-open {
   gap: 3px;
   padding: 5px;
   overflow: hidden;
-  border: 1px solid rgba(46, 28, 16, 0.12);
+  border: 1px solid #ddceb8;
   border-radius: 8px;
-  background: #f5ecdf;
+  background: #f4eddf;
 }
 
 .admin-theme-option__swatch i {
   display: block;
   border-radius: 2px;
-  background: rgba(91, 42, 10, 0.16);
+  background: rgba(106, 53, 20, 0.16);
 }
 
 .admin-theme-option__swatch i:first-child {
   grid-row: 1 / -1;
-  background: #5b2a0a;
+  background: #6a3514;
 }
 
 .admin-theme-option__swatch--light {
-  border-color: #dce4ee;
-  background: #f4f7fb;
+  border-color: #d6dfd9;
+  background: #f5f6f3;
 }
 
 .admin-theme-option__swatch--light i {
-  background: #dce4ee;
+  background: #d6dfd9;
 }
 
 .admin-theme-option__swatch--light i:first-child {
-  background: #2563eb;
+  background: #2f6f62;
 }
 
 .admin-theme-option__swatch--dark {
-  border-color: #493b2f;
-  background: #211d19;
+  border-color: #3b4c4e;
+  background: #1a2426;
 }
 
 .admin-theme-option__swatch--dark i {
-  background: #493b2f;
+  background: #3b4c4e;
 }
 
 .admin-theme-option__swatch--dark i:first-child {
-  background: #d58a43;
+  background: #83c7b4;
+}
+
+.admin-theme-option__swatch--retro {
+  border-color: #ccb98b;
+  background: #efe4cc;
+}
+
+.admin-theme-option__swatch--retro i {
+  background: #ccb98b;
+}
+
+.admin-theme-option__swatch--retro i:first-child {
+  background: #3e6b45;
 }
 
 .admin-theme-option__copy {
@@ -11417,11 +11583,11 @@ body.products-modal-open {
 }
 
 .admin-settings-preview__window {
-  --preview-bg: #f5ecdf;
-  --preview-surface: #fbf8f2;
-  --preview-sidebar: #f1e8db;
-  --preview-line: #e8dcc9;
-  --preview-primary: #5b2a0a;
+  --preview-bg: #f4eddf;
+  --preview-surface: #fffaf2;
+  --preview-sidebar: #eee3d3;
+  --preview-line: #ddceb8;
+  --preview-primary: #6a3514;
   display: grid;
   min-height: 214px;
   grid-template-columns: 92px minmax(0, 1fr);
@@ -11429,27 +11595,36 @@ body.products-modal-open {
   overflow: hidden;
   border: 1px solid var(--preview-line);
   border-radius: 13px;
-  color: #2e1c10;
+  color: #2f231a;
   background: var(--preview-bg);
-  box-shadow: 0 8px 18px rgba(46, 28, 16, 0.08);
+  box-shadow: 0 8px 18px rgba(55, 35, 19, 0.1);
 }
 
 .admin-settings-preview__window--light {
-  --preview-bg: #f4f7fb;
-  --preview-surface: #ffffff;
-  --preview-sidebar: #eaf1ff;
-  --preview-line: #dce4ee;
-  --preview-primary: #2563eb;
-  color: #1f2937;
+  --preview-bg: #f5f6f3;
+  --preview-surface: #fffefa;
+  --preview-sidebar: #e9efeb;
+  --preview-line: #d6dfd9;
+  --preview-primary: #2f6f62;
+  color: #25332d;
 }
 
 .admin-settings-preview__window--dark {
-  --preview-bg: #171411;
-  --preview-surface: #211d19;
-  --preview-sidebar: #1c1815;
-  --preview-line: #493b2f;
-  --preview-primary: #d58a43;
-  color: #f6eee4;
+  --preview-bg: #12191b;
+  --preview-surface: #1a2426;
+  --preview-sidebar: #161f21;
+  --preview-line: #3b4c4e;
+  --preview-primary: #83c7b4;
+  color: #edf5f1;
+}
+
+.admin-settings-preview__window--retro {
+  --preview-bg: #efe4cc;
+  --preview-surface: #fff8e9;
+  --preview-sidebar: #e4d5af;
+  --preview-line: #ccb98b;
+  --preview-primary: #3e6b45;
+  color: #2f3829;
 }
 
 .admin-settings-preview__sidebar {

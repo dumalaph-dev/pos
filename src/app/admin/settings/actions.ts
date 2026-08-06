@@ -39,6 +39,10 @@ async function requireAdmin() {
 }
 
 function refreshSettings() {
+  // The admin shell owns the persisted branding. Revalidate its layout too;
+  // page-only invalidation leaves the shared shell in the client cache until
+  // the stale-time window expires.
+  revalidatePath("/admin", "layout");
   revalidatePath("/admin/settings");
   revalidatePath("/admin");
   revalidatePath("/admin/inventory");

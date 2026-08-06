@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
+import { AdminSettingsSaveButton, AdminThemePicker } from "@/components/admin/AdminThemeControls";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
 import { getAdminProfile } from "@/lib/admin/profile";
 import {
-  ADMIN_THEME_OPTIONS,
   DEFAULT_ADMIN_BRANDING,
   DEFAULT_ORGANIZATION_NAME,
   readAdminBranding,
@@ -95,7 +95,7 @@ export default async function SettingsPage({
           <form action={updateOrganizationSettings} className="admin-panel p-5 sm:p-6">
             <div className="admin-panel__header">
               <div><p className="admin-panel__eyebrow">Admin dashboard</p><h2 id="dashboard-settings-heading" className="admin-panel__title">Identity and appearance</h2><p className="admin-panel__subtitle">These details appear in the dashboard navigation and workspace chrome.</p></div>
-              <span className="admin-settings-theme-pill">{ADMIN_THEME_OPTIONS.find((option) => option.id === branding.theme)?.label ?? "Current"} theme</span>
+              <span className="admin-settings-theme-pill">Shared workspace</span>
             </div>
 
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -113,25 +113,12 @@ export default async function SettingsPage({
             </div>
 
             <div className="mt-7 border-t border-line pt-6">
-              <div><p className="admin-panel__eyebrow">Workspace theme</p><h3 className="mt-1 text-base font-extrabold text-ink">Choose a comfortable dashboard style</h3><p className="mt-1 text-xs leading-5 text-ink-muted">The theme applies to the admin dashboard, inventory, products, and settings pages. POS appearance stays managed in POS settings.</p></div>
-              <fieldset className="mt-4 grid gap-3 sm:grid-cols-3">
-                <legend className="sr-only">Dashboard theme</legend>
-                {ADMIN_THEME_OPTIONS.map((option) => (
-                  <label key={option.id} className="admin-theme-option">
-                    <input type="radio" name="admin_theme" value={option.id} defaultChecked={branding.theme === option.id} disabled={!canWrite || !organization} />
-                    <span className="admin-theme-option__card">
-                      <span className={`admin-theme-option__swatch admin-theme-option__swatch--${option.id}`} aria-hidden="true"><i /><i /><i /></span>
-                      <span className="admin-theme-option__copy"><strong>{option.label}</strong><small>{option.description}</small></span>
-                      <span className="admin-theme-option__check" aria-hidden="true"><AdminIcon name="check" size={13} /></span>
-                    </span>
-                  </label>
-                ))}
-              </fieldset>
+              <AdminThemePicker initialTheme={branding.theme} disabled={!canWrite || !organization} />
             </div>
 
             <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5">
-              <p className="max-w-xl text-xs leading-5 text-ink-muted">Changes are shared with your organization and take effect across the dashboard after saving.</p>
-              <button type="submit" disabled={!canWrite || !organization} className="min-h-11 rounded-btn bg-primary px-5 text-sm font-extrabold text-primary-fg transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50">Save dashboard settings</button>
+              <p className="max-w-xl text-xs leading-5 text-ink-muted">Theme previews are local until you save. Saved brand and appearance settings are shared with your organization.</p>
+              <AdminSettingsSaveButton disabled={!canWrite || !organization} />
             </div>
           </form>
 
@@ -149,15 +136,15 @@ export default async function SettingsPage({
 function DashboardPreview({ branding, organizationName }: { branding: AdminBranding; organizationName: string }) {
   return (
     <aside className="admin-settings-preview admin-panel p-4 sm:p-5" aria-label="Dashboard preview">
-      <div className="flex items-start justify-between gap-3"><div><p className="admin-panel__eyebrow">Preview</p><h2 className="mt-1 text-base font-extrabold text-ink">Your admin workspace</h2></div><span className="admin-settings-preview__status"><i aria-hidden="true" />Saved</span></div>
-      <div className={`admin-settings-preview__window admin-settings-preview__window--${branding.theme}`}>
+      <div className="flex items-start justify-between gap-3"><div><p className="admin-panel__eyebrow">Preview</p><h2 className="mt-1 text-base font-extrabold text-ink">Your admin workspace</h2></div><span className="admin-settings-preview__status"><i aria-hidden="true" />Live preview</span></div>
+      <div data-admin-theme-preview className={`admin-settings-preview__window admin-settings-preview__window--${branding.theme}`}>
         <div className="admin-settings-preview__sidebar">
           <div className="admin-settings-preview__brand"><span className="admin-settings-preview__mark"><AdminIcon name="pig" size={16} /></span><span><strong>{branding.brandName}</strong><small>{branding.brandTagline || "Admin dashboard"}</small></span></div>
           <div className="admin-settings-preview__nav"><i /><i className="is-active" /><i /><i /><i /></div>
         </div>
         <div className="admin-settings-preview__body"><div className="admin-settings-preview__topline"><span /><span /><span /></div><p>{organizationName}</p><strong>Dashboard Overview</strong><div className="admin-settings-preview__cards"><i /><i /><i /></div></div>
       </div>
-      <p className="mt-3 text-xs leading-5 text-ink-muted">This is how your saved brand and theme will read in the dashboard navigation.</p>
+      <p className="mt-3 text-xs leading-5 text-ink-muted">The preview updates as you choose a theme. Save when the dashboard feels comfortable to use.</p>
     </aside>
   );
 }
