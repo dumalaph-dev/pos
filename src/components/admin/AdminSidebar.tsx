@@ -8,7 +8,7 @@ import { AdminBranchSwitcher } from "./AdminBranchSwitcher";
 import type { AdminBranchOption } from "@/lib/admin/branch-context";
 import type { AdminBranding } from "@/lib/admin/branding";
 
-export type AdminSection = "overview" | "sales" | "pos" | "orders" | "inventory" | "products" | "catalog" | "customers" | "suppliers" | "expenses" | "employees" | "staff-access" | "billing" | "reports" | "audit" | "settings" | "promotions" | "branches";
+export type AdminSection = "overview" | "sales" | "pos" | "orders" | "inventory" | "products" | "catalog" | "customers" | "suppliers" | "expenses" | "employees" | "billing" | "reports" | "audit" | "settings" | "promotions" | "branches";
 
 type NavItem = {
   label: string;
@@ -38,7 +38,6 @@ const comingSoonNav: NavItem[] = [
   { label: "Suppliers", href: "/admin/suppliers", icon: "suppliers", active: "suppliers" },
   { label: "Expenses", href: "/admin/expenses", icon: "expenses", active: "expenses" },
   { label: "Employees", href: "/admin/employees", icon: "employees", active: "employees" },
-  { label: "Staff access", href: "/admin/staff-access", icon: "employees", active: "staff-access", adminOnly: true },
   { label: "Billing & plan", href: "/admin/billing", icon: "wallet", active: "billing", adminOnly: true },
   { label: "Promotions", href: "/admin/promotions", icon: "promotions", active: "promotions" },
   { label: "Reports", href: "/admin/reports", icon: "reports", active: "reports" },
@@ -62,7 +61,6 @@ function activeSectionForPath(pathname: string | null): AdminSection {
     ["/admin/suppliers", "suppliers"],
     ["/admin/expenses", "expenses"],
     ["/admin/employees", "employees"],
-    ["/admin/staff-access", "staff-access"],
     ["/admin/billing", "billing"],
     ["/admin/reports", "reports"],
     ["/admin/audit", "audit"],
