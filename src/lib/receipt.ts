@@ -95,8 +95,11 @@ function wrap(text: string, width: number): string[] {
 const ESC = 0x1b;
 const GS = 0x1d;
 
-export function buildReceipt(data: ReceiptData): Uint8Array {
-  const width = COLUMNS[data.paperWidth ?? 58];
+/**
+ * Shared ESC/POS text plumbing. Receipts and till readings print on the same
+ * roll and must lay out identically, so both build through this writer.
+ */
+function createSlipWriter(width: number) {
   const out: number[] = [];
 
   const text = (s: string) => [...ascii(s)].map((c) => c.charCodeAt(0));
@@ -123,6 +126,13 @@ export function buildReceipt(data: ReceiptData): Uint8Array {
     const gap = Math.max(1, width - l.length - r.length);
     line(l + PAD(gap) + r, { bold });
   };
+
+  return { out, line, rule, blank, leftRight };
+}
+
+export function buildReceipt(data: ReceiptData): Uint8Array {
+  const width = COLUMNS[data.paperWidth ?? 58];
+  const { out, line, rule, blank, leftRight } = createSlipWriter(width);
 
   out.push(ESC, 0x40); // init
   blank();
@@ -188,6 +198,140 @@ export function buildReceipt(data: ReceiptData): Uint8Array {
     }
   }
   line("Salamat po!", { align: "center", bold: true });
+  blank();
+  out.push(ESC, 0x64, 3); // feed 3
+  out.push(GS, 0x56, 0x66); // partial cut
+
+  return Uint8Array.from(out);
+}
+
+/* ── Till readings (P8) ──────────────────────────────────────────────── */
+
+export type ReadingSlipData = {
+  kind: "X" | "Z";
+  storeName: string;
+  storeAddress?: string | null;
+  storeTin?: string | null;
+  shiftLabel: string;
+  cashier: string;
+  openedAt: Date;
+  closedAt: Date | null;
+  printedAt: Date;
+  zNumber?: number | null;
+
+  orderCount: number;
+  grossSales: number;
+  discountTotal: number;
+  netSales: number;
+  vatableSale: number;
+  vatAmount: number;
+  vatExemptSale: number;
+  vatRate?: number;
+  showVat?: boolean;
+
+  voidCount: number;
+  voidTotal: number;
+  refundCount: number;
+  refundTotal: number;
+
+  cashSales: number;
+  gcashSales: number;
+  mayaSales: number;
+  cardSales: number;
+
+  openingCash: number;
+  cashRefunds: number;
+  expectedCash: number;
+  declaredCash?: number | null;
+  cashVariance?: number | null;
+  grandTotalAfter?: number | null;
+  note?: string | null;
+  paperWidth?: 58 | 80;
+};
+
+/**
+ * X-reading (mid-shift, non-resetting) and Z-reading (sealed end-of-shift)
+ * slip. Both print the same figures; a Z additionally carries its sequence
+ * number and the branch's running grand total so the archive is self-evident
+ * on paper (PRD §6.5).
+ */
+export function buildReadingSlip(data: ReadingSlipData): Uint8Array {
+  const width = COLUMNS[data.paperWidth ?? 58];
+  const { out, line, rule, blank, leftRight } = createSlipWriter(width);
+
+  out.push(ESC, 0x40); // init
+  blank();
+  line(data.storeName, { align: "center", bold: true, double: true });
+  if (data.storeAddress) line(data.storeAddress, { align: "center" });
+  if (data.storeTin) line(`TIN: ${data.storeTin}`, { align: "center" });
+  blank();
+  line(data.kind === "Z" ? "Z-READING" : "X-READING", { align: "center", bold: true, double: true });
+  line(
+    data.kind === "Z" ? "End of shift - counters sealed" : "Mid-shift summary - not a reset",
+    { align: "center" },
+  );
+  rule();
+
+  leftRight("Shift", data.shiftLabel, true);
+  if (data.kind === "Z" && data.zNumber != null) leftRight("Z number", String(data.zNumber), true);
+  leftRight("Cashier", data.cashier);
+  leftRight("Opened", data.openedAt.toLocaleString("en-PH"));
+  leftRight("Closed", data.closedAt ? data.closedAt.toLocaleString("en-PH") : "Still open");
+  leftRight("Printed", data.printedAt.toLocaleString("en-PH"));
+  rule();
+
+  line("SALES", { bold: true });
+  leftRight("Orders", String(data.orderCount));
+  leftRight("Gross sales", peso(data.grossSales));
+  leftRight("Discounts", "-" + peso(data.discountTotal));
+  leftRight("NET SALES", peso(data.netSales), true);
+  if (data.showVat !== false) {
+    if (data.vatExemptSale > 0) leftRight("VAT-exempt sale", peso(data.vatExemptSale));
+    leftRight("VATable sale", peso(data.vatableSale));
+    leftRight(`VAT (${Math.round((data.vatRate ?? 0.12) * 100)}%)`, peso(data.vatAmount));
+  }
+  rule();
+
+  line("TENDER", { bold: true });
+  leftRight("Cash", peso(data.cashSales));
+  leftRight("GCash", peso(data.gcashSales));
+  leftRight("Maya", peso(data.mayaSales));
+  leftRight("Card", peso(data.cardSales));
+  rule();
+
+  line("REVERSALS", { bold: true });
+  leftRight(`Voids (${data.voidCount})`, peso(data.voidTotal));
+  leftRight(`Refunds (${data.refundCount})`, peso(data.refundTotal));
+  rule();
+
+  line("CASH DRAWER", { bold: true });
+  leftRight("Opening float", peso(data.openingCash));
+  leftRight("Cash sales", peso(data.cashSales));
+  leftRight("Cash refunds", "-" + peso(data.cashRefunds));
+  leftRight("EXPECTED CASH", peso(data.expectedCash), true);
+  if (data.declaredCash != null) {
+    leftRight("Counted cash", peso(data.declaredCash));
+    const variance = data.cashVariance ?? 0;
+    const label = variance === 0 ? "Balanced" : variance < 0 ? "SHORT" : "OVER";
+    leftRight(`Variance (${label})`, peso(Math.abs(variance)), true);
+  } else {
+    line("Cash not counted yet", { align: "center" });
+  }
+  rule();
+
+  if (data.kind === "Z" && data.grandTotalAfter != null) {
+    leftRight("GRAND TOTAL", peso(data.grandTotalAfter), true);
+    line("Accumulated net sales for this branch", { align: "center" });
+    rule();
+  }
+
+  if (data.note) {
+    line("Note:", { bold: true });
+    line("  " + data.note);
+    rule();
+  }
+
+  line("THIS IS NOT AN OFFICIAL RECEIPT", { align: "center", bold: true });
   blank();
   out.push(ESC, 0x64, 3); // feed 3
   out.push(GS, 0x56, 0x66); // partial cut

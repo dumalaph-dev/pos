@@ -8,7 +8,7 @@ import { AdminBranchSwitcher } from "./AdminBranchSwitcher";
 import type { AdminBranchOption } from "@/lib/admin/branch-context";
 import type { AdminBranding } from "@/lib/admin/branding";
 
-export type AdminSection = "overview" | "sales" | "pos" | "orders" | "inventory" | "products" | "catalog" | "customers" | "suppliers" | "expenses" | "employees" | "billing" | "reports" | "audit" | "settings" | "promotions" | "branches";
+export type AdminSection = "overview" | "sales" | "pos" | "orders" | "shifts" | "inventory" | "products" | "catalog" | "customers" | "suppliers" | "expenses" | "employees" | "billing" | "reports" | "audit" | "settings" | "promotions" | "branches";
 
 type NavItem = {
   label: string;
@@ -29,6 +29,7 @@ const primaryNav: NavItem[] = [
   { label: "Sales", href: "/admin/sales", icon: "sales", active: "sales" },
   { label: "POS", href: "/admin/pos", icon: "pos", active: "pos" },
   { label: "Orders", href: "/admin/orders", icon: "orders", active: "orders" },
+  { label: "Shifts & Z-readings", href: "/admin/shifts", icon: "history", active: "shifts" },
   { label: "Inventory", href: "/admin/inventory", icon: "inventory", active: "inventory" },
   { label: "Products", href: "/products", icon: "box", active: "products" },
   { label: "Customers", href: "/admin/customers", icon: "customers", active: "customers" },
@@ -54,6 +55,7 @@ function activeSectionForPath(pathname: string | null): AdminSection {
     ["/admin/sales", "sales"],
     ["/admin/pos", "pos"],
     ["/admin/orders", "orders"],
+    ["/admin/shifts", "shifts"],
     ["/admin/inventory", "inventory"],
     ["/admin/products", "products"],
     ["/admin/catalog", "products"],
