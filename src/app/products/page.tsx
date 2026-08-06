@@ -11,6 +11,7 @@ import { formatStockQuantity, salesQuantity, stockMovementDelta, stockStatus, ty
 import { formatPeso } from "@/lib/money";
 import { isProductImageUrl } from "@/lib/product-images";
 import { getAdminProfile } from "@/lib/admin/profile";
+import { loadReversedOrderIds, selectNetSales } from "@/lib/admin/sales-reports";
 import { readAdminBranding } from "@/lib/admin/branding";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
@@ -79,6 +80,7 @@ type OrderRecord = {
   total: number;
   status: "completed" | "voided" | "refunded";
   created_at: string;
+  reversal_of: string | null;
 };
 
 type OrderItemRecord = {
@@ -376,18 +378,20 @@ export default async function ProductsPage({
 
   let currentOrdersQuery = supabase
     .from("orders")
-    .select("id, store_id, total, status, created_at")
+    .select("id, store_id, total, status, created_at, reversal_of")
     .eq("org_id", profile.org_id)
     .eq("status", "completed")
+    .is("reversal_of", null)
     .gte("created_at", currentStart.toISOString())
     .lt("created_at", todayEnd.toISOString())
     .order("created_at", { ascending: false })
     .limit(5000);
   let previousOrdersQuery = supabase
     .from("orders")
-    .select("id, store_id, total, status, created_at")
+    .select("id, store_id, total, status, created_at, reversal_of")
     .eq("org_id", profile.org_id)
     .eq("status", "completed")
+    .is("reversal_of", null)
     .gte("created_at", previousStart.toISOString())
     .lt("created_at", currentStart.toISOString())
     .limit(5000);
@@ -407,9 +411,10 @@ export default async function ProductsPage({
     .limit(1000);
   let orderItemsQuery = supabase
     .from("order_items")
-    .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status)")
+    .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status, reversal_of)")
     .eq("orders.org_id", profile.org_id)
     .eq("orders.status", "completed")
+    .is("orders.reversal_of", null)
     .gte("orders.created_at", currentStart.toISOString())
     .lt("orders.created_at", todayEnd.toISOString());
   if (selectedBranchId) {
@@ -520,8 +525,15 @@ export default async function ProductsPage({
   const inactiveProducts = products.length - activeProducts;
   const outOfStockProducts = productRows.filter((row) => row.stockStatus === "out").length;
   const lowStockProducts = productRows.filter((row) => row.stockStatus === "low").length;
-  const completedOrders = currentOrders.filter((order) => order.status === "completed");
-  const previousCompletedOrders = previousOrders.filter((order) => order.status === "completed");
+  // A void or refund (0020) leaves the original at `completed`, so the sales
+  // figures below drop any order that was later reversed.
+  const reversalLookup = await loadReversedOrderIds(
+    supabase,
+    profile.org_id,
+    [...currentOrders, ...previousOrders].map((order) => order.id),
+  );
+  const completedOrders = selectNetSales(currentOrders, reversalLookup.reversedIds);
+  const previousCompletedOrders = selectNetSales(previousOrders, reversalLookup.reversedIds);
   const currentSales = completedOrders.reduce((sum, order) => sum + Number(order.total), 0);
   const previousSales = previousCompletedOrders.reduce((sum, order) => sum + Number(order.total), 0);
   const salesChange = percentChange(currentSales, previousSales);

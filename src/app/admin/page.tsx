@@ -13,6 +13,7 @@ import { getAdminProfile } from "@/lib/admin/profile";
 import { readAdminBranding } from "@/lib/admin/branding";
 import { dashboardLowStockThreshold, readAdminInventorySettings } from "@/lib/admin/inventory-settings";
 import { buildOwnerOnboardingState, hasConfiguredOwnerBusinessProfile, hasConfiguredOwnerDashboardSettings } from "@/lib/admin/onboarding";
+import { loadReversedOrderIds, selectNetSales } from "@/lib/admin/sales-reports";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { OwnerGuidance, OwnerOnboardingPanel } from "@/components/admin/OwnerOnboardingPanel";
 
@@ -62,6 +63,7 @@ type OrderRecord = {
   total: number;
   payment_method: PaymentMethod;
   created_at: string;
+  reversal_of: string | null;
 };
 
 type OrderItemRecord = {
@@ -207,13 +209,14 @@ export default async function AdminPage() {
     .eq("org_id", profile.org_id);
   let ordersQuery = supabase
     .from("orders")
-    .select("id, order_no, store_id, status, discount_amount, vat_amount, total, payment_method, created_at")
+    .select("id, order_no, store_id, status, discount_amount, vat_amount, total, payment_method, created_at, reversal_of")
     .eq("org_id", profile.org_id);
   let itemsQuery = supabase
     .from("order_items")
-    .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status)")
+    .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status, reversal_of)")
     .eq("orders.org_id", profile.org_id)
     .eq("orders.status", "completed")
+    .is("orders.reversal_of", null)
     .gte("orders.created_at", start.toISOString())
     .lt("orders.created_at", end.toISOString());
   let devicesQuery = supabase
@@ -298,12 +301,23 @@ export default async function AdminPage() {
     })
     : null;
 
+  // A void or refund leaves the original sale at `completed` and adds a linked
+  // reversal row (0020), so counting `status === "completed"` would report a
+  // voided sale as revenue and put this dashboard out of step with Reports and
+  // the shift readings. See `selectNetSales`.
+  const reversalLookup = await loadReversedOrderIds(
+    supabase,
+    profile.org_id,
+    allOrders.filter((order) => order.status === "completed" && !order.reversal_of).map((order) => order.id),
+  );
+  const reversedIds = reversalLookup.reversedIds;
+
   const queryWarning = Boolean(
-    branchesResult.error || productsResult.error || categoriesResult.error || ordersResult.error || stockResult.error || devicesResult.error || orderItemsError,
+    branchesResult.error || productsResult.error || categoriesResult.error || ordersResult.error || stockResult.error || devicesResult.error || orderItemsError || reversalLookup.failed,
   );
   const categoryById = new Map(categories.map((category) => [category.id, category]));
   const productById = new Map(products.map((product) => [product.id, product]));
-  const completedOrders = todayOrders.filter((order) => order.status === "completed");
+  const completedOrders = selectNetSales(todayOrders, reversedIds);
   const totalSales = completedOrders.reduce((sum, order) => sum + Number(order.total), 0);
   const averageTicket = completedOrders.length ? Math.round(totalSales / completedOrders.length) : 0;
   const activeBranches = visibleBranches.filter((branch) => branch.is_active).length;
@@ -370,8 +384,7 @@ export default async function AdminPage() {
   const largestCategorySale = Math.max(...categorySales.map((category) => category.total), 1);
 
   const salesByDay = new Map<string, number>();
-  for (const order of allOrders) {
-    if (order.status !== "completed") continue;
+  for (const order of selectNetSales(allOrders, reversedIds)) {
     const key = dayKey(new Date(order.created_at));
     salesByDay.set(key, (salesByDay.get(key) ?? 0) + Number(order.total));
   }

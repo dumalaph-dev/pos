@@ -9,6 +9,7 @@ import { isProductImageUrl } from "@/lib/product-images";
 import { salesQuantity, stockStatus } from "@/lib/inventory";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import { getAdminProfile } from "@/lib/admin/profile";
+import { loadReversedOrderIds, selectNetSales } from "@/lib/admin/sales-reports";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 
 type AdminRole = "admin" | "manager" | "cashier";
@@ -39,6 +40,7 @@ type SalesOrder = {
   total: number;
   payment_method: PaymentMethod;
   created_at: string;
+  reversal_of: string | null;
 };
 
 type OrderItemRecord = {
@@ -204,8 +206,13 @@ function productImage(product: ProductRecord | undefined) {
   return isProductImageUrl(product?.image_url) ? product.image_url : null;
 }
 
-function summarizeOrders(orders: SalesOrder[]) {
-  const completed = orders.filter((order) => order.status === "completed");
+/**
+ * `reversedIds` carries the sales that were later voided or refunded. Without
+ * it this would count a voided sale as revenue, because a reversal (0020) adds
+ * a new row and leaves the original at `completed`.
+ */
+function summarizeOrders(orders: SalesOrder[], reversedIds: Set<string>) {
+  const completed = selectNetSales(orders, reversedIds);
   const refunded = orders.filter((order) => order.status === "refunded");
   return {
     sales: completed.reduce((sum, order) => sum + Number(order.total), 0),
@@ -294,7 +301,7 @@ export default async function SalesPage({
   const branchFilter = selectedBranchId ?? (branches.some((branch) => branch.id === requestedBranchFilter) ? requestedBranchFilter : "");
   let currentOrdersQuery = supabase
     .from("orders")
-    .select("id, order_no, store_id, cashier_id, status, subtotal, discount_amount, vat_amount, total, payment_method, created_at")
+    .select("id, order_no, store_id, cashier_id, status, subtotal, discount_amount, vat_amount, total, payment_method, created_at, reversal_of")
     .eq("org_id", profile.org_id)
     .gte("created_at", window.currentStart.toISOString())
     .lt("created_at", window.currentEnd.toISOString())
@@ -302,7 +309,7 @@ export default async function SalesPage({
     .limit(5000);
   let previousOrdersQuery = supabase
     .from("orders")
-    .select("id, order_no, store_id, cashier_id, status, subtotal, discount_amount, vat_amount, total, payment_method, created_at")
+    .select("id, order_no, store_id, cashier_id, status, subtotal, discount_amount, vat_amount, total, payment_method, created_at, reversal_of")
     .eq("org_id", profile.org_id)
     .gte("created_at", window.previousStart.toISOString())
     .lt("created_at", window.previousEnd.toISOString())
@@ -321,8 +328,10 @@ export default async function SalesPage({
 
   let itemsQuery = supabase
     .from("order_items")
-    .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status)")
+    .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status, reversal_of)")
     .eq("orders.org_id", profile.org_id)
+    .eq("orders.status", "completed")
+    .is("orders.reversal_of", null)
     .gte("orders.created_at", window.currentStart.toISOString())
     .lt("orders.created_at", window.currentEnd.toISOString());
   if (branchFilter) itemsQuery = itemsQuery.eq("orders.store_id", branchFilter);
@@ -355,9 +364,18 @@ export default async function SalesPage({
   const orderItems = (itemsResult.data ?? []) as OrderItemRecord[];
   const orderItemsError = Boolean(itemsResult.error);
 
-  const currentSummary = summarizeOrders(currentOrders);
-  const previousSummary = summarizeOrders(previousOrders);
-  const completedOrderIds = new Set(currentOrders.filter((order) => order.status === "completed").map((order) => order.id));
+  const reversalLookup = await loadReversedOrderIds(
+    supabase,
+    profile.org_id,
+    [...currentOrders, ...previousOrders]
+      .filter((order) => order.status === "completed" && !order.reversal_of)
+      .map((order) => order.id),
+  );
+  const reversedIds = reversalLookup.reversedIds;
+  const currentSummary = summarizeOrders(currentOrders, reversedIds);
+  const previousSummary = summarizeOrders(previousOrders, reversedIds);
+  const netCurrentOrders = selectNetSales(currentOrders, reversedIds);
+  const completedOrderIds = new Set(netCurrentOrders.map((order) => order.id));
   const dailyBuckets = buildDailyBuckets(window.currentStart, rangeDays(range));
   const dailyByKey = new Map(dailyBuckets.map((bucket) => [bucket.key, bucket]));
   const hourlySales = weekdayLabels.map(() => hourlyRange.map(() => 0));
@@ -365,7 +383,7 @@ export default async function SalesPage({
   for (const order of currentOrders) {
     const createdAt = new Date(order.created_at);
     const bucket = dailyByKey.get(dateKey(createdAt));
-    if (order.status === "completed") {
+    if (completedOrderIds.has(order.id)) {
       if (bucket) {
         bucket.sales += Number(order.total);
         bucket.orders += 1;
@@ -431,7 +449,7 @@ export default async function SalesPage({
   }
   const peakShare = peakHour && currentSummary.sales > 0 ? Math.round((peakHour.total / currentSummary.sales) * 100) : 0;
 
-  const queryWarning = Boolean(branchesResult.error || cashiersResult.error || productsResult.error || stockResult.error || currentOrdersResult.error || previousOrdersResult.error || orderItemsError);
+  const queryWarning = Boolean(branchesResult.error || cashiersResult.error || productsResult.error || stockResult.error || currentOrdersResult.error || previousOrdersResult.error || orderItemsError || reversalLookup.failed);
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
   const branchLabel = branchFilter ? branchById.get(branchFilter)?.name ?? "Selected branch" : "All branches";
   const totalPages = Math.max(1, Math.ceil(currentOrders.length / pageSize));

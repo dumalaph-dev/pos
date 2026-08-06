@@ -222,6 +222,55 @@ export function salesReportQuery(filters: SalesReportFilters, kind?: string) {
   return params.toString();
 }
 
+export type ReversibleOrder = { id: string; status: string; reversal_of?: string | null };
+
+/**
+ * The ids of orders that have since been voided or refunded.
+ *
+ * Keyed on order ids rather than a date filter because a reversal can be
+ * recorded long after the sale — filtering reversals by the reporting window
+ * would let a sale voided next week still count as revenue this week.
+ *
+ * `failed` is surfaced instead of swallowed: falling back to "nothing was
+ * reversed" would silently overstate revenue, which is the exact bug this
+ * helper exists to prevent.
+ */
+export async function loadReversedOrderIds(
+  supabase: SalesReportClient,
+  orgId: string,
+  orderIds: string[],
+): Promise<{ reversedIds: Set<string>; failed: boolean }> {
+  const reversedIds = new Set<string>();
+  if (orderIds.length === 0) return { reversedIds, failed: false };
+
+  for (let index = 0; index < orderIds.length; index += 300) {
+    const chunk = orderIds.slice(index, index + 300);
+    const { data, error } = await supabase
+      .from("orders")
+      .select("reversal_of")
+      .eq("org_id", orgId)
+      .in("reversal_of", chunk);
+    if (error) return { reversedIds, failed: true };
+    for (const row of (data ?? []) as Array<{ reversal_of: string | null }>) {
+      if (row.reversal_of) reversedIds.add(row.reversal_of);
+    }
+  }
+
+  return { reversedIds, failed: false };
+}
+
+/** Completed sales that are not themselves reversals and have not been reversed. */
+export function selectNetSales<T extends ReversibleOrder>(orders: T[], reversedIds: Set<string>): T[] {
+  return orders.filter(
+    (order) => order.status === "completed" && !order.reversal_of && !reversedIds.has(order.id),
+  );
+}
+
+/** The reversal rows themselves — what a void/refund report counts. */
+export function selectReversals<T extends ReversibleOrder>(orders: T[]): T[] {
+  return orders.filter((order) => Boolean(order.reversal_of));
+}
+
 function resolveBranchFilter(
   requestedBranchId: string,
   workspaceBranchId: string | null,
@@ -314,34 +363,21 @@ export async function loadSalesReport(
   const staffById = new Map(staff.map((person) => [person.id, person.full_name ?? "Unknown"]));
 
   const saleCandidates = allOrders.filter((order) => order.reversal_of === null && order.status === "completed");
-  const reversalRows = allOrders.filter((order) => order.reversal_of !== null);
+  const reversalRows = selectReversals(allOrders);
 
-  // A sale in range can be reversed after the window closes, so the reversal
-  // lookup is keyed on the order ids rather than the date filter. The rows
-  // already in range cover themselves; only the ids need a second pass.
-  const candidateIds = saleCandidates.map((order) => order.id);
-  const reversedIds = new Set(reversalRows.map((row) => row.reversal_of as string));
-  let reversalLookupFailed = false;
-  if (candidateIds.length > 0) {
-    for (let index = 0; index < candidateIds.length; index += 300) {
-      const chunk = candidateIds.slice(index, index + 300);
-      const { data, error } = await supabase
-        .from("orders")
-        .select("reversal_of")
-        .eq("org_id", profile.org_id)
-        .in("reversal_of", chunk);
-      if (error) {
-        reversalLookupFailed = true;
-        break;
-      }
-      for (const row of (data ?? []) as Array<{ reversal_of: string | null }>) {
-        if (row.reversal_of) reversedIds.add(row.reversal_of);
-      }
-    }
+  const reversalLookup = await loadReversedOrderIds(
+    supabase,
+    profile.org_id,
+    saleCandidates.map((order) => order.id),
+  );
+  const reversedIds = reversalLookup.reversedIds;
+  // Reversals already inside the window need no second lookup.
+  for (const row of reversalRows) {
+    if (row.reversal_of) reversedIds.add(row.reversal_of);
   }
+  const reversalLookupFailed = reversalLookup.failed;
 
-  const netOrders = saleCandidates.filter((order) => {
-    if (reversedIds.has(order.id)) return false;
+  const netOrders = selectNetSales(saleCandidates, reversedIds).filter((order) => {
     if (filters.cashierId && order.cashier_id !== filters.cashierId) return false;
     if (filters.paymentMethod && order.payment_method !== filters.paymentMethod) return false;
     return true;
