@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatStockQuantity, salesQuantity } from "@/lib/inventory";
@@ -267,13 +268,12 @@ export default async function ReportsPage({
   return (
     <main className="admin-page text-ink">
       <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
-          <header className="admin-reference-header flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-3 shadow-[var(--shadow-card)] sm:px-5">
-            <div className="flex min-w-0 items-center gap-3">
-              <Link href="/admin" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-primary/25 bg-primary-soft text-primary" aria-label="Back to admin overview"><AdminIcon name="reports" size={20} /></Link>
-              <div className="min-w-0"><p className="truncate text-[10px] font-extrabold uppercase tracking-[0.16em] text-ink-muted">Admin backoffice</p><h1 className="truncate text-lg font-extrabold text-primary">Reports</h1></div>
-            </div>
-            <div className="ml-auto flex flex-wrap items-center gap-2"><Link href="/admin/reports/inventory" className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Inventory reports</Link><Link href={`/admin/report?range=${range}${branchQuery}`} className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Export CSV</Link><Link href={`/admin/orders?range=${range}${branchQuery}`} className="rounded-btn bg-primary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover">View orders</Link><SignOutButton className="px-3 py-2 text-xs" /></div>
-          </header>
+          <AdminPageHeader title="Reports">
+            <Link href="/admin/reports/inventory" className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Inventory reports</Link>
+            <Link href={`/admin/report?range=${range}${branchQuery}`} className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Export CSV</Link>
+            <Link href={`/admin/orders?range=${range}${branchQuery}`} className="rounded-btn bg-primary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover">View orders</Link>
+            <SignOutButton className="px-3 py-2 text-xs" />
+          </AdminPageHeader>
 
           <div className="mt-6 flex flex-wrap items-end justify-between gap-4">
             <div><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Business intelligence &middot; {range === "7d" ? "Last 7 days" : "Last 30 days"} &middot; {currentBranchName}</p><h2 className="mt-2 text-3xl font-extrabold tracking-[-0.04em] text-ink sm:text-4xl">Know what is moving the business.</h2><p className="mt-2 max-w-2xl text-sm text-ink-muted">A live view of completed sales, menu performance, and branch contribution, {firstName}.</p></div>

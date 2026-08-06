@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminSettingsSaveButton, AdminThemePicker } from "@/components/admin/AdminThemeControls";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
@@ -69,13 +70,11 @@ export default async function SettingsPage({
   return (
     <main data-admin-theme={branding.theme} className="admin-page text-ink">
       <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
-        <header className="admin-reference-header flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-3 shadow-[var(--shadow-card)] sm:px-5">
-          <div className="flex min-w-0 items-center gap-3">
-            <Link href="/admin" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-primary/25 bg-primary-soft text-primary" aria-label="Back to admin overview"><AdminIcon name="settings" size={20} /></Link>
-            <div className="min-w-0"><p className="truncate text-[10px] font-extrabold uppercase tracking-[0.16em] text-ink-muted">Admin backoffice</p><h1 className="truncate text-lg font-extrabold text-primary">Settings</h1></div>
-          </div>
-          <div className="ml-auto flex items-center gap-2"><Link href="/admin" className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Overview</Link><Link href="/admin/pos" className="rounded-btn bg-primary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover">Open POS settings</Link><SignOutButton className="px-3 py-2 text-xs" /></div>
-        </header>
+        <AdminPageHeader title="Settings">
+          <Link href="/admin" className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Overview</Link>
+          <Link href="/admin/pos" className="rounded-btn bg-primary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover">Open POS settings</Link>
+          <SignOutButton className="px-3 py-2 text-xs" />
+        </AdminPageHeader>
 
         <div className="mt-7 flex flex-wrap items-end justify-between gap-4">
           <div>
