@@ -1,4 +1,4 @@
-# Lechon POS — Build & Deployment Tasks
+# Dumala POS — Build & Deployment Tasks
 
 **Companion to:** [POS_PRD.md](POS_PRD.md) (v0.3) · [MVP.md](MVP.md)
 **How to use:** Work top-to-bottom. Each phase gates the next only where noted. Check boxes as you go and keep the tracker below in sync.

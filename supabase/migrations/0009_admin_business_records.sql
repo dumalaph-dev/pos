@@ -1,4 +1,4 @@
--- Mario's Lechon House POS - business records for the Admin backoffice.
+-- Dumala POS - business records for the Admin backoffice.
 -- Customers and suppliers are organization directories. Expenses are a
 -- branch-scoped, editable ledger; application actions still require admin role.
 

@@ -80,7 +80,7 @@ type LeaveRecord = {
 type CurrentProfile = { full_name: string | null; role: AccessRole | null; org_id: string; store_id: string | null; password_change_required: boolean };
 type SearchParams = Record<string, string | string[] | undefined>;
 
-const DEFAULT_STORE_NAME = "Mario's Lechon House";
+const DEFAULT_STORE_NAME = "Your Store";
 const PAGE_SIZE = 10;
 const DAYS = [
   ["mon", "Mon"],

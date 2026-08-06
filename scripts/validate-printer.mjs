@@ -318,7 +318,7 @@ async function main() {
   const printerPort = parsePort(option(options, "--printer-port", "PRINTER_PORT", String(DEFAULT_PRINTER_PORT)), "printer port");
   const paperWidth = parsePaperWidth(option(options, "--paper-width", "PAPER_WIDTH", "80"));
   const printerIp = option(options, "--printer-ip", "PRINTER_IP", "");
-  const storeName = option(options, "--store-name", "STORE_NAME", "Lechon POS");
+  const storeName = option(options, "--store-name", "STORE_NAME", "Dumala POS");
   const skipRetry = options.flags.has("--skip-retry") || process.env.SKIP_PRINTER_RETRY === "1";
   const startBridge = !options.flags.has("--no-start-bridge") && (options.flags.has("--start-bridge") || isLoopback(bridgeHost));
 

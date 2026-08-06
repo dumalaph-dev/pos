@@ -1,4 +1,4 @@
-# Lechon POS — MVP Definition
+# Dumala POS — MVP Definition
 
 **Companion to:** [POS_PRD.md](POS_PRD.md) (v0.3)
 **Owner:** Klein

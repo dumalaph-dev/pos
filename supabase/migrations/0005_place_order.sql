@@ -1,4 +1,4 @@
--- Lechon POS — atomic order placement (P1 sell flow).
+-- Dumala POS — atomic order placement (P1 sell flow).
 --
 -- One transaction: order + items + audit row. SECURITY INVOKER so RLS
 -- policies apply per insert (cashier must own the order's store/cashier_id);

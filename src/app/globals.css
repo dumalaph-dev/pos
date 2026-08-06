@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /*
-  Lechon POS design tokens — see docs/DESIGN_SYSTEM.md (color-picked from ui.png).
+  Dumala POS design tokens — see docs/DESIGN_SYSTEM.md.
   Raw CSS variables keep the design-system names (--bg, --primary, --text, ...).
   @theme inline maps them to Tailwind color/radius utilities so a future dark
   theme can flip the :root vars and every utility follows at runtime.
@@ -18,38 +18,38 @@
 
 :root {
   /* neutrals */
-  --bg: #f5ecdf;
-  --surface: #f8f4ec;
-  --surface-panel: #f8f0e8;
-  --surface-raised: #fbf8f2;
-  --sidebar: #f1e8db;
-  --border: #e8dcc9;
-  --border-strong: #d9c9b2;
-  --text: #2e1c10;
-  --text-muted: #8c7b67;
-  --text-subtle: #b7a995;
+  --bg: #f8f3eb;
+  --surface: #fbf8f1;
+  --surface-panel: #f2eee5;
+  --surface-raised: #fffdf8;
+  --sidebar: #edf1e9;
+  --border: #dddcd2;
+  --border-strong: #c4cfc3;
+  --text: #102d21;
+  --text-muted: #667269;
+  --text-subtle: #9ba69b;
   /* brand */
-  --primary: #5b2a0a;
-  --primary-hover: #4a2208;
-  --primary-fg: #f8f0e8;
-  --primary-soft: #ede0cf;
-  --accent: #9a2e13;
-  --accent-hover: #85260f;
-  --accent-fg: #fdf6ee;
-  --secondary-btn: #ebdcc9;
-  --secondary-btn-hover: #decbb0;
+  --primary: #173a2b;
+  --primary-hover: #0e2a20;
+  --primary-fg: #fffaf1;
+  --primary-soft: #dfe8dc;
+  --accent: #bc9657;
+  --accent-hover: #a77c3f;
+  --accent-fg: #173a2b;
+  --secondary-btn: #e8e8dd;
+  --secondary-btn-hover: #dce3d8;
   /* semantic */
-  --success: #3f7d53;
-  --warning: #c08a2e;
-  --danger: #9a2e13;
-  --danger-soft: #f0dacf;
+  --success: #4e7f57;
+  --warning: #bc9657;
+  --danger: #a9513d;
+  --danger-soft: #f1ded5;
   /* shape */
   --radius-card: 16px;
   --radius-btn: 12px;
   --radius-pill: 9999px;
   /* elevation */
-  --shadow-card: 0 1px 2px rgba(46, 28, 16, 0.05);
-  --shadow-pop: 0 8px 24px rgba(46, 28, 16, 0.12);
+  --shadow-card: 0 1px 2px rgba(16, 45, 33, 0.06);
+  --shadow-pop: 0 8px 24px rgba(16, 45, 33, 0.13);
 }
 
 /* -------------------------------------------------------------------------- */

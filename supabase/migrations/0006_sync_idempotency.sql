@@ -1,4 +1,4 @@
--- Lechon POS — make place_order idempotent for offline sync (P2).
+-- Dumala POS — make place_order idempotent for offline sync (P2).
 --
 -- Replays of the same order (same local_uuid) return the existing order id
 -- without inserting items/audit again. The offline outbox can therefore

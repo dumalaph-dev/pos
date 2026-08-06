@@ -37,7 +37,7 @@ type ExpenseRecord = {
   updated_at: string;
 };
 
-const DEFAULT_STORE_NAME = "Mario's Lechon House";
+const DEFAULT_STORE_NAME = "Your Store";
 const rangeOptions: Array<{ value: ExpenseRange; label: string }> = [
   { value: "30d", label: "Last 30 days" },
   { value: "90d", label: "Last 90 days" },

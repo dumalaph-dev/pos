@@ -1,4 +1,4 @@
--- Lechon POS — Row-Level Security. See docs/SCHEMA.md §4.
+-- Dumala POS — Row-Level Security. See docs/SCHEMA.md §4.
 -- RLS is the ONLY trust boundary. Scope is derived from the caller's profile,
 -- never from client-supplied org_id/store_id.
 

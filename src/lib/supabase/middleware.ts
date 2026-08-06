@@ -119,7 +119,8 @@ export async function updateSession(request: NextRequest) {
   }
 
   const path = request.nextUrl.pathname;
-  const isProtected = path.startsWith("/pos") || path.startsWith("/admin");
+  const isPlatformLogin = path === "/platform/login" || path.startsWith("/platform/login/");
+  const isProtected = path.startsWith("/pos") || path.startsWith("/admin") || (path.startsWith("/platform") && !isPlatformLogin);
   const isPasswordSetup = path.startsWith("/account/password");
   const isServerAction = request.headers.has("next-action");
   const isRscNavigation = request.headers.get("RSC") === "1" && !isServerAction;
@@ -132,7 +133,7 @@ export async function updateSession(request: NextRequest) {
   // Unauthenticated → login (only when we could actually check).
   if (checked && !user && isProtected) {
     const redirect = request.nextUrl.clone();
-    redirect.pathname = "/";
+    redirect.pathname = path.startsWith("/platform") ? "/platform/login" : "/login";
     return withRefreshedCookies(NextResponse.redirect(redirect));
   }
 

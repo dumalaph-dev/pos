@@ -16,7 +16,7 @@ type ShellProfile = {
   organizations: { settings?: unknown } | null;
 };
 
-const DEFAULT_STORE_NAME = "Mario's Lechon House";
+const DEFAULT_STORE_NAME = "Your Store";
 
 function formatLastSynced(value: string | null) {
   if (!value) return null;

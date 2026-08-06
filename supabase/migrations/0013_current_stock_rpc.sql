@@ -1,4 +1,4 @@
--- Lechon POS — server-side current stock aggregation (admin latency fix).
+-- Dumala POS — server-side current stock aggregation (admin latency fix).
 --
 -- The dashboard and sales pages previously downloaded up to 10,000 raw
 -- stock_movements rows on every load and re-derived on-hand stock in

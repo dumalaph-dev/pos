@@ -1,11 +1,11 @@
-# Lechon POS — Design System
+# Dumala POS — Design System
 
 **Companion to:** [POS_PRD.md](POS_PRD.md) · [MVP.md](MVP.md)
-**Reference:** the supplied POS mockup ([../ui.png](../ui.png)), now branded for Mario's Lechon House — warm cream + roast-brown + brick-red. This document is the **canonical theme** — every screen matches it. The brand name/logo is *store data*; the tokens below are the *product theme*.
+**Reference:** the supplied POS mockup, now branded for Dumala POS — warm cream + deep forest green + warm gold. This document is the **canonical theme** — every screen matches it. The business name/logo is *store data*; the tokens below are the *product theme*.
 
 > **Palette provenance:** the hex values below were **color-picked directly from `ui.png`** (dominant-color sampling of flat fills; glyph sampling for text). They are exact, not estimates.
 
-> **Design intent:** warm, artisanal, appetizing, calm. It should feel like a well-run lechon house — not a cold enterprise dashboard. Cream canvas, roasted-brown structure, one brick-red call-to-action. High contrast, generous whitespace, big tap targets.
+> **Design intent:** warm, clear, calm, and practical. It should feel like a well-run business — not a cold enterprise dashboard. Cream canvas, forest-green structure, one warm-gold call-to-action. High contrast, generous whitespace, big tap targets.
 
 ---
 
@@ -16,39 +16,39 @@ Values are the canonical palette derived from the reference. Fine-tune with a co
 ### Neutrals (warm) — picked from `ui.png`
 | Token | Hex | Use |
 |---|---|---|
-| `--bg` | `#F5ECDF` | App canvas / page background (cream) |
-| `--surface` | `#F8F4EC` | Cards, product tiles |
-| `--surface-panel` | `#F8F0E8` | Order panel (slightly warmer cream) |
-| `--surface-raised` | `#FBF8F2` | Search input, popovers, modals |
-| `--sidebar` | `#F1E8DB` | Category rail background (a touch deeper than canvas) |
-| `--border` | `#E8DCC9` | Hairlines, card borders, dividers *(mockup's own edges are fainter ~`#F0E8DA`; this is a usable hairline)* |
-| `--border-strong` | `#D9C9B2` | Input borders, stepper outlines |
-| `--text` | `#2E1C10` | Primary text (espresso; darkest glyph ≈ `#290000`) |
-| `--text-muted` | `#8C7B67` | Secondary text, labels, inactive icons |
-| `--text-subtle` | `#B7A995` | Placeholders, disabled |
+| `--bg` | `#F8F3EB` | App canvas / page background (cream) |
+| `--surface` | `#FBF8F1` | Cards, product tiles |
+| `--surface-panel` | `#F2EEE5` | Order panel (slightly warmer cream) |
+| `--surface-raised` | `#FFFDF8` | Search input, popovers, modals |
+| `--sidebar` | `#EDF1E9` | Category rail background (soft sage) |
+| `--border` | `#DDDCD2` | Hairlines, card borders, dividers |
+| `--border-strong` | `#C4CFC3` | Input borders, stepper outlines |
+| `--text` | `#102D21` | Primary text (deep forest green) |
+| `--text-muted` | `#667269` | Secondary text, labels, inactive icons |
+| `--text-subtle` | `#9BA69B` | Placeholders, disabled |
 
-### Brand — picked from `ui.png`
+### Brand — Dumala reference palette
 | Token | Hex | Use |
 |---|---|---|
-| `--primary` | `#5B2A0A` | Roast Brown — active tab, active category, sidebar selection, emphasis *(fill ≈ `#5B2702`)* |
-| `--primary-hover` | `#4A2208` | Hover/pressed on primary surfaces |
-| `--primary-fg` | `#F8F0E8` | Text/icon on primary (cream) |
-| `--primary-soft` | `#EDE0CF` | Tinted brown backgrounds (hover on rail items) |
-| `--accent` | `#9A2E13` | Brick / Roast Red — **primary CTA (CHARGE), TOTAL amount, price accents** *(CHARGE fill ≈ `#9A2E13`, TOTAL glyph ≈ `#A21C0B`)* |
-| `--accent-hover` | `#85260F` | CTA hover/pressed |
-| `--accent-fg` | `#FDF6EE` | Text on accent |
-| `--secondary-btn` | `#EBDCC9` | SAVE / secondary button fill (tan); text = `--primary` |
-| `--secondary-btn-hover` | `#DECBB0` | Secondary hover |
+| `--primary` | `#173A2B` | Forest green — active tab, active category, sidebar selection, emphasis |
+| `--primary-hover` | `#0E2A20` | Hover/pressed on primary surfaces |
+| `--primary-fg` | `#FFFAF1` | Text/icon on primary (cream) |
+| `--primary-soft` | `#DFE8DC` | Tinted green backgrounds (hover on rail items) |
+| `--accent` | `#BC9657` | Warm gold — **primary CTA, totals, and price accents** |
+| `--accent-hover` | `#A77C3F` | CTA hover/pressed |
+| `--accent-fg` | `#173A2B` | Text on accent |
+| `--secondary-btn` | `#E8E8DD` | Secondary button fill; text = `--primary` |
+| `--secondary-btn-hover` | `#DCE3D8` | Secondary hover |
 
 ### Semantic (reserved — never decorative)
 | Token | Hex | Use |
 |---|---|---|
-| `--success` | `#3F7D53` | Payment success, in-stock, positive variance |
-| `--warning` | `#C08A2E` | Low stock, insufficient tender, offline-pending |
-| `--danger` | `#9A2E13` | Destructive: void, delete, remove line (trash icon) — the mockup uses the brand brick-red for this |
-| `--danger-soft` | `#F0DACF` | Destructive hover background |
+| `--success` | `#4E7F57` | Payment success, in-stock, positive variance |
+| `--warning` | `#BC9657` | Low stock, insufficient tender, offline-pending |
+| `--danger` | `#A9513D` | Destructive: void, delete, remove line (trash icon) |
+| `--danger-soft` | `#F1DED5` | Destructive hover background |
 
-> **Accent = danger in this theme.** Unlike a typical system, the mockup uses **one warm brick-red** (`#9A2E13`) for *both* the primary CTA (CHARGE) and destructive controls (the trash icon). We honor that: `--accent` and `--danger` share the hex, and meaning is carried by **icon + context** (a trash glyph reads destructive; a full-width CHARGE bar reads primary). If this ever proves ambiguous in testing, split `--danger` to a deeper `#7E2A14`.
+> **Accent and danger stay distinct.** Warm gold carries primary actions and totals; muted red carries destructive controls. Meaning is reinforced by the icon and context so the counter stays calm and readable.
 
 ### Offline / status pill (extends the reference)
 | State | Background | Text | Note |
@@ -183,15 +183,15 @@ Same palette, **billboard scale** — read from 1.5m away.
 **CSS variables** (`globals.css`):
 ```css
 :root {
-  --bg:#F5ECDF; --surface:#F8F4EC; --surface-panel:#F8F0E8; --surface-raised:#FBF8F2; --sidebar:#F1E8DB;
-  --border:#E8DCC9; --border-strong:#D9C9B2;
-  --text:#2E1C10; --text-muted:#8C7B67; --text-subtle:#B7A995;
-  --primary:#5B2A0A; --primary-hover:#4A2208; --primary-fg:#F8F0E8; --primary-soft:#EDE0CF;
-  --accent:#9A2E13; --accent-hover:#85260F; --accent-fg:#FDF6EE;
-  --secondary-btn:#EBDCC9; --secondary-btn-hover:#DECBB0;
-  --success:#3F7D53; --warning:#C08A2E; --danger:#9A2E13; --danger-soft:#F0DACF;
+  --bg:#F8F3EB; --surface:#FBF8F1; --surface-panel:#F2EEE5; --surface-raised:#FFFDF8; --sidebar:#EDF1E9;
+  --border:#DDDCD2; --border-strong:#C4CFC3;
+  --text:#102D21; --text-muted:#667269; --text-subtle:#9BA69B;
+  --primary:#173A2B; --primary-hover:#0E2A20; --primary-fg:#FFFAF1; --primary-soft:#DFE8DC;
+  --accent:#BC9657; --accent-hover:#A77C3F; --accent-fg:#173A2B;
+  --secondary-btn:#E8E8DD; --secondary-btn-hover:#DCE3D8;
+  --success:#4E7F57; --warning:#BC9657; --danger:#A9513D; --danger-soft:#F1DED5;
   --radius-card:16px; --radius-btn:12px; --radius-pill:9999px;
-  --shadow-card:0 1px 2px rgba(46,28,16,.05); --shadow-pop:0 8px 24px rgba(46,28,16,.12);
+  --shadow-card:0 1px 2px rgba(16,45,33,.06); --shadow-pop:0 8px 24px rgba(16,45,33,.13);
 }
 ```
 
@@ -199,7 +199,7 @@ Same palette, **billboard scale** — read from 1.5m away.
 
 **Motion:** transitions ≤150ms ease-out; only for state changes (press, tab switch, add-to-cart). No decorative animation on the sell screen (PRD §9).
 
-**Dark theme:** deferred (P1). When built, keep the warmth — dark espresso canvas (`#241A13`), cream text, same brick-red accent — not a cold grey dark mode.
+**Dark theme:** deferred (P1). When built, keep the warmth — deep forest canvas, cream text, and the same warm-gold accent — not a cold grey dark mode.
 
 ---
 

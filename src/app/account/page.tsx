@@ -18,7 +18,7 @@ export default async function AccountPage() {
 
   const displayName = profile.full_name?.trim() || "Team member";
   const branchName = profile.stores?.name ?? "All branches";
-  const organizationName = profile.organizations?.name ?? "Lechon POS";
+  const organizationName = profile.organizations?.name ?? "Dumala POS";
   const usesEmployeeId = user.email?.endsWith("@staff.internal") ?? false;
   const destination = profile.role === "cashier" ? "/pos" : "/admin";
 

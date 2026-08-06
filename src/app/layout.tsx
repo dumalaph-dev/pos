@@ -13,24 +13,23 @@ const ibmPlexSans = IBM_Plex_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Lechon POS",
-  description: "Fast, offline-first point of sale for lechon houses.",
+  title: "Dumala POS",
+  description: "A simple POS workspace for owners, branches, teams, and busy counters.",
   icons: {
     icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
-      { url: "/icon-192x192.png", sizes: "192x192", type: "image/png" },
+      { url: "/badge.png", sizes: "250x225", type: "image/png" },
     ],
-    apple: "/icon-192x192.png",
+    apple: "/badge.png",
   },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Lechon POS",
+    title: "Dumala POS",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#9a2e13",
+  themeColor: "#173a2b",
   width: "device-width",
   initialScale: 1,
 };

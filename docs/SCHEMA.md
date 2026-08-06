@@ -1,4 +1,4 @@
-# Lechon POS — Database Schema & RLS Spec
+# Dumala POS — Database Schema & RLS Spec
 
 **Companion to:** [POS_PRD.md](POS_PRD.md) §10 · [ARCHITECTURE.md](ARCHITECTURE.md)
 **Engine:** Postgres (Supabase). **The single highest-risk area is tenant isolation** — an owner's branch must never see another org's or another branch's data. Design RLS first; test it with a two-branch, two-org fixture before any feature.

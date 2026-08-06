@@ -15,13 +15,13 @@ export const ADMIN_THEME_OPTIONS: Array<{
   { id: "retro", label: "Retro", description: "Market green, mustard, and cream" },
 ];
 
-export const DEFAULT_ORGANIZATION_NAME = "Rico's Lechon House";
+export const DEFAULT_ORGANIZATION_NAME = "Your Business";
 
 export const DEFAULT_ADMIN_BRANDING = {
-  brandName: "Rico's",
-  brandTagline: "LECHON HOUSE",
+  brandName: "Dumala",
+  brandTagline: "POS",
   theme: "current" as AdminThemeId,
-  logoUrl: null as string | null,
+  logoUrl: "/logo.png" as string | null,
 };
 
 export type AdminBranding = {

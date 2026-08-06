@@ -1,4 +1,4 @@
-# Lechon POS — Product Requirements Document (v0.3 Draft)
+# Dumala POS — Product Requirements Document (v0.3 Draft)
 
 **Owner:** Klein
 **Status:** Draft v0.3 — scope expanded (multi-branch · customer-facing display · products-first sell screen). Still Android tablet · order slips only · walk-in sales only.

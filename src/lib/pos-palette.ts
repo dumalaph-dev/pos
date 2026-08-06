@@ -21,7 +21,7 @@ const PALETTE_DEFINITIONS: Record<Exclude<PosPaletteId, "custom">, PosPaletteDef
   brown: {
     id: "brown",
     label: "Brown",
-    description: "Warm roasted-caramel accents that keep the Rico's brand character.",
+    description: "Warm roasted-caramel accents for a familiar counter feel.",
     color: "#5b2a0a",
     primary: "#5b2a0a",
     hover: "#4a2208",
@@ -50,15 +50,15 @@ const PALETTE_DEFINITIONS: Record<Exclude<PosPaletteId, "custom">, PosPaletteDef
     id: "green",
     label: "Green",
     description: "Fresh, grounded accents that pair naturally with food and inventory states.",
-    color: "#2f7344",
-    primary: "#2f7344",
-    hover: "#255c36",
-    deep: "#19452a",
-    soft: "#e7f2e9",
-    tint: "#d1e5d5",
-    glow: "#a9c9b0",
+    color: "#173a2b",
+    primary: "#173a2b",
+    hover: "#0e2a20",
+    deep: "#0a2118",
+    soft: "#dfe8dc",
+    tint: "#c9d8c8",
+    glow: "#9fb9a3",
     contrast: "#ffffff",
-    gradient: "linear-gradient(135deg, #3c8954 0%, #255c36 100%)",
+    gradient: "linear-gradient(135deg, #244d3a 0%, #0e2a20 100%)",
   },
   purple: {
     id: "purple",
@@ -101,7 +101,7 @@ function contrastFor(value: string) {
 }
 
 function customPalette(value: string | undefined): PosPaletteDefinition {
-  const primary = normalizeHex(value) ?? PALETTE_DEFINITIONS.brown.primary;
+  const primary = normalizeHex(value) ?? PALETTE_DEFINITIONS.green.primary;
   const hover = mixHex(primary, "#000000", 0.14);
   return {
     id: "custom",
@@ -141,5 +141,5 @@ export function isPosPaletteId(value: unknown): value is PosPaletteId {
 export function getPosPalette(value: string | null | undefined, customColor?: string): PosPaletteDefinition {
   if (value === "custom") return customPalette(customColor);
   if (value && isPosPaletteId(value) && value !== "custom") return PALETTE_DEFINITIONS[value];
-  return PALETTE_DEFINITIONS.brown;
+  return PALETTE_DEFINITIONS.green;
 }
