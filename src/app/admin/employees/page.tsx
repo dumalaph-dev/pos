@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation";
 import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
+import StaffLinkCopy from "@/components/admin/StaffLinkCopy";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
+import { staffLoginPath } from "@/lib/store-access";
 import {
   createEmployee,
   createLeaveRequest,
@@ -36,7 +38,7 @@ type EmployeeRecord = {
   is_active: boolean;
   created_at: string;
 };
-type BranchRecord = { id: string; name: string; is_active: boolean };
+type BranchRecord = { id: string; name: string; is_active: boolean; staff_login_key?: string | null };
 type RoleRecord = {
   id: string;
   name: string;
@@ -293,8 +295,12 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   const recentLeaveQuery = tab === "leave" || employeeFormOpen
     ? null
     : supabase.from("leave_requests").select("id, employee_id, leave_type, start_date, end_date, reason, status, created_at").eq("org_id", profile.org_id).order("created_at", { ascending: false }).limit(3);
+  const staffLinksQuery = profile.role === "admin"
+    ? supabase.from("stores").select("id, name, is_active, staff_login_key").eq("org_id", profile.org_id).order("name")
+    : null;
   const [
     branchesResult,
+    staffLinksResult,
     employeesResult,
     rolesResult,
     attendanceResult,
@@ -304,6 +310,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
     recentLeaveResult,
   ] = await Promise.all([
     supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name"),
+    staffLinksQuery ?? emptyResult,
     supabase.from("employee_records").select("id, profile_id, role_id, store_id, employee_code, full_name, email, phone, role, job_title, hired_on, schedule_days, schedule_start, schedule_end, is_active, created_at").eq("org_id", profile.org_id).order("is_active", { ascending: false }).order("full_name").limit(1000),
     supabase.from("employee_roles").select("id, name, slug, description, color, permissions, is_active").eq("org_id", profile.org_id).order("is_active", { ascending: false }).order("name"),
     attendanceQuery ?? emptyResult,
@@ -385,6 +392,8 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   );
   const periodLabel = rangeScopeLabel(range);
   const employeeListState = { q: searchQuery, role: requestedRole, status: requestedStatus, branch: branchFilter, start: range.start, end: range.end, filters: filtersOpen ? "1" : undefined };
+  const staffLinkBranches = (staffLinksResult.error ? branches : (staffLinksResult.data ?? [])) as BranchRecord[];
+  const staffLinksUnavailable = canWrite && Boolean(staffLinksResult.error);
 
   return (
     <main className="admin-page employee-page text-ink">
@@ -455,9 +464,42 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
               <Link href={employeeHref({ tab: "leave" })} className="employee-leave-cta"><AdminIcon name="calendar" size={17} /> Go to Leave Requests <AdminIcon name="arrow" size={16} /></Link>
             </aside>}
           </div>
+
+          {canWrite && <StaffAccessPanel branches={staffLinkBranches} migrationMissing={staffLinksUnavailable} />}
       </div>
     </main>
   );
+}
+
+function StaffAccessPanel({ branches, migrationMissing }: { branches: BranchRecord[]; migrationMissing: boolean }) {
+  return <section id="staff-access" className="employee-workspace-panel mt-6 scroll-mt-6" aria-labelledby="staff-access-heading">
+    <div className="employee-tab-content">
+      <div className="employee-tab-heading">
+        <div>
+          <p className="employee-section-kicker">Owner-only access tools</p>
+          <h2 id="staff-access-heading">Store login links</h2>
+          <p>Give each branch its own entry link. Employees still need their individual Employee ID and password, so the link identifies the store but never replaces authentication.</p>
+        </div>
+        <span className="employee-data-badge"><AdminIcon name="employees" size={14} /> Staff access</span>
+      </div>
+
+      {migrationMissing && <div role="status" className="employee-notice employee-notice--warning"><AdminIcon name="alert" size={16} /> Store links are not available until migration 0023 is applied. Your existing branches are still shown below.</div>}
+      {branches.length === 0
+        ? <div className="employee-empty-state"><span><AdminIcon name="branches" size={23} /></span><strong>Create a branch first</strong><p>Each active branch receives its own staff login link.</p></div>
+        : <div className="grid gap-3 md:grid-cols-2">{branches.map((branch) => <article key={branch.id} className="rounded-[9px] border border-[#f0e9e1] bg-[#fffefb] p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="employee-section-kicker">{branch.is_active ? "Active branch" : "Inactive branch"}</p>
+              <h3 className="mt-1 text-sm font-extrabold text-[#261e19]">{branch.name}</h3>
+            </div>
+            <span className="employee-data-badge">{branch.is_active ? "Ready to share" : "Disabled"}</span>
+          </div>
+          {branch.staff_login_key
+            ? <StaffLinkCopy path={staffLoginPath(branch.staff_login_key)} disabled={!branch.is_active} />
+            : <p className="mt-4 rounded-btn border border-line bg-raised px-4 py-3 text-xs font-semibold text-ink-muted">This branch needs migration 0023 before a staff link can be generated.</p>}
+        </article>)}</div>}
+    </div>
+  </section>;
 }
 
 function EmployeeMetric({ label, value, detail, icon, tone }: { label: string; value: string; detail: string; icon: AdminIconName; tone: string }) {

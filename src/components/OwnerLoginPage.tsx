@@ -138,9 +138,11 @@ export default function OwnerLoginPage() {
   return (
     <main className="min-h-full flex items-center justify-center bg-bg p-6">
       <div className="w-full max-w-sm rounded-card border border-line bg-surface p-8 shadow-[var(--shadow-card)]">
-        <Image src="/logo.png" alt="Dumala POS" width={160} height={107} className="h-16 w-auto object-contain object-left" priority />
-        <h1 className="mt-1 text-2xl font-extrabold text-ink">Sign in</h1>
-        <p className="mt-2 text-sm leading-6 text-ink-muted">Sign in to manage your business, branches, staff, and POS settings.</p>
+        <div className="flex justify-center">
+          <Image src="/logo.png" alt="Dumala POS" width={480} height={321} className="h-48 w-auto object-contain" priority />
+        </div>
+        <h1 className="sr-only">Owner workspace access</h1>
+        <p className="mt-4 text-sm leading-6 text-ink-muted">Manage your business, branches, staff, and POS settings from one place.</p>
         {authNotice && <p role="alert" className="mt-4 rounded-btn border border-danger/25 bg-danger-soft px-4 py-3 text-sm font-semibold text-danger">{authNotice}</p>}
         {(browserOffline || posPath) && offlineCredential && offlineCatalogReady && (
           <OfflinePinUnlock credential={offlineCredential} onUnlock={openOfflinePos} />
@@ -168,7 +170,6 @@ export default function OwnerLoginPage() {
         <div className="mt-7 border-t border-line pt-5 text-center">
           <p className="text-sm text-ink-muted">New to Dumala POS?</p>
           <Link href="/signup" className="mt-2 inline-flex rounded-btn bg-secondary px-4 py-2.5 text-sm font-extrabold text-primary transition hover:bg-secondary-hover">Create your POS account</Link>
-          <p className="mt-4 text-xs leading-5 text-ink-muted">Staff members should open the unique store access link shared by their owner.</p>
         </div>
       </div>
     </main>
