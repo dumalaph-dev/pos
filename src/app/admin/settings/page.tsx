@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import { AdminIcon } from "@/components/admin/AdminIcon";
+import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminSettingsSaveButton, AdminThemePicker } from "@/components/admin/AdminThemeControls";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
+import { ProductImageUpload } from "@/components/admin/ProductImageUpload";
 import { SignOutButton } from "@/components/SignOutButton";
 import { getAdminProfile } from "@/lib/admin/profile";
 import {
@@ -91,7 +92,7 @@ export default async function SettingsPage({
         {!canWrite && <div role="status" className="mt-5 rounded-card border border-line bg-secondary px-4 py-3 text-sm font-semibold text-primary">This page is read-only for your role. Ask an organization admin to change configuration.</div>}
 
         <section id="dashboard-settings" aria-labelledby="dashboard-settings-heading" className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(300px,0.7fr)]">
-          <form action={updateOrganizationSettings} className="admin-panel p-5 sm:p-6">
+          <form action={updateOrganizationSettings} encType="multipart/form-data" className="admin-panel p-5 sm:p-6">
             <div className="admin-panel__header">
               <div><p className="admin-panel__eyebrow">Admin dashboard</p><h2 id="dashboard-settings-heading" className="admin-panel__title">Identity and appearance</h2><p className="admin-panel__subtitle">These details appear in the dashboard navigation and workspace chrome.</p></div>
               <span className="admin-settings-theme-pill">Shared workspace</span>
@@ -101,6 +102,18 @@ export default async function SettingsPage({
               <div className="sm:col-span-2"><SettingsField label="Organization name" htmlFor="organization-name"><input id="organization-name" name="name" defaultValue={organization?.name ?? DEFAULT_ORGANIZATION_NAME} disabled={!canWrite} required maxLength={120} className="inventory-input" /><span className="mt-1.5 block text-xs text-ink-muted">Used for account-level records and organization references.</span></SettingsField></div>
               <SettingsField label="Brand name" htmlFor="brand-name"><input id="brand-name" name="brand_name" defaultValue={branding.brandName || DEFAULT_ADMIN_BRANDING.brandName} disabled={!canWrite} required maxLength={48} placeholder="e.g. Rico&apos;s" className="inventory-input" /><span className="mt-1.5 block text-xs text-ink-muted">The prominent name in the admin sidebar.</span></SettingsField>
               <SettingsField label="Brand tagline" htmlFor="brand-tagline"><input id="brand-tagline" name="brand_tagline" defaultValue={branding.brandTagline} disabled={!canWrite} maxLength={48} placeholder="e.g. LECHON HOUSE" className="inventory-input" /><span className="mt-1.5 block text-xs text-ink-muted">Optional supporting line below the brand name.</span></SettingsField>
+              <ProductImageUpload
+                existingImageUrl={branding.logoUrl}
+                canWrite={canWrite && Boolean(organization)}
+                prefix="brand-logo"
+                fieldName="brand_logo_file"
+                label="Brand logo"
+                uploadLabel="Upload brand logo"
+                replaceLabel="Replace brand logo"
+                previewLabel="Brand logo preview"
+                fallbackIcon="pig"
+                assetLabel="logo"
+              />
               <SettingsField label="Currency" htmlFor="organization-currency"><select id="organization-currency" name="currency" defaultValue={organization?.currency ?? "PHP"} disabled={!canWrite} className="inventory-input"><option value="PHP">PHP · Philippine peso</option><option value="USD">USD · US dollar</option><option value="SGD">SGD · Singapore dollar</option></select></SettingsField>
               <div className="admin-settings-inventory sm:col-span-2">
                 <div className="admin-settings-inventory__copy"><p className="admin-panel__eyebrow">Inventory alerts</p><h3 className="mt-1 text-base font-extrabold text-ink">Keep a shared low-stock floor on the dashboard</h3><p className="mt-1 text-xs leading-5 text-ink-muted">Use this as the organization-wide alert floor. Products with a higher minimum keep their higher threshold.</p></div>
@@ -138,7 +151,7 @@ function DashboardPreview({ branding, organizationName }: { branding: AdminBrand
       <div className="flex items-start justify-between gap-3"><div><p className="admin-panel__eyebrow">Preview</p><h2 className="mt-1 text-base font-extrabold text-ink">Your admin workspace</h2></div><span className="admin-settings-preview__status"><i aria-hidden="true" />Live preview</span></div>
       <div data-admin-theme-preview className={`admin-settings-preview__window admin-settings-preview__window--${branding.theme}`}>
         <div className="admin-settings-preview__sidebar">
-          <div className="admin-settings-preview__brand"><span className="admin-settings-preview__mark"><AdminIcon name="pig" size={16} /></span><span><strong>{branding.brandName}</strong><small>{branding.brandTagline || "Admin dashboard"}</small></span></div>
+          <div className="admin-settings-preview__brand"><AdminBrandLogo logoUrl={branding.logoUrl} className="admin-settings-preview__mark" iconSize={16} label="Brand logo preview" /><span><strong>{branding.brandName}</strong><small>{branding.brandTagline || "Admin dashboard"}</small></span></div>
           <div className="admin-settings-preview__nav"><i /><i className="is-active" /><i /><i /><i /></div>
         </div>
         <div className="admin-settings-preview__body"><div className="admin-settings-preview__topline"><span /><span /><span /></div><p>{organizationName}</p><strong>Dashboard Overview</strong><div className="admin-settings-preview__cards"><i /><i /><i /></div></div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { AdminBrandLogo } from "./AdminBrandLogo";
 import { AdminIcon, type AdminIconName } from "./AdminIcon";
 import { AdminLink as Link } from "./AdminLink";
 import { AdminBranchSwitcher } from "./AdminBranchSwitcher";
@@ -76,7 +77,7 @@ export function AdminSidebar({ branding, branchName, active: activeOverride, con
     <aside className="admin-sidebar hidden lg:flex">
       <div className="admin-sidebar__inner">
         <Link href="/admin" className="admin-brand" aria-label={`${branding.brandName} ${branding.brandTagline} dashboard`}>
-          <span className="admin-brand__mark"><AdminIcon name="pig" size={30} /></span>
+          <AdminBrandLogo logoUrl={branding.logoUrl} className="admin-brand__mark" iconSize={30} label="Brand logo" />
           <span className="admin-brand__copy">
             <strong>{branding.brandName}</strong>
             <small>{branding.brandTagline}</small>

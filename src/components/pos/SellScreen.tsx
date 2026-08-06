@@ -12,6 +12,8 @@ import { createClient } from "@/lib/supabase/client";
 import { formatPeso, weightLineTotal } from "@/lib/money";
 import { formatStockQuantity, stockMovementDelta, stockStatus } from "@/lib/inventory";
 import { isProductImageUrl } from "@/lib/product-images";
+import { readAdminBranding } from "@/lib/admin/branding";
+import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminMenu } from "@/components/admin/AdminMenu";
 import { SignOutButton } from "@/components/SignOutButton";
 import PrinterSettingsModal from "@/components/pos/PrinterSettings";
@@ -90,6 +92,7 @@ type ProfileData = {
   store_name: string | null;
   store_address: string | null;
   store_tin: string | null;
+  brand_logo_url: string | null;
   full_name: string | null;
   role: "admin" | "manager" | "cashier" | null;
   device_id?: string | null;
@@ -236,6 +239,7 @@ const DEMO_PROFILE: ProfileData = {
   store_name: DEFAULT_STORE_NAME,
   store_address: null,
   store_tin: null,
+  brand_logo_url: null,
   full_name: "Admin",
   role: "admin",
   pos_config: DEFAULT_POS_RUNTIME_CONFIG,
@@ -407,6 +411,7 @@ export default function SellScreen() {
       ...nextProfile,
       store_address: nextProfile.store_address ?? null,
       store_tin: nextProfile.store_tin ?? null,
+      brand_logo_url: nextProfile.brand_logo_url ?? null,
       pos_config: nextConfig,
     };
     setProfile(normalizedProfile);
@@ -464,7 +469,7 @@ export default function SellScreen() {
       if (session) {
         const { data: prof } = await supabase
           .from("profiles")
-          .select("id, org_id, store_id, stores(name, address, tin, vat_registered, vat_rate, settings), full_name, role")
+          .select("id, org_id, store_id, organizations!profiles_org_id_fkey(settings), stores(name, address, tin, vat_registered, vat_rate, settings), full_name, role")
           .eq("id", session.user.id)
           .single();
         if (prof) {
@@ -489,6 +494,8 @@ export default function SellScreen() {
             }
           }
           const store = readStorePosConfig(effectiveStore);
+          const organizationRelation = Array.isArray(prof.organizations) ? prof.organizations[0] : prof.organizations;
+          const branding = readAdminBranding(isRecord(organizationRelation) ? organizationRelation.settings : undefined);
           if (effectiveStoreId && !databasePrinterSettings) {
             const { data: terminal } = await supabase
               .from("devices")
@@ -508,6 +515,7 @@ export default function SellScreen() {
             store_name: store.name,
             store_address: store.address,
             store_tin: store.tin,
+            brand_logo_url: branding.logoUrl,
             full_name: (prof.full_name as string | null) ?? null,
             role: (prof.role as ProfileData["role"]) ?? null,
             device_id: databaseDeviceId,
@@ -1070,7 +1078,7 @@ export default function SellScreen() {
               onClick={() => setNavOpen(true)}
             >
               <span className="pos-topbar__collapsed-brand">
-                <span className="pos-topbar__collapsed-mark"><Icon name="pig" size={22} /></span>
+                <AdminBrandLogo logoUrl={profile?.brand_logo_url} className="pos-topbar__collapsed-mark" iconSize={22} label="Brand logo" />
                 <span className="pos-topbar__collapsed-copy">
                   <strong>{storeName}</strong>
                   <small>POS TERMINAL</small>
@@ -1091,7 +1099,7 @@ export default function SellScreen() {
               <div className="pos-topbar__brand">
                 <div className="brand-lockup" aria-label={storeName}>
                   <div className="brand-lockup__arc">{brandName.toUpperCase()}</div>
-                  <div className="brand-lockup__mark"><Icon name="pig" size={38} /></div>
+                  <AdminBrandLogo logoUrl={profile?.brand_logo_url} className="brand-lockup__mark" iconSize={38} label="Brand logo" />
                   <div className="brand-lockup__name">LECHON<br />HOUSE</div>
                 </div>
               </div>

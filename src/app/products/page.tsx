@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
+import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { ProductCreateDialog } from "@/components/admin/ProductCreateDialog";
@@ -573,7 +574,7 @@ export default async function ProductsPage({
       <div className="min-w-0 px-4 pb-10 sm:px-6 lg:px-8">
           <header className="admin-topbar products-topbar">
             <Link href="/products" className="admin-mobile-brand" aria-label={`${branding.brandName} ${branding.brandTagline} products`}>
-              <span className="admin-brand__mark"><AdminIcon name="pig" size={20} /></span>
+              <AdminBrandLogo logoUrl={branding.logoUrl} className="admin-brand__mark" iconSize={20} label="Brand logo" />
               <span className="admin-brand__copy"><strong>{branding.brandName}</strong><small>{branding.brandTagline}</small></span>
             </Link>
             <Link href="#product-filters" className="admin-icon-button" aria-label="Search products"><AdminIcon name="search" size={19} /></Link>

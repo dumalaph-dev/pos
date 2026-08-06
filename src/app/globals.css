@@ -7082,6 +7082,8 @@ body.products-modal-open {
 
 .brand-lockup__mark {
   display: grid;
+  width: 38px;
+  height: 38px;
   place-items: center;
   color: var(--primary);
 }

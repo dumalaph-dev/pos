@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
+import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { AdminMenu } from "@/components/admin/AdminMenu";
@@ -411,7 +412,7 @@ export default async function AdminPage() {
       <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
           <header className="admin-topbar">
             <Link href="/admin" className="admin-mobile-brand" aria-label={`${branding.brandName} ${branding.brandTagline} dashboard`}>
-              <span className="admin-brand__mark"><AdminIcon name="pig" size={20} /></span>
+              <AdminBrandLogo logoUrl={branding.logoUrl} className="admin-brand__mark" iconSize={20} label="Brand logo" />
               <span className="admin-brand__copy"><strong>{branding.brandName}</strong><small>{branding.brandTagline}</small></span>
             </Link>
             <Link href="/products" className="admin-icon-button" aria-label="Open products"><AdminIcon name="box" size={19} /></Link>

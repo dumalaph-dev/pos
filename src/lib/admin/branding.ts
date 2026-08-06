@@ -1,3 +1,5 @@
+import { isProductImageUrl } from "@/lib/product-images";
+
 export const ADMIN_THEME_IDS = ["current", "light", "dark", "retro"] as const;
 
 export type AdminThemeId = (typeof ADMIN_THEME_IDS)[number];
@@ -19,12 +21,14 @@ export const DEFAULT_ADMIN_BRANDING = {
   brandName: "Rico's",
   brandTagline: "LECHON HOUSE",
   theme: "current" as AdminThemeId,
+  logoUrl: null as string | null,
 };
 
 export type AdminBranding = {
   brandName: string;
   brandTagline: string;
   theme: AdminThemeId;
+  logoUrl: string | null;
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -51,6 +55,7 @@ export function readAdminBranding(settings: unknown): AdminBranding {
     brandName: readString(dashboard.brand_name, DEFAULT_ADMIN_BRANDING.brandName),
     brandTagline: readOptionalString(dashboard.brand_tagline, DEFAULT_ADMIN_BRANDING.brandTagline),
     theme,
+    logoUrl: isProductImageUrl(dashboard.logo_url) ? dashboard.logo_url : DEFAULT_ADMIN_BRANDING.logoUrl,
   };
 }
 
@@ -65,6 +70,7 @@ export function mergeAdminBrandingSettings(settings: unknown, branding: AdminBra
       brand_name: branding.brandName,
       brand_tagline: branding.brandTagline,
       theme: branding.theme,
+      logo_url: branding.logoUrl,
     },
   };
 }

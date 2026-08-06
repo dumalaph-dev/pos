@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition, type CSSProperties, type SVGProps } from "react";
+import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
 import { createDeviceSettings, savePosSettings, updateDeviceSettings } from "@/app/admin/pos/actions";
@@ -267,6 +268,7 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (che
 
 export default function PosSettingsScreen({
   organizationName,
+  logoUrl,
   branchName,
   address,
   tin,
@@ -286,6 +288,7 @@ export default function PosSettingsScreen({
   initialSettings,
 }: {
   organizationName: string;
+  logoUrl: string | null;
   branchName: string;
   address: string;
   tin: string;
@@ -565,8 +568,9 @@ export default function PosSettingsScreen({
                 </div>
                 <PreviewWindow
                   organizationName={organizationName}
-                   branchName={currentBranchName}
-                   address={currentAddress}
+                  logoUrl={logoUrl}
+                  branchName={currentBranchName}
+                  address={currentAddress}
                   cashierName={cashierName}
                   now={now}
                   config={config}
@@ -638,6 +642,7 @@ export default function PosSettingsScreen({
 
 function PreviewWindow({
   organizationName,
+  logoUrl,
   branchName,
   address,
   cashierName,
@@ -686,6 +691,7 @@ function PreviewWindow({
   setMoreOpen,
 }: {
   organizationName: string;
+  logoUrl: string | null;
   branchName: string;
   address: string;
   cashierName: string;
@@ -736,7 +742,7 @@ function PreviewWindow({
   return (
     <div className={`pos-preview-window pos-preview-window--${previewDevice} pos-preview-window--${config.uiStyle}`} style={previewStyle}>
       <header className="pos-preview-topbar" title={address || branchName}>
-        <div className="pos-preview-brand-mark"><MiniIcon name="pig" size={22} /></div>
+        <AdminBrandLogo logoUrl={logoUrl} className="pos-preview-brand-mark" iconSize={22} label="Brand logo" />
         <div className="pos-preview-brand-copy"><strong>{organizationName}</strong><span>{branchName} <MiniIcon name="chevron" size={11} /></span></div>
         <div className="pos-preview-topbar__status"><span><i className={online ? "" : "is-offline"} /> {online ? "Online" : "Offline"}</span><span>{formatDateTime(now)}</span>{config.showCashier ? <span><MiniIcon name="person" size={14} /> Cashier: {cashierName}</span> : null}</div>
       </header>

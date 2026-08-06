@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { AdminIcon } from "@/components/admin/AdminIcon";
+import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 import { PRODUCT_IMAGE_MAX_BYTES, PRODUCT_IMAGE_MIME_TYPES } from "@/lib/product-images";
 
 const MAX_IMAGE_SIDE = 1400;
@@ -13,6 +13,13 @@ type ProductImageUploadProps = {
   existingImageUrl?: string | null;
   canWrite: boolean;
   prefix: string;
+  fieldName?: string;
+  label?: string;
+  uploadLabel?: string;
+  replaceLabel?: string;
+  previewLabel?: string;
+  fallbackIcon?: AdminIconName;
+  assetLabel?: string;
 };
 
 type ImageSource = ImageBitmap | HTMLImageElement;
@@ -94,12 +101,26 @@ function isAllowedImageType(file: File) {
   return (PRODUCT_IMAGE_MIME_TYPES as readonly string[]).includes(file.type);
 }
 
-export function ProductImageUpload({ existingImageUrl, canWrite, prefix }: ProductImageUploadProps) {
+export function ProductImageUpload({
+  existingImageUrl,
+  canWrite,
+  prefix,
+  fieldName = "image_file",
+  label = "Product photo",
+  uploadLabel = "Upload product photo",
+  replaceLabel = "Replace photo",
+  previewLabel = "Product photo preview",
+  fallbackIcon = "box",
+  assetLabel = "photo",
+}: ProductImageUploadProps) {
+  const defaultStatus = "JPG, PNG, or WebP · optimized to 1400px and under 900 KB";
   const [previewUrl, setPreviewUrl] = useState(existingImageUrl ?? null);
-  const [status, setStatus] = useState("JPG, PNG, or WebP · optimized to 1400px and under 900 KB");
+  const [status, setStatus] = useState(defaultStatus);
   const previewObjectUrl = useRef<string | null>(null);
+  const optimizationRequest = useRef(0);
 
   useEffect(() => () => {
+    optimizationRequest.current += 1;
     if (previewObjectUrl.current) URL.revokeObjectURL(previewObjectUrl.current);
   }, []);
 
@@ -111,10 +132,12 @@ export function ProductImageUpload({ existingImageUrl, canWrite, prefix }: Produ
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const input = event.currentTarget;
+    const requestId = optimizationRequest.current + 1;
+    optimizationRequest.current = requestId;
     const file = input.files?.[0];
     if (!file) {
       replacePreview(existingImageUrl ?? null);
-      setStatus("JPG, PNG, or WebP · optimized to 1400px and under 900 KB");
+      setStatus(defaultStatus);
       return;
     }
     if (!isAllowedImageType(file)) {
@@ -123,42 +146,45 @@ export function ProductImageUpload({ existingImageUrl, canWrite, prefix }: Produ
       return;
     }
 
-    setStatus("Optimizing photo…");
+    setStatus(`Optimizing ${assetLabel}…`);
     try {
       const optimized = await optimizeImage(file);
+      if (optimizationRequest.current !== requestId) return;
       const transfer = new DataTransfer();
       transfer.items.add(optimized);
       input.files = transfer.files;
       replacePreview(URL.createObjectURL(optimized));
-      setStatus(`Optimized photo · ${formatBytes(file.size)} → ${formatBytes(optimized.size)}`);
+      setStatus(`Optimized ${assetLabel} · ${formatBytes(file.size)} → ${formatBytes(optimized.size)}`);
     } catch (error) {
+      if (optimizationRequest.current !== requestId) return;
       input.value = "";
-      setStatus(error instanceof Error ? error.message : "The photo could not be optimized.");
+      setStatus(error instanceof Error ? error.message : `The ${assetLabel} could not be optimized.`);
     }
   }
 
   return (
     <div className="products-form-field products-image-upload sm:col-span-2">
-      <span>Product photo</span>
+      <span>{label}</span>
       <div className="products-image-upload__body">
         <div
           className="products-image-upload__preview"
           role={previewUrl ? "img" : undefined}
-          aria-label={previewUrl ? "Product photo preview" : undefined}
+          aria-label={previewUrl ? previewLabel : undefined}
           style={previewUrl ? { backgroundImage: `url(${JSON.stringify(previewUrl)})` } : undefined}
         >
-          {!previewUrl && <AdminIcon name="box" size={22} />}
+          {!previewUrl && <AdminIcon name={fallbackIcon} size={22} />}
         </div>
         <div className="products-image-upload__controls">
           <label htmlFor={`${prefix}-image-file`} className={`products-secondary-button products-image-upload__button ${!canWrite ? "is-disabled" : ""}`}>
             <AdminIcon name="upload" size={14} />
-            {previewUrl ? "Replace photo" : "Upload product photo"}
+            {previewUrl ? replaceLabel : uploadLabel}
             <input
               id={`${prefix}-image-file`}
-              name="image_file"
+              name={fieldName}
               type="file"
               accept="image/jpeg,image/png,image/webp"
               disabled={!canWrite}
+              aria-describedby={`${prefix}-image-help`}
               onChange={(event) => void handleFileChange(event)}
               className="sr-only"
             />

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getAdminProfile } from "@/lib/admin/profile";
+import { readAdminBranding } from "@/lib/admin/branding";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { POS_PALETTE_IDS } from "@/lib/pos-palette";
 import { POS_THEME_IDS } from "@/lib/pos-theme";
@@ -21,7 +22,7 @@ type ProfileRecord = {
   org_id: string;
   store_id: string | null;
   password_change_required: boolean;
-  organizations: { name?: string } | null;
+  organizations: { name?: string; settings?: unknown } | null;
   stores: { name?: string } | null;
 };
 
@@ -186,6 +187,7 @@ export default async function AdminPosPage({ searchParams }: { searchParams: Pro
   const devices = (devicesResult.data ?? []) as AdminPosDevice[];
   const queryWarning = Boolean(!store || organizationResult.error || storesResult.error || categoriesResult.error || productsResult.error || devicesResult.error || stockResult.error);
   const organizationName = organizationResult.data?.name || profile.organizations?.name || DEFAULT_ORGANIZATION_NAME;
+  const logoUrl = readAdminBranding(profile.organizations?.settings).logoUrl;
   const branchName = store?.name || profile.stores?.name || DEFAULT_STORE_NAME;
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
   const savedMessage = saved === "settings" ? "POS settings saved." : saved === "branch" ? "Receipt and tax details saved." : saved === "device" ? "Terminal settings saved." : "";
@@ -196,6 +198,7 @@ export default async function AdminPosPage({ searchParams }: { searchParams: Pro
   return (
     <PosSettingsScreen
       organizationName={organizationName}
+      logoUrl={logoUrl}
       branchName={branchName}
       address={store?.address ?? ""}
       tin={store?.tin ?? ""}

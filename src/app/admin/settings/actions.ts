@@ -2,8 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import {
+  organizationImageStoragePath,
+  readOrganizationImageFile,
+  removeOrganizationImage,
+  uploadOrganizationImage,
+} from "@/lib/admin/image-storage";
 import { invalidateAdminProfile } from "@/lib/admin/profile";
-import { isAdminThemeId, mergeAdminBrandingSettings } from "@/lib/admin/branding";
+import { isAdminThemeId, mergeAdminBrandingSettings, readAdminBranding } from "@/lib/admin/branding";
 import { mergeAdminInventorySettings, readAdminInventorySettings } from "@/lib/admin/inventory-settings";
 import { createClient } from "@/lib/supabase/server";
 
@@ -58,6 +64,7 @@ export async function updateOrganizationSettings(formData: FormData) {
   const brandName = readText(formData, "brand_name");
   const brandTagline = readText(formData, "brand_tagline");
   const theme = readText(formData, "admin_theme");
+  const brandLogoFile = readOrganizationImageFile(formData, "brand_logo_file");
   const lowStockAlertsEnabled = formData.get("low_stock_alerts_enabled") === "on";
   const defaultLowStockThreshold = Number(readText(formData, "default_low_stock_threshold"));
   validateRequiredText(name, "Organization name", 120);
@@ -65,6 +72,7 @@ export async function updateOrganizationSettings(formData: FormData) {
   if (brandTagline.length > 48) settingsRedirect("Brand tagline must be at most 48 characters.");
   if (!/^[A-Z]{3}$/.test(currency)) settingsRedirect("Currency must be a three-letter code such as PHP.");
   if (!isAdminThemeId(theme)) settingsRedirect("Choose a valid dashboard theme.");
+  if (brandLogoFile === undefined) settingsRedirect("Choose a JPG, PNG, or WebP brand logo under 900 KB.");
   if (!Number.isFinite(defaultLowStockThreshold) || defaultLowStockThreshold < 0 || defaultLowStockThreshold > 100000) {
     settingsRedirect("The default low-stock threshold must be a number from 0 to 100,000.");
   }
@@ -77,10 +85,20 @@ export async function updateOrganizationSettings(formData: FormData) {
   if (organizationError) settingsRedirect(organizationError.message || "Organization settings could not be read.");
   if (!organization) settingsRedirect("Organization settings could not be found.");
 
+  const currentBranding = readAdminBranding(organization.settings);
+  const uploadedLogo = brandLogoFile
+    ? await uploadOrganizationImage(supabase, orgId, "branding/logo", brandLogoFile)
+    : null;
+  if (uploadedLogo?.error || (uploadedLogo && !uploadedLogo.url)) {
+    await removeOrganizationImage(supabase, uploadedLogo?.path ?? null);
+    settingsRedirect("Brand logo upload failed. Check that image storage is configured, then try again.");
+  }
+
   const brandingSettings = mergeAdminBrandingSettings(organization?.settings, {
     brandName,
     brandTagline,
     theme,
+    logoUrl: uploadedLogo?.url ?? currentBranding.logoUrl,
   });
   const currentInventorySettings = readAdminInventorySettings(organization?.settings);
   const settings = mergeAdminInventorySettings(brandingSettings, {
@@ -91,7 +109,14 @@ export async function updateOrganizationSettings(formData: FormData) {
   });
 
   const { error } = await supabase.from("organizations").update({ name, currency, settings }).eq("id", orgId);
-  if (error) settingsRedirect(error.message || "Organization settings could not be saved.");
+  if (error) {
+    await removeOrganizationImage(supabase, uploadedLogo?.path ?? null);
+    settingsRedirect(error.message || "Organization settings could not be saved.");
+  }
+
+  if (uploadedLogo?.url) {
+    await removeOrganizationImage(supabase, organizationImageStoragePath(currentBranding.logoUrl, orgId));
+  }
 
   invalidateAdminProfile(userId);
   refreshSettings();
