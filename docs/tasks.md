@@ -19,11 +19,11 @@ This section is the current source of truth for delivered work and the next gate
 | Printing | In progress (6/7) | Physical LAN printer slip validation |
 | Multi-branch | Complete | Production second-branch sign-off |
 | Customer display | Not started | Build `/display` pairing and live cart mirror |
-| Admin backoffice | In progress (Orders operations added locally) | Apply migration, verify hosted/browser void-refund-reprint flow, then finish remaining P6 slices |
+| Admin backoffice | In progress (Orders operations merged and hosted QA passed) | Manager-role QA, physical printer validation, then finish remaining P6 slices |
 | Inventory workflow | Complete | Maintain regression coverage |
 | Inventory reporting and exports | Implemented | End-to-end filter, permissions, totals, CSV, and responsive-layout QA |
 | Store-owner onboarding and guidance | Implemented | Verify first-run and mobile behavior on the deployed app |
-| Admin workspace themes | Implemented locally | Commit, push, deploy, then verify Classic/Light/Dark/Retro live |
+| Admin workspace themes | Merged in PR #2 | Verify Classic/Light/Dark/Retro on the live main deployment |
 | Production pilot | Not started | Production Supabase, device setup, pilot week, and branch #2 |
 
 ### Recent delivery log
@@ -38,8 +38,8 @@ This section is the current source of truth for delivered work and the next gate
 
 ### Immediate next task
 
-1. Apply `supabase/migrations/0020_order_actions.sql` to the linked Supabase project.
-2. Deploy and verify the P6 Orders workflow: admin void/refund, reason validation, stock restoration, audit entries, browser reprint, manager read-only access, and mobile detail layout.
+1. Add or use a safe hosted manager account and complete the manager read-only Orders pass; the current hosted project has only admin Klein and cashier Juan Dela Cruz.
+2. Verify the merged main deployment and perform physical LAN-printer receipt validation with the store hardware.
 3. Continue the remaining P6 backoffice gaps and then return to the pending Inventory Reporting & Export QA pass.
 
 ---
@@ -165,8 +165,8 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 - `0020_order_actions.sql` adds `orders.reversal_of`, a unique reversal guard, and the `record_order_action` RPC. The original completed order is never updated or deleted; the linked void/refund row and stock adjustment are append-only.
 - `/admin/orders` keeps filters and detail context after an action, surfaces database errors, identifies a prior reversal, and passes branch receipt metadata into the action panel.
 - Admins can submit a reason-required void or refund. Managers can reprint but cannot see or submit reversal controls. Reprint uses the terminal printer settings and writes `order.reprint` only after the printer confirms delivery.
-- The migration must be applied before the new Orders action can run in a deployed environment. Hosted role/branch/mobile QA is the next P6 gate.
-- Application checks pass: `npm run typecheck`, `npm run lint`, `npm run build`, and `git diff --check`. Linked remote `supabase db lint --linked --fail-on error` is clean; `supabase migration list` confirms remote is at `0019` and `0020_order_actions.sql` is still pending. Local `supabase db lint --local --fail-on error` remains blocked by the pre-existing `get_available_slots` ambiguous `resource_id` error and unrelated warnings.
+ - Hosted migration and authenticated QA passed on 2026-08-06. Physical printer output remains a separate hardware gate.
+ - Application checks passed: `npm run typecheck`, `npm run lint`, `npm run build`, and `git diff --check`. The PR CI and Vercel preview checks also passed.
 
 ### Employee workspace implementation — 2026-08-03
 
@@ -259,3 +259,14 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 - Initial photo compression passed: source public/food/whole-lechon-small.png was 2,473,703 bytes; the UI reported Optimized photo - 2.4 MB -> 205 KB. Hosted storage recorded WebP path 8d453c86-4db6-4356-b9fa-1cc36fd830d6/62c4d353-6e4f-4cc6-820f-898908aea861-6b115e77-a27a-4e81-aeae-73ea556e518b.webp, MIME image/webp, 210026 bytes. The product image rendered in both Inventory and Products using that same public Supabase Storage URL.
 - Replacement photo flow passed: editing the product and replacing with public/food/lechon-paksiw.png (2,674,721 bytes) reported Optimized photo - 2.6 MB -> 252 KB. The final hosted object is WebP path 8d453c86-4db6-4356-b9fa-1cc36fd830d6/62c4d353-6e4f-4cc6-820f-898908aea861-2e039903-678d-45d7-b0b1-4fc0a42c4b16.webp, MIME image/webp, 257628 bytes. After reload, both Inventory and Products rendered the new public URL. The old object was absent from storage.objects; its public URL returned HTTP 400, while the new URL returned HTTP 200 with image/webp.
 - The edit server action committed the database and storage change even though this local production runner did not navigate away from the editor within the browser wait window; refreshed Inventory and Products reads confirmed the final URL and image state. No unrelated migration was applied.
+
+### Hosted P6 Orders migration and authenticated verification - 2026-08-06
+
+- Release branch codex/admin-orders-theme-release was pushed and merged into main by PR #2. Merge commit: 6239eed. The three source commits were 55d8a21 (Orders actions and migration), 7e07e1a (workspace themes and CI), and b2dcd50 (verification log).
+- Hosted migration check passed: 0020_order_actions.sql applied successfully; linked migration list now shows local and remote 0020 matching. Hosted schema checks found orders.reversal_of as uuid and the public record_order_action RPC.
+- Authenticated POS creation passed as admin Klein on Main Branch. Product Codex Image QA Product 20260806 was charged for 123.45 cash, creating order MB-D9ND1MW-260806-0001 (id e8c5520d-2d2d-4dcf-9579-c2ab1fcf3386). The app returned the expected printer warning because no printer IP was initially configured, but the order saved successfully.
+- Reason validation passed: the empty required reason field blocked the Void order submission and no confirmation dialog or database action occurred.
+- Admin void passed with reason QA verification after hosted migration. The UI returned the audited reversal success message; hosted order 2f7b2044-7870-40f2-8186-58074d9bb197 is status voided, reversal_of points to the original order, and the original completed order remains unchanged. Hosted stock_movements contains one adjust return for product 62c4d353-6e4f-4cc6-820f-898908aea861, qty 1.000 pcs, with the same reason. Hosted audit_logs contains order.voided with the reason and reversal id.
+- Browser reprint passed through a temporary local WebSocket bridge and TCP mock printer configured through the authenticated POS printer settings. The Orders UI reported MB-D9ND1MW-260806-0001 reprinted and audit logged; hosted audit_logs contains order.reprint for the original order. The temporary bridge, mock printer, and log were stopped/removed after verification. Physical printer paper output remains unverified.
+- Mobile layout check passed at a 390x844 viewport override: the order detail and action region remained available, document width was 375px, and horizontal overflow was false. The viewport was reset afterward.
+- Manager read-only verification is blocked by available hosted data rather than the implementation: the linked project currently has only admin Klein and cashier Juan Dela Cruz, with no manager profile to authenticate. No real user was modified or fabricated for this check.
