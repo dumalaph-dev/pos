@@ -14,7 +14,7 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Supabase CLI output is a generated, minified runtime bundle.
     "supabase/.temp/**",
-    // OpenNext output is generated during the deployment build.
+    // Deployment output is generated during the build.
     ".open-next/**",
     "dist/**",
     // Claude/Codex worktrees are machine-local copies, not this checkout's source.
