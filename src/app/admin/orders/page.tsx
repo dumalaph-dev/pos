@@ -1,6 +1,7 @@
 import Image from "next/image";
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
+import { AdminOrderActions } from "@/components/admin/AdminOrderActions";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
@@ -26,7 +27,15 @@ type ProfileRecord = {
   password_change_required: boolean;
 };
 
-type BranchRecord = { id: string; name: string; is_active: boolean };
+type BranchRecord = {
+  id: string;
+  name: string;
+  address: string | null;
+  tin: string | null;
+  vat_registered: boolean;
+  vat_rate: number;
+  is_active: boolean;
+};
 type CashierRecord = { id: string; full_name: string; role: AdminRole };
 
 type OrderRecord = {
@@ -39,7 +48,9 @@ type OrderRecord = {
   discount_type: string;
   discount_amount: number;
   discount_ref: string | null;
+  vatable_sale: number;
   vat_amount: number;
+  vat_exempt_sale: number;
   total: number;
   payment_method: PaymentMethod;
   payment_ref: string | null;
@@ -48,6 +59,15 @@ type OrderRecord = {
   note: string | null;
   created_at: string;
   created_at_device: string;
+  reversal_of: string | null;
+};
+
+type ReversalRecord = {
+  id: string;
+  reversal_of: string;
+  status: OrderStatus;
+  order_no: string;
+  created_at: string;
 };
 
 type OrderItemRecord = {
@@ -94,8 +114,8 @@ const paymentOptions: Array<{ value: PaymentFilter; label: string }> = [
   { value: "maya", label: "Maya" },
   { value: "card", label: "Card" },
 ];
-const ORDER_LIST_FIELDS = "id, order_no, store_id, cashier_id, status, discount_amount, total, payment_method, created_at";
-const ORDER_DETAIL_FIELDS = "id, order_no, store_id, cashier_id, status, subtotal, discount_type, discount_amount, discount_ref, vat_amount, total, payment_method, payment_ref, amount_tendered, change_due, note, created_at, created_at_device";
+const ORDER_LIST_FIELDS = "id, order_no, store_id, cashier_id, status, discount_amount, vatable_sale, vat_amount, vat_exempt_sale, total, payment_method, created_at, reversal_of";
+const ORDER_DETAIL_FIELDS = "id, order_no, store_id, cashier_id, status, subtotal, discount_type, discount_amount, discount_ref, vatable_sale, vat_amount, vat_exempt_sale, total, payment_method, payment_ref, amount_tendered, change_due, note, created_at, created_at_device, reversal_of";
 const singaporeDateFormatter = new Intl.DateTimeFormat("en-US", {
   day: "2-digit",
   month: "2-digit",
@@ -288,7 +308,7 @@ function buildOrderHref({ range, status, payment, branch, query, page, pageSize,
 export default async function OrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string | string[]; status?: string | string[]; payment?: string | string[]; branch?: string | string[]; q?: string | string[]; order?: string | string[]; page?: string | string[]; pageSize?: string | string[] }>;
+  searchParams: Promise<{ range?: string | string[]; status?: string | string[]; payment?: string | string[]; branch?: string | string[]; q?: string | string[]; order?: string | string[]; page?: string | string[]; pageSize?: string | string[]; saved?: string | string[]; error?: string | string[] }>;
 }) {
   const params = await searchParams;
   const supabase = await createClient();
@@ -313,12 +333,14 @@ export default async function OrdersPage({
   const selectedOrderId = readParam(params.order);
   const pageSize = readPageSize(readParam(params.pageSize));
   const requestedPage = readPage(readParam(params.page));
+  const savedAction = readParam(params.saved);
+  const actionError = readParam(params.error).slice(0, 240);
   const { start: todayStart, end: todayEnd } = getSingaporeDayBounds();
   const startDate = rangeStart(range, todayStart);
   const previousStart = startDate && rangeDays(range) ? new Date(startDate.getTime() - DAY_MS * rangeDays(range)!) : null;
   const previousEnd = startDate;
 
-  const branchesResult = await supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name");
+  const branchesResult = await supabase.from("stores").select("id, name, address, tin, vat_registered, vat_rate, is_active").eq("org_id", profile.org_id).order("name");
   const branches = (branchesResult.data ?? []) as BranchRecord[];
   const selectedBranchId = profile.role === "admin"
     ? await getSelectedAdminBranchId(branches, profile.store_id)
@@ -413,6 +435,16 @@ export default async function OrdersPage({
   const visibleOrderIds = new Set(filteredOrders.slice((page - 1) * pageSize, page * pageSize).map((order) => order.id));
   if (selectedOrder?.id) visibleOrderIds.add(selectedOrder.id);
 
+  const reversalResult = visibleOrderIds.size > 0
+    ? await supabase
+        .from("orders")
+        .select("id, reversal_of, status, order_no, created_at")
+        .eq("org_id", profile.org_id)
+        .in("reversal_of", [...visibleOrderIds])
+    : { data: [] as ReversalRecord[], error: null };
+  const reversals = (reversalResult.data ?? []) as unknown as ReversalRecord[];
+  const reversalByOrderId = new Map(reversals.map((reversal) => [reversal.reversal_of, reversal]));
+
   let orderItems: OrderItemRecord[] = [];
   let orderItemsError = false;
   if (itemsResult) {
@@ -442,7 +474,10 @@ export default async function OrdersPage({
   const trendBuckets = buildTrendBuckets(filteredOrders, startDate, todayEnd);
   const branchLabel = branchFilter ? branchById.get(branchFilter)?.name ?? "Selected branch" : "All branches";
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
-  const queryWarning = Boolean(branchesResult.error || cashiersResult.error || productsResult.error || ordersResult.error || previousOrdersResult?.error || orderItemsError || selectedOrderResult?.error);
+  const canManageOrders = profile.role === "admin";
+  const canReprintOrders = profile.role === "admin" || profile.role === "manager";
+  const returnHref = buildOrderHref({ range, status, payment, branch: branchFilter, query: searchQuery, page, pageSize });
+  const queryWarning = Boolean(branchesResult.error || cashiersResult.error || productsResult.error || ordersResult.error || previousOrdersResult?.error || orderItemsError || selectedOrderResult?.error || reversalResult.error);
   const visibleOrders = filteredOrders.slice((page - 1) * pageSize, page * pageSize);
   const exportParams = new URLSearchParams({ range });
   if (branchFilter) exportParams.set("branch", branchFilter);
@@ -478,6 +513,9 @@ export default async function OrdersPage({
           </header>
 
           {queryWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink">Some order data could not refresh. The page is showing the records that were available; check the Supabase connection and RLS scope if totals look incomplete.</div>}
+          {savedAction === "voided" && <div role="status" className="mt-5 rounded-card border border-success/30 bg-success/10 px-4 py-3 text-sm text-ink">The order was voided. The original sale remains in history and tracked stock was returned through an audited reversal.</div>}
+          {savedAction === "refunded" && <div role="status" className="mt-5 rounded-card border border-success/30 bg-success/10 px-4 py-3 text-sm text-ink">The order was refunded. The original sale remains in history and tracked stock was returned through an audited reversal.</div>}
+          {actionError && <div role="alert" className="mt-5 rounded-card border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">{actionError}</div>}
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
             <OrderMetric label="Total orders" value={String(summary.total)} trend={percentChange(summary.total, previousSummary.total, canCompare)} comparisonLabel={rangeLabel(range)} values={trendBuckets.map((bucket) => bucket.orders)} tone="bg-accent text-accent-fg" icon="bag" />
@@ -495,7 +533,7 @@ export default async function OrdersPage({
 
           <section aria-labelledby="orders-table-heading" className="admin-panel mt-4 min-w-0 p-5">
             <div className="admin-panel__header"><div><p className="admin-panel__eyebrow">Live order register</p><h2 id="orders-table-heading" className="admin-panel__title">All orders</h2><p className="admin-panel__subtitle">{filteredOrders.length} matching order{filteredOrders.length === 1 ? "" : "s"} · {formatDateRange(startDate, todayEnd)}</p></div><span className="rounded-pill bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary">RLS-scoped records</span></div>
-            {filteredOrders.length === 0 ? <EmptyOrders /> : selectedOrder ? <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.42fr)]"><OrdersTable orders={visibleOrders} selectedOrderId={selectedOrder.id} range={range} status={status} payment={payment} branch={branchFilter} query={searchQuery} page={page} pageSize={pageSize} branchById={branchById} cashierById={cashierById} itemCountByOrder={itemCountByOrder} itemsByOrder={itemsByOrder} productById={productById} totalOrders={filteredOrders.length} totalPages={totalPages} /><OrderDetail order={selectedOrder} items={itemsByOrder.get(selectedOrder.id) ?? []} productById={productById} branchName={branchById.get(selectedOrder.store_id)?.name ?? "Unknown branch"} cashierName={cashierById.get(selectedOrder.cashier_id)?.full_name ?? "Unknown cashier"} clearHref={buildOrderHref({ range, status, payment, branch: branchFilter, query: searchQuery })} /></div> : <OrdersTable orders={visibleOrders} selectedOrderId={null} range={range} status={status} payment={payment} branch={branchFilter} query={searchQuery} page={page} pageSize={pageSize} branchById={branchById} cashierById={cashierById} itemCountByOrder={itemCountByOrder} itemsByOrder={itemsByOrder} productById={productById} totalOrders={filteredOrders.length} totalPages={totalPages} />}
+            {filteredOrders.length === 0 ? <EmptyOrders /> : selectedOrder ? <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.42fr)]"><OrdersTable orders={visibleOrders} selectedOrderId={selectedOrder.id} range={range} status={status} payment={payment} branch={branchFilter} query={searchQuery} page={page} pageSize={pageSize} branchById={branchById} cashierById={cashierById} itemCountByOrder={itemCountByOrder} itemsByOrder={itemsByOrder} productById={productById} totalOrders={filteredOrders.length} totalPages={totalPages} /><OrderDetail order={selectedOrder} items={itemsByOrder.get(selectedOrder.id) ?? []} productById={productById} branchName={branchById.get(selectedOrder.store_id)?.name ?? "Unknown branch"} branchAddress={branchById.get(selectedOrder.store_id)?.address ?? null} branchTin={branchById.get(selectedOrder.store_id)?.tin ?? null} branchVatRegistered={Boolean(branchById.get(selectedOrder.store_id)?.vat_registered)} branchVatRate={Number(branchById.get(selectedOrder.store_id)?.vat_rate ?? 0.12)} cashierName={cashierById.get(selectedOrder.cashier_id)?.full_name ?? "Unknown cashier"} clearHref={returnHref} returnTo={returnHref} canManage={canManageOrders} canReprint={canReprintOrders} reversal={reversalByOrderId.get(selectedOrder.id) ?? null} /></div> : <OrdersTable orders={visibleOrders} selectedOrderId={null} range={range} status={status} payment={payment} branch={branchFilter} query={searchQuery} page={page} pageSize={pageSize} branchById={branchById} cashierById={cashierById} itemCountByOrder={itemCountByOrder} itemsByOrder={itemsByOrder} productById={productById} totalOrders={filteredOrders.length} totalPages={totalPages} />}
           </section>
       </div>
     </main>
@@ -527,8 +565,121 @@ function OrderPageSizeForm({ range, status, payment, branch, query, pageSize }: 
   return <form action="/admin/orders" method="get" className="flex items-center gap-2"><input type="hidden" name="range" value={range} /><input type="hidden" name="status" value={status} /><input type="hidden" name="payment" value={payment} /><input type="hidden" name="branch" value={branch} /><input type="hidden" name="q" value={query} /><label htmlFor="orders-page-size" className="text-[10px] font-semibold text-ink-muted">Rows per page</label><select id="orders-page-size" name="pageSize" defaultValue={String(pageSize)} className="inventory-input min-h-8 w-auto py-1 text-[10px]"><option value="10">10</option><option value="25">25</option><option value="50">50</option></select><button type="submit" className="rounded-btn border border-line bg-surface px-2 py-1.5 text-[10px] font-extrabold text-primary hover:bg-primary-soft">Apply</button></form>;
 }
 
-function OrderDetail({ order, items, productById, branchName, cashierName, clearHref }: { order: OrderRecord; items: OrderItemRecord[]; productById: Map<string, ProductRecord>; branchName: string; cashierName: string; clearHref: string }) {
-  return <aside id="order-detail" aria-labelledby="order-detail-heading" className="admin-panel min-w-0 self-start p-5 xl:sticky xl:top-4"><div className="admin-panel__header"><div><p className="admin-panel__eyebrow">Receipt view</p><h2 id="order-detail-heading" className="admin-panel__title">{order.order_no}</h2><p className="admin-panel__subtitle">{formatDateTime(order.created_at)}</p></div><Link href={clearHref} className="grid h-8 w-8 place-items-center rounded-full bg-secondary text-primary transition hover:bg-secondary-hover" aria-label="Close order detail">&times;</Link></div><div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-b border-line pb-4"><span className={`inline-flex rounded-pill px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${statusClass(order.status)}`}>{statusLabel(order.status)}</span><span className="text-xs font-extrabold text-ink">{paymentLabel(order.payment_method)}</span></div><div className="mt-4 grid gap-2 rounded-btn bg-surface-raised p-3 text-xs"><ReceiptMeta label="Branch" value={branchName} /><ReceiptMeta label="Cashier" value={cashierName} />{order.payment_ref && <ReceiptMeta label="Payment ref" value={order.payment_ref} />}</div><div className="mt-5"><p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted">Items</p>{items.length === 0 ? <p className="mt-3 rounded-btn border border-dashed border-line-strong px-3 py-4 text-center text-xs text-ink-muted">Item details are unavailable for this order.</p> : <div className="mt-2 divide-y divide-line/70">{items.map((item, index) => <div key={`${item.order_id}-${index}`} className="flex items-start justify-between gap-3 py-3"><span className="min-w-0"><strong className="block truncate text-xs font-extrabold text-ink">{item.name_snapshot}</strong><small className="mt-1 block text-[10px] text-ink-muted">{formatQuantity(salesQuantity(item))} {productById.get(item.product_id ?? "")?.unit ?? (item.weight_kg ? "kg" : "item")}</small></span><strong className="tnums whitespace-nowrap text-xs font-extrabold text-ink">{displayPeso(item.line_total)}</strong></div>)}</div>}</div><div className="mt-4 border-t border-line pt-4"><ReceiptTotal label="Subtotal" value={displayPeso(order.subtotal)} /><ReceiptTotal label="Discount" value={displayPeso(order.discount_amount)} muted /><ReceiptTotal label="VAT" value={displayPeso(order.vat_amount)} muted /><div className="mt-3 flex items-center justify-between border-t border-line pt-3"><span className="text-sm font-extrabold text-ink">Total</span><strong className="tnums text-xl font-extrabold text-primary">{displayPeso(order.total)}</strong></div></div>{(order.amount_tendered != null || order.change_due != null || order.note) && <div className="mt-4 border-t border-line pt-4">{order.amount_tendered != null && <ReceiptTotal label="Amount tendered" value={displayPeso(order.amount_tendered)} />}{order.change_due != null && <ReceiptTotal label="Change due" value={displayPeso(order.change_due)} />}{order.note && <div className="mt-3 rounded-btn bg-secondary/60 px-3 py-2.5 text-xs leading-5 text-ink"><strong className="block text-[10px] uppercase tracking-[0.1em] text-ink-muted">Order note</strong><span className="mt-1 block">{order.note}</span></div>}</div>}</aside>;
+function OrderDetail({
+  order,
+  items,
+  productById,
+  branchName,
+  branchAddress,
+  branchTin,
+  branchVatRegistered,
+  branchVatRate,
+  cashierName,
+  clearHref,
+  returnTo,
+  canManage,
+  canReprint,
+  reversal,
+}: {
+  order: OrderRecord;
+  items: OrderItemRecord[];
+  productById: Map<string, ProductRecord>;
+  branchName: string;
+  branchAddress: string | null;
+  branchTin: string | null;
+  branchVatRegistered: boolean;
+  branchVatRate: number;
+  cashierName: string;
+  clearHref: string;
+  returnTo: string;
+  canManage: boolean;
+  canReprint: boolean;
+  reversal: ReversalRecord | null;
+}) {
+  return (
+    <aside id="order-detail" aria-labelledby="order-detail-heading" className="admin-panel min-w-0 self-start p-5 xl:sticky xl:top-4">
+      <div className="admin-panel__header">
+        <div>
+          <p className="admin-panel__eyebrow">Receipt view</p>
+          <h2 id="order-detail-heading" className="admin-panel__title">{order.order_no}</h2>
+          <p className="admin-panel__subtitle">{formatDateTime(order.created_at)}</p>
+        </div>
+        <Link href={clearHref} className="grid h-8 w-8 place-items-center rounded-full bg-secondary text-primary transition hover:bg-secondary-hover" aria-label="Close order detail">&times;</Link>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-b border-line pb-4">
+        <span className={`inline-flex rounded-pill px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${statusClass(order.status)}`}>{statusLabel(order.status)}</span>
+        <span className="text-xs font-extrabold text-ink">{paymentLabel(order.payment_method)}</span>
+      </div>
+
+      {reversal && (
+        <div className="mt-4 rounded-btn border border-warning/30 bg-warning/10 px-3 py-2.5 text-xs leading-5 text-ink">
+          <strong className="block text-[10px] uppercase tracking-[0.1em] text-warning">Reversal recorded</strong>
+          <span className="mt-1 block">{statusLabel(reversal.status)} as {reversal.order_no} on {formatDateTime(reversal.created_at)}.</span>
+        </div>
+      )}
+
+      <div className="mt-4 grid gap-2 rounded-btn bg-surface-raised p-3 text-xs">
+        <ReceiptMeta label="Branch" value={branchName} />
+        <ReceiptMeta label="Cashier" value={cashierName} />
+        {order.payment_ref && <ReceiptMeta label="Payment ref" value={order.payment_ref} />}
+      </div>
+
+      <div className="mt-5">
+        <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted">Items</p>
+        {items.length === 0 ? <p className="mt-3 rounded-btn border border-dashed border-line-strong px-3 py-4 text-center text-xs text-ink-muted">Item details are unavailable for this order.</p> : <div className="mt-2 divide-y divide-line/70">{items.map((item, index) => <div key={`${item.order_id}-${index}`} className="flex items-start justify-between gap-3 py-3"><span className="min-w-0"><strong className="block truncate text-xs font-extrabold text-ink">{item.name_snapshot}</strong><small className="mt-1 block text-[10px] text-ink-muted">{formatQuantity(salesQuantity(item))} {productById.get(item.product_id ?? "")?.unit ?? (item.weight_kg ? "kg" : "item")}</small></span><strong className="tnums whitespace-nowrap text-xs font-extrabold text-ink">{displayPeso(item.line_total)}</strong></div>)}</div>}
+      </div>
+
+      <div className="mt-4 border-t border-line pt-4">
+        <ReceiptTotal label="Subtotal" value={displayPeso(order.subtotal)} />
+        <ReceiptTotal label="Discount" value={displayPeso(order.discount_amount)} muted />
+        <ReceiptTotal label="VAT" value={displayPeso(order.vat_amount)} muted />
+        <div className="mt-3 flex items-center justify-between border-t border-line pt-3"><span className="text-sm font-extrabold text-ink">Total</span><strong className="tnums text-xl font-extrabold text-primary">{displayPeso(order.total)}</strong></div>
+      </div>
+
+      {(order.amount_tendered != null || order.change_due != null || order.note) && <div className="mt-4 border-t border-line pt-4">
+        {order.amount_tendered != null && <ReceiptTotal label="Amount tendered" value={displayPeso(order.amount_tendered)} />}
+        {order.change_due != null && <ReceiptTotal label="Change due" value={displayPeso(order.change_due)} />}
+        {order.note && <div className="mt-3 rounded-btn bg-secondary/60 px-3 py-2.5 text-xs leading-5 text-ink"><strong className="block text-[10px] uppercase tracking-[0.1em] text-ink-muted">Order note</strong><span className="mt-1 block">{order.note}</span></div>}
+      </div>}
+
+      <AdminOrderActions
+        order={{
+          id: order.id,
+          order_no: order.order_no,
+          status: order.status,
+          subtotal: Number(order.subtotal),
+          discount_amount: Number(order.discount_amount),
+          discount_ref: order.discount_ref,
+          vatable_sale: Number(order.vatable_sale ?? 0),
+          vat_amount: Number(order.vat_amount),
+          vat_exempt_sale: Number(order.vat_exempt_sale ?? 0),
+          total: Number(order.total),
+          payment_method: order.payment_method,
+          payment_ref: order.payment_ref,
+          amount_tendered: order.amount_tendered,
+          change_due: order.change_due,
+          created_at_device: order.created_at_device || order.created_at,
+        }}
+        items={items.map((item) => ({
+          name_snapshot: item.name_snapshot,
+          qty: Number(item.qty),
+          weight_kg: item.weight_kg === null ? null : Number(item.weight_kg),
+          line_total: Number(item.line_total),
+        }))}
+        branchName={branchName}
+        branchAddress={branchAddress}
+        branchTin={branchTin}
+        branchVatRegistered={branchVatRegistered}
+        branchVatRate={branchVatRate}
+        cashierName={cashierName}
+        returnTo={returnTo}
+        canManage={canManage}
+        canReprint={canReprint}
+        hasReversal={Boolean(reversal)}
+      />
+    </aside>
+  );
 }
 
 function ReceiptMeta({ label, value }: { label: string; value: string }) {
