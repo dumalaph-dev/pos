@@ -36,7 +36,7 @@ type StoreRecord = {
   settings: JsonRecord;
 };
 
-const DEFAULT_ORGANIZATION_NAME = "Rico's Lechon House";
+const DEFAULT_ORGANIZATION_NAME = "Your Business";
 const DEFAULT_STORE_NAME = "Main Branch";
 
 function readParam(value: string | string[] | undefined) {
@@ -82,8 +82,8 @@ function readPosConfig(store: StoreRecord): PosConfig {
   const configuredDefault = readEnum(source.defaultOrderType, ["Dine In", "Takeout", "Delivery"] as const, "Dine In");
 
   return {
-    palette: readEnum(source.palette, POS_PALETTE_IDS, "brown"),
-    customColor: typeof source.customColor === "string" && /^#[0-9a-f]{6}$/i.test(source.customColor) ? source.customColor : "#5b2a0a",
+    palette: readEnum(source.palette, POS_PALETTE_IDS, "green"),
+    customColor: typeof source.customColor === "string" && /^#[0-9a-f]{6}$/i.test(source.customColor) ? source.customColor : "#173a2b",
     uiStyle: readEnum(source.uiStyle, POS_THEME_IDS, "modern"),
     defaultOrderType: enabledOrderTypes.includes(configuredDefault) ? configuredDefault : enabledOrderTypes[0],
     orderTypes: enabledOrderTypes,

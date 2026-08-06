@@ -22,7 +22,7 @@ export default function SignupForm() {
         <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-success">Almost there</p>
         <h2 className="mt-2 text-xl font-extrabold text-ink">Confirm your email</h2>
         <p className="mt-2 text-sm leading-6 text-ink-muted">{state.message}</p>
-        <Link href="/" className="mt-5 inline-flex rounded-btn bg-primary px-4 py-3 text-sm font-extrabold text-primary-fg transition hover:bg-primary-hover">Back to sign in</Link>
+        <Link href="/login" className="mt-5 inline-flex rounded-btn bg-primary px-4 py-3 text-sm font-extrabold text-primary-fg transition hover:bg-primary-hover">Back to sign in</Link>
       </div>
     );
   }
@@ -46,7 +46,7 @@ export default function SignupForm() {
 
         <label className="block text-sm font-medium text-ink sm:col-span-2" htmlFor="signup-organization-name">
           Business name
-          <input id="signup-organization-name" name="organization_name" type="text" required minLength={2} maxLength={120} autoComplete="organization" placeholder="Juan's Lechon House" className={fieldClass(Boolean(state.errors?.organization_name))} />
+          <input id="signup-organization-name" name="organization_name" type="text" required minLength={2} maxLength={120} autoComplete="organization" placeholder="e.g. Juan's Kitchen" className={fieldClass(Boolean(state.errors?.organization_name))} />
           <FieldError state={state} field="organization_name" />
         </label>
 
@@ -83,7 +83,7 @@ export default function SignupForm() {
       </div>
 
       <button type="submit" disabled={pending} className="w-full rounded-btn bg-accent px-6 py-3 font-bold uppercase text-accent-fg transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50">{pending ? "Creating workspace…" : "Create owner account"}</button>
-      <p className="text-center text-sm text-ink-muted">Already have an account? <Link href="/" className="font-extrabold text-primary underline-offset-4 hover:underline">Sign in</Link></p>
+      <p className="text-center text-sm text-ink-muted">Already have an account? <Link href="/login" className="font-extrabold text-primary underline-offset-4 hover:underline">Sign in</Link></p>
     </form>
   );
 }

@@ -1,0 +1,122 @@
+import { redirect } from "next/navigation";
+import { AdminIcon } from "@/components/admin/AdminIcon";
+import { AdminLink as Link } from "@/components/admin/AdminLink";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { SignOutButton } from "@/components/SignOutButton";
+import { getAdminProfile } from "@/lib/admin/profile";
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
+import {
+  BILLING_PLANS,
+  formatBillingDate,
+  getBillingPlan,
+  normalizeSubscriptionStatus,
+  subscriptionStatusLabel,
+  subscriptionTone,
+} from "@/lib/billing";
+
+type OrganizationRecord = {
+  id: string;
+  name: string;
+  currency: string;
+  subscription_status?: string | null;
+  subscription_plan?: string | null;
+  subscription_current_period_end?: string | null;
+  subscription_updated_at?: string | null;
+};
+
+type BranchRecord = { id: string; is_active: boolean };
+
+export const dynamic = "force-dynamic";
+
+export default async function BillingPage() {
+  const user = await getAuthenticatedUser();
+  if (!user) redirect("/");
+
+  const profile = await getAdminProfile(user.id);
+  if (!profile) return <BillingMessage title="Your admin profile is not ready." detail="Ask an organization admin to finish your profile before opening billing settings." />;
+  if (profile.role !== "admin") return <BillingMessage title="Owner access required" detail="Only the business owner can manage the organization plan and subscription." />;
+
+  const supabase = await createClient();
+  const richResult = await supabase
+    .from("organizations")
+    .select("id, name, currency, subscription_status, subscription_plan, subscription_current_period_end, subscription_updated_at")
+    .eq("id", profile.org_id)
+    .maybeSingle();
+
+  let organization: OrganizationRecord | null = richResult.data as OrganizationRecord | null;
+  const subscriptionFieldsAvailable = !richResult.error;
+  if (richResult.error) {
+    const fallback = await supabase.from("organizations").select("id, name, currency").eq("id", profile.org_id).maybeSingle();
+    organization = fallback.data as OrganizationRecord | null;
+  }
+
+  const branchesResult = await supabase.from("stores").select("id, is_active").eq("org_id", profile.org_id);
+  const branches = (branchesResult.data ?? []) as BranchRecord[];
+  const activeBranches = branches.filter((branch) => branch.is_active).length;
+  const status = subscriptionFieldsAvailable ? normalizeSubscriptionStatus(organization?.subscription_status) : null;
+  const currentPlan = subscriptionFieldsAvailable ? getBillingPlan(organization?.subscription_plan) : null;
+
+  return (
+    <main className="admin-page min-h-screen bg-bg px-4 pb-12 pt-6 text-ink sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl">
+        <AdminPageHeader title="Billing & plan">
+          <Link href="/admin" className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Overview</Link>
+          <SignOutButton className="px-3 py-2 text-xs" />
+        </AdminPageHeader>
+
+        <section className="mt-7 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Owner workspace</p>
+            <h1 className="mt-2 text-3xl font-extrabold tracking-[-0.04em] sm:text-4xl">Keep your plan simple.</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">Review your organization’s subscription status and the capabilities available as your business grows.</p>
+          </div>
+          <div className="flex items-center gap-2 rounded-pill bg-primary-soft px-3 py-2 text-xs font-extrabold text-primary"><AdminIcon name="wallet" size={15} /> {organization?.name ?? "Your business"}</div>
+        </section>
+
+        {!subscriptionFieldsAvailable && <div role="status" className="mt-7 rounded-card border border-warning/35 bg-warning/10 px-5 py-4 text-sm font-semibold text-ink">Subscription tracking is not active yet. Apply migration 0023 before connecting checkout or recording plan changes.</div>}
+
+        <section className="mt-7 grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)]" aria-labelledby="current-plan-heading">
+          <div className="rounded-card border border-primary/20 bg-primary p-6 text-primary-fg shadow-[var(--shadow-pop)] sm:p-7">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-primary-fg/65">Current plan</p><h2 id="current-plan-heading" className="mt-2 text-3xl font-extrabold">{currentPlan?.name ?? "Billing setup"}</h2><p className="mt-2 max-w-lg text-sm leading-6 text-primary-fg/75">{currentPlan?.summary ?? "Your workspace is ready for subscription configuration."}</p></div>
+              {status && <span className="rounded-pill bg-primary-fg/15 px-3 py-1.5 text-xs font-extrabold text-primary-fg">{subscriptionStatusLabel(status)}</span>}
+            </div>
+            <div className="mt-7 grid gap-3 border-t border-primary-fg/15 pt-5 sm:grid-cols-3">
+              <BillingMetric label="Branches" value={`${activeBranches} active`} detail={`${branches.length} total`} />
+              <BillingMetric label="Billing cycle" value="Monthly" detail="Checkout connection pending" />
+              <BillingMetric label="Next review" value={subscriptionFieldsAvailable ? formatBillingDate(organization?.subscription_current_period_end) : "After setup"} detail={subscriptionFieldsAvailable ? "Current period" : "Migration required"} />
+            </div>
+          </div>
+
+          <aside className="rounded-card border border-line bg-surface p-6 shadow-[var(--shadow-card)] sm:p-7" aria-labelledby="billing-status-heading">
+            <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Subscription status</p>
+            <h2 id="billing-status-heading" className="mt-2 text-xl font-extrabold">{status ? subscriptionStatusLabel(status) : "Not connected"}</h2>
+            <p className="mt-2 text-sm leading-6 text-ink-muted">{status === "active" ? "Your workspace is on an active subscription." : status === "trialing" ? "Your workspace can be prepared while billing is being connected." : "Billing updates will appear here once the payment connection is enabled."}</p>
+            {status && <span className={`mt-5 inline-flex rounded-pill px-3 py-1.5 text-xs font-extrabold ${subscriptionTone(status)}`}>{subscriptionStatusLabel(status)}</span>}
+            <p className="mt-5 border-t border-line pt-4 text-xs leading-5 text-ink-muted">Last recorded update: {subscriptionFieldsAvailable ? formatBillingDate(organization?.subscription_updated_at) : "Not available"}</p>
+          </aside>
+        </section>
+
+        <section className="mt-8" aria-labelledby="plans-heading">
+          <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Plans</p><h2 id="plans-heading" className="mt-2 text-2xl font-extrabold">Choose the level of support you need.</h2></div><span className="text-xs font-semibold text-ink-muted">Monthly billing · checkout coming next</span></div>
+          <div className="mt-4 grid gap-4 xl:grid-cols-3">
+            {BILLING_PLANS.map((plan) => {
+              const isCurrent = currentPlan?.id === plan.id;
+              return <article key={plan.id} className={`rounded-card border bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6 ${isCurrent ? "border-primary/40 ring-1 ring-primary/15" : "border-line"}`}><div className="flex items-start justify-between gap-3"><div><h3 className="text-lg font-extrabold">{plan.name}</h3><p className="mt-1 text-sm leading-5 text-ink-muted">{plan.summary}</p></div>{isCurrent && <span className="rounded-pill bg-primary-soft px-2.5 py-1 text-[10px] font-extrabold text-primary">Current</span>}</div><ul className="mt-5 grid gap-2.5 border-t border-line pt-5">{plan.features.map((feature) => <li key={feature} className="flex gap-2 text-sm text-ink-muted"><AdminIcon name="check" size={15} /><span>{feature}</span></li>)}</ul><div className="mt-6 border-t border-line pt-4"><span className="text-xs font-extrabold uppercase tracking-[0.12em] text-ink-subtle">{isCurrent ? "Selected for this workspace" : "Available when billing is connected"}</span></div></article>;
+            })}
+          </div>
+        </section>
+
+        <section className="mt-8 rounded-card border border-line bg-surface-raised p-5 sm:p-6" aria-labelledby="billing-next-heading"><div className="flex gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary"><AdminIcon name="alert" size={17} /></span><div><h2 id="billing-next-heading" className="text-base font-extrabold">What happens next</h2><p className="mt-1 text-sm leading-6 text-ink-muted">This page is the subscription foundation. Once your monthly prices and payment provider are configured, checkout, receipts, renewals, and cancellation controls can be connected here without changing the owner or staff access model.</p></div></div></section>
+      </div>
+    </main>
+  );
+}
+
+function BillingMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return <div><p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-primary-fg/60">{label}</p><strong className="mt-1 block text-sm">{value}</strong><span className="mt-0.5 block text-xs text-primary-fg/65">{detail}</span></div>;
+}
+
+function BillingMessage({ title, detail }: { title: string; detail: string }) {
+  return <main className="grid min-h-screen place-items-center bg-bg p-6 text-center text-ink"><div className="max-w-md rounded-card border border-line bg-surface p-8 shadow-[var(--shadow-pop)]"><h1 className="text-2xl font-extrabold">{title}</h1><p className="mt-3 text-sm leading-6 text-ink-muted">{detail}</p><Link href="/admin" className="mt-6 inline-flex rounded-btn bg-primary px-4 py-3 text-sm font-extrabold text-primary-fg">Back to dashboard</Link></div></main>;
+}

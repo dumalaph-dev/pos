@@ -1,4 +1,4 @@
-# Lechon POS — Interface Contracts
+# Dumala POS — Interface Contracts
 
 **Companion to:** [ARCHITECTURE.md](ARCHITECTURE.md) · [SCHEMA.md](SCHEMA.md)
 

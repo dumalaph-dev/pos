@@ -1,16 +1,16 @@
-# Mario's Lechon House POS UI reference
+# Dumala POS UI reference
 
-This is the working visual reference for future POS screens. The source of truth is the supplied [UI reference image](ui.png), with the more detailed token inventory in [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md).
+This is the working visual reference for future POS screens. The source of truth is the supplied UI reference, with the more detailed token inventory in [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md).
 
 ## Product character
 
-Warm, artisanal, calm, and operational. The screen should feel like a well-run lechon house: cream paper, roasted brown structure, brick-red action, generous tap targets, and appetizing product photography. Keep the interface tactile and human without turning it into a decorative dashboard.
+Calm, warm, and operational. The screen should feel like a well-run business: cream paper, deep forest-green structure, warm gold action, generous tap targets, and clear product photography. Keep the interface tactile and human without turning it into a decorative dashboard.
 
 ## Layout contract
 
 - Top bar: compact 62px cashier strip by default. Clicking the strip expands an 88px navigation bar with the brand lockup, centered `POS / ORDERS` segmented control, utility actions (`Search`, `Hold`, `Receipts`, `More`), cashier profile, and a clear Hide control.
 - Main body: three zones — category rail (~202px), product catalog (largest area), order panel (~34vw / 410px minimum).
-- Category rail: warm sidebar fill, line icons, and 53px rows with an active roast-brown pill.
+- Category rail: soft sage sidebar fill, line icons, and 53px rows with an active forest-green pill.
 - Catalog: compact 54px search field, four-column image-led product cards on desktop, scrollable content, `Grid / List` toggle pinned to the bottom. Collapse to two columns on narrow mobile widths.
 - Order panel: receipt-paper cream surface with a scalloped top edge, `Current Order` header, adjacent `Dine In` and `Discount` controls, quantity steppers, totals, and `SAVE / CHARGE` actions. Only the line-item list may scroll; the summary and actions stay fixed. The optional order note is captured inside the Discount sheet.
 - On narrow screens, the category rail becomes a horizontal scroller, the catalog stays above the order panel, and the order panel becomes a full-width section.
@@ -36,9 +36,9 @@ Typography is IBM Plex Sans. Use tabular numerals for money and quantities. Keep
 ## Component rules
 
 - Product cards use a 16px radius, a 1px warm border, subtle shadow, flush 1.38:1 image, two-line product name, and whole-peso price in text color. Tap feedback is a quick `scale(.985)` press with a small hover lift on pointer devices.
-- Quantity steppers are 108px × 52px, outlined in `--border-strong`, with brick-red minus/plus controls and tabular quantity.
-- Primary action is always brick red with cream text. Secondary action is tan with roast-brown text. Destructive actions use brick red iconography on transparent or pale red hover surfaces.
-- Inputs are warm raised cream, 12–14px radius, and a soft roast-brown focus ring. Search fields are the largest and calmest input on the screen.
+- Quantity steppers are 108px × 52px, outlined in `--border-strong`, with gold minus/plus controls and tabular quantity.
+- Primary action is always deep forest green with cream text. Secondary action is soft sage with forest-green text. Destructive actions use muted red iconography on transparent or pale red hover surfaces.
+- Inputs are warm raised cream, 12–14px radius, and a soft forest-green focus ring. Search fields are the largest and calmest input on the screen.
 - The order panel should feel like a paper ticket: quiet borders, dashed summary divider, generous whitespace, and one visually dominant total.
 - The Current Order ticket uses compact `QTY / ITEM / AMOUNT` labels, dashed item rules, and receipt-aligned totals. Keep quantity controls visible and thumb-friendly inside the paper treatment; place the optional order note inside the Discount sheet rather than on the ticket.
 
@@ -62,7 +62,7 @@ Cold enterprise blue, purple gradients, glassmorphism, heavy shadows, tiny tap t
 
 The `/products` workspace is the owner-facing source of truth for the POS menu:
 
-- Keep the same cream canvas, roast-brown structure, brick-red primary action, warm borders, and tabular money treatment as the POS and inventory screens.
+- Keep the same cream canvas, forest-green structure, gold primary action, warm borders, and tabular money treatment as the POS and inventory screens.
 - Organize the screen as `catalog metrics → add product / categories → editable product table`. The product table may scroll horizontally; the page itself should remain easy to scan.
 - Product editing must make branch, category, price, unit, pricing mode, local image path, stock tracking, POS visibility, and sort order explicit.
 - Category controls stay branch-specific. Disabled products and categories remain visible to admins so accidental removal is reversible.

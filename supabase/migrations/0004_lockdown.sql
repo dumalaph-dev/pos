@@ -1,4 +1,4 @@
--- Lechon POS — lockdown: revoke anon's table privileges.
+-- Dumala POS — lockdown: revoke anon's table privileges.
 --
 -- HOSTED Supabase applies default privileges that grant `anon` full table
 -- access to tables created in schema public (local stacks don't, so behavior

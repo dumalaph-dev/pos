@@ -37,7 +37,7 @@ type SupplierRecord = {
   updated_at: string;
 };
 
-const DEFAULT_STORE_NAME = "Mario's Lechon House";
+const DEFAULT_STORE_NAME = "Your Store";
 const statusOptions: Array<{ value: SupplierStatus; label: string }> = [
   { value: "all", label: "All suppliers" },
   { value: "active", label: "Active only" },

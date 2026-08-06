@@ -1,4 +1,4 @@
--- Lechon POS — inventory ledger wiring (P7 first slice).
+-- Dumala POS — inventory ledger wiring (P7 first slice).
 --
 -- Stock is derived from append-only movements. Manual movements are recorded
 -- through an authenticated RPC so the movement and its audit row are atomic.

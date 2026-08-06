@@ -1,4 +1,4 @@
-# Lechon POS — UI Spec (Screen States)
+# Dumala POS — UI Spec (Screen States)
 
 **Companion to:** [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) (tokens/theme) · [POS_PRD.md](POS_PRD.md) · [INTERFACES.md](INTERFACES.md)
 **Rule:** every screen defines all of **empty · loading · error · offline · success**. "Offline is a neutral state, not an error" (PRD §9). All colors are token names from the design system.

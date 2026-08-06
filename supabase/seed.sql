@@ -1,4 +1,4 @@
--- Lechon POS — local dev fixture (applied automatically by `supabase start` / `supabase db reset`).
+-- Dumala POS — local dev fixture (applied automatically by `supabase start` / `supabase db reset`).
 -- 2 orgs × 2 branches + one device per branch + a small menu per branch.
 --
 -- Auth users and `profiles` rows are NOT created here: GoTrue must hash the

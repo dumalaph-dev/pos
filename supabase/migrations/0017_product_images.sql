@@ -1,4 +1,4 @@
--- Lechon POS — product photo storage.
+-- Dumala POS — product photo storage.
 -- Product photos are resized in the browser before upload and stored under
 -- an organization-prefixed path so admins can replace and clean up safely.
 

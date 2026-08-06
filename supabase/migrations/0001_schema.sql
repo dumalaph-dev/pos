@@ -1,4 +1,4 @@
--- Lechon POS — schema (first cut). See docs/SCHEMA.md.
+-- Dumala POS — schema (first cut). See docs/SCHEMA.md.
 -- Money is integer centavos (bigint). store = a BRANCH; organizations = account root.
 
 create extension if not exists pgcrypto;

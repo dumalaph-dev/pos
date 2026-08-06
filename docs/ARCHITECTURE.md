@@ -1,4 +1,4 @@
-# Lechon POS — Architecture
+# Dumala POS — Architecture
 
 **Companion to:** [POS_PRD.md](POS_PRD.md) · [SCHEMA.md](SCHEMA.md) · [INTERFACES.md](INTERFACES.md) · [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)
 

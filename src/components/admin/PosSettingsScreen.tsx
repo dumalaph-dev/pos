@@ -484,7 +484,7 @@ export default function PosSettingsScreen({
   function choosePalette(palette: PaletteId) {
     if (palette === "custom") {
       setCustomPaletteOpen(true);
-      updateConfig({ palette: "custom", customColor: config.customColor || "#5b2a0a" });
+      updateConfig({ palette: "custom", customColor: config.customColor || "#173a2b" });
       return;
     }
     setCustomPaletteOpen(false);
@@ -818,7 +818,7 @@ function AppearancePanel({ config, choosePalette, updateConfig, customPaletteOpe
             return <button type="button" role="radio" aria-checked={config.palette === paletteOption.id} title={paletteOption.description} key={paletteOption.id} className={`pos-palette-option ${config.palette === paletteOption.id ? "is-selected" : ""}`} style={{ "--palette-option-accent": optionPalette.primary } as CSSProperties} aria-label={`Use ${paletteOption.label} palette`} onClick={() => choosePalette(paletteOption.id)}><span style={{ background: optionPalette.gradient }} />{config.palette === paletteOption.id ? <b style={{ color: optionPalette.contrast, background: optionPalette.primary }}><MiniIcon name="check" size={11} /></b> : null}</button>;
           })}
         </div>
-        {customPaletteOpen ? <label className="pos-custom-color"><span>Custom accent</span><input type="color" value={config.customColor || "#5b2a0a"} onChange={(event) => updateConfig({ customColor: event.target.value })} /><button type="button" onClick={() => setCustomPaletteOpen(false)}>Done</button></label> : null}
+        {customPaletteOpen ? <label className="pos-custom-color"><span>Custom accent</span><input type="color" value={config.customColor || "#173a2b"} onChange={(event) => updateConfig({ customColor: event.target.value })} /><button type="button" onClick={() => setCustomPaletteOpen(false)}>Done</button></label> : null}
       </div>
       <div className="pos-appearance-section pos-theme-section">
         <div className="pos-theme-section-heading">

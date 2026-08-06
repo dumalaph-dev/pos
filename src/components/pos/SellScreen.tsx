@@ -86,7 +86,7 @@ type ParkedOrder = {
 
 const PARK_KEY = OFFLINE_PARKED_ORDER_KEY;
 const MAX_PARKED = 10;
-const DEFAULT_STORE_NAME = "Mario's Lechon House";
+const DEFAULT_STORE_NAME = "Your Store";
 
 const round = (n: number) => Math.round(n);
 const displayPeso = (cents: number) => formatPeso(cents).replace(/\.00$/, "");
@@ -114,8 +114,8 @@ type ProfileData = Omit<OfflineProfileSnapshot, "pos_config"> & {
 };
 
 const DEFAULT_POS_RUNTIME_CONFIG: PosRuntimeConfig = {
-  palette: "brown",
-  customColor: "#5b2a0a",
+  palette: "green",
+  customColor: "#173a2b",
   uiStyle: "modern",
   defaultOrderType: "Dine In",
   orderTypes: ["Dine In", "Takeout"],
@@ -154,7 +154,7 @@ function normalizePosRuntimeConfig(value: unknown, vatRateFallback = DEFAULT_POS
   const configuredDefault = typeof source.defaultOrderType === "string" && allOrderTypes.includes(source.defaultOrderType)
     ? source.defaultOrderType
     : DEFAULT_POS_RUNTIME_CONFIG.defaultOrderType;
-  const palette = isPosPaletteId(source.palette) ? source.palette : "brown";
+  const palette = isPosPaletteId(source.palette) ? source.palette : "green";
   const uiStyle = isPosThemeId(source.uiStyle) ? source.uiStyle : "modern";
   const paymentMethods = {
     cash: readBoolean(paymentSource.cash, DEFAULT_POS_RUNTIME_CONFIG.paymentMethods.cash),
@@ -1050,7 +1050,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     return (
       <main className="min-h-full flex items-center justify-center bg-bg p-6">
         <div className="w-full max-w-sm rounded-card border border-line bg-surface p-8 shadow-[var(--shadow-card)]">
-          <p className="text-sm font-semibold uppercase tracking-wide text-ink-muted">Lechon POS</p>
+          <p className="text-sm font-semibold uppercase tracking-wide text-ink-muted">Dumala POS</p>
           <h1 className="mt-1 text-2xl font-extrabold text-ink">Offline POS</h1>
           {offlineCredential && offlineCatalogReady ? (
             <OfflinePinUnlock credential={offlineCredential} onUnlock={openCachedOfflineProfile} />
@@ -1158,7 +1158,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                 <div className="brand-lockup" aria-label={storeName}>
                   <div className="brand-lockup__arc">{brandName.toUpperCase()}</div>
                   <AdminBrandLogo logoUrl={profile?.brand_logo_url} className="brand-lockup__mark" iconSize={38} label="Brand logo" />
-                  <div className="brand-lockup__name">LECHON<br />HOUSE</div>
+                  <div className="brand-lockup__name">DUMALA<br />POS</div>
                 </div>
               </div>
 
@@ -1560,7 +1560,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
       <header className="relative flex items-center gap-3 border-b border-line bg-surface px-4 py-2.5">
         <div className="mr-auto">
           <p className="text-xs font-bold uppercase tracking-wide text-ink-muted">
-            Lechon POS · <span className="text-ink">{storeName}</span>
+            Dumala POS · <span className="text-ink">{storeName}</span>
           </p>
         </div>
         <input

@@ -1,4 +1,4 @@
-/* Lechon POS — app-shell service worker (P2).
+/* Dumala POS — app-shell service worker (P2).
  * Network-first for navigations (dev/prod safe), cache-first for hashed
  * static assets, precached public shell for the offline launch.
  * Bump VERSION to release a new worker; skipWaiting applies it immediately.
@@ -12,19 +12,21 @@
  * and falls back to the login shell when the network is down. This is an
  * allowlist: a new route is uncacheable until deliberately added below.
  */
-const VERSION = "pos-shell-v4";
+const VERSION = "pos-shell-v5";
 
-/* The login page at "/" is the only document safe to serve to anyone.
- * /pos and /admin are deliberately NOT precached: they 302 to "/" when
+/* The login page at "/login" is the only document safe to serve to anyone.
+ * /pos and /admin are deliberately NOT precached: they 302 to "/login" when
  * unauthenticated (so `addAll` rejects on the redirected response and aborts
  * the whole install), and when authenticated they are exactly the private HTML
  * this worker must never retain. The offline launch is carried by this shell
  * plus the hashed bundles below — per ARCHITECTURE.md §3 the sell screen
  * renders from Dexie, not from server-rendered HTML. */
-const PUBLIC_SHELL = "/";
+const PUBLIC_SHELL = "/login";
 const SHELL = [PUBLIC_SHELL];
 const PUBLIC_ASSETS = [
   "/manifest.webmanifest",
+  "/logo.png",
+  "/badge.png",
   "/icon.svg",
   "/icon-192x192.png",
   "/icon-512x512.png",
@@ -35,14 +37,14 @@ function isPublicShell(url) {
   return url.pathname === PUBLIC_SHELL;
 }
 
-/** A redirect ("/" → /admin for a signed-in user) is not the login shell. */
+/** A redirect to another page is not the login shell. */
 function isCacheableShellResponse(res) {
   return res.ok && !res.redirected && res.type === "basic";
 }
 
 function isPublicAsset(url) {
   if (url.pathname.startsWith("/food/")) return true;
-  if (["/manifest.webmanifest", "/icon.svg", "/icon-192x192.png", "/icon-512x512.png"].includes(url.pathname)) return true;
+  if (["/manifest.webmanifest", "/logo.png", "/badge.png", "/icon.svg", "/icon-192x192.png", "/icon-512x512.png"].includes(url.pathname)) return true;
   // Next Image proxies the local demo/catalog images through this route. Only
   // allow the public /food source path; remote product images stay uncached.
   return url.pathname === "/_next/image" && (url.searchParams.get("url") || "").startsWith("/food/");

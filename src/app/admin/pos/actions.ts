@@ -115,8 +115,8 @@ function normalizePosSettings(value: JsonRecord, fallback: JsonRecord, fallbackV
   }
 
   return {
-    palette: readEnum(value.palette, PALETTES, readEnum(fallback.palette, PALETTES, "brown")),
-    customColor: typeof value.customColor === "string" && /^#[0-9a-f]{6}$/i.test(value.customColor) ? value.customColor : typeof fallback.customColor === "string" && /^#[0-9a-f]{6}$/i.test(fallback.customColor) ? fallback.customColor : "#5b2a0a",
+    palette: readEnum(value.palette, PALETTES, readEnum(fallback.palette, PALETTES, "green")),
+    customColor: typeof value.customColor === "string" && /^#[0-9a-f]{6}$/i.test(value.customColor) ? value.customColor : typeof fallback.customColor === "string" && /^#[0-9a-f]{6}$/i.test(fallback.customColor) ? fallback.customColor : "#173a2b",
     uiStyle: readEnum(value.uiStyle, UI_STYLES, readEnum(fallback.uiStyle, UI_STYLES, "modern")),
     defaultOrderType: enabledOrderTypes.includes(configuredDefault) ? configuredDefault : enabledOrderTypes[0],
     orderTypes: enabledOrderTypes,

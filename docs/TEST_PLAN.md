@@ -1,4 +1,4 @@
-# Lechon POS — Test Plan
+# Dumala POS — Test Plan
 
 **Companion to:** [POS_PRD.md](POS_PRD.md) (acceptance criteria) · [SCHEMA.md](SCHEMA.md) (RLS) · [INTERFACES.md](INTERFACES.md) (contracts)
 **Principle:** the two things most expensive to get wrong are **tenant isolation** and **offline correctness** — those get the deepest tests. A change isn't "done" until its box here passes on a real device where noted.

@@ -7,6 +7,7 @@ import {
   normalizeEmployeeCode,
 } from "@/lib/employee-auth";
 import { createClient } from "@/lib/supabase/server";
+import { getStoreByStaffKey, isStoreAccessKey, normalizeStoreAccessKey } from "@/lib/store-access";
 
 export type LoginState = { message: string };
 
@@ -19,6 +20,7 @@ type EmployeeLoginRecord = {
 
 type EmployeeLoginProfile = {
   role: "admin" | "manager" | "cashier";
+  store_id: string | null;
   is_active: boolean;
   password_change_required: boolean;
 };
@@ -27,19 +29,25 @@ const INVALID_LOGIN_MESSAGE = "Employee ID or password is incorrect.";
 
 export async function loginWithEmployeeId(_previousState: LoginState, formData: FormData): Promise<LoginState> {
   const employeeCode = normalizeEmployeeCode(String(formData.get("employee_code") ?? ""));
+  const storeKey = normalizeStoreAccessKey(String(formData.get("store_key") ?? ""));
   const password = String(formData.get("password") ?? "");
 
-  if (!isEmployeeCode(employeeCode) || !password) return { message: INVALID_LOGIN_MESSAGE };
+  if (!isEmployeeCode(employeeCode) || !isStoreAccessKey(storeKey) || !password) return { message: INVALID_LOGIN_MESSAGE };
 
   const admin = createAdminClient();
   if (!admin) {
     return { message: "Employee login is not configured on the server yet. Ask an administrator to finish the setup." };
   }
 
+  const store = await getStoreByStaffKey(storeKey);
+  if (!store) return { message: INVALID_LOGIN_MESSAGE };
+
   const { data: employeeRows, error: employeeError } = await admin
     .from("employee_records")
     .select("org_id, profile_id, employee_code, is_active")
     .eq("employee_code", employeeCode)
+    .eq("org_id", store.org_id)
+    .eq("store_id", store.id)
     .eq("is_active", true)
     .limit(2);
   const employees = (employeeRows ?? []) as EmployeeLoginRecord[];
@@ -54,16 +62,21 @@ export async function loginWithEmployeeId(_previousState: LoginState, formData: 
     admin.auth.admin.getUserById(employee.profile_id),
     admin
       .from("profiles")
-      .select("role, is_active, password_change_required")
+      .select("role, store_id, is_active, password_change_required")
       .eq("id", employee.profile_id)
       .eq("org_id", employee.org_id)
       .maybeSingle(),
   ]);
   const profile = profileData as EmployeeLoginProfile | null;
   const authEmail = authUserData?.user?.email;
-  if (authUserError || authEmail === undefined || profileError || !profile || !profile.is_active) {
+  if (authUserError || authEmail === undefined || profileError || !profile || !profile.is_active || profile.store_id !== store.id) {
     return { message: INVALID_LOGIN_MESSAGE };
   }
+
+  // Organization owners use the owner login. A store link is only for
+  // branch-assigned managers and cashiers, so it cannot become an alternate
+  // path into organization-wide admin access.
+  if (profile.role === "admin") return { message: "Use the owner login for administrator access." };
 
   const supabase = await createClient();
   const { error: signInError } = await supabase.auth.signInWithPassword({ email: authEmail, password });
@@ -81,5 +94,5 @@ export async function signOut() {
   // app-shell caches even when sign-out did not come from SignOutButton
   // (expired session, a redirect, JS-disabled fallback). See
   // src/lib/offline-cache.ts.
-  redirect("/?signed-out=1");
+  redirect("/login?signed-out=1");
 }

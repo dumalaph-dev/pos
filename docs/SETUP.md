@@ -1,4 +1,4 @@
-# Lechon POS — Setup & Runbook
+# Dumala POS — Setup & Runbook
 
 **Companion to:** [ARCHITECTURE.md](ARCHITECTURE.md) · [SCHEMA.md](SCHEMA.md) · [tasks.md](tasks.md)
 Local dev, Supabase provisioning, migrations, and deploy. The stack is Next.js 16 (App Router, TS) + Tailwind v4 + Supabase.
@@ -32,8 +32,11 @@ Fill `.env.local` from Supabase → **Settings → API**:
 
 `EMPLOYEE_INITIAL_PASSWORD` is the common temporary password that the administrator gives to staff. It must be at least 8 characters and stays server-only; employees are forced to replace it after their first successful Employee ID login.
 
+`PLATFORM_ADMIN_EMAILS` is a comma-separated, server-only allowlist for the platform operator console at `/platform`. It should contain only the operator account(s) that may view cross-business metrics.
+
 ## 4. Database migrations
 SQL lives in `supabase/migrations/` (run in order):
+The latest migration adds store staff access keys and subscription tracking fields: `0023_store_access_and_subscriptions.sql`.
 1. `0001_schema.sql` — tables, enums, indexes
 2. `0002_rls.sql` — grants, helper functions, RLS policies, append-only triggers
 3. `0003_functions.sql` — `clone_menu` (multi-branch)
@@ -90,7 +93,7 @@ Auth users are created through Supabase Auth (not raw SQL). Minimum to log in:
 1. **Authentication → Users → Add user** (email + password) for the owner.
 2. In SQL Editor, create the org, a branch, and the owner profile:
    ```sql
-   insert into organizations (name) values ('Rico''s Lechon House') returning id; -- note org_id
+   insert into organizations (name) values ('Your Business') returning id; -- note org_id
    insert into stores (org_id, name, address) values ('<org_id>', 'Main Branch', '...') returning id; -- note store_id
    insert into profiles (id, org_id, store_id, full_name, role)
    values ('<auth.uid of owner>', '<org_id>', '<store_id>', 'Owner', 'admin');

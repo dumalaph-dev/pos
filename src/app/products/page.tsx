@@ -123,7 +123,7 @@ type TopSellingProduct = {
 
 type QueryValue = string | string[] | undefined;
 
-const DEFAULT_STORE_NAME = "Mario's Lechon House";
+const DEFAULT_STORE_NAME = "Your Store";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const LOCAL_PRODUCT_IMAGES: Record<string, string> = {
   "whole lechon (small)": "/food/whole-lechon-small.png",

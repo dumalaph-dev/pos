@@ -34,7 +34,7 @@ type CustomerRecord = {
   updated_at: string;
 };
 
-const DEFAULT_STORE_NAME = "Mario's Lechon House";
+const DEFAULT_STORE_NAME = "Your Store";
 const statusOptions: Array<{ value: CustomerStatus; label: string }> = [
   { value: "all", label: "All customers" },
   { value: "active", label: "Active only" },

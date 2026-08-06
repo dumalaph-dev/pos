@@ -56,10 +56,10 @@ export default function PWAInstallPrompt() {
 
   return (
     <aside
-      aria-label="Install Lechon POS"
+      aria-label="Install Dumala POS"
       className="fixed bottom-4 right-4 z-[55] max-w-[min(24rem,calc(100vw-2rem))] rounded-card border border-line bg-surface px-4 py-3 shadow-[var(--shadow-pop)]"
     >
-      <p className="text-sm font-bold text-ink">Install Lechon POS</p>
+      <p className="text-sm font-bold text-ink">Install Dumala POS</p>
       {deferredPrompt ? (
         <div className="mt-2 flex items-center gap-3">
           <p className="text-xs leading-5 text-ink-muted">Open the POS like an app and keep it ready for offline selling.</p>

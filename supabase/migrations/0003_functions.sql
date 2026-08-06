@@ -1,4 +1,4 @@
--- Lechon POS — server functions. See docs/SCHEMA.md §6.
+-- Dumala POS — server functions. See docs/SCHEMA.md §6.
 
 -- Clone a branch's menu (categories + products) into another branch of the
 -- SAME org. Used by "Add branch → clone menu from…". Prices/SKUs then diverge.
