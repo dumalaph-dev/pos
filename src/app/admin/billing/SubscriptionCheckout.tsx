@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 type CheckoutVariant = {
   id: string;
@@ -37,6 +37,50 @@ export default function SubscriptionCheckout({ variants, policyGateOpen, provide
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [messageKind, setMessageKind] = useState<"error" | "success">("error");
+
+  useEffect(() => {
+    const paymentIntentId = new URLSearchParams(window.location.search).get("payment_intent_id");
+    if (!paymentIntentId) return;
+
+    let cancelled = false;
+    void Promise.resolve().then(async () => {
+      if (cancelled) return;
+      setPending(true);
+      setMessageKind("success");
+      setMessage("Verifying your payment with PayMongo…");
+
+      try {
+        const response = await fetch(`/api/billing/payment-intent?payment_intent_id=${encodeURIComponent(paymentIntentId)}`, {
+          headers: { Accept: "application/json" },
+        });
+        const payload = await response.json() as { ok?: boolean; status?: string; message?: string };
+        if (!response.ok || !payload.ok) throw new Error(payload.message || "The payment status could not be verified.");
+        if (cancelled) return;
+        if (payload.status === "succeeded") {
+          setMessage("Payment confirmed. Your subscription is active.");
+        } else if (payload.status === "processing") {
+          setMessage("Payment is still processing. Refresh your billing status in a moment.");
+        } else {
+          setMessageKind("error");
+          setMessage("PayMongo is waiting for a new payment method. Check the card details and try checkout again.");
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setMessageKind("error");
+          setMessage(error instanceof Error ? error.message : "The payment status could not be verified.");
+        }
+      } finally {
+        if (!cancelled) {
+          setPending(false);
+          window.history.replaceState(null, "", window.location.pathname);
+        }
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const selectedVariant = variants.find((variant) => variant.id === selectedId) ?? variants[0];
 

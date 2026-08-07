@@ -26,6 +26,7 @@ type OrganizationRecord = {
   subscription_provider_plan_id: string | null;
   subscription_provider_subscription_id: string | null;
   subscription_provider_payment_intent_id: string | null;
+  subscription_updated_at: string | null;
 };
 
 type CheckoutPaymentIntent = {
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
 
     const organizationResult = await admin
       .from("organizations")
-      .select("id, account_status, subscription_status, subscription_plan, subscription_provider_customer_id, subscription_provider_plan_id, subscription_provider_subscription_id, subscription_provider_payment_intent_id")
+      .select("id, account_status, subscription_status, subscription_plan, subscription_provider_customer_id, subscription_provider_plan_id, subscription_provider_subscription_id, subscription_provider_payment_intent_id, subscription_updated_at")
       .eq("id", profile.org_id)
       .maybeSingle();
     if (organizationResult.error) return errorResponse("Apply Supabase migrations 0025 and 0027 before enabling checkout.", 503);
@@ -85,12 +86,6 @@ export async function POST(request: NextRequest) {
       return errorResponse("This organization already has a billing connection. Use the existing subscription instead of starting another one.", 409);
     }
 
-    if (status === "incomplete" && organization.subscription_provider_subscription_id) {
-      const existing = await resumeIncompleteSubscription(organization, variant);
-      if (existing instanceof NextResponse) return existing;
-      if (existing) return NextResponse.json(existing);
-    }
-
     const amountCentavos = calculateBillingVariantPrice(
       operations.catalog.monthlyPriceCentavos,
       variant.intervalUnit,
@@ -98,6 +93,12 @@ export async function POST(request: NextRequest) {
       variant.discountPercent,
     );
     if (amountCentavos < 2_000) return errorResponse("The selected price is below PayMongo's minimum subscription amount.", 400);
+
+    if (status === "incomplete" && organization.subscription_provider_subscription_id) {
+      const existing = await resumeIncompleteSubscription(organization, variant, amountCentavos);
+      if (existing instanceof NextResponse) return existing;
+      if (existing) return NextResponse.json(existing);
+    }
 
     const plan = await ensurePayMongoPlan({
       existingPlanId: variant.paymongoPlanId,
@@ -124,9 +125,13 @@ export async function POST(request: NextRequest) {
       idempotencyKey: `pos-customer-${organization.id}`,
     });
 
-    const subscription = await createPayMongoSubscription(plan.id, customer.id, `pos-subscription-${organization.id}-${variant.id}-${crypto.randomUUID()}`);
-    const paymentIntent = await checkoutPaymentIntent(subscription.id, resourceAttributes(subscription.response));
-    const providerStatus = readPayMongoString(resourceAttributes(subscription.response), "status");
+    const subscription = await createPayMongoSubscription(plan.id, customer.id, subscriptionAttemptKey(organization));
+    const subscriptionAttributes = resourceAttributes(subscription.response);
+    if (!providerSubscriptionMatchesVariant(subscriptionAttributes, plan.id, variant, amountCentavos)) {
+      return errorResponse("A different subscription payment is already in progress. Finish it or wait for it to expire before choosing another plan.", 409);
+    }
+    const paymentIntent = await checkoutPaymentIntent(subscription.id, subscriptionAttributes);
+    const providerStatus = readPayMongoString(subscriptionAttributes, "status");
     const localStatus = localSubscriptionStatus(providerStatus, paymentIntent.status);
     const periodEnd = periodEndValue(readPayMongoString(resourceAttributes(subscription.response), "next_billing_schedule"));
     const saved = await saveOrganizationBilling(admin, organization.id, {
@@ -159,12 +164,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function resumeIncompleteSubscription(organization: OrganizationRecord, variant: BillingVariant) {
+async function resumeIncompleteSubscription(organization: OrganizationRecord, variant: BillingVariant, amountCentavos: number) {
   try {
     const existing = await getPayMongoSubscription(organization.subscription_provider_subscription_id!);
     const attributes = existing.attributes;
-    const providerPlanId = readPayMongoString(attributes, "plan_id");
-    if (providerPlanId && organization.subscription_provider_plan_id && providerPlanId !== organization.subscription_provider_plan_id) {
+    if (!providerSubscriptionMatchesVariant(attributes, variant.paymongoPlanId, variant, amountCentavos)) {
       return errorResponse("A different subscription payment is already in progress. Finish it or wait for it to expire before choosing another plan.", 409);
     }
 
@@ -217,6 +221,34 @@ function periodEndValue(value: string | null) {
   if (!value) return null;
   const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00.000Z`) : new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function providerSubscriptionMatchesVariant(attributes: Record<string, unknown>, expectedPlanId: string | null, variant: BillingVariant, amountCentavos: number) {
+  const providerPlanId = readProviderPlanId(attributes);
+  if (providerPlanId && expectedPlanId && providerPlanId !== expectedPlanId) return false;
+
+  const providerPlan = isRecord(attributes.plan) ? attributes.plan : null;
+  if (!providerPlan) return Boolean(providerPlanId && expectedPlanId && providerPlanId === expectedPlanId);
+
+  const providerAmount = Number(providerPlan.amount);
+  const providerInterval = typeof providerPlan.interval === "string" ? providerPlan.interval : null;
+  const providerIntervalCount = Number(providerPlan.interval_count);
+  const intervalMatches = variant.intervalUnit === "month"
+    ? providerInterval === "monthly" || providerInterval === "month"
+    : providerInterval === "yearly" || providerInterval === "year";
+  return providerAmount === amountCentavos && intervalMatches && providerIntervalCount === variant.intervalCount;
+}
+
+function readProviderPlanId(attributes: Record<string, unknown>) {
+  const direct = readPayMongoString(attributes, "plan_id");
+  if (direct) return direct;
+  const plan = isRecord(attributes.plan) ? attributes.plan : null;
+  return plan && typeof plan.id === "string" ? plan.id : null;
+}
+
+function subscriptionAttemptKey(organization: OrganizationRecord) {
+  const revision = (organization.subscription_updated_at ?? "new").replace(/[^a-zA-Z0-9]/g, "");
+  return `pos-subscription-${organization.id}-${revision}`;
 }
 
 function firstName(value: string | null) {

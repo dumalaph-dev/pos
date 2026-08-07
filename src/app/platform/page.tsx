@@ -71,33 +71,38 @@ export default async function PlatformPage() {
   const trialSubscriptions = organizations.filter((organization) => organization.subscription_status && normalizeSubscriptionStatus(organization.subscription_status) === "trialing").length;
 
   return (
-    <main className="min-h-screen bg-bg px-4 py-6 text-ink sm:px-6 lg:px-10">
-      <div className="mx-auto max-w-7xl">
-        <header className="flex flex-col gap-4 border-b border-line pb-6 sm:flex-row sm:items-end sm:justify-between">
+    <main className="min-h-screen bg-bg px-4 py-6 text-ink sm:px-6 lg:px-10 lg:py-8">
+      <div className="mx-auto max-w-[1440px]">
+        <header className="flex flex-col gap-5 border-b border-line pb-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Platform operations</p>
+              <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Platform revenue</p>
               <span className="rounded-pill bg-primary-soft px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-primary">Policy-first mode</span>
             </div>
-            <h1 className="mt-2 text-3xl font-extrabold tracking-[-0.04em] sm:text-4xl">Run the platform with guardrails</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">Define the billing and support contract before turning on checkout, account suspension, or support actions for business accounts.</p>
+            <h1 className="mt-2 text-3xl font-extrabold tracking-[-0.055em] sm:text-4xl">Plans &amp; Pricing</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">Manage subscription plans, pricing, and billing settings for every Dumala POS business account.</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/login" className="rounded-btn bg-secondary px-4 py-3 text-sm font-extrabold text-primary transition hover:bg-secondary-hover">Owner login</Link>
-            <span className="rounded-btn border border-line bg-surface px-4 py-3 text-xs font-bold text-ink-muted">{user.email}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/admin/billing" className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-line-strong bg-surface px-3.5 py-2.5 text-xs font-extrabold text-primary transition hover:border-primary hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"><AdminIcon name="eye" size={14} /> Preview checkout</Link>
+            <Link href="/login" className="inline-flex min-h-10 items-center rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold text-primary-fg transition hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">Owner login</Link>
+            <span className="grid h-10 w-10 place-items-center rounded-full border border-line bg-surface text-xs font-extrabold text-primary" title={user.email ?? "Platform admin"}>{getInitials(user.email)}</span>
           </div>
         </header>
 
-        {(!organizationsResult.subscriptionFieldsAvailable || !organizationsResult.accountFieldsAvailable || !catalog.schemaAvailable || !policies.schemaAvailable || !supportCasesReady) && <div role="status" className="mt-6 rounded-card border border-warning/35 bg-warning/10 px-5 py-4 text-sm font-semibold leading-6 text-ink">Platform operations is showing safe defaults or locked controls because the latest database migrations are not fully available. Apply <code className="font-extrabold">0027_platform_operations.sql</code> and <code className="font-extrabold">0028_support_cases.sql</code> before using the complete console.</div>}
+        {(!organizationsResult.subscriptionFieldsAvailable || !organizationsResult.accountFieldsAvailable || !catalog.schemaAvailable || !policies.schemaAvailable || !supportCasesReady) && <div role="status" className="mt-6 rounded-[18px] border border-warning/35 bg-warning/10 px-5 py-4 text-sm font-semibold leading-6 text-ink">Platform operations is showing safe defaults or locked controls because the latest database migrations are not fully available. Apply <code className="font-extrabold">0027_platform_operations.sql</code> and <code className="font-extrabold">0028_support_cases.sql</code> before using the complete console.</div>}
 
-        <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Platform summary">
+        <section className="mt-6" aria-label="Plans and pricing workspace">
+          <BillingCatalogEditor catalog={catalog} />
+        </section>
+
+        <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Platform summary">
           <Metric label="Businesses" value={organizations.length} detail="Registered workspaces" />
           <Metric label="Active stores" value={stores.filter((store) => store.is_active).length} detail={`${stores.length} total branches`} />
           <Metric label="Active staff" value={employees.filter((employee) => employee.is_active).length} detail={`${employees.length} employee records`} />
           <Metric label="Policy gate" value={`${publishedPolicies}/2`} detail={policyGateOpen ? "Ready for integration" : "Checkout and actions locked"} />
         </section>
 
-        <section className="mt-8 overflow-hidden rounded-card border border-primary/20 bg-primary p-5 text-primary-fg shadow-[var(--shadow-pop)] sm:p-6" aria-labelledby="policy-gate-heading">
+        <section className="mt-6 overflow-hidden rounded-[20px] border border-primary/20 bg-primary p-5 text-primary-fg shadow-[var(--shadow-pop)] sm:p-6" aria-labelledby="policy-gate-heading">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-start gap-3">
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-fg/12"><AdminIcon name={policyGateOpen ? "check" : "alert"} size={19} /></span>
@@ -114,29 +119,15 @@ export default async function PlatformPage() {
           </div>
         </section>
 
-        <section className="mt-8 grid gap-5 xl:grid-cols-[minmax(0,1.18fr)_minmax(330px,0.82fr)]" aria-label="Platform policy and pricing setup">
-          <article className="rounded-card border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="pricing-heading">
-            <div className="flex items-start gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary"><AdminIcon name="wallet" size={18} /></span>
-              <div>
-                <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-accent">Subscription catalog</p>
-                <h2 id="pricing-heading" className="mt-1 text-xl font-extrabold">Set the price customers will see</h2>
-                <p className="mt-1 max-w-xl text-sm leading-5 text-ink-muted">Manage the monthly base price, enable 1-, 2-, or 3-year offers, and tune the discount for each annual duration.</p>
-              </div>
-            </div>
-            <BillingCatalogEditor catalog={catalog} />
+        <section className="mt-6 grid gap-5 xl:grid-cols-2" aria-label="Platform policies">
+          <article className="rounded-card border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="billing-policy-heading">
+            <PolicyCardHeading policy={policies.billing} />
+            <div id="billing-policy-heading"><PlatformPolicyEditor policy={policies.billing} schemaAvailable={policies.schemaAvailable} /></div>
           </article>
-
-          <div className="space-y-5">
-            <article className="rounded-card border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="billing-policy-heading">
-              <PolicyCardHeading policy={policies.billing} />
-              <div id="billing-policy-heading"><PlatformPolicyEditor policy={policies.billing} schemaAvailable={policies.schemaAvailable} /></div>
-            </article>
-            <article className="rounded-card border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="support-policy-heading">
-              <PolicyCardHeading policy={policies.support} />
-              <div id="support-policy-heading"><PlatformPolicyEditor policy={policies.support} schemaAvailable={policies.schemaAvailable} /></div>
-            </article>
-          </div>
+          <article className="rounded-card border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="support-policy-heading">
+            <PolicyCardHeading policy={policies.support} />
+            <div id="support-policy-heading"><PlatformPolicyEditor policy={policies.support} schemaAvailable={policies.schemaAvailable} /></div>
+          </article>
         </section>
 
         <section className="mt-8 grid gap-5 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]" aria-label="Payment provider and gated actions">
@@ -159,14 +150,14 @@ export default async function PlatformPage() {
             <p className="mt-5 rounded-btn bg-raised px-3 py-2.5 text-xs leading-5 text-ink-muted">The owner billing page now has the policy-gated first-payment flow. Provider activation, test-mode payment, and signed webhook delivery must pass before live checkout is enabled.</p>
           </article>
 
-          <article className="rounded-card border border-dashed border-line-strong bg-surface-raised p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="actions-heading">
+          <article className="rounded-card border border-dashed border-line-strong bg-raised p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="actions-heading">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-ink-muted">Next phase</p>
                 <h2 id="actions-heading" className="mt-1 text-xl font-extrabold">Operational actions</h2>
                 <p className="mt-1 max-w-xl text-sm leading-5 text-ink-muted">Subscription checkout is wired in the owner Billing page behind the same gates. Account suspension and support workflows are available from each business row once both policies are published.</p>
               </div>
-              <span className="rounded-pill bg-warning/15 px-3 py-1.5 text-xs font-extrabold text-ink">Locked</span>
+              <span className={`rounded-pill px-3 py-1.5 text-xs font-extrabold ${policyGateOpen && accountOperationsSchemaReady && checkoutReady ? "bg-success/10 text-success" : "bg-warning/15 text-ink"}`}>{policyGateOpen && accountOperationsSchemaReady && checkoutReady ? "Ready" : "Locked"}</span>
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
               <LockedAction icon="wallet" label="Subscription checkout" detail={checkoutReady ? "Available from the owner Billing page" : policyGateOpen ? "Finish PayMongo setup" : "Publish billing + support policies"} href={checkoutReady ? "/admin/billing" : undefined} />
@@ -233,6 +224,11 @@ function countByOrg<T extends { org_id: string }>(rows: T[]) {
 function formatDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeZone: "Asia/Singapore" }).format(date);
+}
+
+function getInitials(value: string | null | undefined) {
+  const parts = (value ?? "Platform admin").split(/[@.\s_-]+/).filter(Boolean);
+  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "PA";
 }
 
 function Metric({ label, value, detail }: { label: string; value: number | string; detail: string }) {

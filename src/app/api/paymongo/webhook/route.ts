@@ -83,7 +83,7 @@ async function applyProviderEvent(admin: NonNullable<ReturnType<typeof createAdm
   const resourceId = resource?.id ?? null;
   const attributes = resourceAttributes({ data: { attributes: resource?.attributes } });
   const customerId = readPayMongoString(attributes, "customer_id");
-  const paymentIntentId = readPayMongoString(attributes, "payment_intent_id");
+  const paymentIntentId = eventType.startsWith("payment_intent.") ? resourceId : readPayMongoString(attributes, "payment_intent_id");
   const subscriptionId = eventType.startsWith("subscription.") ? resourceId : readPayMongoString(attributes, "resource_id");
   const organization = await findOrganization(admin, subscriptionId, customerId, paymentIntentId);
   if (!organization) return;
@@ -146,6 +146,10 @@ async function findOrganization(admin: NonNullable<ReturnType<typeof createAdmin
 
 function eventSubscriptionStatus(eventType: string, providerStatus: string | null, currentStatus: string | null) {
   if (eventType === "subscription.invoice.paid" || eventType === "payment.paid") return "active" as const;
+  if (eventType === "payment_intent.succeeded") return "active" as const;
+  if (eventType === "payment_intent.awaiting_payment_method") {
+    return normalizeSubscriptionStatus(currentStatus) === "incomplete" ? "incomplete" as const : null;
+  }
   if (eventType === "subscription.invoice.payment_failed" || eventType === "payment.failed") {
     return normalizeSubscriptionStatus(currentStatus) === "incomplete" ? "incomplete" as const : "past_due" as const;
   }
