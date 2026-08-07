@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { ADMIN_THEME_OPTIONS, type AdminThemeId } from "@/lib/admin/branding";
 import { AdminIcon } from "./AdminIcon";
@@ -20,20 +20,21 @@ function applyThemePreview(theme: AdminThemeId) {
 
 export function AdminThemePicker({ initialTheme, disabled }: { initialTheme: AdminThemeId; disabled: boolean }) {
   const [selectedTheme, setSelectedTheme] = useState<AdminThemeId>(initialTheme);
+  const persistedThemeRef = useRef(initialTheme);
   const selectedOption = ADMIN_THEME_OPTIONS.find((option) => option.id === selectedTheme) ?? ADMIN_THEME_OPTIONS[0];
   const hasUnsavedTheme = selectedTheme !== initialTheme;
 
   useEffect(() => {
-    const themeTargets = Array.from(document.querySelectorAll<HTMLElement>("[data-admin-theme]"));
-    const originalThemes = themeTargets.map((node) => node.dataset.adminTheme ?? null);
+    persistedThemeRef.current = initialTheme;
+  }, [initialTheme]);
+
+  useEffect(() => {
     const previewTargets = Array.from(document.querySelectorAll<HTMLElement>("[data-admin-theme-preview]"));
     const originalPreviewClasses = previewTargets.map((node) => node.className);
 
     return () => {
-      themeTargets.forEach((node, index) => {
-        const originalTheme = originalThemes[index];
-        if (originalTheme) node.dataset.adminTheme = originalTheme;
-        else delete node.dataset.adminTheme;
+      document.querySelectorAll<HTMLElement>("[data-admin-theme]").forEach((node) => {
+        node.dataset.adminTheme = persistedThemeRef.current;
       });
       previewTargets.forEach((node, index) => {
         node.className = originalPreviewClasses[index] ?? node.className;

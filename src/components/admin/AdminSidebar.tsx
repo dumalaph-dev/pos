@@ -19,33 +19,81 @@ type NavItem = {
   adminOnly?: boolean;
 };
 
+type AdminNavGroupId = "overview" | "operations" | "catalog" | "growth" | "insights" | "administration";
+
+type AdminNavGroup = {
+  id: AdminNavGroupId;
+  label: string;
+  icon: AdminIconName;
+  items: NavItem[];
+};
+
 export type AdminSidebarConnection = {
   connected: boolean;
   lastSyncedLabel: string | null;
 };
 
-const primaryNav: NavItem[] = [
-  { label: "Dashboard", href: "/admin", icon: "dashboard", active: "overview" },
-  { label: "Calendar", href: "/admin/calendar", icon: "calendar", active: "calendar" },
-  { label: "Sales", href: "/admin/sales", icon: "sales", active: "sales" },
-  { label: "POS", href: "/admin/pos", icon: "pos", active: "pos" },
-  { label: "Orders", href: "/admin/orders", icon: "orders", active: "orders" },
-  { label: "Shifts & Z-readings", href: "/admin/shifts", icon: "history", active: "shifts" },
-  { label: "Inventory", href: "/admin/inventory", icon: "inventory", active: "inventory" },
-  { label: "Products", href: "/products", icon: "box", active: "products" },
-  { label: "Customers", href: "/admin/customers", icon: "customers", active: "customers" },
-];
-
-const comingSoonNav: NavItem[] = [
-  { label: "Suppliers", href: "/admin/suppliers", icon: "suppliers", active: "suppliers" },
-  { label: "Expenses", href: "/admin/expenses", icon: "expenses", active: "expenses" },
-  { label: "Employees", href: "/admin/employees", icon: "employees", active: "employees" },
-  { label: "Billing & plan", href: "/admin/billing", icon: "wallet", active: "billing", adminOnly: true },
-  { label: "Promotions", href: "/admin/promotions", icon: "promotions", active: "promotions" },
-  { label: "Reports", href: "/admin/reports", icon: "reports", active: "reports" },
-  { label: "Audit log", href: "/admin/audit", icon: "history", active: "audit" },
-  { label: "Branches", href: "/admin/branches", icon: "branches", active: "branches" },
-  { label: "Settings", href: "/admin/settings", icon: "settings", active: "settings" },
+const adminNavGroups: AdminNavGroup[] = [
+  {
+    id: "overview",
+    label: "Overview",
+    icon: "dashboard",
+    items: [
+      { label: "Dashboard", href: "/admin", icon: "dashboard", active: "overview" },
+    ],
+  },
+  {
+    id: "operations",
+    label: "Store operations",
+    icon: "pos",
+    items: [
+      { label: "POS", href: "/admin/pos", icon: "pos", active: "pos" },
+      { label: "Orders", href: "/admin/orders", icon: "orders", active: "orders" },
+      { label: "Calendar", href: "/admin/calendar", icon: "calendar", active: "calendar" },
+      { label: "Shifts & Z-readings", href: "/admin/shifts", icon: "history", active: "shifts" },
+    ],
+  },
+  {
+    id: "catalog",
+    label: "Products & stock",
+    icon: "box",
+    items: [
+      { label: "Products", href: "/products", icon: "box", active: "products" },
+      { label: "Inventory", href: "/admin/inventory", icon: "inventory", active: "inventory" },
+      { label: "Suppliers", href: "/admin/suppliers", icon: "suppliers", active: "suppliers" },
+    ],
+  },
+  {
+    id: "growth",
+    label: "Customers & growth",
+    icon: "customers",
+    items: [
+      { label: "Customers", href: "/admin/customers", icon: "customers", active: "customers" },
+      { label: "Promotions", href: "/admin/promotions", icon: "promotions", active: "promotions" },
+    ],
+  },
+  {
+    id: "insights",
+    label: "Insights & finance",
+    icon: "chart",
+    items: [
+      { label: "Sales", href: "/admin/sales", icon: "sales", active: "sales" },
+      { label: "Reports", href: "/admin/reports", icon: "reports", active: "reports" },
+      { label: "Expenses", href: "/admin/expenses", icon: "expenses", active: "expenses" },
+    ],
+  },
+  {
+    id: "administration",
+    label: "Team & settings",
+    icon: "settings",
+    items: [
+      { label: "Employees", href: "/admin/employees", icon: "employees", active: "employees" },
+      { label: "Branches", href: "/admin/branches", icon: "branches", active: "branches" },
+      { label: "Billing & plan", href: "/admin/billing", icon: "wallet", active: "billing", adminOnly: true },
+      { label: "Audit log", href: "/admin/audit", icon: "history", active: "audit" },
+      { label: "Settings", href: "/admin/settings", icon: "settings", active: "settings" },
+    ],
+  },
 ];
 
 function activeSectionForPath(pathname: string | null): AdminSection {
@@ -76,6 +124,31 @@ function activeSectionForPath(pathname: string | null): AdminSection {
   return routeSections.find(([prefix]) => pathname.startsWith(prefix))?.[1] ?? "overview";
 }
 
+function isVisibleNavItem(item: NavItem, canManageBranches: boolean) {
+  return (!item.adminOnly || canManageBranches) && (item.active !== "branches" || canManageBranches);
+}
+
+function AdminNavItem({ item, active }: { item: NavItem; active: AdminSection }) {
+  const className = `admin-nav__item ${item.active === active ? "is-active" : ""}`;
+
+  if (!item.href) {
+    return (
+      <span className={`${className} is-disabled`} aria-disabled="true">
+        <AdminIcon name={item.icon} size={17} />
+        <span>{item.label}</span>
+        {item.next && <small>Next</small>}
+      </span>
+    );
+  }
+
+  return (
+    <Link href={item.href} aria-current={item.active === active ? "page" : undefined} className={className}>
+      <AdminIcon name={item.icon} size={17} />
+      <span>{item.label}</span>
+    </Link>
+  );
+}
+
 export function AdminSidebar({ branding, branchName, active: activeOverride, connection, branches = [], selectedBranchId = null, canSwitchBranches = false, canManageBranches = false }: { branding: AdminBranding; branchName: string; active?: AdminSection; connection?: AdminSidebarConnection; branches?: AdminBranchOption[]; selectedBranchId?: string | null; canSwitchBranches?: boolean; canManageBranches?: boolean }) {
   const pathname = usePathname();
   const active = activeOverride ?? activeSectionForPath(pathname);
@@ -94,39 +167,25 @@ export function AdminSidebar({ branding, branchName, active: activeOverride, con
         <AdminBranchSwitcher branchName={branchName} branches={branches} selectedBranchId={selectedBranchId} canSwitch={canSwitchBranches} canManageBranches={canManageBranches} />
 
         <nav aria-label="Admin navigation" className="admin-nav">
-          <div className="admin-nav__group">
-            {primaryNav.map((item) => item.href ? (
-              <Link
-                key={item.label}
-                href={item.href}
-                aria-current={item.active === active ? "page" : undefined}
-                className={`admin-nav__item ${item.active === active ? "is-active" : ""}`}
-              >
-                <AdminIcon name={item.icon} size={17} />
-                <span>{item.label}</span>
-              </Link>
-            ) : null)}
-          </div>
+          {adminNavGroups.map((group) => {
+            const items = group.items.filter((item) => isVisibleNavItem(item, canManageBranches));
+            const hasActiveItem = items.some((item) => item.active === active);
+            if (!items.length) return null;
 
-          <div className="admin-nav__group admin-nav__group--secondary">
-            {comingSoonNav.filter((item) => (!item.adminOnly || canManageBranches) && (item.active !== "branches" || canManageBranches)).map((item) => item.href ? (
-              <Link
-                key={item.label}
-                href={item.href}
-                aria-current={item.active === active ? "page" : undefined}
-                className={`admin-nav__item ${item.active === active ? "is-active" : ""}`}
-              >
-                <AdminIcon name={item.icon} size={17} />
-                <span>{item.label}</span>
-              </Link>
-            ) : (
-              <span key={item.label} className="admin-nav__item is-disabled" aria-disabled="true">
-                <AdminIcon name={item.icon} size={17} />
-                <span>{item.label}</span>
-                {item.next && <small>Next</small>}
-              </span>
-            ))}
-          </div>
+            return (
+              <details key={`${group.id}-${hasActiveItem}`} className={`admin-nav__section ${hasActiveItem ? "is-active" : ""}`} open={hasActiveItem || group.id === "overview"}>
+                <summary className="admin-nav__section-toggle">
+                  <span className="admin-nav__section-icon"><AdminIcon name={group.icon} size={15} /></span>
+                  <span>{group.label}</span>
+                  <small className="admin-nav__section-count" aria-label={`${items.length} pages`}>{items.length}</small>
+                  <span className="admin-nav__section-chevron" aria-hidden="true"><AdminIcon name="chevron" size={14} /></span>
+                </summary>
+                <div className="admin-nav__group">
+                  {items.map((item) => <AdminNavItem key={item.label} item={item} active={active} />)}
+                </div>
+              </details>
+            );
+          })}
         </nav>
 
         <section className="admin-quick-actions" aria-labelledby="quick-actions-heading">

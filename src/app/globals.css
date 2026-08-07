@@ -3792,6 +3792,99 @@ textarea.inventory-input {
   min-height: 0;
 }
 
+.admin-nav__section {
+  display: block;
+}
+
+.admin-nav__section + .admin-nav__section {
+  margin-top: 4px;
+}
+
+.admin-nav__section > summary {
+  list-style: none;
+}
+
+.admin-nav__section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-nav__section-toggle {
+  display: grid;
+  min-height: clamp(30px, 3.7vh, 37px);
+  grid-template-columns: 22px minmax(0, 1fr) auto 16px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px;
+  border-radius: 9px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.1;
+  text-transform: uppercase;
+  cursor: pointer;
+  user-select: none;
+  transition: color 150ms ease, background 150ms ease;
+}
+
+.admin-nav__section-toggle:hover {
+  color: var(--text);
+  background: var(--primary-soft);
+}
+
+.admin-nav__section-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.admin-nav__section.is-active > .admin-nav__section-toggle {
+  color: var(--primary);
+}
+
+.admin-nav__section-icon {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 7px;
+  color: inherit;
+  background: var(--primary-soft);
+}
+
+.admin-nav__section-count {
+  display: grid;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  padding: 0 4px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--secondary-btn);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.admin-nav__section-chevron {
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  transition: color 150ms ease, transform 150ms ease;
+}
+
+.admin-nav__section[open] .admin-nav__section-chevron {
+  color: var(--primary);
+  transform: rotate(180deg);
+}
+
+.admin-nav__section > .admin-nav__group {
+  gap: 2px;
+  margin: 3px 0 0 5px;
+  padding-left: 5px;
+  border-left: 1px solid var(--border);
+}
+
 .admin-nav__label {
   margin: 0 12px clamp(4px, 0.8vh, 8px);
   color: var(--text-subtle);
