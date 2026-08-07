@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { getBillingPlan, normalizeSubscriptionStatus, subscriptionStatusLabel, subscriptionTone } from "@/lib/billing";
 import { createAdminClient } from "@/lib/employee-auth";
 import { isPlatformAdminEmail } from "@/lib/platform-admin";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
@@ -48,8 +49,8 @@ export default async function PlatformPage() {
   const activeStoresByOrg = countByOrg(stores.filter((store) => store.is_active));
   const employeesByOrg = countByOrg(employees);
   const activeEmployeesByOrg = countByOrg(employees.filter((employee) => employee.is_active));
-  const activeSubscriptions = organizations.filter((organization) => organization.subscription_status === "active").length;
-  const trialSubscriptions = organizations.filter((organization) => organization.subscription_status === "trialing").length;
+  const activeSubscriptions = organizations.filter((organization) => organization.subscription_status && normalizeSubscriptionStatus(organization.subscription_status) === "active").length;
+  const trialSubscriptions = organizations.filter((organization) => organization.subscription_status && normalizeSubscriptionStatus(organization.subscription_status) === "trialing").length;
 
   return (
     <main className="min-h-screen bg-bg px-4 py-6 text-ink sm:px-6 lg:px-10">
@@ -58,7 +59,7 @@ export default async function PlatformPage() {
           <div>
             <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Platform operations</p>
             <h1 className="mt-2 text-3xl font-extrabold tracking-[-0.04em]">Business accounts</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">A read-only overview of businesses, stores, staff activity, and subscription readiness.</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">A read-only overview of businesses, stores, staff activity, and Premium subscription readiness.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Link href="/login" className="rounded-btn bg-secondary px-4 py-3 text-sm font-extrabold text-primary transition hover:bg-secondary-hover">Owner login</Link>
@@ -66,7 +67,7 @@ export default async function PlatformPage() {
           </div>
         </header>
 
-        {!organizationsResult.subscriptionFieldsAvailable && <div role="status" className="mt-6 rounded-card border border-warning/35 bg-warning/10 px-5 py-4 text-sm font-semibold text-ink">Subscription fields are not available yet. Apply migration 0023 to enable billing status tracking.</div>}
+        {!organizationsResult.subscriptionFieldsAvailable && <div role="status" className="mt-6 rounded-card border border-warning/35 bg-warning/10 px-5 py-4 text-sm font-semibold text-ink">Subscription fields are not available yet. Apply migration 0025 to enable Premium billing status tracking.</div>}
 
         <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Platform summary">
           <Metric label="Businesses" value={organizations.length} detail="Registered workspaces" />
@@ -89,8 +90,9 @@ export default async function PlatformPage() {
               <tbody className="divide-y divide-line">
                 {organizations.length === 0 ? <tr><td colSpan={6} className="px-6 py-12 text-center text-ink-muted">No business accounts yet.</td></tr> : organizations.map((organization) => {
                   const owner = organization.owner_profile_id ? profileById.get(organization.owner_profile_id) : undefined;
-                  const subscription = organization.subscription_status ?? "not configured";
-                  return <tr key={organization.id} className="align-top"><td className="px-6 py-4"><strong className="block font-extrabold">{organization.name}</strong><span className="mt-1 block text-xs text-ink-muted">{organization.id.slice(0, 8)}</span></td><td className="px-6 py-4"><strong className="block">{owner?.full_name ?? "Owner profile pending"}</strong><span className="mt-1 block text-xs text-ink-muted">{organization.owner_profile_id ? authEmailById.get(organization.owner_profile_id) || "Email unavailable" : "—"}</span></td><td className="px-6 py-4"><strong>{activeStoresByOrg.get(organization.id) ?? 0}</strong><span className="block text-xs text-ink-muted">of {storesByOrg.get(organization.id) ?? 0} active</span></td><td className="px-6 py-4"><strong>{activeEmployeesByOrg.get(organization.id) ?? 0}</strong><span className="block text-xs text-ink-muted">of {employeesByOrg.get(organization.id) ?? 0} records active</span></td><td className="px-6 py-4"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-extrabold ${subscriptionTone(subscription)}`}>{subscriptionLabel(subscription)}</span><span className="mt-2 block text-xs text-ink-muted">{organization.subscription_plan ?? "Billing not connected"}</span></td><td className="whitespace-nowrap px-6 py-4 text-ink-muted">{formatDate(organization.created_at)}</td></tr>;
+                  const subscription = organization.subscription_status ? normalizeSubscriptionStatus(organization.subscription_status) : null;
+                  const plan = getBillingPlan(organization.subscription_plan);
+                  return <tr key={organization.id} className="align-top"><td className="px-6 py-4"><strong className="block font-extrabold">{organization.name}</strong><span className="mt-1 block text-xs text-ink-muted">{organization.id.slice(0, 8)}</span></td><td className="px-6 py-4"><strong className="block">{owner?.full_name ?? "Owner profile pending"}</strong><span className="mt-1 block text-xs text-ink-muted">{organization.owner_profile_id ? authEmailById.get(organization.owner_profile_id) || "Email unavailable" : "—"}</span></td><td className="px-6 py-4"><strong>{activeStoresByOrg.get(organization.id) ?? 0}</strong><span className="block text-xs text-ink-muted">of {storesByOrg.get(organization.id) ?? 0} active</span></td><td className="px-6 py-4"><strong>{activeEmployeesByOrg.get(organization.id) ?? 0}</strong><span className="block text-xs text-ink-muted">of {employeesByOrg.get(organization.id) ?? 0} records active</span></td><td className="px-6 py-4">{subscription ? <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-extrabold ${subscriptionTone(subscription)}`}>{subscriptionStatusLabel(subscription)}</span> : <span className="inline-flex rounded-full bg-raised px-2.5 py-1 text-xs font-extrabold text-ink-muted">Not connected</span>}<span className="mt-2 block text-xs font-semibold text-ink-muted">{plan.name} · {plan.priceLabel}/month</span></td><td className="whitespace-nowrap px-6 py-4 text-ink-muted">{formatDate(organization.created_at)}</td></tr>;
                 })}
               </tbody>
             </table>
@@ -120,18 +122,6 @@ function countByOrg<T extends { org_id: string }>(rows: T[]) {
 function formatDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeZone: "Asia/Singapore" }).format(date);
-}
-
-function subscriptionLabel(value: string) {
-  return value === "not configured" ? "Not connected" : value.replaceAll("_", " ");
-}
-
-function subscriptionTone(value: string) {
-  if (value === "active") return "bg-success/10 text-success";
-  if (value === "trialing") return "bg-primary-soft text-primary";
-  if (value === "past_due" || value === "incomplete") return "bg-warning/15 text-ink";
-  if (value === "canceled" || value === "paused") return "bg-danger-soft text-danger";
-  return "bg-raised text-ink-muted";
 }
 
 function Metric({ label, value, detail }: { label: string; value: number | string; detail: string }) {

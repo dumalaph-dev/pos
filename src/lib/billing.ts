@@ -1,47 +1,54 @@
 export type SubscriptionStatus = "trialing" | "active" | "past_due" | "canceled" | "incomplete" | "paused";
-export type SubscriptionPlanId = "starter" | "growth" | "custom";
+
+export const PREMIUM_PLAN_ID = "premium" as const;
+export const PREMIUM_PRICE_PHP = 799;
+export const PREMIUM_PRICE_LABEL = "₱799";
+
+export type SubscriptionPlanId = typeof PREMIUM_PLAN_ID;
 
 export type BillingPlan = {
   id: SubscriptionPlanId;
   name: string;
   summary: string;
+  priceMonthlyPhp: number;
+  priceLabel: string;
   features: string[];
 };
 
-export const BILLING_PLANS: BillingPlan[] = [
-  {
-    id: "starter",
-    name: "Starter",
-    summary: "The essentials for one focused store team.",
-    features: ["Core POS and checkout", "Owner dashboard", "Branch staff access links", "Sales and inventory records"],
-  },
-  {
-    id: "growth",
-    name: "Growth",
-    summary: "More visibility for owners running multiple branches.",
-    features: ["Everything in Starter", "Multiple branch management", "Manager access", "Cross-branch reporting"],
-  },
-  {
-    id: "custom",
-    name: "Custom",
-    summary: "A plan shaped around a larger operation.",
-    features: ["Custom branch and team needs", "Implementation guidance", "Operational support planning", "Flexible commercial terms"],
-  },
-];
+export const PREMIUM_PLAN: BillingPlan = {
+  id: PREMIUM_PLAN_ID,
+  name: "Premium",
+  summary: "The complete POS workspace for every branch and staff member.",
+  priceMonthlyPhp: PREMIUM_PRICE_PHP,
+  priceLabel: PREMIUM_PRICE_LABEL,
+  features: [
+    "Tablet POS and owner dashboard",
+    "Unlimited branches, staff, and products",
+    "Offline-first selling with automatic sync",
+    "Inventory, suppliers, expenses, and reports",
+    "Shifts, cash counts, and audit history",
+  ],
+};
+
+export const BILLING_PLANS: BillingPlan[] = [PREMIUM_PLAN];
 
 export function normalizeSubscriptionStatus(value: string | null | undefined): SubscriptionStatus {
   if (value === "active" || value === "past_due" || value === "canceled" || value === "incomplete" || value === "paused") return value;
   return "trialing";
 }
 
+/**
+ * Historical plan rows are intentionally treated as Premium at read time so a
+ * rolling deploy stays consistent while the database migration backfills
+ * existing organizations.
+ */
 export function normalizeSubscriptionPlan(value: string | null | undefined): SubscriptionPlanId {
-  if (value === "growth" || value === "custom") return value;
-  return "starter";
+  return value === PREMIUM_PLAN_ID ? value : PREMIUM_PLAN_ID;
 }
 
 export function getBillingPlan(value: string | null | undefined) {
   const planId = normalizeSubscriptionPlan(value);
-  return BILLING_PLANS.find((plan) => plan.id === planId) ?? BILLING_PLANS[0];
+  return BILLING_PLANS.find((plan) => plan.id === planId) ?? PREMIUM_PLAN;
 }
 
 export function subscriptionStatusLabel(value: SubscriptionStatus) {

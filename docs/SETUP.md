@@ -36,7 +36,7 @@ Fill `.env.local` from Supabase → **Settings → API**:
 
 ## 4. Database migrations
 SQL lives in `supabase/migrations/` (run in order):
-The latest migration adds store staff access keys and subscription tracking fields: `0023_store_access_and_subscriptions.sql`.
+The latest migrations add store staff access keys, subscription tracking, and the single Premium billing plan: `0023_store_access_and_subscriptions.sql`, `0024_shifts_and_z_readings.sql`, and `0025_premium_billing_plan.sql`.
 1. `0001_schema.sql` — tables, enums, indexes
 2. `0002_rls.sql` — grants, helper functions, RLS policies, append-only triggers
 3. `0003_functions.sql` — `clone_menu` (multi-branch)
@@ -60,6 +60,9 @@ The latest migration adds store staff access keys and subscription tracking fiel
 20. `0020_order_actions.sql` - order action records and policies
 21. `0021_product_price_audit.sql` - product price audit records
 22. `0022_owner_signup.sql` - self-service store-owner workspace creation
+23. `0023_store_access_and_subscriptions.sql` - staff access links and subscription tracking fields
+24. `0024_shifts_and_z_readings.sql` - shifts and Z-reading records
+25. `0025_premium_billing_plan.sql` - safely backfill organizations and enforce Premium-only billing
 
 **Apply them** either way:
 - **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push`
