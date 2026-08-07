@@ -5,6 +5,7 @@ import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import { getAdminProfile } from "@/lib/admin/profile";
+import { loadReversedOrderIds, selectNetSales } from "@/lib/admin/sales-reports";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 
 type AdminRole = "admin" | "manager" | "cashier";
@@ -32,6 +33,7 @@ type OrderRecord = {
   subtotal: number;
   total: number;
   created_at: string;
+  reversal_of: string | null;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -134,9 +136,10 @@ export default async function PromotionsPage({
   const startDate = range === "7d" ? new Date(todayStart.getTime() - DAY_MS * 6) : range === "30d" ? new Date(todayStart.getTime() - DAY_MS * 29) : null;
   let ordersQuery = supabase
     .from("orders")
-    .select("id, order_no, store_id, status, discount_type, discount_amount, discount_ref, subtotal, total, created_at")
+    .select("id, order_no, store_id, status, discount_type, discount_amount, discount_ref, subtotal, total, created_at, reversal_of")
     .eq("org_id", profile.org_id)
     .eq("status", "completed")
+    .is("reversal_of", null)
     .order("created_at", { ascending: false })
     .limit(5000);
   if (startDate) ordersQuery = ordersQuery.gte("created_at", startDate.toISOString()).lt("created_at", todayEnd.toISOString());
@@ -148,7 +151,10 @@ export default async function PromotionsPage({
   const branches = (branchesResult.data ?? []) as BranchRecord[];
   const orders = (ordersResult.data ?? []) as OrderRecord[];
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
-  const completedOrders = orders.filter((order) => order.status === "completed");
+  // A discount on a sale that was later voided was never actually given, so the
+  // reversed originals are dropped before any total is computed (0020).
+  const reversalLookup = await loadReversedOrderIds(supabase, profile.org_id, orders.map((order) => order.id));
+  const completedOrders = selectNetSales(orders, reversalLookup.reversedIds);
   const discountedOrders: OrderRecord[] = [];
   const typeTotalsByType = new Map<DiscountType, { orders: number; total: number }>();
   const discountByDay = new Map<string, number>();
@@ -188,7 +194,7 @@ export default async function PromotionsPage({
   });
   const maxDiscountDay = Math.max(...discountSeries.map((point) => point.value), 0);
   const recentDiscounts = discountedOrders.slice(0, 8);
-  const queryWarning = Boolean(branchesResult.error || ordersResult.error);
+  const queryWarning = Boolean(branchesResult.error || ordersResult.error || reversalLookup.failed);
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
   const rangeLabel = rangeOptions.find((option) => option.value === range)?.label ?? "Last 30 days";
 

@@ -10,6 +10,7 @@ import { formatPeso } from "@/lib/money";
 import { isProductImageUrl } from "@/lib/product-images";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import { getAdminProfile } from "@/lib/admin/profile";
+import { loadReversedOrderIds, selectNetSales } from "@/lib/admin/sales-reports";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 
 type AdminRole = "admin" | "manager" | "cashier";
@@ -228,8 +229,13 @@ function productImage(product: ProductRecord | undefined) {
   return isProductImageUrl(product?.image_url) ? product.image_url : null;
 }
 
-function orderSummary(orders: OrderRecord[]) {
-  const completed = orders.filter((order) => order.status === "completed");
+/**
+ * `reversedIds` carries the sales that were later voided or refunded. A
+ * reversal (0020) adds a linked row and leaves the original at `completed`, so
+ * without this the sales figure would still include a voided order.
+ */
+function orderSummary(orders: OrderRecord[], reversedIds: Set<string>) {
+  const completed = selectNetSales(orders, reversedIds);
   return {
     total: orders.length,
     completed: completed.length,
@@ -258,7 +264,7 @@ function sparklinePoints(values: number[], width = 160, height = 30) {
   }).join(" ");
 }
 
-function buildTrendBuckets(orders: OrderRecord[], start: Date | null, end: Date) {
+function buildTrendBuckets(orders: OrderRecord[], start: Date | null, end: Date, reversedIds: Set<string>) {
   const buckets = new Map<string, TrendBucket>();
   if (start) {
     const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / DAY_MS));
@@ -279,7 +285,7 @@ function buildTrendBuckets(orders: OrderRecord[], start: Date | null, end: Date)
     const bucket = buckets.get(key);
     if (!bucket) continue;
     bucket.orders += 1;
-    if (order.status === "completed") {
+    if (order.status === "completed" && !order.reversal_of && !reversedIds.has(order.id)) {
       bucket.completed += 1;
       bucket.sales += Number(order.total);
       bucket.discounts += Number(order.discount_amount);
@@ -468,16 +474,27 @@ export default async function OrdersPage({
     itemsByOrder.set(item.order_id, items);
   }
 
-  const summary = orderSummary(filteredOrders);
-  const previousSummary = orderSummary(previousOrders);
+  // The `reversals` lookup above only covers the visible page, because it feeds
+  // the per-row badges. The summary and trend span every filtered order, so
+  // they need their own reversal scope.
+  const metricsReversalLookup = await loadReversedOrderIds(
+    supabase,
+    profile.org_id,
+    [...filteredOrders, ...previousOrders]
+      .filter((order) => order.status === "completed" && !order.reversal_of)
+      .map((order) => order.id),
+  );
+  const metricsReversedIds = metricsReversalLookup.reversedIds;
+  const summary = orderSummary(filteredOrders, metricsReversedIds);
+  const previousSummary = orderSummary(previousOrders, metricsReversedIds);
   const canCompare = range !== "all" && !searchQuery;
-  const trendBuckets = buildTrendBuckets(filteredOrders, startDate, todayEnd);
+  const trendBuckets = buildTrendBuckets(filteredOrders, startDate, todayEnd, metricsReversedIds);
   const branchLabel = branchFilter ? branchById.get(branchFilter)?.name ?? "Selected branch" : "All branches";
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
   const canManageOrders = profile.role === "admin";
   const canReprintOrders = profile.role === "admin" || profile.role === "manager";
   const returnHref = buildOrderHref({ range, status, payment, branch: branchFilter, query: searchQuery, page, pageSize });
-  const queryWarning = Boolean(branchesResult.error || cashiersResult.error || productsResult.error || ordersResult.error || previousOrdersResult?.error || orderItemsError || selectedOrderResult?.error || reversalResult.error);
+  const queryWarning = Boolean(branchesResult.error || cashiersResult.error || productsResult.error || ordersResult.error || previousOrdersResult?.error || orderItemsError || selectedOrderResult?.error || reversalResult.error || metricsReversalLookup.failed);
   const visibleOrders = filteredOrders.slice((page - 1) * pageSize, page * pageSize);
   const exportParams = new URLSearchParams({ range });
   if (branchFilter) exportParams.set("branch", branchFilter);

@@ -60,7 +60,7 @@ This section is the current source of truth for delivered work and the next gate
 | **P5** | Customer display | ⬜ Not started | 0 / 6 | Needs P1 cart events |
 | **P6** | Backoffice | 🟡 In progress | Core admin slices implemented | Hosted/browser QA and production hardening |
 | **P7** | Inventory | ✅ Done | 6 / 6 | Maintain regression coverage |
-| **P8** | Shifts & reports | 🟡 In progress | Shifts, X/Z readings, and inventory reporting implemented | Hosted `0024` + authenticated till QA; sales/discount reports remain |
+| **P8** | Shifts & reports | 🟡 In progress | Shifts, X/Z readings, sales reports, and inventory reporting implemented | Authenticated till QA; reconcile against a real day's data |
 | **P9** | Pilot & production deploy | ⬜ Not started | 0 / 8 | Everything above |
 
 **Status legend:** ⬜ Not started · 🟡 In progress · ✅ Done · 🔴 Blocked
@@ -218,6 +218,20 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 ## P8 — Shifts & Reports
 *Goal: trustworthy till + numbers the owner reads weekly.*
 
+### Sales reporting slice — 2026-08-07
+
+- **Reversal correctness bug found and fixed.** A void or refund (0020) never mutates the original sale — it inserts a linked reversal row and leaves the original at `completed`. `/admin/reports` filtered on `status === "completed"`, so it **counted voided sales as revenue**. Reproduced on the local fixture: three sales of `₱750`, `₱850`, and `₱300` with the `₱300` GCash sale voided reported **3 orders / `₱1,900.00`** under the old rule versus **2 orders / `₱1,600.00`** under the corrected one — an 18.75% overstatement in that sample. The corrected tender mix drops GCash entirely, the discount report keeps the `₱150` senior discount on its one order, the voided order's Rice line leaves the item rows, and the void is reported separately as 1 × `₱300`.
+- `src/lib/admin/sales-reports.ts` is now the single reversal-aware aggregation, shared by the page and the CSV routes so the two can never disagree. It matches the `shift_reading` rule in `0024`, which is what makes `/admin/reports` and `/admin/shifts` agree about the same day.
+- A reversal can be recorded after the reporting window closes, so the reversal lookup is keyed on the order ids in range (chunked `in()` lookups) rather than on a date filter. Reversals are reported as recorded in the window — that is when the money left the drawer — while net figures exclude the underlying sale whenever it was reversed.
+- `/admin/reports` rebuilt on that module: day/week/month grouping, cashier and payment-method filters, sales trend, tender mix with a reversals line, best sellers, category sales, a weekday×hour heatmap trimmed to trading hours, sales by cashier including the reversals each recorded, the discount report, and branch comparison.
+- `/admin/reports/export?kind=` emits summary, periods, items, categories, cashiers, branches, discounts, and hourly CSVs. Amounts stay in centavos so a spreadsheet never inherits a rounding decision the app did not make, cells are guarded against formula injection, and the route returns `413` rather than emitting a silently truncated file.
+- Row limits are explicit (10k orders, 20k items) and the page shows a blocking warning when a range exceeds them, because silent truncation in a financial report is worse than no report.
+- Verified: PostgREST accepts the embedded-resource filters used for `order_items` (`orders.status`, `orders.reversal_of=is.null`) and the `reversal_of=in.()` lookup — both returned HTTP 200 against the local stack. The aggregation rule itself was verified in SQL against seeded fixture rows, run in a transaction and rolled back. `npm run typecheck`, `npm run lint`, and `npm run build` pass; the build exposes `/admin/reports/export`.
+- **The same reversal bug was then fixed everywhere else it appeared (2026-08-07).** `loadReversedOrderIds` and `selectNetSales` were extracted from the reports module so every revenue figure in the app applies one rule, and `loadSalesReport` was refactored onto them so there is genuinely a single implementation. Fixed: the dashboard (`src/app/admin/page.tsx` — today's KPIs, the seven-day series, and the item/category panels), Sales (`src/app/admin/sales/page.tsx` — both period summaries, the daily/hourly/weekday buckets, and best sellers), Promotions (`src/app/admin/promotions/page.tsx` — a discount on a sale that was later voided was never actually given), the Orders list metrics and trend (`src/app/admin/orders/page.tsx`; its existing reversal query only covers the visible page because it feeds the per-row badges, so the metrics take their own scope), and `/products` (`src/app/products/page.tsx`), which was a fifth page not in the original list. Every embedded `order_items` query now also filters `orders.reversal_of is null`.
+- A failed reversal lookup is surfaced through each page's existing `queryWarning` rather than swallowed, because falling back to "nothing was reversed" would silently overstate revenue — the exact bug being fixed.
+- Verified against seeded fixture rows on the local stack, run in a transaction and rolled back: a refunded sale is still returned by the `status = completed and reversal_of is null` query (confirming the id-keyed second pass is what removes it, not the query alone), the reversal lookup returns exactly the refunded order's id, the net selection leaves only the surviving sale, the discount on the refunded order drops out of the promotions totals, and the refunded order's line leaves the item rows. `npm run typecheck`, `npm run lint`, and `npm run build` pass.
+- Not done: reconciling reports against a real day's data. That needs real sales volume on the hosted project, which does not exist yet.
+
 ### Shift and Z-reading slice — 2026-08-07
 
 - `supabase/migrations/0024_shifts_and_z_readings.sql` adds the whole slice: shift hardening (`shift_no`, `closed_by`, a partial unique index enforcing one open till per cashier per branch, a manager read policy matching 0019), `shift_variance_threshold`, `shift_reading`, `shift_reading_list`, `open_shift`, `close_shift`, the append-only `z_readings` table, `record_z_reading`, and a replacement `place_order`.
@@ -234,10 +248,10 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 
 - [x] Shift open (declared cash) / close (counted vs. expected, variance, note over threshold), per branch/device. *(`0024_shifts_and_z_readings.sql`: `open_shift` / `close_shift`, one open till per cashier per branch, expected cash = opening + cash sales − cash refunds, note enforced above the org threshold. POS till panel + admin close-out.)*
 - [x] X-reading (cashier) / Z-reading (admin), per branch. *(One `shift_reading` RPC feeds both. X is live and non-resetting in the POS; Z is admin-only, sealed into the append-only `z_readings` archive with a per-branch sequence and running grand total. Both print as ESC/POS slips.)*
-- [ ] Reports: sales by day/week/month, item, category, cashier; hourly heatmap.
-- [ ] Discount report; branch-vs-branch comparison.
-- [ ] CSV export.
-- [ ] Reconcile reports against raw orders on a real day's data.
+- [x] Reports: sales by day/week/month, item, category, cashier; hourly heatmap. *(`src/lib/admin/sales-reports.ts` is the single reversal-aware aggregation; `/admin/reports` renders it with day/week/month grouping plus cashier and payment filters.)*
+- [x] Discount report; branch-vs-branch comparison. *(Discounts grouped by `discount_type`; branch table shows orders, net sales, discounts, average order, and share.)*
+- [x] CSV export. *(`/admin/reports/export?kind=` for summary, periods, items, categories, cashiers, branches, discounts, and hourly. Amounts stay in centavos and the route refuses to emit a truncated file.)*
+- [ ] Reconcile reports against raw orders on a real day's data. *(Blocked: needs real sales volume on the hosted project. Not yet possible.)*
 
 ## P9 — Pilot & Production Deployment
 *Goal: live in a real store, then a second branch as the true multi-branch test.*

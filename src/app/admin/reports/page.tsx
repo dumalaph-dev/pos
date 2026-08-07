@@ -1,18 +1,26 @@
+import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
-import { formatStockQuantity, salesQuantity } from "@/lib/inventory";
+import { formatStockQuantity } from "@/lib/inventory";
 import { formatPeso } from "@/lib/money";
-import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import { getAdminProfile } from "@/lib/admin/profile";
+import {
+  loadSalesReport,
+  readSalesReportFilters,
+  salesReportQuery,
+  weekdayLabel,
+  SALES_PAYMENT_METHODS,
+  type SalesGrouping,
+  type SalesPaymentMethod,
+  type SalesReportData,
+  type SalesReportFilters,
+} from "@/lib/admin/sales-reports";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 
 type AdminRole = "admin" | "manager" | "cashier";
-type OrderStatus = "completed" | "voided" | "refunded";
-type PaymentMethod = "cash" | "gcash" | "maya" | "card";
-type ReportRange = "7d" | "30d";
 
 type ProfileRecord = {
   full_name: string | null;
@@ -22,281 +30,389 @@ type ProfileRecord = {
   password_change_required: boolean;
 };
 
-type BranchRecord = { id: string; name: string; is_active: boolean };
-type CategoryRecord = { id: string; store_id: string; name: string };
-type ProductRecord = { id: string; name: string; store_id: string; category_id: string | null; unit: string };
-type OrderRecord = {
-  id: string;
-  store_id: string;
-  status: OrderStatus;
-  discount_amount: number;
-  vat_amount: number;
-  total: number;
-  payment_method: PaymentMethod;
-  created_at: string;
-};
-type OrderItemRecord = {
-  order_id: string;
-  product_id: string | null;
-  name_snapshot: string;
-  qty: number;
-  weight_kg: number | null;
-  line_total: number;
-};
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-const SINGAPORE_DAY_FORMATTER = new Intl.DateTimeFormat("en-CA", {
-  day: "2-digit",
-  month: "2-digit",
-  timeZone: "Asia/Singapore",
-  year: "numeric",
-});
-const rangeOptions: Array<{ value: ReportRange; label: string }> = [
-  { value: "7d", label: "Last 7 days" },
-  { value: "30d", label: "Last 30 days" },
+const groupingOptions: Array<{ value: SalesGrouping; label: string }> = [
+  { value: "day", label: "By day" },
+  { value: "week", label: "By week" },
+  { value: "month", label: "By month" },
 ];
 
-function readParam(value: string | string[] | undefined) {
-  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
-}
+const quickRanges: Array<{ label: string; days: number }> = [
+  { label: "7 days", days: 7 },
+  { label: "30 days", days: 30 },
+  { label: "90 days", days: 90 },
+];
 
-function isReportRange(value: string): value is ReportRange {
-  return rangeOptions.some((option) => option.value === value);
-}
-
-function getSingaporeDayBounds() {
-  const date = new Intl.DateTimeFormat("en-CA", {
-    day: "2-digit",
-    month: "2-digit",
-    timeZone: "Asia/Singapore",
-    year: "numeric",
-  }).format(new Date());
-  const start = new Date(`${date}T00:00:00+08:00`);
-  return { start, end: new Date(start.getTime() + DAY_MS) };
-}
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function displayPeso(value: number) {
   return formatPeso(Number(value)).replace(/\.00$/, "");
 }
 
 function compactPeso(value: number) {
-  const amount = Number(value) / 100;
-  if (amount >= 1000) return `PHP ${(amount / 1000).toFixed(amount >= 10000 ? 0 : 1)}K`;
-  return `PHP ${Math.round(amount)}`;
+  const peso = value / 100;
+  if (Math.abs(peso) >= 1_000_000) return `₱${(peso / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(peso) >= 1_000) return `₱${(peso / 1_000).toFixed(1)}k`;
+  return displayPeso(value);
 }
 
 function shortName(name: string | null, fallback: string) {
   return name?.trim().split(/\s+/)[0] || fallback;
 }
 
-function paymentLabel(method: PaymentMethod) {
-  if (method === "gcash") return "GCash";
-  if (method === "maya") return "Maya";
-  if (method === "card") return "Card";
-  return "Cash";
+function paymentLabel(method: SalesPaymentMethod) {
+  return method === "cash" ? "Cash" : method === "gcash" ? "GCash" : method === "maya" ? "Maya" : "Card";
 }
 
-function dayLabel(value: Date, range: ReportRange) {
-  return new Intl.DateTimeFormat("en-PH", {
-    day: "numeric",
-    month: range === "30d" ? "numeric" : "short",
-    timeZone: "Asia/Singapore",
-  }).format(value);
+function singaporeDate(value = new Date()) {
+  return new Date(value.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
-function dayKey(value: Date) {
-  return SINGAPORE_DAY_FORMATTER.format(value);
+function shiftDate(value: string, days: number) {
+  return new Date(new Date(`${value}T00:00:00Z`).getTime() + days * DAY_MS).toISOString().slice(0, 10);
 }
 
-function formatReportDate(value: Date) {
-  return new Intl.DateTimeFormat("en-PH", {
-    dateStyle: "long",
-    timeZone: "Asia/Singapore",
-  }).format(value);
+function formatRangeDate(value: string) {
+  return new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`));
+}
+
+function reportsHref(filters: SalesReportFilters, overrides: Partial<SalesReportFilters> = {}) {
+  return `/admin/reports?${salesReportQuery({ ...filters, ...overrides })}`;
+}
+
+function exportHref(filters: SalesReportFilters, kind: string) {
+  return `/admin/reports/export?${salesReportQuery(filters, kind)}`;
 }
 
 export default async function ReportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string | string[]; branch?: string | string[] }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
-  const rangeParam = readParam(params.range);
-  const requestedBranchFilter = readParam(params.branch);
-  const range: ReportRange = isReportRange(rangeParam) ? rangeParam : "7d";
-  const dayCount = range === "30d" ? 30 : 7;
-  const supabase = await createClient();
   const user = await getAuthenticatedUser();
 
   if (!user) redirect("/");
 
-  const profile = await getAdminProfile(user.id) as ProfileRecord | null;
+  const profile = (await getAdminProfile(user.id)) as ProfileRecord | null;
 
   if (profile?.password_change_required) redirect("/account/password?required=1");
   if (profile?.role === "cashier") redirect("/pos");
-  if (!profile) return <ReportsProfileMissing />;
+  if (!profile || (profile.role !== "admin" && profile.role !== "manager")) return <ReportsProfileMissing />;
 
-  const { start: todayStart, end: todayEnd } = getSingaporeDayBounds();
-  const startDate = new Date(todayStart.getTime() - DAY_MS * (dayCount - 1));
-  const branchesResult = await supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name");
-  const branches = (branchesResult.data ?? []) as BranchRecord[];
-  const selectedBranchId = profile.role === "admin"
-    ? await getSelectedAdminBranchId(branches, profile.store_id)
-    : profile.store_id;
-  const branchFilter = selectedBranchId ?? (branches.some((branch) => branch.id === requestedBranchFilter) ? requestedBranchFilter : "");
-  const visibleBranches = branchFilter ? branches.filter((branch) => branch.id === branchFilter) : branches;
+  const report = await loadSalesReport(
+    await createClient(),
+    { org_id: profile.org_id, role: profile.role, store_id: profile.store_id },
+    readSalesReportFilters(params),
+  );
 
-  let categoriesQuery = supabase.from("categories").select("id, store_id, name").eq("org_id", profile.org_id);
-  let productsQuery = supabase.from("products").select("id, name, store_id, category_id, unit").eq("org_id", profile.org_id);
-  let ordersQuery = supabase
-    .from("orders")
-    .select("id, store_id, status, discount_amount, vat_amount, total, payment_method, created_at")
-    .eq("org_id", profile.org_id);
-  let itemsQuery = supabase
-    .from("order_items")
-    .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status)")
-    .eq("orders.org_id", profile.org_id)
-    .eq("orders.status", "completed")
-    .gte("orders.created_at", startDate.toISOString())
-    .lt("orders.created_at", todayEnd.toISOString());
-  if (branchFilter) {
-    categoriesQuery = categoriesQuery.eq("store_id", branchFilter);
-    productsQuery = productsQuery.eq("store_id", branchFilter);
-    ordersQuery = ordersQuery.eq("store_id", branchFilter);
-    itemsQuery = itemsQuery.eq("orders.store_id", branchFilter);
-  }
-  categoriesQuery = categoriesQuery.order("sort_order").order("name");
-  productsQuery = productsQuery.limit(1000);
-  ordersQuery = ordersQuery
-    .gte("created_at", startDate.toISOString())
-    .lt("created_at", todayEnd.toISOString())
-    .order("created_at", { ascending: false })
-    .limit(2000);
-
-  const [categoriesResult, productsResult, ordersResult, itemsResult] = await Promise.all([
-    categoriesQuery,
-    productsQuery,
-    ordersQuery,
-    // Items are joined straight to the range's completed orders so they run
-    // in the same round trip as the batch instead of a second .in() query.
-    itemsQuery,
-  ]);
-
-  const categories = ((categoriesResult.data ?? []) as CategoryRecord[]).filter((category) => !branchFilter || category.store_id === branchFilter);
-  const products = ((productsResult.data ?? []) as ProductRecord[]).filter((product) => !branchFilter || product.store_id === branchFilter);
-  const orders = ((ordersResult.data ?? []) as OrderRecord[]).filter((order) => !branchFilter || order.store_id === branchFilter);
-  const orderItems = (itemsResult.data ?? []) as OrderItemRecord[];
-  const orderItemsError = Boolean(itemsResult.error);
-
-  const categoryById = new Map(categories.map((category) => [category.id, category]));
-  const productById = new Map(products.map((product) => [product.id, product]));
-  const completedOrders = orders.filter((order) => order.status === "completed");
-  const completedOrderIds = new Set(completedOrders.map((order) => order.id));
-  let totalSales = 0;
-  let discountsGiven = 0;
-  let taxCollected = 0;
-  const paymentTotalsByMethod = new Map<PaymentMethod, { orders: number; total: number }>();
-  const branchTotalsById = new Map<string, { orders: number; sales: number }>();
-  const salesByDay = new Map<string, number>();
-
-  for (const order of completedOrders) {
-    const total = Number(order.total);
-    totalSales += total;
-    discountsGiven += Number(order.discount_amount);
-    taxCollected += Number(order.vat_amount);
-
-    const payment = paymentTotalsByMethod.get(order.payment_method) ?? { orders: 0, total: 0 };
-    payment.orders += 1;
-    payment.total += total;
-    paymentTotalsByMethod.set(order.payment_method, payment);
-
-    const branch = branchTotalsById.get(order.store_id) ?? { orders: 0, sales: 0 };
-    branch.orders += 1;
-    branch.sales += total;
-    branchTotalsById.set(order.store_id, branch);
-
-    const key = dayKey(new Date(order.created_at));
-    salesByDay.set(key, (salesByDay.get(key) ?? 0) + total);
-  }
-
-  const averageOrder = completedOrders.length ? Math.round(totalSales / completedOrders.length) : 0;
-  const paymentTotals = (["cash", "gcash", "maya", "card"] as PaymentMethod[]).map((method) => ({
-    method,
-    ...(paymentTotalsByMethod.get(method) ?? { orders: 0, total: 0 }),
-  }));
-
-  const topItemsByName = new Map<string, { name: string; qty: number; unit: string; total: number }>();
-  const categorySalesById = new Map<string, { name: string; qty: number; unit: string; total: number }>();
-  for (const item of orderItems) {
-    if (!completedOrderIds.has(item.order_id)) continue;
-
-    const product = item.product_id ? productById.get(item.product_id) : null;
-    const topItem = topItemsByName.get(item.name_snapshot) ?? { name: item.name_snapshot, qty: 0, unit: product?.unit ?? "items", total: 0 };
-    topItem.qty += salesQuantity(item);
-    topItem.total += Number(item.line_total);
-    topItemsByName.set(item.name_snapshot, topItem);
-
-    const category = product?.category_id ? categoryById.get(product.category_id) : null;
-    const categoryKey = category?.id ?? "uncategorized";
-    const categoryItem = categorySalesById.get(categoryKey) ?? { name: category?.name ?? "Uncategorized", qty: 0, unit: product?.unit ?? "items", total: 0 };
-    categoryItem.qty += salesQuantity(item);
-    categoryItem.total += Number(item.line_total);
-    categorySalesById.set(categoryKey, categoryItem);
-  }
-
-  const topItems = Array.from(topItemsByName.values())
-    .sort((a, b) => b.total - a.total || b.qty - a.qty)
-    .slice(0, 5);
-  const categorySales = Array.from(categorySalesById.values())
-    .sort((a, b) => b.total - a.total || b.qty - a.qty)
-    .slice(0, 5);
-  const dailySeries = Array.from({ length: dayCount }, (_, index) => {
-    const date = new Date(startDate.getTime() + DAY_MS * index);
-    const value = salesByDay.get(dayKey(date)) ?? 0;
-    return { label: dayLabel(date, range), value };
-  });
-  const branchStats = visibleBranches
-    .map((branch) => ({ ...branch, ...(branchTotalsById.get(branch.id) ?? { sales: 0, orders: 0 }) }))
-    .sort((a, b) => b.sales - a.sales);
-  const queryWarning = Boolean(branchesResult.error || categoriesResult.error || productsResult.error || ordersResult.error || orderItemsError);
+  const { filters, totals } = report;
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
-  const currentBranchName = branchFilter
-    ? branches.find((branch) => branch.id === branchFilter)?.name ?? "Selected branch"
-    : "All branches";
-  const branchQuery = branchFilter ? `&branch=${encodeURIComponent(branchFilter)}` : "";
+  const today = singaporeDate();
+  const reversalTotal = totals.voidTotal + totals.refundTotal;
 
   return (
     <main className="admin-page text-ink">
       <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
-          <AdminPageHeader title="Reports">
-            <Link href="/admin/reports/inventory" className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Inventory reports</Link>
-            <Link href={`/admin/report?range=${range}${branchQuery}`} className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Export CSV</Link>
-            <Link href={`/admin/orders?range=${range}${branchQuery}`} className="rounded-btn bg-primary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover">View orders</Link>
-            <SignOutButton className="px-3 py-2 text-xs" />
-          </AdminPageHeader>
+        <AdminPageHeader title="Reports">
+          <Link href="/admin/reports/inventory" className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Inventory reports</Link>
+          <Link href="/admin/shifts" className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Shifts</Link>
+          <Link href="/admin/orders" className="rounded-btn bg-primary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover">View orders</Link>
+          <SignOutButton className="px-3 py-2 text-xs" />
+        </AdminPageHeader>
 
-          <div className="mt-6 flex flex-wrap items-end justify-between gap-4">
-            <div><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Business intelligence &middot; {range === "7d" ? "Last 7 days" : "Last 30 days"} &middot; {currentBranchName}</p><h2 className="mt-2 text-3xl font-extrabold tracking-[-0.04em] text-ink sm:text-4xl">Know what is moving the business.</h2><p className="mt-2 max-w-2xl text-sm text-ink-muted">A live view of completed sales, menu performance, and branch contribution, {firstName}.</p></div>
-            <div className="flex items-center gap-2">{rangeOptions.map((option) => <Link key={option.value} href={`/admin/reports?range=${option.value}${branchQuery}`} className={`rounded-btn border px-3 py-2 text-xs font-extrabold transition ${range === option.value ? "border-primary bg-primary text-primary-fg" : "border-line bg-surface text-primary hover:bg-primary-soft"}`}>{option.label}</Link>)}</div>
+        <div className="mt-6 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Business intelligence · {report.branchName}</p>
+            <h2 className="mt-2 text-3xl font-extrabold tracking-[-0.04em] text-ink sm:text-4xl">Know what is moving the business.</h2>
+            <p className="mt-2 max-w-2xl text-sm text-ink-muted">{formatRangeDate(filters.from)} to {formatRangeDate(filters.to)}. Voided and refunded sales are excluded from every figure below, {firstName}.</p>
           </div>
-
-          {queryWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink">Some report data could not refresh. The panels are showing the data that was available.</div>}
-
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><ReportMetric label="Net sales" value={displayPeso(totalSales)} detail={`${completedOrders.length} completed orders`} tone="bg-primary text-primary-fg" icon="wallet" /><ReportMetric label="Average order" value={displayPeso(averageOrder)} detail="Per completed order" tone="bg-success text-white" icon="chart" /><ReportMetric label="Discounts given" value={displayPeso(discountsGiven)} detail="Across the selected period" tone="bg-secondary text-primary" icon="promotions" /><ReportMetric label="Tax collected" value={displayPeso(taxCollected)} detail="Recorded VAT amount" tone="bg-warning/15 text-warning" icon="reports" /></div>
-
-          <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.7fr)]">
-            <section aria-labelledby="trend-heading" className="admin-panel p-5"><div className="admin-panel__header"><div><p className="admin-panel__eyebrow">Sales trend</p><h2 id="trend-heading" className="admin-panel__title">Daily completed sales</h2><p className="admin-panel__subtitle">{formatReportDate(startDate)} to {formatReportDate(todayStart)}</p></div><span className="rounded-pill bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary">{compactPeso(Math.max(...dailySeries.map((point) => point.value), 0))} peak day</span></div><ReportTrend series={dailySeries} range={range} /></section>
-            <section aria-labelledby="payment-heading" className="admin-panel p-5"><div className="admin-panel__header"><div><p className="admin-panel__eyebrow">Tender mix</p><h2 id="payment-heading" className="admin-panel__title">Payment totals</h2><p className="admin-panel__subtitle">Completed sales by method</p></div></div><div className="mt-4 divide-y divide-line/70">{paymentTotals.map((payment) => <div key={payment.method} className="flex items-center justify-between gap-3 py-3"><span className="flex items-center gap-2 text-xs font-extrabold text-ink"><i className={`h-2.5 w-2.5 rounded-full ${payment.method === "cash" ? "bg-primary" : payment.method === "gcash" ? "bg-success" : payment.method === "maya" ? "bg-warning" : "bg-[#8064a7]"}`} />{paymentLabel(payment.method)}</span><span className="text-right"><strong className="tnums block text-xs font-extrabold text-ink">{displayPeso(payment.total)}</strong><small className="tnums mt-1 block text-[10px] text-ink-muted">{payment.orders} order{payment.orders === 1 ? "" : "s"} &middot; {totalSales ? Math.round((payment.total / totalSales) * 100) : 0}%</small></span></div>)}</div></section>
+          <div className="flex flex-wrap items-center gap-2">
+            {quickRanges.map((range) => {
+              const from = shiftDate(today, -(range.days - 1));
+              const isActive = filters.from === from && filters.to === today;
+              return (
+                <Link
+                  key={range.label}
+                  href={reportsHref(filters, { from, to: today })}
+                  className={`rounded-btn border px-3 py-2 text-xs font-extrabold transition ${isActive ? "border-primary bg-primary text-primary-fg" : "border-line bg-surface text-primary hover:bg-primary-soft"}`}
+                >
+                  {range.label}
+                </Link>
+              );
+            })}
           </div>
+        </div>
 
-          <div className="mt-4 grid gap-4 xl:grid-cols-2">
-            <ReportListPanel title="Best sellers" subtitle="Top items by revenue" emptyTitle="No completed sales yet" emptyDetail="Items will appear after the first completed order." items={topItems.map((item) => ({ label: item.name, detail: `${formatStockQuantity(item.qty)} ${item.unit} sold`, value: displayPeso(item.total) }))} />
-            <ReportListPanel title="Sales by category" subtitle="Menu families driving item sales" emptyTitle="No category sales yet" emptyDetail="Category performance will appear after completed orders." items={categorySales.map((item) => ({ label: item.name, detail: `${formatStockQuantity(item.qty)} ${item.unit} sold`, value: displayPeso(item.total) }))} />
+        {report.truncated && (
+          <div role="alert" className="mt-5 rounded-card border border-danger/25 bg-danger-soft px-4 py-3 text-sm font-semibold text-danger">
+            This range exceeds the row limit, so the figures below are incomplete. Narrow the date range before relying on or exporting them.
           </div>
+        )}
+        {report.queryWarning && !report.truncated && (
+          <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink">Some report data could not refresh. The panels are showing the data that was available.</div>
+        )}
 
-          <section aria-labelledby="branch-report-heading" className="admin-panel mt-4 p-5"><div className="admin-panel__header"><div><p className="admin-panel__eyebrow">{branchFilter ? "Selected branch" : "Branch comparison"}</p><h2 id="branch-report-heading" className="admin-panel__title">{branchFilter ? `${currentBranchName} performance` : "Where sales are happening"}</h2><p className="admin-panel__subtitle">Completed sales for the selected period</p></div><Link href="/admin/employees" className="admin-kpi-card__link mt-0">Manage staff <AdminIcon name="arrow" size={14} /></Link></div>{branchStats.length === 0 ? <ReportEmpty title="No branches found" detail="Create a branch to compare performance." /> : <div className="mt-4 overflow-x-auto"><table className="admin-list-table min-w-[620px]"><thead><tr><th>Branch</th><th>Orders</th><th>Total sales</th><th>Share</th><th>Average order</th></tr></thead><tbody>{branchStats.map((branch) => <tr key={branch.id}><td><strong>{branch.name}</strong><small className="mt-1 block text-[10px] text-ink-muted">{branch.is_active ? "Active" : "Inactive"}</small></td><td className="tnums">{branch.orders}</td><td className="tnums font-extrabold">{displayPeso(branch.sales)}</td><td className="tnums">{totalSales ? Math.round((branch.sales / totalSales) * 100) : 0}%</td><td className="tnums font-extrabold">{displayPeso(branch.orders ? Math.round(branch.sales / branch.orders) : 0)}</td></tr>)}</tbody></table></div>}</section>
+        <section aria-labelledby="report-filters-heading" className="admin-panel mt-6 p-5">
+          <div className="admin-panel__header">
+            <div>
+              <p className="admin-panel__eyebrow">Refine</p>
+              <h2 id="report-filters-heading" className="admin-panel__title">Filter sales</h2>
+              <p className="admin-panel__subtitle">Dates follow the branch business day (Asia/Singapore).</p>
+            </div>
+            <Link href={reportsHref(filters, { from: shiftDate(today, -6), to: today, cashierId: "", paymentMethod: "", grouping: "day" })} className="admin-kpi-card__link mt-0">Reset <AdminIcon name="arrow" size={14} /></Link>
+          </div>
+          <form action="/admin/reports" method="get" className="mt-4 grid gap-3 lg:grid-cols-[repeat(5,minmax(130px,1fr))_auto] lg:items-end">
+            <FilterField label="From" htmlFor="report-from"><input id="report-from" type="date" name="from" defaultValue={filters.from} className="inventory-input" /></FilterField>
+            <FilterField label="To" htmlFor="report-to"><input id="report-to" type="date" name="to" defaultValue={filters.to} className="inventory-input" /></FilterField>
+            <FilterField label="Group by" htmlFor="report-grouping">
+              <select id="report-grouping" name="grouping" defaultValue={filters.grouping} className="inventory-input">
+                {groupingOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </FilterField>
+            <FilterField label="Cashier" htmlFor="report-cashier">
+              <select id="report-cashier" name="cashier" defaultValue={filters.cashierId} className="inventory-input">
+                <option value="">All cashiers</option>
+                {report.cashiers.map((cashier) => <option key={cashier.id} value={cashier.id}>{cashier.name}</option>)}
+              </select>
+            </FilterField>
+            <FilterField label="Payment" htmlFor="report-payment">
+              <select id="report-payment" name="payment" defaultValue={filters.paymentMethod} className="inventory-input">
+                <option value="">All methods</option>
+                {SALES_PAYMENT_METHODS.map((method) => <option key={method} value={method}>{paymentLabel(method)}</option>)}
+              </select>
+            </FilterField>
+            <button type="submit" className="min-h-11 rounded-btn bg-primary px-5 text-sm font-extrabold text-primary-fg transition hover:bg-primary-hover">Apply</button>
+          </form>
+
+          <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
+            <span className="self-center text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted">Export CSV</span>
+            {[
+              { kind: "summary", label: "Summary" },
+              { kind: "periods", label: groupingOptions.find((option) => option.value === filters.grouping)?.label ?? "Periods" },
+              { kind: "items", label: "Items" },
+              { kind: "categories", label: "Categories" },
+              { kind: "cashiers", label: "Cashiers" },
+              { kind: "branches", label: "Branches" },
+              { kind: "discounts", label: "Discounts" },
+              { kind: "hourly", label: "Hourly" },
+            ].map((option) => (
+              <a key={option.kind} href={exportHref(filters, option.kind)} className="rounded-btn bg-secondary px-3 py-2 text-[11px] font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">{option.label}</a>
+            ))}
+          </div>
+        </section>
+
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <ReportMetric label="Net sales" value={displayPeso(totals.netSales)} detail={`${totals.orderCount} order${totals.orderCount === 1 ? "" : "s"}, reversals excluded`} tone="bg-primary text-primary-fg" icon="wallet" />
+          <ReportMetric label="Average order" value={displayPeso(totals.averageOrder)} detail="Per completed order" tone="bg-success text-white" icon="chart" />
+          <ReportMetric label="Discounts given" value={displayPeso(totals.discountTotal)} detail={`${totals.discountedOrderCount} discounted order${totals.discountedOrderCount === 1 ? "" : "s"}`} tone="bg-secondary text-primary" icon="promotions" />
+          <ReportMetric label="VAT collected" value={displayPeso(totals.vatAmount)} detail={`${displayPeso(totals.vatExemptSale)} VAT-exempt`} tone="bg-warning/15 text-warning" icon="reports" />
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.7fr)]">
+          <section aria-labelledby="trend-heading" className="admin-panel p-5">
+            <div className="admin-panel__header">
+              <div>
+                <p className="admin-panel__eyebrow">Sales trend</p>
+                <h2 id="trend-heading" className="admin-panel__title">Net sales {filters.grouping === "day" ? "by day" : filters.grouping === "week" ? "by week" : "by month"}</h2>
+                <p className="admin-panel__subtitle">{report.periodRows.length} period{report.periodRows.length === 1 ? "" : "s"} in range</p>
+              </div>
+              <div className="flex gap-1.5">
+                {groupingOptions.map((option) => (
+                  <Link key={option.value} href={reportsHref(filters, { grouping: option.value })} className={`rounded-btn border px-2.5 py-1.5 text-[11px] font-extrabold transition ${filters.grouping === option.value ? "border-primary bg-primary text-primary-fg" : "border-line bg-surface text-primary hover:bg-primary-soft"}`}>{option.label.replace("By ", "")}</Link>
+                ))}
+              </div>
+            </div>
+            {report.periodRows.length === 0 ? <ReportEmpty title="No sales in this range" detail="Completed sales appear here once orders are rung up." /> : <ReportTrend series={report.periodRows.map((row) => ({ label: row.label, value: row.netSales }))} />}
+          </section>
+
+          <section aria-labelledby="payment-heading" className="admin-panel p-5">
+            <div className="admin-panel__header"><div><p className="admin-panel__eyebrow">Tender mix</p><h2 id="payment-heading" className="admin-panel__title">Payment totals</h2><p className="admin-panel__subtitle">Net sales by method</p></div></div>
+            <div className="mt-4 divide-y divide-line/70">
+              {report.paymentRows.map((payment) => (
+                <div key={payment.method} className="flex items-center justify-between gap-3 py-3">
+                  <span className="flex items-center gap-2 text-xs font-extrabold text-ink">
+                    <i className={`h-2.5 w-2.5 rounded-full ${payment.method === "cash" ? "bg-primary" : payment.method === "gcash" ? "bg-success" : payment.method === "maya" ? "bg-warning" : "bg-[#8064a7]"}`} />
+                    {paymentLabel(payment.method)}
+                  </span>
+                  <span className="text-right">
+                    <strong className="tnums block text-xs font-extrabold text-ink">{displayPeso(payment.netSales)}</strong>
+                    <small className="tnums mt-1 block text-[10px] text-ink-muted">{payment.orders} order{payment.orders === 1 ? "" : "s"} · {payment.share}%</small>
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 border-t border-line pt-3">
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted">Reversals recorded</p>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <span className="text-xs text-ink-muted">{totals.voidCount} void{totals.voidCount === 1 ? "" : "s"} · {totals.refundCount} refund{totals.refundCount === 1 ? "" : "s"}</span>
+                <strong className={`tnums text-xs font-extrabold ${reversalTotal > 0 ? "text-danger" : "text-ink-muted"}`}>{displayPeso(reversalTotal)}</strong>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div className="mt-4 grid gap-4 xl:grid-cols-2">
+          <ReportListPanel
+            title="Best sellers"
+            subtitle="Top items by revenue"
+            emptyTitle="No completed sales yet"
+            emptyDetail="Items appear after the first completed order."
+            items={report.itemRows.slice(0, 8).map((item) => ({ label: item.name, detail: `${formatStockQuantity(item.qty)} ${item.unit} · ${item.orders} order${item.orders === 1 ? "" : "s"}`, value: displayPeso(item.netSales) }))}
+          />
+          <ReportListPanel
+            title="Sales by category"
+            subtitle="Menu families driving item sales"
+            emptyTitle="No category sales yet"
+            emptyDetail="Category performance appears after completed orders."
+            items={report.categoryRows.slice(0, 8).map((item) => ({ label: item.name, detail: `${formatStockQuantity(item.qty)} ${item.unit} · ${item.share}%`, value: displayPeso(item.netSales) }))}
+          />
+        </div>
+
+        <section aria-labelledby="hourly-heading" className="admin-panel mt-4 p-5">
+          <div className="admin-panel__header">
+            <div>
+              <p className="admin-panel__eyebrow">Demand shape</p>
+              <h2 id="hourly-heading" className="admin-panel__title">Hourly heatmap</h2>
+              <p className="admin-panel__subtitle">Net sales by weekday and hour, across the whole range</p>
+            </div>
+            {report.peakHour && <span className="rounded-pill bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary">Peak {weekdayLabel(report.peakHour.weekday)} {String(report.peakHour.hour).padStart(2, "0")}:00 · {compactPeso(report.peakHour.netSales)}</span>}
+          </div>
+          {report.hourCells.length === 0 ? <ReportEmpty title="No sales to map yet" detail="The heatmap fills in as orders are completed through the day." /> : <ReportHeatmap report={report} />}
+        </section>
+
+        <div className="mt-4 grid gap-4 xl:grid-cols-2">
+          <section aria-labelledby="cashier-heading" className="admin-panel min-w-0 p-5">
+            <div className="admin-panel__header">
+              <div>
+                <p className="admin-panel__eyebrow">Team</p>
+                <h2 id="cashier-heading" className="admin-panel__title">Sales by cashier</h2>
+                <p className="admin-panel__subtitle">Voids and refunds count the reversals they recorded</p>
+              </div>
+              <Link href="/admin/employees" className="admin-kpi-card__link mt-0">Staff <AdminIcon name="arrow" size={14} /></Link>
+            </div>
+            {report.cashierRows.length === 0 ? <ReportEmpty title="No cashier activity" detail="Cashier performance appears once sales are rung up in this range." /> : (
+              <div className="mt-4 overflow-x-auto">
+                <table className="admin-list-table min-w-[620px]">
+                  <thead><tr><th>Cashier</th><th>Orders</th><th>Net sales</th><th>Average</th><th>Reversals</th><th>Share</th></tr></thead>
+                  <tbody>
+                    {report.cashierRows.map((row) => (
+                      <tr key={row.cashierId}>
+                        <td><strong>{row.name}</strong></td>
+                        <td className="tnums">{row.orders}</td>
+                        <td className="tnums font-extrabold">{displayPeso(row.netSales)}</td>
+                        <td className="tnums">{displayPeso(row.averageOrder)}</td>
+                        <td className={`tnums ${row.voidCount + row.refundCount > 0 ? "text-danger" : "text-ink-muted"}`}>{row.voidCount + row.refundCount}</td>
+                        <td className="tnums">{row.share}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          <section aria-labelledby="discount-heading" className="admin-panel min-w-0 p-5">
+            <div className="admin-panel__header">
+              <div>
+                <p className="admin-panel__eyebrow">Concessions</p>
+                <h2 id="discount-heading" className="admin-panel__title">Discount report</h2>
+                <p className="admin-panel__subtitle">Senior and PWD discounts are legally mandated and VAT-exempt</p>
+              </div>
+            </div>
+            <div className="mt-4 overflow-x-auto">
+              <table className="admin-list-table min-w-[520px]">
+                <thead><tr><th>Type</th><th>Orders</th><th>Discount given</th><th>Net sales</th></tr></thead>
+                <tbody>
+                  {report.discountRows.map((row) => (
+                    <tr key={row.type}>
+                      <td><strong>{row.label}</strong></td>
+                      <td className="tnums">{row.orders}</td>
+                      <td className="tnums font-extrabold">{row.discountTotal > 0 ? displayPeso(row.discountTotal) : "—"}</td>
+                      <td className="tnums">{displayPeso(row.netSales)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <section aria-labelledby="branch-report-heading" className="admin-panel mt-4 p-5">
+          <div className="admin-panel__header">
+            <div>
+              <p className="admin-panel__eyebrow">{report.canCompareBranches ? "Branch comparison" : "Selected branch"}</p>
+              <h2 id="branch-report-heading" className="admin-panel__title">{report.canCompareBranches ? "Where sales are happening" : `${report.branchName} performance`}</h2>
+              <p className="admin-panel__subtitle">{report.canCompareBranches ? "Switch to a single branch from the top bar to drill in" : "Switch to All branches from the top bar to compare"}</p>
+            </div>
+          </div>
+          {report.branchRows.length === 0 ? <ReportEmpty title="No branches found" detail="Create a branch to compare performance." /> : (
+            <div className="mt-4 overflow-x-auto">
+              <table className="admin-list-table min-w-[680px]">
+                <thead><tr><th>Branch</th><th>Orders</th><th>Net sales</th><th>Discounts</th><th>Average order</th><th>Share</th></tr></thead>
+                <tbody>
+                  {report.branchRows.map((row) => (
+                    <tr key={row.branchId}>
+                      <td><strong>{row.name}</strong><small className="mt-1 block text-[10px] text-ink-muted">{row.isActive ? "Active" : "Inactive"}</small></td>
+                      <td className="tnums">{row.orders}</td>
+                      <td className="tnums font-extrabold">{displayPeso(row.netSales)}</td>
+                      <td className="tnums">{displayPeso(row.discountTotal)}</td>
+                      <td className="tnums font-extrabold">{displayPeso(row.averageOrder)}</td>
+                      <td className="tnums">{row.share}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       </div>
     </main>
+  );
+}
+
+function ReportHeatmap({ report }: { report: SalesReportData }) {
+  const byKey = new Map(report.hourCells.map((cell) => [`${cell.weekday}-${cell.hour}`, cell]));
+  const max = report.hourCells.reduce((peak, cell) => Math.max(peak, cell.netSales), 0);
+  // Business days start mid-morning and run late, so the grid is trimmed to the
+  // hours a lechon counter actually trades rather than a flat 24-column wall.
+  const activeHours = report.hourCells.map((cell) => cell.hour);
+  const firstHour = Math.min(...activeHours, 8);
+  const lastHour = Math.max(...activeHours, 20);
+  const hours = Array.from({ length: lastHour - firstHour + 1 }, (_, index) => firstHour + index);
+  const weekdays = [1, 2, 3, 4, 5, 6, 0];
+
+  return (
+    <div className="mt-4 overflow-x-auto">
+      <table className="w-full min-w-[680px] border-separate border-spacing-1">
+        <thead>
+          <tr>
+            <th className="w-10" />
+            {hours.map((hour) => <th key={hour} className="text-[9px] font-extrabold text-ink-muted">{String(hour).padStart(2, "0")}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {weekdays.map((weekday) => (
+            <tr key={weekday}>
+              <th scope="row" className="pr-1 text-right text-[10px] font-extrabold text-ink-muted">{weekdayLabel(weekday)}</th>
+              {hours.map((hour) => {
+                const cell = byKey.get(`${weekday}-${hour}`);
+                const value = cell?.netSales ?? 0;
+                const intensity = max > 0 && value > 0 ? Math.max(0.12, value / max) : 0;
+                return (
+                  <td key={hour} className="p-0">
+                    <span
+                      className="block h-7 rounded-sm border border-line/60"
+                      style={{ backgroundColor: intensity > 0 ? `color-mix(in srgb, var(--color-primary) ${Math.round(intensity * 100)}%, transparent)` : undefined }}
+                      title={`${weekdayLabel(weekday)} ${String(hour).padStart(2, "0")}:00 — ${displayPeso(value)}${cell ? ` · ${cell.orders} order${cell.orders === 1 ? "" : "s"}` : ""}`}
+                    />
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -304,13 +420,31 @@ function ReportMetric({ label, value, detail, tone, icon }: { label: string; val
   return <article className="admin-kpi-card min-h-[132px]"><div className="admin-kpi-card__inner"><div className="admin-kpi-card__top"><span className="admin-kpi-card__label">{label}</span><span className={`admin-kpi-card__icon ${tone}`}><AdminIcon name={icon} size={17} /></span></div><p className="admin-kpi-card__value tnums">{value}</p><p className="admin-kpi-card__trend">{detail}</p></div></article>;
 }
 
-function ReportTrend({ series, range }: { series: Array<{ label: string; value: number }>; range: ReportRange }) {
+function ReportTrend({ series }: { series: Array<{ label: string; value: number }> }) {
   const max = Math.max(...series.map((point) => point.value), 1);
-  return <div className="mt-5"><div className="flex h-[220px] items-end gap-1 border-b border-line px-1">{series.map((point, index) => <div key={`${point.label}-${index}`} className="group flex h-full min-w-0 flex-1 items-end justify-center" title={`${point.label}: ${displayPeso(point.value)}`}><span className="w-full max-w-7 rounded-t-sm bg-primary transition-all duration-200 group-hover:bg-accent" style={{ height: `${Math.max(point.value ? 5 : 1, Math.round((point.value / max) * 100))}%` }} /></div>)}</div><div className="mt-2 flex gap-1 px-1 text-[9px] font-semibold text-ink-muted">{series.map((point, index) => <span key={`${point.label}-label-${index}`} className="min-w-0 flex-1 truncate text-center">{range === "7d" || index === 0 || index === series.length - 1 || index % 5 === 0 ? point.label : ""}</span>)}</div></div>;
+  const labelEvery = series.length > 14 ? Math.ceil(series.length / 8) : 1;
+  return (
+    <div className="mt-5">
+      <div className="flex h-[220px] items-end gap-1 border-b border-line px-1">
+        {series.map((point, index) => (
+          <div key={`${point.label}-${index}`} className="group flex h-full min-w-0 flex-1 items-end justify-center" title={`${point.label}: ${displayPeso(point.value)}`}>
+            <span className="w-full max-w-7 rounded-t-sm bg-primary transition-all duration-200 group-hover:bg-accent" style={{ height: `${Math.max(point.value ? 5 : 1, Math.round((point.value / max) * 100))}%` }} />
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 flex gap-1 px-1 text-[9px] font-semibold text-ink-muted">
+        {series.map((point, index) => <span key={`${point.label}-label-${index}`} className="min-w-0 flex-1 truncate text-center">{index % labelEvery === 0 || index === series.length - 1 ? point.label : ""}</span>)}
+      </div>
+    </div>
+  );
 }
 
 function ReportListPanel({ title, subtitle, items, emptyTitle, emptyDetail }: { title: string; subtitle: string; items: Array<{ label: string; detail: string; value: string }>; emptyTitle: string; emptyDetail: string }) {
   return <section className="admin-panel p-5"><div className="admin-panel__header"><div><p className="admin-panel__eyebrow">Performance list</p><h2 className="admin-panel__title">{title}</h2><p className="admin-panel__subtitle">{subtitle}</p></div></div>{items.length === 0 ? <ReportEmpty title={emptyTitle} detail={emptyDetail} /> : <div className="admin-ranking">{items.map((item, index) => <div key={item.label} className="admin-ranking__item"><span className="admin-ranking__rank">{index + 1}</span><span className="admin-ranking__copy"><strong>{item.label}</strong><small>{item.detail}</small></span><strong className="admin-ranking__total tnums">{item.value}</strong></div>)}</div>}</section>;
+}
+
+function FilterField({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {
+  return <label htmlFor={htmlFor} className="block"><span className="mb-1.5 block text-xs font-extrabold uppercase tracking-[0.12em] text-ink-muted">{label}</span>{children}</label>;
 }
 
 function ReportEmpty({ title, detail }: { title: string; detail: string }) {
