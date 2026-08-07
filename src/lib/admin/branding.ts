@@ -1,6 +1,6 @@
 import { isProductImageUrl } from "@/lib/product-images";
 
-export const ADMIN_THEME_IDS = ["current", "light", "dark", "retro"] as const;
+export const ADMIN_THEME_IDS = ["default", "current", "light", "dark", "retro"] as const;
 
 export type AdminThemeId = (typeof ADMIN_THEME_IDS)[number];
 
@@ -9,6 +9,10 @@ export const ADMIN_THEME_OPTIONS: Array<{
   label: string;
   description: string;
 }> = [
+  // `default` is the house theme documented in docs/THEME_STYLE_GUIDE.md.
+  // The themes below it are independent — changing the style guide must not
+  // change them.
+  { id: "default", label: "Default", description: "Forest green, gold, and cream paper" },
   { id: "current", label: "Classic", description: "Warm paper, cocoa, and cream" },
   { id: "light", label: "Light", description: "Soft neutrals with sage accents" },
   { id: "dark", label: "Dark", description: "Charcoal surfaces with calm mint" },
@@ -20,7 +24,7 @@ export const DEFAULT_ORGANIZATION_NAME = "Your Business";
 export const DEFAULT_ADMIN_BRANDING = {
   brandName: "Dumala",
   brandTagline: "POS",
-  theme: "current" as AdminThemeId,
+  theme: "default" as AdminThemeId,
   logoUrl: "/logo.png" as string | null,
 };
 
