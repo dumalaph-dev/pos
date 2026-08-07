@@ -13637,3 +13637,128 @@ body.products-modal-open {
   --preview-primary: #173a2b;
   color: #102d21;
 }
+
+/* Quick actions are high-frequency controls, so they need stronger type and
+   a clear action hierarchy than the surrounding navigation. */
+.admin-quick-actions {
+  --quick-action-item: var(--primary-soft);
+  --quick-action-item-hover: var(--primary);
+  --quick-action-item-text: var(--text);
+  --quick-action-item-hover-text: var(--primary-fg);
+  --quick-action-icon: var(--accent);
+  --quick-action-arrow: var(--text-muted);
+  display: grid;
+  gap: 8px;
+  margin: 18px 4px 0;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-panel);
+  box-shadow: inset 0 1px 0 rgba(255, 250, 241, 0.06);
+}
+
+.admin-quick-actions h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.admin-quick-actions__list {
+  display: grid;
+  gap: 7px;
+}
+
+.admin-quick-actions__item {
+  display: grid;
+  min-height: 37px;
+  grid-template-columns: 28px minmax(0, 1fr) 14px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 9px 0 7px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--quick-action-item-text);
+  background: var(--quick-action-item);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  text-align: left;
+  text-decoration: none;
+  transition: color 150ms ease, background 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.admin-quick-actions__item:hover {
+  color: var(--quick-action-item-hover-text);
+  background: var(--quick-action-item-hover);
+  border-color: var(--quick-action-item-hover);
+  transform: translateX(2px);
+}
+
+.admin-quick-actions__item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.admin-quick-actions__item--primary {
+  --quick-action-item: var(--accent);
+  --quick-action-item-hover: var(--accent-hover);
+  --quick-action-item-text: var(--accent-fg);
+  --quick-action-item-hover-text: var(--accent-fg);
+}
+
+.admin-quick-actions__icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  color: var(--quick-action-icon);
+  border-radius: 8px;
+  background: rgba(255, 250, 241, 0.12);
+}
+
+.admin-quick-actions__item--primary .admin-quick-actions__icon {
+  color: var(--accent-fg);
+  background: rgba(23, 58, 43, 0.14);
+}
+
+.admin-quick-actions__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-quick-actions__item > svg:last-child {
+  color: var(--quick-action-arrow);
+  transition: color 150ms ease, transform 150ms ease;
+}
+
+.admin-quick-actions__item:hover > svg:last-child {
+  color: currentColor;
+  transform: translateX(2px);
+}
+
+[data-admin-theme="default"] .admin-sidebar .admin-quick-actions {
+  --quick-action-item: #285b42;
+  --quick-action-item-hover: #356f4e;
+  --quick-action-item-text: #fffaf1;
+  --quick-action-item-hover-text: #fffaf1;
+  --quick-action-icon: #e0b273;
+  --quick-action-arrow: #b6c8b8;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-quick-actions__item,
+  .admin-quick-actions__item > svg:last-child {
+    transition: none;
+  }
+
+  .admin-quick-actions__item:hover,
+  .admin-quick-actions__item:hover > svg:last-child {
+    transform: none;
+  }
+}

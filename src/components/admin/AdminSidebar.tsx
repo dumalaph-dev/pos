@@ -131,10 +131,28 @@ export function AdminSidebar({ branding, branchName, active: activeOverride, con
 
         <section className="admin-quick-actions" aria-labelledby="quick-actions-heading">
           <h2 id="quick-actions-heading">Quick actions</h2>
-          <Link href="/pos" className="admin-quick-actions__item"><span className="admin-quick-actions__icon"><AdminIcon name="plus" size={15} /></span><span>New Sale</span></Link>
-          <Link href="/pos?quickAction=park" className="admin-quick-actions__item"><span className="admin-quick-actions__icon"><AdminIcon name="pos" size={15} /></span><span>Park Order</span></Link>
-          <Link href="/admin/orders?status=refunded" className="admin-quick-actions__item"><span className="admin-quick-actions__icon"><AdminIcon name="history" size={15} /></span><span>Return / Refund</span></Link>
-          <Link href="/pos?quickAction=drawer" className="admin-quick-actions__item"><span className="admin-quick-actions__icon"><AdminIcon name="wallet" size={15} /></span><span>Open Cash Drawer</span></Link>
+          <div className="admin-quick-actions__list">
+            <Link href="/pos" className="admin-quick-actions__item admin-quick-actions__item--primary">
+              <span className="admin-quick-actions__icon"><AdminIcon name="plus" size={16} /></span>
+              <span className="admin-quick-actions__label">New Sale</span>
+              <AdminIcon name="arrow" size={14} />
+            </Link>
+            <Link href="/pos?quickAction=park" className="admin-quick-actions__item">
+              <span className="admin-quick-actions__icon"><AdminIcon name="pos" size={16} /></span>
+              <span className="admin-quick-actions__label">Park Order</span>
+              <AdminIcon name="arrow" size={14} />
+            </Link>
+            <Link href="/admin/orders?status=refunded" className="admin-quick-actions__item">
+              <span className="admin-quick-actions__icon"><AdminIcon name="history" size={16} /></span>
+              <span className="admin-quick-actions__label">Return / Refund</span>
+              <AdminIcon name="arrow" size={14} />
+            </Link>
+            <Link href="/pos?quickAction=drawer" className="admin-quick-actions__item">
+              <span className="admin-quick-actions__icon"><AdminIcon name="wallet" size={16} /></span>
+              <span className="admin-quick-actions__label">Open Cash Drawer</span>
+              <AdminIcon name="arrow" size={14} />
+            </Link>
+          </div>
         </section>
 
         <section className="admin-system-info" aria-label="POS system information">
