@@ -10,6 +10,7 @@ type ProfileRecord = {
   role: "admin" | "manager" | "cashier" | null;
   password_change_required: boolean;
   org_id: string;
+  organizations: { account_status?: "active" | "suspended" | null } | null;
 };
 
 type BranchRecord = { id: string; name: string; address: string | null };
@@ -19,6 +20,7 @@ export default async function SetupPage() {
   if (!user) redirect("/");
 
   const profile = await getAdminProfile(user.id) as ProfileRecord | null;
+  if (profile?.organizations?.account_status === "suspended") redirect("/account/suspended");
   if (profile?.password_change_required) redirect("/account/password?required=1");
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile || profile.role !== "admin") return <SetupNotAllowed />;

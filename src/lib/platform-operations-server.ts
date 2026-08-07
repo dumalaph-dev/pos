@@ -1,0 +1,142 @@
+import { createAdminClient } from "@/lib/employee-auth";
+import {
+  DEFAULT_BILLING_VARIANTS,
+  DEFAULT_MONTHLY_PRICE_CENTAVOS,
+  DEFAULT_PLATFORM_POLICIES,
+  type BillingCatalog,
+  type BillingVariant,
+  type PlatformPolicies,
+  type PlatformPolicy,
+  type PlatformPolicyKey,
+} from "@/lib/platform-operations";
+
+type PlatformAdminClient = NonNullable<ReturnType<typeof createAdminClient>>;
+
+export async function readPlatformBillingCatalog(admin: PlatformAdminClient): Promise<BillingCatalog> {
+  const [settingsResult, variantsResult] = await Promise.all([
+    admin.from("platform_billing_settings").select("currency, monthly_price_centavos").eq("id", "default").maybeSingle(),
+    admin.from("platform_billing_variants").select("id, label, billing_unit, interval_count, discount_percent, paymongo_plan_id, is_active, sort_order").order("sort_order", { ascending: true }),
+  ]);
+
+  const schemaAvailable = !settingsResult.error && !variantsResult.error;
+  const monthlyPriceCentavos = readInteger(settingsResult.data?.monthly_price_centavos, DEFAULT_MONTHLY_PRICE_CENTAVOS);
+  const rows = (variantsResult.data ?? []) as Array<{
+    id: string;
+    label: string;
+    billing_unit: string;
+    interval_count: number;
+    discount_percent: number;
+    paymongo_plan_id: string | null;
+    is_active: boolean;
+    sort_order: number;
+  }>;
+
+  const variants = rows
+    .filter((row) => row.billing_unit === "month" || row.billing_unit === "year")
+    .map<BillingVariant>((row) => ({
+      id: row.id,
+      label: row.label,
+      intervalUnit: row.billing_unit as BillingVariant["intervalUnit"],
+      intervalCount: readInteger(row.interval_count, 1),
+      discountPercent: Number(row.discount_percent) || 0,
+      paymongoPlanId: row.paymongo_plan_id,
+      isActive: Boolean(row.is_active),
+      sortOrder: readInteger(row.sort_order, 0),
+    }));
+
+  return {
+    currency: "PHP",
+    monthlyPriceCentavos,
+    variants: variants.length > 0 ? variants : DEFAULT_BILLING_VARIANTS,
+    schemaAvailable,
+  };
+}
+
+export async function readPlatformPolicies(admin: PlatformAdminClient): Promise<PlatformPolicies> {
+  const result = await admin
+    .from("platform_policies")
+    .select("policy_key, status, version, summary, settings, published_at, updated_at");
+
+  if (result.error) {
+    return { ...DEFAULT_PLATFORM_POLICIES, schemaAvailable: false };
+  }
+
+  const rows = (result.data ?? []) as Array<{
+    policy_key: string;
+    status: string;
+    version: number;
+    summary: string;
+    settings: Record<string, string | number> | null;
+    published_at: string | null;
+    updated_at: string | null;
+  }>;
+
+  const byKey = new Map(rows.map((row) => [row.policy_key, row]));
+  return {
+    billing: normalizePolicy("billing", byKey.get("billing")),
+    support: normalizePolicy("support", byKey.get("support")),
+    schemaAvailable: true,
+  };
+}
+
+export async function readPlatformOperations(admin: PlatformAdminClient) {
+  const [catalog, policies] = await Promise.all([
+    readPlatformBillingCatalog(admin),
+    readPlatformPolicies(admin),
+  ]);
+  return { catalog, policies };
+}
+
+export async function supportCasesSchemaAvailable(admin: PlatformAdminClient) {
+  const result = await admin.from("support_cases").select("id").limit(1);
+  return !result.error;
+}
+
+export function payMongoConfiguration() {
+  const secretKey = process.env.PAYMONGO_SECRET_KEY?.trim() || "";
+  const publicKey = process.env.NEXT_PUBLIC_PAYMONGO_PUBLIC_KEY?.trim() || null;
+  const secretMode = payMongoKeyMode(secretKey);
+  const publicMode = payMongoKeyMode(publicKey);
+  return {
+    secretKeyConfigured: Boolean(secretKey),
+    publicKeyConfigured: Boolean(publicKey),
+    keyModeConsistent: Boolean(secretMode && publicMode && secretMode === publicMode),
+    publicKey,
+    webhookSecretConfigured: Boolean(process.env.PAYMONGO_WEBHOOK_SECRET),
+    subscriptionsEnabled: process.env.PAYMONGO_SUBSCRIPTIONS_ENABLED === "true",
+    apiBaseUrl: process.env.PAYMONGO_API_BASE_URL || "https://api.paymongo.com",
+  };
+}
+
+function payMongoKeyMode(value: string | null) {
+  if (value?.startsWith("sk_test_") || value?.startsWith("pk_test_")) return "test";
+  if (value?.startsWith("sk_live_") || value?.startsWith("pk_live_")) return "live";
+  return null;
+}
+
+function normalizePolicy(key: PlatformPolicyKey, row: {
+  policy_key: string;
+  status: string;
+  version: number;
+  summary: string;
+  settings: Record<string, string | number> | null;
+  published_at: string | null;
+  updated_at: string | null;
+} | undefined): PlatformPolicy {
+  const fallback = DEFAULT_PLATFORM_POLICIES[key];
+  if (!row) return fallback;
+  return {
+    key,
+    status: row.status === "published" ? "published" : "draft",
+    version: readInteger(row.version, 1),
+    summary: row.summary || fallback.summary,
+    settings: row.settings ?? fallback.settings,
+    publishedAt: row.published_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function readInteger(value: unknown, fallback: number) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : fallback;
+}

@@ -20,6 +20,7 @@ export default async function PosPage() {
   if (checked && !user) redirect("/");
   if (checked && user) {
     const profile = await getAdminProfile(user.id);
+    if (profile?.organizations?.account_status === "suspended") redirect("/account/suspended");
     if (profile?.password_change_required) redirect("/account/password?required=1");
   }
 

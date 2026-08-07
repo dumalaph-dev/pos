@@ -3,12 +3,15 @@ import Image from "next/image";
 import Link from "next/link";
 import LandingHeader from "@/components/landing/LandingHeader";
 import ScrollReveal from "@/components/landing/ScrollReveal";
-import { PREMIUM_PRICE_LABEL as PREMIUM_PRICE } from "@/lib/billing";
+import { createAdminClient } from "@/lib/employee-auth";
+import { formatPeso } from "@/lib/money";
+import { DEFAULT_MONTHLY_PRICE_CENTAVOS } from "@/lib/platform-operations";
+import { readPlatformBillingCatalog } from "@/lib/platform-operations-server";
 
 export const metadata: Metadata = {
   title: "Dumala POS | Run your business with less stress",
   description:
-    "An offline-first POS for Philippine counters: a tablet sell screen for cashiers, an owner dashboard for the business, and every branch in one workspace. 14-day free trial, then ₱799 a month.",
+    "An offline-first POS for Philippine counters: a tablet sell screen for cashiers, an owner dashboard for the business, and every branch in one workspace. Start with a 14-day free trial.",
 };
 
 type FeatureIconName = "bag" | "chart" | "people" | "bolt";
@@ -169,7 +172,8 @@ const pricingIncludes = [
   "Owner, manager, and cashier roles",
 ];
 
-const faqs: Array<{ question: string; answer: string }> = [
+function buildFaqs(premiumPrice: string): Array<{ question: string; answer: string }> {
+  return [
   {
     question: "How does the free trial work?",
     answer:
@@ -178,7 +182,7 @@ const faqs: Array<{ question: string; answer: string }> = [
   {
     question: "What does it cost after the trial?",
     answer:
-      `${PREMIUM_PRICE} per month for Premium. That is the only paid plan — there are no tiers, no per-branch pricing, and no add-ons to compare. One subscription covers your whole business.`,
+      `${premiumPrice} per month for Premium. That is the only paid plan — there are no tiers, no per-branch pricing, and no add-ons to compare. One subscription covers your whole business.`,
   },
   {
     question: "Does it keep working when the internet drops?",
@@ -210,7 +214,8 @@ const faqs: Array<{ question: string; answer: string }> = [
     answer:
       "No. Dumala runs in the browser and installs to a tablet or desktop home screen as an app when you want the full-screen experience. There is no app store review to wait on.",
   },
-];
+  ];
+}
 
 const marqueeItems = [
   "Offline-first, always",
@@ -470,7 +475,14 @@ function HeroVisual() {
 
 // Keep <main> free of `overflow-hidden`: it would become the scroll container
 // and break the sticky header. Sections clip their own decorative overflow.
-export default function LandingPage() {
+export const dynamic = "force-dynamic";
+
+export default async function LandingPage() {
+  const admin = createAdminClient();
+  const catalog = admin ? await readPlatformBillingCatalog(admin) : null;
+  const premiumPrice = formatPeso(catalog?.monthlyPriceCentavos ?? DEFAULT_MONTHLY_PRICE_CENTAVOS);
+  const faqs = buildFaqs(premiumPrice);
+
   return (
     <main className="lp min-h-screen bg-[#f8f3eb] text-[#102d21]">
       <noscript>
@@ -559,7 +571,7 @@ export default function LandingPage() {
               style={{ "--lp-delay": "420ms" } as React.CSSProperties}
             >
               <span className="inline-flex items-center gap-2"><CheckIcon /> 14 days free, no card</span>
-              <span className="inline-flex items-center gap-2"><CheckIcon /> Then {PREMIUM_PRICE}/month — one plan</span>
+              <span className="inline-flex items-center gap-2"><CheckIcon /> Then {premiumPrice}/month — one plan</span>
               <span className="inline-flex items-center gap-2"><CheckIcon /> Sells with no internet</span>
             </div>
           </div>
@@ -1010,7 +1022,7 @@ export default function LandingPage() {
                 </div>
 
                 <p className="relative mt-6 flex flex-wrap items-baseline gap-2">
-                  <span className="text-[3.6rem] font-black leading-none tracking-[-0.06em] tabular-nums">{PREMIUM_PRICE}</span>
+                  <span className="text-[3.6rem] font-black leading-none tracking-[-0.06em] tabular-nums">{premiumPrice}</span>
                   <span className="text-sm font-bold text-[#a9c4ae]">/ month</span>
                 </p>
                 <p className="relative mt-3 max-w-md text-sm leading-6 text-[#cad6ca]">
@@ -1087,7 +1099,7 @@ export default function LandingPage() {
                   Give your business a calmer way to run.
                 </h2>
                 <p className="mt-3 max-w-xl text-sm leading-6 text-[#657168] sm:text-base">
-                  Take the full product for 14 days, free and without a card. Keep it for {PREMIUM_PRICE} a month — the one
+                  Take the full product for 14 days, free and without a card. Keep it for {premiumPrice} a month — the one
                   plan that includes both the tablet POS and your owner dashboard.
                 </p>
               </div>
@@ -1098,7 +1110,7 @@ export default function LandingPage() {
                 >
                   Start your free trial <ArrowIcon />
                 </Link>
-                <p className="mt-3 text-xs text-[#7d887f]">14 days free · then {PREMIUM_PRICE}/month</p>
+                <p className="mt-3 text-xs text-[#7d887f]">14 days free · then {premiumPrice}/month</p>
               </div>
             </div>
           </div>
@@ -1115,7 +1127,7 @@ export default function LandingPage() {
               </Link>
               <p className="mt-4 text-xs leading-5 text-[#708076]">
                 An offline-first tablet POS and owner dashboard, built for Philippine counters and peso pricing. Free for 14
-                days, then {PREMIUM_PRICE} a month — one plan, everything included.
+                days, then {premiumPrice} a month — one plan, everything included.
               </p>
             </div>
 

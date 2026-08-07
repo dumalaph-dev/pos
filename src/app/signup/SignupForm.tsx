@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { PREMIUM_PRICE_LABEL } from "@/lib/billing";
 import { signupStoreOwner } from "./actions";
 import { INITIAL_SIGNUP_STATE, type SignupField, type SignupState } from "./state";
 
@@ -15,7 +14,7 @@ function fieldClass(hasError: boolean) {
   return `mt-1 w-full rounded-btn border bg-raised px-4 py-3 text-ink outline-none transition focus:border-primary ${hasError ? "border-danger" : "border-line-strong"}`;
 }
 
-export default function SignupForm() {
+export default function SignupForm({ monthlyPriceLabel }: { monthlyPriceLabel: string }) {
   const [state, formAction, pending] = useActionState(signupStoreOwner, INITIAL_SIGNUP_STATE);
 
   if (state.ok && state.needsConfirmation) {
@@ -35,7 +34,7 @@ export default function SignupForm() {
         <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-accent">Owner details</p>
         <h2 id="signup-heading" className="mt-1 text-lg font-extrabold text-ink">Create your POS workspace</h2>
         <p className="mt-1 text-sm leading-6 text-ink-muted">Your registration includes a private organization, first branch, and admin access.</p>
-        <p className="mt-3 rounded-btn bg-secondary px-3 py-3 text-xs leading-5 text-ink-muted"><strong className="font-extrabold text-ink">Premium:</strong> 14 days free, then {PREMIUM_PRICE_LABEL}/month. One plan covers your whole business.</p>
+        <p className="mt-3 rounded-btn bg-secondary px-3 py-3 text-xs leading-5 text-ink-muted"><strong className="font-extrabold text-ink">Premium:</strong> 14 days free, then {monthlyPriceLabel}/month. One plan covers your whole business.</p>
       </div>
 
       {state.message && <p role="alert" className="rounded-btn border border-danger/25 bg-danger-soft px-4 py-3 text-sm font-semibold text-danger">{state.message}</p>}
