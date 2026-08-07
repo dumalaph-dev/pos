@@ -65,7 +65,7 @@ Fixture: **2 orgs**, each with **2 branches**, each branch with an admin + a cas
 | 5.3 | Printer out of range/unreachable | M | non-blocking "Retry print"; sale still saved |
 | 5.4 | Two tablets, own printers, same branch | M | independent config; no overwrite |
 | 5.5 | Reprint from history | M | marked `REPRINT` + audit logged |
-| 5.6 | 58mm vs 80mm layout | M | both render correctly |
+| 5.6 | 52mm, 58mm, and 80mm layouts | M | all three render correctly |
 | 5.7 | Receipt content | M | branch, items, discount+ID, totals, "not an official receipt" line present |
 
 ### Validation record — 2026-08-03

@@ -6,6 +6,8 @@
  * printer directly. All adapters share one interface: print(bytes).
  */
 
+import { normalizePaperWidth, type PaperWidth } from "./paper-width.ts";
+
 export type PrinterTransport = "network" | "bluetooth" | "usb";
 
 export type PrinterSettings = {
@@ -14,7 +16,7 @@ export type PrinterSettings = {
   bridgePort: number; // usually 8787
   ip: string; // network printer address
   port: number; // usually 9100
-  paperWidth: 58 | 80;
+  paperWidth: PaperWidth;
 };
 
 const SETTINGS_KEY = "pos.printer.v1";
@@ -43,7 +45,7 @@ function normalizeSettings(value: unknown): PrinterSettings {
     bridgePort: validPort(raw.bridgePort, DEFAULT_BRIDGE_PORT),
     ip: typeof raw.ip === "string" ? raw.ip.trim() : DEFAULT_SETTINGS.ip,
     port: validPort(raw.port, DEFAULT_SETTINGS.port),
-    paperWidth: raw.paperWidth === 80 ? 80 : 58,
+    paperWidth: normalizePaperWidth(raw.paperWidth),
   };
 }
 

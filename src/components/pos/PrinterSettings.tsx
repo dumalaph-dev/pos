@@ -12,6 +12,7 @@ import {
   type PrinterTransport,
 } from "@/lib/printer";
 import { buildReceipt } from "@/lib/receipt";
+import { PAPER_WIDTH_OPTIONS } from "@/lib/paper-width";
 
 export default function PrinterSettingsModal({
   initial,
@@ -145,17 +146,25 @@ export default function PrinterSettingsModal({
           </>
         )}
 
-        <label className="mt-3 block text-sm font-medium text-ink">Paper width</label>
-        <div className="mt-1 grid grid-cols-2 gap-2">
-          {([58, 80] as const).map((w) => (
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-ink">Paper roll width</label>
+          <p className="mt-1 text-xs leading-5 text-ink-muted">Choose the width of the roll loaded in this printer.</p>
+        </div>
+        <div className="mt-2 grid grid-cols-3 gap-2" role="group" aria-label="Paper roll width">
+          {PAPER_WIDTH_OPTIONS.map(({ value, label, description, columns }) => (
             <button
-              key={w}
-              onClick={() => set("paperWidth", w)}
-              className={`rounded-btn py-2 text-sm font-bold ${
-                form.paperWidth === w ? "bg-primary text-primary-fg" : "bg-secondary text-ink"
+              key={value}
+              type="button"
+              aria-pressed={form.paperWidth === value}
+              onClick={() => set("paperWidth", value)}
+              className={`rounded-btn flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 py-2 text-sm font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+                form.paperWidth === value ? "bg-primary text-primary-fg" : "bg-secondary text-ink"
               }`}
             >
-              {w}mm
+              <span>{label}</span>
+              <span className={`text-[10px] font-semibold ${form.paperWidth === value ? "text-primary-fg/75" : "text-ink-muted"}`}>
+                {description} · {columns} chars
+              </span>
             </button>
           ))}
         </div>

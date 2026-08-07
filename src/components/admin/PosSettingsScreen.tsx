@@ -12,6 +12,7 @@ import { getPrinter, type PrinterSettings } from "@/lib/printer";
 import { getPosTheme, POS_THEME_OPTIONS, type PosThemeId } from "@/lib/pos-theme";
 import { getPosPalette, POS_PALETTE_OPTIONS, type PosPaletteId } from "@/lib/pos-palette";
 import { isProductImageUrl } from "@/lib/product-images";
+import { normalizePaperWidth, PAPER_WIDTH_OPTIONS, toPaperWidthValue, type PaperWidthValue } from "@/lib/paper-width";
 
 export type AdminPosProduct = {
   id: string;
@@ -61,7 +62,7 @@ export type PosConfig = {
   receiptHeader: string;
   receiptFooter: string;
   showCashier: boolean;
-  paperWidth: "58" | "80";
+  paperWidth: PaperWidthValue;
 };
 
 export type PosTabId = "preview" | "settings" | "payments" | "receipts" | "hardware";
@@ -133,7 +134,7 @@ function devicePrinterSettings(device: AdminPosDevice): PrinterSettings {
     bridgePort: readDeviceNumber(config.bridge_port, 8787),
     ip: typeof config.ip === "string" ? config.ip.trim() : "",
     port: readDeviceNumber(config.port, 9100),
-    paperWidth: config.paper_width === 80 || config.paper_width === "80" ? 80 : 58,
+    paperWidth: normalizePaperWidth(config.paper_width),
   };
 }
 
@@ -143,7 +144,7 @@ function deviceText(config: Record<string, unknown>, key: string, fallback = "")
 }
 
 function devicePaperWidth(config: Record<string, unknown>) {
-  return config.paper_width === 80 || config.paper_width === "80" ? "80" : "58";
+  return toPaperWidthValue(normalizePaperWidth(config.paper_width));
 }
 
 function deviceLastSeen(value: string | null) {
@@ -874,7 +875,7 @@ function ReceiptSettingsPanel({ config, updateConfig, branchDetails, updateBranc
         <label className="pos-config-field"><span>TIN</span><input maxLength={80} value={branchDetails.tin} onChange={(event) => updateBranchDetails({ tin: event.target.value })} placeholder="Optional tax ID" /></label>
         <label className="pos-config-field pos-config-field--full"><span>Branch address</span><input maxLength={240} value={branchDetails.address} onChange={(event) => updateBranchDetails({ address: event.target.value })} placeholder="Address printed on receipts" /></label>
         <label className="pos-config-field"><span>VAT rate (%)</span><input type="number" min="0" max="100" step="0.01" value={(config.vatRate * 100).toFixed(2)} onChange={(event) => updateConfig({ vatRate: Math.max(0, Math.min(1, Number(event.target.value) / 100 || 0)) })} /></label>
-        <label className="pos-config-field"><span>Paper width</span><select value={config.paperWidth} onChange={(event) => updateConfig({ paperWidth: event.target.value === "80" ? "80" : "58" })}><option value="58">58mm</option><option value="80">80mm</option></select></label>
+        <label className="pos-config-field"><span>Paper roll width</span><small>Match the roll loaded in this printer.</small><select value={config.paperWidth} onChange={(event) => updateConfig({ paperWidth: toPaperWidthValue(normalizePaperWidth(event.target.value)) })}>{PAPER_WIDTH_OPTIONS.map(({ value, label, description }) => <option key={value} value={value}>{label} · {description}</option>)}</select></label>
         <label className="pos-config-field pos-config-field--full"><span>Receipt header</span><textarea maxLength={200} value={config.receiptHeader} onChange={(event) => updateConfig({ receiptHeader: event.target.value })} placeholder="Optional line below the branch name" /></label>
         <label className="pos-config-field pos-config-field--full"><span>Receipt footer</span><textarea maxLength={200} value={config.receiptFooter} onChange={(event) => updateConfig({ receiptFooter: event.target.value })} placeholder="Thank you message or return policy" /></label>
       </div>
@@ -924,7 +925,7 @@ function DeviceBranchField({ id, name, value, branches, canWrite }: { id: string
 }
 
 function DevicePrinterFields({ prefix, config, transport, canWrite }: { prefix: string; config: Record<string, unknown>; transport: "network" | "bluetooth" | "usb"; canWrite: boolean }) {
-  return <div className="pos-device-printer-fields"><p className="pos-hardware-section-label">Printer connection</p><div className="pos-config-grid"><label className="pos-config-field"><span>Printer transport</span><select id={`${prefix}-transport`} name="printer_transport" defaultValue={transport} disabled={!canWrite}><option value="network">Network</option><option value="bluetooth">Bluetooth</option><option value="usb">USB</option></select></label><label className="pos-config-field"><span>Paper width</span><select id={`${prefix}-paper`} name="paper_width" defaultValue={devicePaperWidth(config)} disabled={!canWrite}><option value="58">58mm</option><option value="80">80mm</option></select></label><label className="pos-config-field"><span>Printer IP</span><input id={`${prefix}-ip`} name="ip" defaultValue={deviceText(config, "ip")} disabled={!canWrite} placeholder="192.168.1.50" /></label><label className="pos-config-field"><span>Printer port</span><input id={`${prefix}-port`} name="port" type="number" inputMode="numeric" min="1" max="65535" defaultValue={deviceText(config, "port", "9100")} disabled={!canWrite} /></label><label className="pos-config-field"><span>Bridge host</span><input id={`${prefix}-bridge`} name="bridge_host" defaultValue={deviceText(config, "bridge_host", "127.0.0.1")} disabled={!canWrite} placeholder="127.0.0.1" /></label><label className="pos-config-field"><span>Bridge port</span><input id={`${prefix}-bridge-port`} name="bridge_port" type="number" inputMode="numeric" min="1" max="65535" defaultValue={deviceText(config, "bridge_port", "8787")} disabled={!canWrite} /></label></div><p className="pos-hardware-help">Network printers use the local WebSocket bridge. Bluetooth and USB require browser support on the POS device.</p></div>;
+  return <div className="pos-device-printer-fields"><p className="pos-hardware-section-label">Printer connection</p><div className="pos-config-grid"><label className="pos-config-field"><span>Printer transport</span><select id={`${prefix}-transport`} name="printer_transport" defaultValue={transport} disabled={!canWrite}><option value="network">Network</option><option value="bluetooth">Bluetooth</option><option value="usb">USB</option></select></label><label className="pos-config-field"><span>Paper roll width</span><select id={`${prefix}-paper`} name="paper_width" defaultValue={devicePaperWidth(config)} disabled={!canWrite}>{PAPER_WIDTH_OPTIONS.map(({ value, label, description }) => <option key={value} value={value}>{label} · {description}</option>)}</select></label><label className="pos-config-field"><span>Printer IP</span><input id={`${prefix}-ip`} name="ip" defaultValue={deviceText(config, "ip")} disabled={!canWrite} placeholder="192.168.1.50" /></label><label className="pos-config-field"><span>Printer port</span><input id={`${prefix}-port`} name="port" type="number" inputMode="numeric" min="1" max="65535" defaultValue={deviceText(config, "port", "9100")} disabled={!canWrite} /></label><label className="pos-config-field"><span>Bridge host</span><input id={`${prefix}-bridge`} name="bridge_host" defaultValue={deviceText(config, "bridge_host", "127.0.0.1")} disabled={!canWrite} placeholder="127.0.0.1" /></label><label className="pos-config-field"><span>Bridge port</span><input id={`${prefix}-bridge-port`} name="bridge_port" type="number" inputMode="numeric" min="1" max="65535" defaultValue={deviceText(config, "bridge_port", "8787")} disabled={!canWrite} /></label></div><p className="pos-hardware-help">Network printers use the local WebSocket bridge. Bluetooth and USB require browser support on the POS device.</p></div>;
 }
 
 function DeviceEditor({ device, deviceBranches, canWrite, deviceTest, onTestDevice }: { device: AdminPosDevice; deviceBranches: Array<{ id: string; name: string }>; canWrite: boolean; deviceTest: string | null; onTestDevice: (device: AdminPosDevice) => void }) {

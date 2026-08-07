@@ -9,6 +9,7 @@ import {
   type PendingOrder,
 } from "@/lib/offline";
 import { buildReceipt } from "@/lib/receipt";
+import type { PaperWidth } from "@/lib/paper-width";
 
 type OrderStatus = "completed" | "voided" | "refunded";
 type PaymentMethod = "cash" | "gcash" | "maya" | "card";
@@ -98,7 +99,7 @@ type OrderHistoryProps = {
   offline: boolean;
   pendingCount: number;
   receiptSettings: {
-    paperWidth: 58 | 80;
+    paperWidth: PaperWidth;
     vatRate: number;
     showVat: boolean;
     receiptHeader: string;

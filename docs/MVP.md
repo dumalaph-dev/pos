@@ -56,7 +56,7 @@ Each item is "done" when its box can be checked in a real store, not a demo.
 
 ### 2.4 Printing (per tablet)
 - [ ] `PrinterAdapter` with `bluetooth | network | usb`, one ESC/POS receipt builder.
-- [ ] Printer config lives on the device; 58/80mm; auto-reconnect; reprint (marked + logged).
+- [ ] Printer config lives on the device; 52/58/80mm; auto-reconnect; reprint (marked + logged).
 - [ ] Print failure never loses a sale (non-blocking retry).
 
 ### 2.5 Multi-branch

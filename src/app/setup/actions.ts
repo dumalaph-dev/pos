@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
+import { parsePaperWidth } from "@/lib/paper-width";
 
 export type SetupState = {
   ok: boolean;
@@ -44,7 +45,7 @@ export async function onboardTablet(_previousState: SetupState, formData: FormDa
   const name = readText(formData, "name");
   const devicePrefix = readText(formData, "device_prefix").toUpperCase();
   const transport = readText(formData, "printer_transport");
-  const paperWidth = readText(formData, "paper_width");
+  const paperWidth = parsePaperWidth(readText(formData, "paper_width"));
   const ip = readText(formData, "ip");
   const port = readPort(readText(formData, "port"), 9100);
   const bridgeHost = readText(formData, "bridge_host");
@@ -54,7 +55,7 @@ export async function onboardTablet(_previousState: SetupState, formData: FormDa
   if (!name || name.length > 80) return setupError("Give the tablet a name of at most 80 characters.");
   if (!/^[A-Z0-9-]{1,12}$/.test(devicePrefix)) return setupError("The device prefix may contain only letters, numbers, and hyphens.");
   if (!['network', 'bluetooth', 'usb'].includes(transport)) return setupError("Choose a supported printer transport.");
-  if (paperWidth !== "58" && paperWidth !== "80") return setupError("Choose a paper width of 58mm or 80mm.");
+  if (paperWidth === null) return setupError("Choose a paper width of 52mm, 58mm, or 80mm.");
   if (ip.length > 120 || bridgeHost.length > 120) return setupError("Printer connection details are too long.");
 
   const { data: branch, error: branchError } = await supabase
@@ -77,7 +78,7 @@ export async function onboardTablet(_previousState: SetupState, formData: FormDa
       printer_config: {
         ip,
         port,
-        paper_width: Number(paperWidth),
+        paper_width: paperWidth,
         bridge_host: bridgeHost || "127.0.0.1",
         bridge_port: bridgePort,
       },

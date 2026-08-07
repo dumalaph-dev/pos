@@ -172,7 +172,7 @@ Browsers can't open raw TCP sockets, so LAN printing goes through a tiny local b
 ```bash
 node scripts/printer-bridge.mjs   # run on an always-on device on the printer's network
 ```
-Then in the app: **🖨 → Network → printer IP + port 9100 → Bridge host → Test**. Receipts print automatically after each sale (58/80mm); failures show a non-blocking **Retry print** toast and never block the sale. Bluetooth (Web Bluetooth) and USB (WebUSB) transports are also implemented for Chrome/Android and Chrome/Edge respectively. Sale receipts include the VAT split (VAT-inclusive prices; SC/PWD sales VAT-exempt) and "THIS IS NOT AN OFFICIAL RECEIPT" until BIR registration.
+Then in the app: **🖨 → Network → printer IP + port 9100 → Bridge host → Test**. Receipts print automatically after each sale (52/58/80mm); failures show a non-blocking **Retry print** toast and never block the sale. Bluetooth (Web Bluetooth) and USB (WebUSB) transports are also implemented for Chrome/Android and Chrome/Edge respectively. Sale receipts include the VAT split (VAT-inclusive prices; SC/PWD sales VAT-exempt) and "THIS IS NOT AN OFFICIAL RECEIPT" until BIR registration.
 
 The bridge listens on port `8787` by default. If it is changed, start it with `BRIDGE_PORT=<port>` and enter the same bridge port in POS printer settings.
 

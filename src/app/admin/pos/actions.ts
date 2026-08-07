@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { POS_PALETTE_IDS } from "@/lib/pos-palette";
 import { POS_THEME_IDS } from "@/lib/pos-theme";
 import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
+import { normalizePaperWidth, parsePaperWidth, toPaperWidthValue } from "@/lib/paper-width";
 
 type JsonRecord = Record<string, unknown>;
 type PrinterTransport = "network" | "bluetooth" | "usb";
@@ -128,7 +129,7 @@ function normalizePosSettings(value: JsonRecord, fallback: JsonRecord, fallbackV
     receiptHeader: typeof value.receiptHeader === "string" ? value.receiptHeader.slice(0, 200) : typeof fallback.receiptHeader === "string" ? fallback.receiptHeader.slice(0, 200) : "",
     receiptFooter: typeof value.receiptFooter === "string" ? value.receiptFooter.slice(0, 200) : typeof fallback.receiptFooter === "string" ? fallback.receiptFooter.slice(0, 200) : "",
     showCashier: readBoolean(value.showCashier, readBoolean(fallback.showCashier, true)),
-    paperWidth: value.paperWidth === "80" || (value.paperWidth === undefined && fallback.paperWidth === "80") ? "80" : "58",
+    paperWidth: toPaperWidthValue(normalizePaperWidth(value.paperWidth ?? fallback.paperWidth)),
   };
 }
 
@@ -192,7 +193,7 @@ function readTransport(value: string): PrinterTransport | null {
 }
 
 function readPaperWidth(value: string) {
-  return value === "58" || value === "80" ? Number(value) : null;
+  return parsePaperWidth(value);
 }
 
 function readPort(value: string) {
