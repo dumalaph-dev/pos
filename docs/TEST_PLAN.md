@@ -118,7 +118,18 @@ Fixture: **2 orgs**, each with **2 branches**, each branch with an admin + a cas
 | 10.1 | Sensitive actions logged | I | login, PIN fail, void, refund, discount, price edit, stock move, branch/device change, sync error, permission denied all appear |
 | 10.2 | Log is append-only | I | no update/delete path (see 1.4) |
 
-## 11. Non-functional
+## 11. Hosted append-only privilege hardening 🔴
+
+| # | Test | Type | Pass |
+|---|---|---|---|
+| 11.1 | Hosted `authenticated` privileges on `orders`, `order_items`, `stock_movements`, and `audit_logs` | I | exactly `SELECT, INSERT`; no `UPDATE`/`DELETE` |
+| 11.2 | Authenticated `place_order` sale and idempotent replay | I | one order/items/audit set; replay adds no rows |
+| 11.3 | Admin `record_order_action` void/refund | I | linked reversal order/items/stock/audit rows; original unchanged |
+| 11.4 | Inventory movement/yield/count RPCs | I | append-only stock and audit rows still write successfully |
+
+✅ **Hosted and local verification passed 2026-08-07** in [SETUP.md](SETUP.md#hosted-hardening-verification--2026-08-07). The pre-migration hosted ACL query showed full `authenticated` table privileges; after `0026`, all four hosted and local rows returned `true, true, false, false`. Rollback-scoped authenticated smoke tests passed for sale/idempotent replay, reversal, inventory, and audit writes, with no smoke rows left behind. The local `scripts/rls-fixture.mjs` run also passed all 18 isolation and mutation assertions.
+
+## 12. Non-functional
 
 - **Performance 🔴:** median 3-line sale tap→printed ≤ 20s (M, timed on the actual tablet).
 - **Accessibility:** tap targets ≥ 48px, tiles ≥ 96px; `prefers-reduced-motion` honored; contrast AA on `--text`/`--bg`.

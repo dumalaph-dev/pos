@@ -36,7 +36,7 @@ Fill `.env.local` from Supabase → **Settings → API**:
 
 ## 4. Database migrations
 SQL lives in `supabase/migrations/` (run in order):
-The latest migrations add store staff access keys, subscription tracking, and the single Premium billing plan: `0023_store_access_and_subscriptions.sql`, `0024_shifts_and_z_readings.sql`, and `0025_premium_billing_plan.sql`.
+The latest migrations add store staff access keys, subscription tracking, the single Premium billing plan, and append-only privilege hardening: `0023_store_access_and_subscriptions.sql`, `0024_shifts_and_z_readings.sql`, `0025_premium_billing_plan.sql`, and `0026_authenticated_append_only_hardening.sql`.
 1. `0001_schema.sql` — tables, enums, indexes
 2. `0002_rls.sql` — grants, helper functions, RLS policies, append-only triggers
 3. `0003_functions.sql` — `clone_menu` (multi-branch)
@@ -63,6 +63,7 @@ The latest migrations add store staff access keys, subscription tracking, and th
 23. `0023_store_access_and_subscriptions.sql` - staff access links and subscription tracking fields
 24. `0024_shifts_and_z_readings.sql` - shifts and Z-reading records
 25. `0025_premium_billing_plan.sql` - safely backfill organizations and enforce Premium-only billing
+26. `0026_authenticated_append_only_hardening.sql` - remove authenticated UPDATE/DELETE access from orders, order items, stock movements, and audit logs; retain only SELECT/INSERT for POS flows
 
 **Apply them** either way:
 - **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push`
@@ -82,6 +83,60 @@ npx supabase link --project-ref uzavkjftwcuixidxyopr  # prompts for the DB passw
 npx supabase db push                                # applies all pending migrations in order
 ```
 > `supabase db push` runs **migrations only** — never `seed.sql` (local-dev fixture data stays local). Never run `supabase db reset` against a hosted project.
+
+### Hosted hardening verification — 2026-08-07
+
+The hosted project (`uzavkjftwcuixidxyopr`) was checked before applying the
+hardening migration. The four append-only tables had direct full DML grants for
+`authenticated` (`arwdDxtm`), so the existing `0002` `GRANT SELECT, INSERT`
+was not sufficient on the hosted default privilege configuration.
+
+After applying `0026_authenticated_append_only_hardening.sql`, verify the
+effective table privileges with the Supabase SQL Editor or the linked CLI:
+
+```sql
+select
+  table_name,
+  has_table_privilege('authenticated', 'public.' || table_name, 'SELECT') as can_select,
+  has_table_privilege('authenticated', 'public.' || table_name, 'INSERT') as can_insert,
+  has_table_privilege('authenticated', 'public.' || table_name, 'UPDATE') as can_update,
+  has_table_privilege('authenticated', 'public.' || table_name, 'DELETE') as can_delete
+from (values
+  ('orders'),
+  ('order_items'),
+  ('stock_movements'),
+  ('audit_logs')
+) as tables(table_name)
+order by table_name;
+```
+
+Expected result for every row: `can_select = true`, `can_insert = true`,
+`can_update = false`, and `can_delete = false`. Confirm the migration history
+also contains `0026`, then run the authenticated POS smoke paths: `place_order`
+(sale + idempotent replay), `record_order_action` (void/refund reversal),
+inventory movement/yield/count RPCs, and audit-log inserts. These RPCs remain
+available because they only require the retained SELECT/INSERT table access
+(or, for the reversal RPC, execute access to its `SECURITY DEFINER` function).
+
+Hosted verification completed on 2026-08-07: `npx supabase db push --linked
+--yes` applied pending `0025` and `0026`; the migration ledger contains both
+versions. The privilege query returned `true, true, false, false` for all four
+tables, and the RPC check returned `EXECUTE = true` for `place_order`,
+`record_order_action`, `record_stock_movement`, `record_yield_entry`, and
+`record_inventory_count`. A rollback-scoped authenticated smoke test passed
+for sale/idempotent replay, void reversal, stock movement, yield, inventory
+count, and their audit writes; post-test hosted counts remained 2 orders, 2
+order items, 2 stock movements, and 8 audit logs, with zero smoke rows left.
+
+Local verification also passed on 2026-08-07 after Docker was restarted. A
+scoped clean rebuild of the local `pos` stack applied migrations `0001` through
+`0026` and the seed fixture. The same privilege query returned
+`true, true, false, false` for all four tables; all five POS RPCs retained
+authenticated `EXECUTE`; and `node scripts/rls-fixture.mjs` passed all 18 RLS
+assertions. A rollback-scoped local smoke test passed sale/idempotent replay,
+void reversal, manual stock movement, yield, inventory count, and audit writes;
+the final local fixture had no smoke orders or products and retained only its
+expected fixture rows.
 
 **Validate locally first (no account needed):** the CLI applies `supabase/migrations/` automatically when the local stack starts:
 ```bash
