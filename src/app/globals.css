@@ -243,7 +243,15 @@
   min-height: 100dvh;
   overflow: hidden;
   color: #171514;
-  background: #fff;
+  background: var(--bg, #fdfbf8);
+}
+
+/* The POS workspace is a fixed light design (white cards, dark type), so it
+   keeps a light canvas when the dashboard runs the dark theme instead of
+   inheriting the dark --bg it cannot read against. */
+.admin-shell[data-admin-theme="dark"] .pos-settings-page,
+.admin-shell[data-admin-theme="dark"] .pos-settings-empty-page {
+  background: #fdfbf8;
 }
 
 .pos-settings-topbar {
@@ -254,7 +262,7 @@
   justify-content: space-between;
   gap: 24px;
   padding: 19px 26px 15px 29px;
-  border-bottom: 1px solid #f5f2ef;
+  border-bottom: 1px solid var(--border, #f5f2ef);
 }
 
 .pos-settings-topbar__brand h1 {
@@ -2814,7 +2822,7 @@
   place-items: center;
   padding: 24px;
   color: #2e1c10;
-  background: #fff;
+  background: var(--bg, #fdfbf8);
 }
 
 .pos-settings-empty-page > div {
@@ -2822,6 +2830,7 @@
   padding: 30px;
   border: 1px solid #eee8e2;
   border-radius: 12px;
+  background: #fff;
   text-align: center;
 }
 
