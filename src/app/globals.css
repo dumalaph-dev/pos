@@ -254,6 +254,20 @@
   background: #fdfbf8;
 }
 
+.admin-shell[data-admin-theme="dark"] .pos-editor-card,
+.admin-shell[data-admin-theme="dark"] .pos-appearance-card {
+  border-color: #eee9e5;
+  background: #fff;
+}
+
+.admin-shell[data-admin-theme="dark"] .pos-settings-topbar,
+.admin-shell[data-admin-theme="dark"] .pos-settings-tabs,
+.admin-shell[data-admin-theme="dark"] .pos-appearance-card__heading,
+.admin-shell[data-admin-theme="dark"] .pos-appearance-section,
+.admin-shell[data-admin-theme="dark"] .pos-config-heading {
+  border-bottom-color: #f0ece9;
+}
+
 .pos-settings-topbar {
   position: relative;
   display: flex;
@@ -557,9 +571,9 @@
 .pos-editor-card,
 .pos-appearance-card {
   min-width: 0;
-  border: 1px solid #eee9e5;
+  border: 1px solid var(--border, #eee9e5);
   border-radius: 10px;
-  background: #fff;
+  background: var(--surface, #fff);
 }
 
 .pos-editor-card {
@@ -572,7 +586,7 @@
   align-items: stretch;
   gap: 26px;
   padding: 0 16px;
-  border-bottom: 1px solid #f1eeeb;
+  border-bottom: 1px solid var(--border, #f1eeeb);
 }
 
 .pos-settings-tabs button {
@@ -1666,12 +1680,12 @@
 
 .pos-appearance-card__heading {
   padding: 0 4px 22px;
-  border-bottom: 1px solid #f0ece9;
+  border-bottom: 1px solid var(--border, #f0ece9);
 }
 
 .pos-appearance-section {
   padding: 22px 0 20px;
-  border-bottom: 1px solid #f0ece9;
+  border-bottom: 1px solid var(--border, #f0ece9);
 }
 
 .pos-appearance-section h3 {
@@ -1922,10 +1936,32 @@
   border-color: var(--primary);
 }
 
+/* Nine themes ship in POS_THEME_OPTIONS, so the list scrolls inside the
+   appearance card instead of stretching the sidebar past the preview. The
+   max-height cuts through a row to advertise that there is more below. */
 .pos-style-options {
   display: grid;
+  max-height: 300px;
   gap: 5px;
   margin-top: 13px;
+  padding-right: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #cbb9ab transparent;
+}
+
+.pos-style-options::-webkit-scrollbar {
+  width: 6px;
+}
+
+.pos-style-options::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #cbb9ab;
+}
+
+.pos-style-options::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .pos-style-option {
@@ -2360,7 +2396,7 @@
 .pos-config-heading {
   max-width: 650px;
   padding-bottom: 25px;
-  border-bottom: 1px solid #f0ece9;
+  border-bottom: 1px solid var(--border, #f0ece9);
 }
 
 .pos-config-heading > p {
