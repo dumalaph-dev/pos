@@ -13,7 +13,7 @@ type ShellProfile = {
   store_id: string | null;
   password_change_required: boolean;
   stores: { name?: string } | null;
-  organizations: { settings?: unknown } | null;
+  organizations: { settings?: unknown; account_status?: "active" | "suspended" | null } | null;
 };
 
 const DEFAULT_STORE_NAME = "Your Store";
@@ -69,6 +69,7 @@ export default async function AdminRouteLayout({ children }: { children: ReactNo
 
   const profile = await getAdminProfile(user.id) as ShellProfile | null;
 
+  if (profile?.organizations?.account_status === "suspended") redirect("/account/suspended");
   if (profile?.password_change_required) redirect("/account/password?required=1");
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile) return children;

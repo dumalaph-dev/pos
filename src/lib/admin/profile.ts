@@ -8,7 +8,7 @@ export type AdminProfile = {
   org_id: string;
   store_id: string | null;
   password_change_required: boolean;
-  organizations: { name?: string; settings?: unknown } | null;
+  organizations: { name?: string; settings?: unknown; account_status?: "active" | "suspended" | null; suspension_reason?: string | null; suspended_at?: string | null } | null;
   stores: { name?: string } | null;
 };
 
@@ -38,9 +38,19 @@ export const getAdminProfile = cache(async (userId: string): Promise<AdminProfil
       const supabase = await createClient();
       const { data, error } = await supabase
         .from("profiles")
-        .select("full_name, role, org_id, store_id, password_change_required, organizations!profiles_org_id_fkey(name, settings), stores(name)")
+        .select("full_name, role, org_id, store_id, password_change_required, organizations!profiles_org_id_fkey(name, settings, account_status, suspension_reason, suspended_at), stores(name)")
         .eq("id", userId)
         .maybeSingle();
+
+      if (error && isMissingAccountLifecycleSchema(error.message)) {
+        const legacy = await supabase
+          .from("profiles")
+          .select("full_name, role, org_id, store_id, password_change_required, organizations!profiles_org_id_fkey(name, settings), stores(name)")
+          .eq("id", userId)
+          .maybeSingle();
+        if (legacy.error) throw legacy.error;
+        return (legacy.data as AdminProfile) ?? null;
+      }
 
       // Throw rather than return null so a transient failure is not cached as
       // "this user has no profile" for the rest of the TTL.
@@ -51,6 +61,11 @@ export const getAdminProfile = cache(async (userId: string): Promise<AdminProfil
     return null;
   }
 });
+
+function isMissingAccountLifecycleSchema(message: string | null | undefined) {
+  const normalized = (message ?? "").toLowerCase();
+  return (normalized.includes("account_status") || normalized.includes("suspension_reason") || normalized.includes("suspended_at")) && (normalized.includes("column") || normalized.includes("schema cache") || normalized.includes("does not exist"));
+}
 
 /**
  * Drops a cached profile. Call from any server action that writes to

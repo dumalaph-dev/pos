@@ -15,6 +15,7 @@ export default async function AccountPage() {
 
   const profile = await getAdminProfile(user.id);
   if (!profile) redirect("/");
+  if (profile.organizations?.account_status === "suspended") redirect("/account/suspended");
 
   const displayName = profile.full_name?.trim() || "Team member";
   const branchName = profile.stores?.name ?? "All branches";

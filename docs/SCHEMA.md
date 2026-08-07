@@ -334,7 +334,41 @@ Seed **two orgs**, each with **two branches**, each with a cashier + admin, and 
 
 ---
 
-## 8. Open schema questions
+## 8. Platform operations (migrations 0027–0030)
+
+Platform-wide configuration is intentionally isolated from tenant RLS. The
+server-only platform admin client reads and writes these tables after checking
+the `PLATFORM_ADMIN_EMAILS` allowlist:
+
+- `platform_billing_settings` stores the PHP monthly base price in integer
+  centavos.
+- `platform_billing_variants` stores monthly or annual durations, adjustable
+  discounts, active/offered state, and the corresponding PayMongo plan ID.
+- `platform_policies` stores versioned `billing` and `support` drafts or
+  published policies. Checkout, suspension, and support mutations must require
+  both policy rows to be `published`.
+- `billing_provider_events` stores PayMongo event IDs and payloads for signed,
+  idempotent webhook processing. Organizations also retain the provider
+  customer, plan, subscription, and first payment-intent IDs needed to
+  reconcile recurring billing.
+- `support_cases` stores platform-created support requests with a priority,
+  lifecycle status, and first-response due time calculated from the published
+  support policy. It is service-role-only while the platform console owns the
+  workflow; migration 0029 removes inherited tenant table grants, and
+  tenant-facing case history can be added later without changing the policy
+  gate.
+
+`organizations.account_status` plus the suspension metadata columns are the
+account-lifecycle projection. Platform suspension and restore actions write an
+append-only `audit_logs` record with the platform operator ID in the JSON
+snapshot because platform operators are not required to have tenant `profiles`.
+Migration 0030 also makes the active organization/store helper functions return
+no tenant context for suspended users, so the suspension boundary applies to
+RLS and security-definer business functions as well as the route UI.
+
+---
+
+## 9. Open schema questions
 
 - **Void/refund modeling:** linked reversing order vs. status column with an append-only history table? (Leaning: a `order_events` append-only table so `orders.status` is a projection, keeping BIR-CAS path open — PRD §8.)
 - **VAT computation:** store computed at sale time (snapshot) — confirm SC/PWD VAT-exempt split formula with the owner.

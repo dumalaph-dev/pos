@@ -26,6 +26,11 @@ Fill `.env.local` from Supabase → **Settings → API**:
 | `NEXT_PUBLIC_SITE_URL` | public app origin for email-confirmation redirects (required on deployed environments) | client + server |
 | `NEXT_PUBLIC_SUPABASE_URL` | Project URL | client + server |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon/public key | client + server |
+| `NEXT_PUBLIC_PAYMONGO_PUBLIC_KEY` | PayMongo public key for browser-side payment-method tokenization | client + server |
+| `PAYMONGO_SECRET_KEY` | PayMongo secret API key for server-side plan/customer/subscription calls | **server only** |
+| `PAYMONGO_WEBHOOK_SECRET` | PayMongo webhook signing secret | **server only** |
+| `PAYMONGO_API_BASE_URL` | PayMongo API origin (defaults to `https://api.paymongo.com`) | server |
+| `PAYMONGO_SUBSCRIPTIONS_ENABLED` | explicit server-side activation flag (`false` until tested) | server |
 | `SUPABASE_SERVICE_ROLE_KEY` | service_role key | **server only — never ship to client** |
 
 `.env.local` is gitignored. Set the same vars in Vercel (Project → Settings → Environment Variables) for preview + production.
@@ -34,9 +39,19 @@ Fill `.env.local` from Supabase → **Settings → API**:
 
 `PLATFORM_ADMIN_EMAILS` is a comma-separated, server-only allowlist for the platform operator console at `/platform`. It should contain only the operator account(s) that may view cross-business metrics.
 
+PayMongo recurring billing uses `NEXT_PUBLIC_PAYMONGO_PUBLIC_KEY` in the
+browser only for tokenizing card details, while `PAYMONGO_SECRET_KEY` and
+`PAYMONGO_WEBHOOK_SECRET` remain server-only. Set
+`PAYMONGO_SUBSCRIPTIONS_ENABLED=false` until PayMongo has activated
+Subscriptions for the account and test-mode first payments plus signed
+webhook delivery have passed. The app never sends raw card details to its
+server. Configure the PayMongo webhook URL as
+`<your-site-origin>/api/paymongo/webhook` and subscribe to the subscription
+and payment events used by the integration.
+
 ## 4. Database migrations
 SQL lives in `supabase/migrations/` (run in order):
-The latest migrations add store staff access keys, subscription tracking, the single Premium billing plan, and append-only privilege hardening: `0023_store_access_and_subscriptions.sql`, `0024_shifts_and_z_readings.sql`, `0025_premium_billing_plan.sql`, and `0026_authenticated_append_only_hardening.sql`.
+The latest migrations add store staff access keys, subscription tracking, the single Premium billing plan, append-only privilege hardening, and the policy-first platform operations catalog: `0023_store_access_and_subscriptions.sql`, `0024_shifts_and_z_readings.sql`, `0025_premium_billing_plan.sql`, `0026_authenticated_append_only_hardening.sql`, `0027_platform_operations.sql`, `0028_support_cases.sql`, `0029_support_cases_privileges.sql`, and `0030_suspended_account_rls.sql`.
 1. `0001_schema.sql` — tables, enums, indexes
 2. `0002_rls.sql` — grants, helper functions, RLS policies, append-only triggers
 3. `0003_functions.sql` — `clone_menu` (multi-branch)
@@ -64,6 +79,10 @@ The latest migrations add store staff access keys, subscription tracking, the si
 24. `0024_shifts_and_z_readings.sql` - shifts and Z-reading records
 25. `0025_premium_billing_plan.sql` - safely backfill organizations and enforce Premium-only billing
 26. `0026_authenticated_append_only_hardening.sql` - remove authenticated UPDATE/DELETE access from orders, order items, stock movements, and audit logs; retain only SELECT/INSERT for POS flows
+27. `0027_platform_operations.sql` - editable monthly/annual pricing options, platform billing/support policies, account suspension fields, and provider event idempotency storage
+28. `0028_support_cases.sql` - service-role-only support cases, SLA due-time indexes, and platform support workflow storage
+29. `0029_support_cases_privileges.sql` - remove inherited tenant grants from the service-role-only support-case table
+30. `0030_suspended_account_rls.sql` - make active organization/store helper contexts unavailable to suspended users while preserving their own organization status row
 
 **Apply them** either way:
 - **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push`
@@ -137,6 +156,13 @@ assertions. A rollback-scoped local smoke test passed sale/idempotent replay,
 void reversal, manual stock movement, yield, inventory count, and audit writes;
 the final local fixture had no smoke orders or products and retained only its
 expected fixture rows.
+
+Hosted platform-operations verification completed on 2026-08-07: the linked
+project now contains migrations `0027` through `0030`. Its seeded billing and
+support policy rows are both `draft` version 1, so checkout, suspension, and
+support mutations remain locked until the operator defines and publishes those
+rules. The platform console reports the support-case table as unavailable until
+`0028_support_cases.sql` and its privilege hardening are applied.
 
 **Validate locally first (no account needed):** the CLI applies `supabase/migrations/` automatically when the local stack starts:
 ```bash
