@@ -3589,7 +3589,7 @@ textarea.inventory-input {
   border-right: 1px solid rgba(224, 213, 198, 0.8);
 }
 
-/* The rail is sized to fit one viewport without scrolling: it lists 13 nav
+/* The rail is sized to fit one viewport without scrolling: it lists 14 nav
    destinations, so the rows and the chrome around them shrink with viewport
    height (clamped, so they never fall below a comfortable target size).
    Measured to fit with room to spare at 720px tall and above.
@@ -3931,6 +3931,26 @@ textarea.inventory-input {
 
 .admin-shell__content {
   min-width: 0;
+}
+
+/* The calendar follows the supplied full-width reference composition. Keep
+   the authenticated admin route and navigation entry, but let this surface
+   own the viewport instead of squeezing into the backoffice rail. */
+@media (min-width: 1024px) {
+  .admin-shell:has(.calendar-page) {
+    display: block;
+    max-width: none;
+  }
+
+  .admin-shell:has(.calendar-page) .admin-sidebar {
+    display: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .admin-shell:has(.calendar-page) .admin-mobile-context {
+    display: none;
+  }
 }
 
 .admin-route-loading {

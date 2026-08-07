@@ -8,7 +8,7 @@ import { AdminBranchSwitcher } from "./AdminBranchSwitcher";
 import type { AdminBranchOption } from "@/lib/admin/branch-context";
 import type { AdminBranding } from "@/lib/admin/branding";
 
-export type AdminSection = "overview" | "sales" | "pos" | "orders" | "shifts" | "inventory" | "products" | "catalog" | "customers" | "suppliers" | "expenses" | "employees" | "billing" | "reports" | "audit" | "settings" | "promotions" | "branches";
+export type AdminSection = "overview" | "calendar" | "sales" | "pos" | "orders" | "shifts" | "inventory" | "products" | "catalog" | "customers" | "suppliers" | "expenses" | "employees" | "billing" | "reports" | "audit" | "settings" | "promotions" | "branches";
 
 type NavItem = {
   label: string;
@@ -26,6 +26,7 @@ export type AdminSidebarConnection = {
 
 const primaryNav: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: "dashboard", active: "overview" },
+  { label: "Calendar", href: "/admin/calendar", icon: "calendar", active: "calendar" },
   { label: "Sales", href: "/admin/sales", icon: "sales", active: "sales" },
   { label: "POS", href: "/admin/pos", icon: "pos", active: "pos" },
   { label: "Orders", href: "/admin/orders", icon: "orders", active: "orders" },
@@ -52,6 +53,7 @@ function activeSectionForPath(pathname: string | null): AdminSection {
   if (!pathname || pathname === "/admin" || pathname === "/admin/") return "overview";
 
   const routeSections: Array<[string, AdminSection]> = [
+    ["/admin/calendar", "calendar"],
     ["/admin/sales", "sales"],
     ["/admin/pos", "pos"],
     ["/admin/orders", "orders"],
