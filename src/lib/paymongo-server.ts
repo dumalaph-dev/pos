@@ -83,7 +83,7 @@ export async function ensurePayMongoPlan(input: PlanInput) {
   const expected = {
     amount: input.amountCentavos,
     currency: "PHP",
-    interval: input.intervalUnit === "month" ? "monthly" : "yearly",
+    interval: input.intervalUnit,
     intervalCount: input.intervalCount,
   };
 
@@ -98,32 +98,51 @@ export async function ensurePayMongoPlan(input: PlanInput) {
     }
   }
 
-  const response = await payMongoRequest(
-    "/v1/subscriptions/plans",
-    {
-      method: "POST",
-      idempotencyKey: `pos-plan-${input.variantId}-${input.amountCentavos}-${input.intervalUnit}-${input.intervalCount}`,
-      body: {
-        data: {
-          attributes: {
-            name: input.label,
-            description: `Dumala POS ${input.label}`,
-            amount: input.amountCentavos,
-            currency: "PHP",
-            interval: expected.interval,
-            interval_count: input.intervalCount,
-            metadata: {
-              pos_variant_id: input.variantId,
-              pos_amount_centavos: String(input.amountCentavos),
-            },
-          },
-        },
-      },
-    },
-  );
+  const response = await createScheduledPlan(input);
   const id = resourceId(response);
   if (!id) throw new Error("PayMongo did not return a plan id.");
   return { id, created: true };
+}
+
+async function createScheduledPlan(input: PlanInput) {
+  const idempotencyKey = `pos-plan-${input.variantId}-${input.amountCentavos}-${input.intervalUnit}-${input.intervalCount}`;
+  const currentBody = planBody(input, input.intervalUnit);
+
+  try {
+    return await payMongoRequest("/v1/plans", {
+      method: "POST",
+      idempotencyKey,
+      body: currentBody,
+    });
+  } catch (error) {
+    if (!(error instanceof PayMongoApiError) || (error.status !== 404 && error.status !== 405)) throw error;
+
+    return payMongoRequest("/v1/subscriptions/plans", {
+      method: "POST",
+      idempotencyKey,
+      body: planBody(input, input.intervalUnit === "month" ? "monthly" : "yearly"),
+    });
+  }
+}
+
+function planBody(input: PlanInput, interval: "month" | "year" | "monthly" | "yearly") {
+  return {
+    data: {
+      attributes: {
+        type: "scheduled",
+        name: input.label,
+        description: `Dumala POS ${input.label}`,
+        amount: input.amountCentavos,
+        currency: "PHP",
+        interval,
+        interval_count: input.intervalCount,
+        metadata: {
+          pos_variant_id: input.variantId,
+          pos_amount_centavos: String(input.amountCentavos),
+        },
+      },
+    },
+  };
 }
 
 export async function createPayMongoCustomer(input: CustomerInput) {
@@ -182,8 +201,14 @@ export async function getPayMongoPaymentIntent(paymentIntentId: string) {
 }
 
 export async function getPayMongoPlan(planId: string) {
-  const response = await payMongoRequest(`/v1/subscriptions/plans/${encodeURIComponent(planId)}`);
-  return { response, attributes: resourceAttributes(response) };
+  try {
+    const response = await payMongoRequest(`/v1/plans/${encodeURIComponent(planId)}`);
+    return { response, attributes: resourceAttributes(response) };
+  } catch (error) {
+    if (!(error instanceof PayMongoApiError) || (error.status !== 404 && error.status !== 405)) throw error;
+    const response = await payMongoRequest(`/v1/subscriptions/plans/${encodeURIComponent(planId)}`);
+    return { response, attributes: resourceAttributes(response) };
+  }
 }
 
 export function resourceId(resource: PayMongoResource) {
@@ -214,7 +239,11 @@ function isMatchingPlan(attributes: PayMongoResourceAttributes, expected: { amou
   const currency = readPayMongoString(attributes, "currency")?.toUpperCase();
   const interval = readPayMongoString(attributes, "interval");
   const intervalCount = readPayMongoNumber(attributes, "interval_count");
-  const intervalMatches = interval === expected.interval || (expected.interval === "monthly" && interval === "month") || (expected.interval === "yearly" && interval === "year");
+  const intervalMatches = expected.interval === "month"
+    ? interval === "month" || interval === "monthly"
+    : expected.interval === "year"
+      ? interval === "year" || interval === "yearly"
+      : interval === expected.interval;
   return amount === expected.amount && currency === expected.currency && intervalMatches && intervalCount === expected.intervalCount;
 }
 
