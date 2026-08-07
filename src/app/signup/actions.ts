@@ -3,17 +3,11 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
+import type { SignupField, SignupState } from "./state";
 
-export type SignupField = "full_name" | "organization_name" | "store_name" | "store_address" | "email" | "password" | "password_confirmation";
-
-export type SignupState = {
-  ok: boolean;
-  message: string;
-  needsConfirmation?: boolean;
-  errors?: Partial<Record<SignupField, string>>;
-};
-
-export const INITIAL_SIGNUP_STATE: SignupState = { ok: false, message: "" };
+// The form state and its initial value live in `./state` because a
+// `"use server"` module may only export async functions. Exporting the
+// constant from here threw at module evaluation and 500'd `/signup`.
 
 function readText(formData: FormData, name: SignupField) {
   const value = formData.get(name);
