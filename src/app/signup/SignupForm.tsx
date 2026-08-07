@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { INITIAL_SIGNUP_STATE, signupStoreOwner, type SignupField, type SignupState } from "./actions";
+import { signupStoreOwner } from "./actions";
+import { INITIAL_SIGNUP_STATE, type SignupField, type SignupState } from "./state";
 
 function FieldError({ state, field }: { state: SignupState; field: SignupField }) {
   const message = state.errors?.[field];
