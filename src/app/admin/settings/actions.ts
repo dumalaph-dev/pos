@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { refresh, revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   organizationImageStoragePath,
@@ -120,5 +120,9 @@ export async function updateOrganizationSettings(formData: FormData) {
 
   invalidateAdminProfile(userId);
   refreshSettings();
+  // The Admin shell is a persistent client layout. Revalidation refreshes the
+  // server-side cache, while refresh() clears the current client router tree
+  // so the new theme is visible on the next soft navigation without F5.
+  refresh();
   redirect("/admin/settings?saved=organization");
 }

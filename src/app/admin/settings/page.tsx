@@ -128,7 +128,7 @@ export default async function SettingsPage({
             </div>
 
             <div className="mt-7 border-t border-line pt-6">
-              <AdminThemePicker initialTheme={branding.theme} disabled={!canWrite || !organization} />
+              <AdminThemePicker key={branding.theme} initialTheme={branding.theme} disabled={!canWrite || !organization} />
             </div>
 
             <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5">
