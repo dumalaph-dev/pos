@@ -102,9 +102,9 @@ export function payMongoConfiguration() {
     publicKeyConfigured: Boolean(publicKey),
     keyModeConsistent: Boolean(secretMode && publicMode && secretMode === publicMode),
     publicKey,
-    webhookSecretConfigured: Boolean(process.env.PAYMONGO_WEBHOOK_SECRET),
+    webhookSecretConfigured: Boolean(process.env.PAYMONGO_WEBHOOK_SECRET?.trim()),
     subscriptionsEnabled: process.env.PAYMONGO_SUBSCRIPTIONS_ENABLED === "true",
-    apiBaseUrl: process.env.PAYMONGO_API_BASE_URL || "https://api.paymongo.com",
+    apiBaseUrl: process.env.PAYMONGO_API_BASE_URL?.trim() || "https://api.paymongo.com",
   };
 }
 

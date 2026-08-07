@@ -46,8 +46,10 @@ browser only for tokenizing card details, while `PAYMONGO_SECRET_KEY` and
 Subscriptions for the account and test-mode first payments plus signed
 webhook delivery have passed. The app never sends raw card details to its
 server. Configure the PayMongo webhook URL as
-`<your-site-origin>/api/paymongo/webhook` and subscribe to the subscription
-and payment events used by the integration.
+`<your-site-origin>/api/paymongo/webhook` and subscribe to these events:
+`payment.paid`, `payment.failed`, `payment_intent.succeeded`,
+`subscription.past_due`, `subscription.unpaid`, `subscription.updated`,
+`subscription.invoice.paid`, and `subscription.invoice.payment_failed`.
 
 ## 4. Database migrations
 SQL lives in `supabase/migrations/` (run in order):
