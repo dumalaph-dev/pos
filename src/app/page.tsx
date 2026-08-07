@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import LandingHeader from "@/components/landing/LandingHeader";
 import ScrollReveal from "@/components/landing/ScrollReveal";
+import { PREMIUM_PRICE_LABEL as PREMIUM_PRICE } from "@/lib/billing";
 
 export const metadata: Metadata = {
   title: "Dumala POS | Run your business with less stress",
@@ -156,8 +157,6 @@ const syncSteps: Array<{ step: string; title: string; text: string }> = [
     text: "When the connection returns the queue clears in the background. Order numbers are prefixed per branch and device, so nothing is entered twice.",
   },
 ];
-
-const PREMIUM_PRICE = "₱799";
 
 const pricingIncludes = [
   "The tablet POS and the owner dashboard",
