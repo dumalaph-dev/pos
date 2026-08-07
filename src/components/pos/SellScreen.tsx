@@ -45,6 +45,7 @@ import {
   type PrinterSettings,
 } from "@/lib/printer";
 import { buildReceipt } from "@/lib/receipt";
+import { normalizePaperWidth, type PaperWidth } from "@/lib/paper-width";
 import { getPosTheme, isPosThemeId, type PosThemeId } from "@/lib/pos-theme";
 import { getPosPalette, isPosPaletteId, type PosPaletteId } from "@/lib/pos-palette";
 
@@ -107,7 +108,7 @@ type PosRuntimeConfig = {
   receiptHeader: string;
   receiptFooter: string;
   showCashier: boolean;
-  paperWidth: 58 | 80;
+  paperWidth: PaperWidth;
 };
 
 type ProfileData = Omit<OfflineProfileSnapshot, "pos_config"> & {
@@ -179,7 +180,7 @@ function normalizePosRuntimeConfig(value: unknown, vatRateFallback = DEFAULT_POS
     receiptHeader: typeof source.receiptHeader === "string" ? source.receiptHeader.slice(0, 200) : "",
     receiptFooter: typeof source.receiptFooter === "string" ? source.receiptFooter.slice(0, 200) : "",
     showCashier: readBoolean(source.showCashier, DEFAULT_POS_RUNTIME_CONFIG.showCashier),
-    paperWidth: source.paperWidth === "80" || source.paperWidth === 80 ? 80 : 58,
+    paperWidth: normalizePaperWidth(source.paperWidth),
   };
 }
 
@@ -205,7 +206,7 @@ function readDevicePrinterSettings(value: unknown): PrinterSettings | null {
     bridgePort: readNumber(config.bridge_port, 8787, 1, 65535),
     ip: typeof config.ip === "string" ? config.ip.trim() : "",
     port: readNumber(config.port, 9100, 1, 65535),
-    paperWidth: config.paper_width === 80 || config.paper_width === "80" ? 80 : 58,
+    paperWidth: normalizePaperWidth(config.paper_width),
   };
 }
 

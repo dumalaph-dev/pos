@@ -89,7 +89,7 @@ type PrinterTransport = 'bluetooth' | 'network' | 'usb';
 
 interface PrinterConfig {
   transport: PrinterTransport;
-  paperWidth: 58 | 80;      // mm
+  paperWidth: 52 | 58 | 80;  // mm
   // bluetooth: { bleDeviceId }  |  network: { ip, port=9100, bridgeHost, bridgePort=8787 }  |  usb: { vendorId, productId }
   connection: Record<string, unknown>;
 }
@@ -129,7 +129,7 @@ interface ReceiptData {
 }
 
 interface ReceiptBuilder {
-  build(data: ReceiptData, paperWidth: 58 | 80): Uint8Array;
+  build(data: ReceiptData, paperWidth: 52 | 58 | 80): Uint8Array;
 }
 ```
 Fixed content: branch name/address, order no, items, discount (+ SC/PWD id), totals, payment, change, `"This is not an official receipt"` line (PRD §6.4). `REPRINT` marker + audit log on reprints.

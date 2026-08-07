@@ -15,7 +15,7 @@
 
 Wizard, one step per screen:
 1. **Pick branch** — list of the org's branches (`--surface` cards); select binds the tablet.
-2. **Configure printer** — transport picker (Network / Bluetooth / USB), then connection fields (IP:port default `:9100` / BLE scan / USB grant), paper width 58·80, **"Print test slip"** button with success/fail state.
+2. **Configure printer** — transport picker (Network / Bluetooth / USB), then connection fields (IP:port default `:9100` / BLE scan / USB grant), paper width 52·58·80, **"Print test slip"** button with success/fail state.
 3. **Pair customer display** *(optional)* — show pairing token/QR; "Skip".
 4. **Done** — "This tablet is set up for **{Branch}**." → `/pos`.
 

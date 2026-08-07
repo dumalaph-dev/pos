@@ -82,7 +82,7 @@ const detailPanels: Array<{
       "One adapter covers the three ways a receipt printer usually connects, so you are not buying new hardware to start.",
     specs: [
       "Bluetooth, Wi-Fi, or USB behind one adapter",
-      "58mm and 80mm ESC/POS layouts",
+      "52mm, 58mm, and 80mm ESC/POS layouts",
       "Reconnects between sales on its own",
       "A failed print never loses the sale",
     ],
@@ -193,7 +193,7 @@ const faqs: Array<{ question: string; answer: string }> = [
   {
     question: "Which receipt printers are supported?",
     answer:
-      "ESC/POS printers over Bluetooth, Wi-Fi, or USB, in both 58mm and 80mm widths. The printer is configured per device, so each tablet can pair with the printer sitting next to it.",
+      "ESC/POS printers over Bluetooth, Wi-Fi, or USB, in 52mm, 58mm, and 80mm widths. The printer is configured per device, so each tablet can pair with the printer sitting next to it.",
   },
   {
     question: "Are these BIR-accredited official receipts?",

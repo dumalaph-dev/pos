@@ -1,8 +1,9 @@
 /**
  * ESC/POS receipt builder (P3). Pure byte assembly — no printer hardware
  * needed to test. Money is centavos; amounts are rendered as pesos.
- * Paper widths: 58mm = 32 columns, 80mm = 42 columns (font A).
+ * Paper widths: 52mm = 30 columns, 58mm = 32 columns, 80mm = 42 columns (font A).
  */
+import { DEFAULT_PAPER_WIDTH, PAPER_WIDTH_COLUMNS, type PaperWidth } from "./paper-width.ts";
 
 export type ReceiptItem = {
   name: string;
@@ -34,13 +35,11 @@ export type ReceiptData = {
   changeDue?: number | null;
   officialReceipt?: boolean; // false → "not an official receipt" line
   isReprint?: boolean;
-  paperWidth?: 58 | 80;
+  paperWidth?: PaperWidth;
   receiptHeader?: string | null;
   receiptFooter?: string | null;
   showCashier?: boolean;
 };
-
-const COLUMNS = { 58: 32, 80: 42 } as const;
 
 const peso = (centavos: number) =>
   (centavos / 100).toLocaleString("en-PH", {
@@ -131,7 +130,7 @@ function createSlipWriter(width: number) {
 }
 
 export function buildReceipt(data: ReceiptData): Uint8Array {
-  const width = COLUMNS[data.paperWidth ?? 58];
+  const width = PAPER_WIDTH_COLUMNS[data.paperWidth ?? DEFAULT_PAPER_WIDTH];
   const { out, line, rule, blank, leftRight } = createSlipWriter(width);
 
   out.push(ESC, 0x40); // init
@@ -246,7 +245,7 @@ export type ReadingSlipData = {
   cashVariance?: number | null;
   grandTotalAfter?: number | null;
   note?: string | null;
-  paperWidth?: 58 | 80;
+  paperWidth?: PaperWidth;
 };
 
 /**
@@ -256,7 +255,7 @@ export type ReadingSlipData = {
  * on paper (PRD §6.5).
  */
 export function buildReadingSlip(data: ReadingSlipData): Uint8Array {
-  const width = COLUMNS[data.paperWidth ?? 58];
+  const width = PAPER_WIDTH_COLUMNS[data.paperWidth ?? DEFAULT_PAPER_WIDTH];
   const { out, line, rule, blank, leftRight } = createSlipWriter(width);
 
   out.push(ESC, 0x40); // init

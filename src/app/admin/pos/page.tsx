@@ -6,6 +6,7 @@ import { POS_PALETTE_IDS } from "@/lib/pos-palette";
 import { POS_THEME_IDS } from "@/lib/pos-theme";
 import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
 import { isProductImageUrl } from "@/lib/product-images";
+import { normalizePaperWidth, toPaperWidthValue } from "@/lib/paper-width";
 import PosSettingsScreen, {
   type AdminPosCategory,
   type AdminPosDevice,
@@ -101,7 +102,7 @@ function readPosConfig(store: StoreRecord): PosConfig {
     receiptHeader: readText(source.receiptHeader) || readText(store.settings?.receipt_header),
     receiptFooter: readText(source.receiptFooter) || readText(store.settings?.receipt_footer),
     showCashier: readBoolean(source.showCashier, true),
-    paperWidth: source.paperWidth === "80" || (source.paperWidth === undefined && store.settings?.paper_width === "80") ? "80" : "58",
+    paperWidth: toPaperWidthValue(normalizePaperWidth(source.paperWidth ?? store.settings?.paper_width)),
   };
 }
 

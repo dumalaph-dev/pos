@@ -173,7 +173,7 @@ Rationale for the change from v0.2 (categories were a fat 62%-side element): a l
   - **USB-OTG (WebUSB)** — cable-tethered to the tablet.
 - Receipt content (**order slip**): **branch** name & address, order number, date/time, cashier name, line items (name, qty or kg, unit price, line total), subtotal, discount (with type + ID if SC/PWD), total, payment method, tendered, change, footer message, and a fixed **"This is not an official receipt"** line. VAT breakdown is a settings toggle, off by default.
 - Reprint last receipt; reprint any order from the POS order history (reprints are marked `REPRINT` and logged).
-- 58mm and 80mm paper width support (per-tablet setting).
+- 52mm, 58mm, and 80mm paper width support (per-tablet setting).
 
 > ⚠️ **Hardware constraint (unchanged).** Web Bluetooth on Android/Chrome can **only** talk to **Bluetooth Low Energy (BLE)** devices. Many ₱1.5–3k PH thermal printers are Bluetooth **Classic (SPP)** and are invisible to Web Bluetooth. Confirm the exact printer model exposes a BLE GATT service before relying on Bluetooth.
 >
@@ -189,7 +189,7 @@ Standardize every branch on a **Wi-Fi / Ethernet (LAN) 80mm thermal receipt prin
 |---|---|---|
 | **Transport** | Wi-Fi (2.4GHz) **and/or** Ethernet LAN | Prints with zero internet over the branch's own router; no OS pairing quirks; survives tablet swaps |
 | **Protocol** | ESC/POS (raw TCP, **port 9100**) | One receipt builder drives it; the `network` adapter is a thin TCP send |
-| **Paper width** | 80mm (58mm supported as a setting) | 80mm is the PH counter standard; roomier order slips |
+| **Paper width** | 80mm (52mm and 58mm supported as settings) | 80mm is the PH counter standard; roomier order slips |
 | **Print speed** | ≥ 200 mm/s | Keeps within the 3-second print target at peak |
 | **Cutter** | Auto-cutter | Hands stay on the next order, not tearing paper |
 | **Cash drawer port** | RJ11/RJ12 drawer kick | Optional now, but "kick drawer" becomes a one-line ESC/POS command later |

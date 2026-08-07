@@ -16,6 +16,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { formatPeso, toCentavos } from "@/lib/money";
 import { buildReadingSlip } from "@/lib/receipt";
+import type { PaperWidth } from "@/lib/paper-width";
 import {
   formatShiftDuration,
   formatShiftTime,
@@ -39,7 +40,7 @@ type ShiftProfile = {
 };
 
 export type ShiftReceiptSettings = {
-  paperWidth: 58 | 80;
+  paperWidth: PaperWidth;
   vatRate: number;
   showVat: boolean;
 };

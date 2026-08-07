@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { buildReceipt } from "../src/lib/receipt.ts";
 import { getPrinter } from "../src/lib/printer.ts";
+import { parsePaperWidth as parseConfiguredPaperWidth } from "../src/lib/paper-width.ts";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = resolve(SCRIPT_DIR, "..");
@@ -34,7 +35,7 @@ Options:
   --bridge-host <host>   Bridge host (default: BRIDGE_HOST or 127.0.0.1)
   --bridge-port <port>   Bridge WebSocket port (default: BRIDGE_PORT or 8787)
   --printer-port <port>  Printer TCP port (default: PRINTER_PORT or 9100)
-  --paper-width <58|80>  Receipt width (default: PAPER_WIDTH or 80)
+  --paper-width <52|58|80>  Receipt width (default: PAPER_WIDTH or 80)
   --store-name <name>    Header printed on the validation slip
   --skip-retry           Skip the local forced-failure/retry check
   --no-start-bridge      Do not start a local bridge automatically
@@ -90,8 +91,9 @@ function parsePort(value, label) {
 }
 
 function parsePaperWidth(value) {
-  if (value !== "58" && value !== "80") throw new Error("paper width must be 58 or 80");
-  return Number(value);
+  const parsed = parseConfiguredPaperWidth(value);
+  if (parsed === null) throw new Error("paper width must be 52, 58, or 80");
+  return parsed;
 }
 
 function isLoopback(host) {
@@ -256,6 +258,7 @@ async function print(settings, receipt) {
 
 function assertCapturedReceipt(received, expected) {
   const text = received.toString("latin1");
+  const searchableText = text.replace(/\s+/g, " ");
   const checks = [
     ["payload is non-empty", received.length > 0],
     ["payload matches the receipt bytes", Buffer.compare(received, Buffer.from(expected)) === 0],
@@ -264,7 +267,7 @@ function assertCapturedReceipt(received, expected) {
     ["validation order number", text.includes("PRINTER-TEST")],
     ["weight line", text.includes("1.35 kg")],
     ["VAT line", text.includes("VAT (12%)")],
-    ["not-official line", text.includes("THIS IS NOT AN OFFICIAL RECEIPT")],
+    ["not-official line", searchableText.includes("THIS IS NOT AN OFFICIAL RECEIPT")],
   ];
   let failed = 0;
   for (const [label, passed] of checks) {
