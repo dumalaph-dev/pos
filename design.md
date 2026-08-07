@@ -2,6 +2,8 @@
 
 This is the working visual reference for future POS screens. The source of truth is the supplied UI reference, with the more detailed token inventory in [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md).
 
+**The main theme style guide is [docs/THEME_STYLE_GUIDE.md](docs/THEME_STYLE_GUIDE.md)** — palette, typography, shape, textures, motion, and component patterns, extracted from the landing page and shipped as the admin `Default` theme. Read it before styling any new surface.
+
 ## Product character
 
 Calm, warm, and operational. The screen should feel like a well-run business: cream paper, deep forest-green structure, warm gold action, generous tap targets, and clear product photography. Keep the interface tactile and human without turning it into a decorative dashboard.

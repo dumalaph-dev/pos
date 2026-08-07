@@ -56,7 +56,7 @@ export function AdminThemePicker({ initialTheme, disabled }: { initialTheme: Adm
         <span className="admin-settings-theme-pill" aria-live="polite">{selectedOption.label} theme</span>
       </div>
 
-      <fieldset className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <fieldset className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <legend className="sr-only">Dashboard theme</legend>
         {ADMIN_THEME_OPTIONS.map((option) => (
           <label key={option.id} className="admin-theme-option">
