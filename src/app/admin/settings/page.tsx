@@ -92,7 +92,10 @@ export default async function SettingsPage({
         {!canWrite && <div role="status" className="mt-5 rounded-card border border-line bg-secondary px-4 py-3 text-sm font-semibold text-primary">This page is read-only for your role. Ask an organization admin to change configuration.</div>}
 
         <section id="dashboard-settings" aria-labelledby="dashboard-settings-heading" className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(300px,0.7fr)]">
-          <form action={updateOrganizationSettings} encType="multipart/form-data" className="admin-panel p-5 sm:p-6">
+          {/* No encType: React sets multipart/form-data itself for a Server
+              Action form, and specifying it here is overridden with a warning.
+              The brand-logo file input still submits normally. */}
+          <form action={updateOrganizationSettings} className="admin-panel p-5 sm:p-6">
             <div className="admin-panel__header">
               <div><p className="admin-panel__eyebrow">Admin dashboard</p><h2 id="dashboard-settings-heading" className="admin-panel__title">Identity and appearance</h2><p className="admin-panel__subtitle">These details appear in the dashboard navigation and workspace chrome.</p></div>
               <span className="admin-settings-theme-pill">Shared workspace</span>
