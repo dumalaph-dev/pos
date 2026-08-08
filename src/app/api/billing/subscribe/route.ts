@@ -157,10 +157,14 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof PayMongoApiError) {
       console.error("[billing/subscribe] PayMongo API error", error.status, error.providerMessage);
+      const providerMessage = error.providerMessage.toLowerCase();
+      const accountCapabilityMessage = providerMessage.includes("no subscription payment methods are configured")
+        ? " PayMongo has not enabled a subscription-capable payment method for this organization. Enable Visa/Mastercard cards or Maya, then request Subscriptions activation from PayMongo."
+        : "";
       const diagnostic = process.env.PAYMONGO_SECRET_KEY?.trim().startsWith("sk_test_") && error.providerMessage
         ? ` PayMongo test response: ${error.providerMessage.slice(0, 240)}`
         : "";
-      return errorResponse(`PayMongo could not start this subscription. Check account activation and payment settings, then try again.${diagnostic}`, 502);
+      return errorResponse(`PayMongo could not start this subscription. Check account activation and payment settings, then try again.${accountCapabilityMessage}${diagnostic}`, 502);
     }
     console.error("[billing/subscribe] Unexpected error", error instanceof Error ? error.message : error);
     return errorResponse("Checkout could not be started. Please try again or contact support.", 500);

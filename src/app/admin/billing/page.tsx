@@ -7,8 +7,8 @@ import { getAdminProfile } from "@/lib/admin/profile";
 import { getBillingPlan, formatBillingDate, normalizeSubscriptionStatus, subscriptionStatusLabel, subscriptionTone } from "@/lib/billing";
 import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
-import { billingVariantPriceLabel, DEFAULT_BILLING_VARIANTS, DEFAULT_MONTHLY_PRICE_CENTAVOS, DEFAULT_PLATFORM_POLICIES, isPolicyGateOpen } from "@/lib/platform-operations";
-import { payMongoConfiguration, readPlatformOperations } from "@/lib/platform-operations-server";
+import { billingVariantPriceLabel, DEFAULT_BILLING_VARIANTS, DEFAULT_MONTHLY_PRICE_CENTAVOS, DEFAULT_PLATFORM_POLICIES, hasSubscriptionPaymentMethod, isPolicyGateOpen } from "@/lib/platform-operations";
+import { payMongoConfiguration, readPayMongoSubscriptionReadiness, readPlatformOperations } from "@/lib/platform-operations-server";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import SubscriptionCheckout from "./SubscriptionCheckout";
 
@@ -63,7 +63,15 @@ export default async function BillingPage() {
   const catalog = operations.catalog;
   const policyGateOpen = operations.policies.schemaAvailable && isPolicyGateOpen(operations.policies);
   const paymongo = payMongoConfiguration();
-  const providerReady = policyGateOpen && paymongo.secretKeyConfigured && paymongo.publicKeyConfigured && paymongo.keyModeConsistent && paymongo.webhookSecretConfigured && paymongo.subscriptionsEnabled;
+  const paymongoSubscriptionReadiness = await readPayMongoSubscriptionReadiness();
+  const providerReady = policyGateOpen && paymongo.secretKeyConfigured && paymongo.publicKeyConfigured && paymongo.keyModeConsistent && paymongo.webhookSecretConfigured && paymongo.subscriptionsEnabled && paymongoSubscriptionReadiness.subscriptionsApiAvailable === true && hasSubscriptionPaymentMethod(paymongoSubscriptionReadiness.subscriptionPaymentMethods);
+  const providerDetail = !paymongo.secretKeyConfigured || !paymongo.publicKeyConfigured || !paymongo.keyModeConsistent || !paymongo.webhookSecretConfigured
+    ? "The platform owner must configure matching PayMongo keys and the webhook signing secret before checkout can collect a payment."
+    : !paymongo.subscriptionsEnabled || paymongoSubscriptionReadiness.subscriptionsApiAvailable !== true
+      ? "Request PayMongo Subscriptions activation for this organization, then rerun the checkout preflight and keep PAYMONGO_SUBSCRIPTIONS_ENABLED=true only after access is confirmed."
+      : !hasSubscriptionPaymentMethod(paymongoSubscriptionReadiness.subscriptionPaymentMethods)
+        ? "Enable Visa/Mastercard cards or Maya for this PayMongo organization, then request Subscriptions activation for that payment method."
+        : "PayMongo checkout is being prepared. Run the checkout preflight to verify the remaining provider settings.";
   const annualAutoRenewalAllowed = operations.policies.billing.settings.annualRenewal !== "manual_review";
   const monthlyPriceLabel = formatPeso(catalog.monthlyPriceCentavos);
   const offeredVariants = catalog.variants.filter((variant) => variant.isActive);
@@ -156,7 +164,7 @@ export default async function BillingPage() {
             <p className="mt-1 max-w-2xl text-sm leading-6 text-ink-muted">The first payment creates the PayMongo subscription and stores a tokenized payment method for future scheduled invoices.</p>
             {!annualAutoRenewalAllowed && <p className="mt-3 max-w-2xl rounded-btn bg-warning/10 px-3 py-2.5 text-xs font-semibold leading-5 text-ink">Annual options are hidden because the published billing policy requires manual review instead of automatic annual renewal.</p>}
           </div>
-          <SubscriptionCheckout variants={checkoutVariants} policyGateOpen={policyGateOpen} providerReady={providerReady} publicKey={paymongo.publicKey} apiBaseUrl={paymongo.apiBaseUrl} ownerEmail={user.email ?? ""} />
+          <SubscriptionCheckout variants={checkoutVariants} policyGateOpen={policyGateOpen} providerReady={providerReady} providerDetail={providerDetail} publicKey={paymongo.publicKey} apiBaseUrl={paymongo.apiBaseUrl} ownerEmail={user.email ?? ""} />
         </section>
 
         <section className="mt-8 rounded-card border border-line bg-surface-raised p-5 sm:p-6" aria-labelledby="billing-next-heading"><div className="flex gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary"><AdminIcon name="alert" size={17} /></span><div><h2 id="billing-next-heading" className="text-base font-extrabold">What happens next</h2><p className="mt-1 text-sm leading-6 text-ink-muted">{policyGateOpen && providerReady ? "Checkout is available. PayMongo will send signed subscription and payment events to keep this status current." : "Pricing is managed from Platform Operations. Checkout remains locked until both policies are published and PayMongo subscription activation plus keys are configured."}</p></div></div></section>

@@ -108,10 +108,70 @@ export function payMongoConfiguration() {
   };
 }
 
+export async function readPayMongoSubscriptionReadiness() {
+  const secretKey = process.env.PAYMONGO_SECRET_KEY?.trim() || "";
+  const baseUrl = (process.env.PAYMONGO_API_BASE_URL?.trim() || "https://api.paymongo.com").replace(/\/+$/, "");
+  if (!/^sk_(test|live)_/.test(secretKey)) {
+    return { subscriptionsApiAvailable: null, subscriptionPaymentMethods: null };
+  }
+
+  const headers = {
+    Accept: "application/json",
+    Authorization: "Basic " + Buffer.from(secretKey + ":", "utf8").toString("base64"),
+  };
+  const [plans, capabilities] = await Promise.all([
+    readPayMongoEndpoint(`${baseUrl}/v1/subscriptions/plans?limit=1`, headers),
+    readPayMongoEndpoint(`${baseUrl}/v1/merchants/capabilities/payment_methods`, headers),
+  ]);
+
+  return {
+    subscriptionsApiAvailable: plans === null ? null : plans.ok,
+    subscriptionPaymentMethods: capabilities === null ? null : capabilities.ok ? readPaymentMethodIds(capabilities.payload) : null,
+  };
+}
+
 function payMongoKeyMode(value: string | null, prefix: "pk" | "sk") {
   if (value?.startsWith(`${prefix}_test_`)) return "test";
   if (value?.startsWith(`${prefix}_live_`)) return "live";
   return null;
+}
+
+async function readPayMongoEndpoint(url: string, headers: Record<string, string>) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8_000);
+  try {
+    const response = await fetch(url, { headers, cache: "no-store", signal: controller.signal });
+    const body = await response.text();
+    let payload: unknown = null;
+    if (body) {
+      try {
+        payload = JSON.parse(body) as unknown;
+      } catch {
+        payload = null;
+      }
+    }
+    return { ok: response.ok, payload };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function readPaymentMethodIds(payload: unknown) {
+  const values = Array.isArray(payload)
+    ? payload
+    : isRecord(payload) && Array.isArray(payload.data)
+      ? payload.data
+      : [];
+  return values
+    .map((value) => {
+      if (typeof value === "string") return value;
+      if (!isRecord(value)) return null;
+      if (typeof value.id === "string") return value.id;
+      return isRecord(value.attributes) && typeof value.attributes.id === "string" ? value.attributes.id : null;
+    })
+    .filter((value): value is string => typeof value === "string");
 }
 
 function normalizePolicy(key: PlatformPolicyKey, row: {
@@ -139,4 +199,8 @@ function normalizePolicy(key: PlatformPolicyKey, row: {
 function readInteger(value: unknown, fallback: number) {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) ? parsed : fallback;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

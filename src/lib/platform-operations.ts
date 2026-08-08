@@ -44,10 +44,12 @@ export type PayMongoReadinessSignals = {
   keyModeConsistent: boolean;
   webhookSecretConfigured: boolean;
   subscriptionsEnabled: boolean;
+  subscriptionApiAvailable: boolean | null;
+  subscriptionPaymentMethods: string[] | null;
 };
 
 export type CheckoutReadinessItem = {
-  id: "plans" | "billing-policy" | "support-policy" | "secret-key" | "public-key" | "key-mode" | "webhook-secret" | "subscriptions";
+  id: "plans" | "billing-policy" | "support-policy" | "secret-key" | "public-key" | "key-mode" | "webhook-secret" | "subscriptions" | "subscription-payment-methods";
   label: string;
   ready: boolean;
   detail: string;
@@ -192,6 +194,8 @@ export function getCheckoutReadiness({
   const billingPolicyPublished = policies.schemaAvailable && policies.billing.status === "published";
   const supportPolicyPublished = policies.schemaAvailable && policies.support.status === "published";
   const keyPairConfigured = paymongo.secretKeyConfigured && paymongo.publicKeyConfigured;
+  const subscriptionPaymentMethodsReady = hasSubscriptionPaymentMethod(paymongo.subscriptionPaymentMethods);
+  const configuredPaymentMethods = paymongo.subscriptionPaymentMethods?.join(", ") || "none";
 
   const items: CheckoutReadinessItem[] = [
     {
@@ -262,14 +266,41 @@ export function getCheckoutReadiness({
     {
       id: "subscriptions",
       label: "PayMongo subscriptions",
-      ready: paymongo.subscriptionsEnabled,
-      detail: paymongo.subscriptionsEnabled ? "Subscription activation flag is on" : "Subscription activation flag is off",
-      action: "Request recurring-billing activation from PayMongo, then set PAYMONGO_SUBSCRIPTIONS_ENABLED=true.",
+      ready: paymongo.subscriptionsEnabled && paymongo.subscriptionApiAvailable === true,
+      detail: !paymongo.subscriptionsEnabled
+        ? "Local activation flag is off"
+        : paymongo.subscriptionApiAvailable === true
+          ? "PayMongo Subscriptions API is available"
+          : paymongo.subscriptionApiAvailable === false
+            ? "PayMongo rejected Subscriptions access for this organization"
+            : "PayMongo Subscriptions access has not been verified",
+      action: !paymongo.subscriptionsEnabled
+        ? "Request recurring-billing activation from PayMongo, then set PAYMONGO_SUBSCRIPTIONS_ENABLED=true."
+        : paymongo.subscriptionApiAvailable === false
+          ? "Request PayMongo Subscriptions access for this organization, then rerun the checkout preflight."
+          : "Run the PayMongo checkout preflight and confirm that the Subscriptions API is available before enabling checkout.",
+    },
+    {
+      id: "subscription-payment-methods",
+      label: "Subscription payment method",
+      ready: subscriptionPaymentMethodsReady,
+      detail: paymongo.subscriptionPaymentMethods === null
+        ? "PayMongo payment-method capabilities could not be verified"
+        : subscriptionPaymentMethodsReady
+          ? `Configured: ${configuredPaymentMethods}`
+          : `Configured: ${configuredPaymentMethods}; card or Maya is required for subscriptions`,
+      action: paymongo.subscriptionPaymentMethods === null
+        ? "Verify the PayMongo server key and run the checkout preflight to read the organization capabilities."
+        : "Enable Visa/Mastercard cards or Maya for this PayMongo organization, then request Subscriptions activation for that payment method.",
     },
   ];
 
   const remainingActions = items.filter((item) => !item.ready);
   return { ready: remainingActions.length === 0, items, remainingActions };
+}
+
+export function hasSubscriptionPaymentMethod(methods: string[] | null) {
+  return Boolean(methods?.some((method) => ["card", "cards", "maya"].includes(method.toLowerCase())));
 }
 
 export function policyStatusLabel(status: PlatformPolicyStatus) {

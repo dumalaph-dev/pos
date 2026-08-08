@@ -5,7 +5,7 @@ import { getBillingPlan, normalizeSubscriptionStatus, subscriptionStatusLabel, s
 import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
 import { getCheckoutReadiness, isPolicyGateOpen } from "@/lib/platform-operations";
-import { payMongoConfiguration, readPlatformOperations, supportCasesSchemaAvailable } from "@/lib/platform-operations-server";
+import { payMongoConfiguration, readPayMongoSubscriptionReadiness, readPlatformOperations, supportCasesSchemaAvailable } from "@/lib/platform-operations-server";
 import { CheckoutReadinessChecklist } from "@/app/platform/CheckoutReadinessChecklist";
 import { PlatformMetric, PlatformMigrationNotice, PlatformPageHeader, PlatformSectionHeading, PlatformStatusBadge, PlatformUnavailable } from "../../PlatformUI";
 import { countByOrg, formatDate, readPlatformDirectory } from "../../_lib/platform-data";
@@ -16,10 +16,11 @@ export default async function PlatformOperationsPage() {
   const admin = createAdminClient();
   if (!admin) return <PlatformUnavailable detail="Add SUPABASE_SERVICE_ROLE_KEY before opening the platform console." />;
 
-  const [directory, operations, supportCasesReady] = await Promise.all([
+  const [directory, operations, supportCasesReady, paymongoSubscriptionReadiness] = await Promise.all([
     readPlatformDirectory(admin),
     readPlatformOperations(admin),
     supportCasesSchemaAvailable(admin),
+    readPayMongoSubscriptionReadiness(),
   ]);
 
   const { organizations, profiles, stores, employees, authEmailById, organizationsResult } = directory;
@@ -35,6 +36,8 @@ export default async function PlatformOperationsPage() {
       keyModeConsistent: paymongo.keyModeConsistent,
       webhookSecretConfigured: paymongo.webhookSecretConfigured,
       subscriptionsEnabled: paymongo.subscriptionsEnabled,
+      subscriptionApiAvailable: paymongoSubscriptionReadiness.subscriptionsApiAvailable,
+      subscriptionPaymentMethods: paymongoSubscriptionReadiness.subscriptionPaymentMethods,
     },
   });
   const checkoutReady = checkoutReadiness.ready;

@@ -37,6 +37,8 @@ Fill `.env.local` from Supabase → **Settings → API**:
 
 For a local PayMongo test, use matching `pk_test_...` and `sk_test_...` keys. Create a separate enabled test-mode webhook endpoint, copy its signing secret into `.env.local` as `PAYMONGO_WEBHOOK_SECRET`, then run `npm run paymongo:preflight`. The preflight prints only safe mode and status information; it never prints keys, webhook secrets, or API response bodies.
 
+PayMongo Subscriptions require separate account activation and a subscription-capable payment method. If the preflight reports HTTP 403 for the Subscriptions plan API or no supported methods, ask PayMongo to enable Subscriptions for the organization and enable Visa/Mastercard card subscriptions or Maya subscriptions. QR Ph alone cannot start a recurring subscription.
+
 For a successful subscription activation in PayMongo test mode, use `4120000000000007`, any future expiry, and a three-digit CVC; choose **Authorize** if the test prompt appears. Use `5234000000000106` and choose **Fail** to exercise failed activation, or `5123000000000001` to exercise a successful first payment followed by a recurring-payment failure.
 
 `EMPLOYEE_INITIAL_PASSWORD` is the common temporary password that the administrator gives to staff. It must be at least 8 characters and stays server-only; employees are forced to replace it after their first successful Employee ID login.

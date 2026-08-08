@@ -78,7 +78,7 @@ if (supabaseUrl && supabaseServiceRoleKey) {
     } else if (!policies.ok) {
       issues.push(supabaseAction(policies.status, "platform_policies"));
     } else {
-      const rows = Array.isArray(policies.payload?.data) ? policies.payload.data : [];
+      const rows = collectionItems(policies.payload);
       const statuses = new Map(rows.map((row) => [row?.policy_key, row?.status]));
       const unpublished = ["billing", "support"].filter((policyKey) => statuses.get(policyKey) !== "published");
       console.log("- platform policies: " + (unpublished.length === 0 ? "billing and support published" : unpublished.join(" and ") + " not published"));
@@ -90,7 +90,7 @@ if (supabaseUrl && supabaseServiceRoleKey) {
       issues.push("The billing catalog check could not be completed: " + catalog.error + ".");
     } else if (!catalog.ok) {
       issues.push(supabaseAction(catalog.status, "platform_billing_variants"));
-    } else if (!Array.isArray(catalog.payload?.data) || catalog.payload.data.length === 0) {
+    } else if (collectionItems(catalog.payload).length === 0) {
       issues.push("Activate at least one billing variant from /platform/plans before checkout.");
     } else {
       console.log("- active billing variant: present");
@@ -98,7 +98,7 @@ if (supabaseUrl && supabaseServiceRoleKey) {
   }
 }
 
-if (issues.length === 0) {
+if (secretKey && secretMode === expectedMode) {
   const plans = await getPayMongo("/v1/subscriptions/plans?limit=1", secretKey);
   if (plans.error) {
     issues.push("The PayMongo plan API could not be reached: " + plans.error + ".");
@@ -107,11 +107,25 @@ if (issues.length === 0) {
     if (!plans.ok) issues.push(planApiAction(plans.status));
   }
 
+  const capabilities = await getPayMongo("/v1/merchants/capabilities/payment_methods", secretKey);
+  if (capabilities.error) {
+    issues.push("The PayMongo payment-method capability check could not be completed: " + capabilities.error + ".");
+  } else if (!capabilities.ok) {
+    issues.push(payMongoCapabilityAction(capabilities.status));
+  } else {
+    const methods = paymentMethodIds(capabilities.payload);
+    const subscriptionMethods = methods.filter(isSubscriptionPaymentMethod);
+    console.log("- configured payment methods: " + (methods.length > 0 ? methods.join(", ") : "none"));
+    if (subscriptionMethods.length === 0) {
+      issues.push("Enable Visa/Mastercard cards or Maya for this PayMongo organization, then request Subscriptions activation for that payment method.");
+    }
+  }
+
   const webhooks = await getPayMongo("/v1/webhooks", secretKey);
   if (webhooks.error) {
     issues.push("The PayMongo webhook API could not be reached: " + webhooks.error + ".");
   } else {
-    const endpoints = Array.isArray(webhooks.payload?.data) ? webhooks.payload.data : [];
+    const endpoints = collectionItems(webhooks.payload);
     const testEndpoints = endpoints.filter((endpoint) => endpoint?.attributes?.livemode === false);
     console.log("- test webhook endpoints: " + testEndpoints.length);
     if (testEndpoints.length === 0) {
@@ -200,6 +214,28 @@ function webhookEvents(candidate) {
     .filter((eventName) => typeof eventName === "string");
 }
 
+function collectionItems(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (payload && typeof payload === "object" && Array.isArray(payload.data)) return payload.data;
+  return [];
+}
+
+function paymentMethodIds(payload) {
+  return collectionItems(payload)
+    .map((method) => {
+      if (typeof method === "string") return method;
+      if (!method || typeof method !== "object") return null;
+      if (typeof method.id === "string") return method.id;
+      if (method.attributes && typeof method.attributes === "object" && typeof method.attributes.id === "string") return method.attributes.id;
+      return null;
+    })
+    .filter((method) => typeof method === "string");
+}
+
+function isSubscriptionPaymentMethod(method) {
+  return ["card", "cards", "maya"].includes(String(method).toLowerCase());
+}
+
 async function getPayMongo(endpoint, key) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -261,6 +297,12 @@ function planApiAction(status) {
   if (status === 401 || status === 403) return "PayMongo rejected the secret key or Subscriptions is not enabled for this account; verify the test secret key and request/enable Subscriptions access.";
   if (status === 404 || status === 405) return "PayMongo did not expose the Subscriptions plan API for this account; request/enable Subscriptions access before checkout.";
   return "The PayMongo subscription plan API returned HTTP " + status + "; resolve that account or API error before checkout.";
+}
+
+function payMongoCapabilityAction(status) {
+  if (status === 401 || status === 403) return "PayMongo rejected the secret key or account capability request; verify the test secret key and organization access.";
+  if (status === 404 || status === 405) return "PayMongo did not expose the payment-method capability API for this account; confirm the organization and request PayMongo support activation.";
+  return "The PayMongo payment-method capability check returned HTTP " + status + "; resolve that account or API error before checkout.";
 }
 
 function supabaseAction(status, resource) {

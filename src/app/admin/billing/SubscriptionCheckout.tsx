@@ -14,6 +14,7 @@ type SubscriptionCheckoutProps = {
   variants: CheckoutVariant[];
   policyGateOpen: boolean;
   providerReady: boolean;
+  providerDetail: string;
   publicKey: string | null;
   apiBaseUrl: string;
   ownerEmail: string;
@@ -27,7 +28,7 @@ type PaymentIntentResponse = {
   paymentIntentStatus?: string;
 };
 
-export default function SubscriptionCheckout({ variants, policyGateOpen, providerReady, publicKey, apiBaseUrl, ownerEmail }: SubscriptionCheckoutProps) {
+export default function SubscriptionCheckout({ variants, policyGateOpen, providerReady, providerDetail, publicKey, apiBaseUrl, ownerEmail }: SubscriptionCheckoutProps) {
   const [selectedId, setSelectedId] = useState(variants[0]?.id ?? "");
   const [cardholderName, setCardholderName] = useState("");
   const [cardNumber, setCardNumber] = useState("");
@@ -160,7 +161,7 @@ export default function SubscriptionCheckout({ variants, policyGateOpen, provide
     return <CheckoutNotice title="Checkout is locked by policy" detail="The platform owner must publish both the billing policy and support policy before an organization can start a paid subscription." tone="warning" />;
   }
   if (!providerReady) {
-    return <CheckoutNotice title="PayMongo checkout is being prepared" detail="The platform owner must configure the public key, secret key, webhook secret, and PayMongo Subscriptions activation before checkout can collect a payment." tone="neutral" />;
+    return <CheckoutNotice title="PayMongo checkout is being prepared" detail={providerDetail} tone="neutral" />;
   }
   if (variants.length === 0) {
     return <CheckoutNotice title="No subscription options are available" detail="Ask the platform owner to enable at least one billing option in Platform Operations." tone="neutral" />;
