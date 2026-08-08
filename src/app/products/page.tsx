@@ -5,6 +5,7 @@ import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { ProductCreateDialog } from "@/components/admin/ProductCreateDialog";
+import { MultiProductModal } from "@/components/admin/MultiProductModal";
 import { ProductFields } from "@/components/admin/ProductFields";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatStockQuantity, salesQuantity, stockMovementDelta, stockStatus, type StockMovementType } from "@/lib/inventory";
@@ -615,6 +616,7 @@ export default async function ProductsPage({
               </details>
               <Link href="#product-filters" className="products-secondary-button"><AdminIcon name="filter" size={15} /> Filters{(searchQuery || categoryFilter !== "all" || status !== "all" || posOnly) && <span className="products-filter-count">!</span>}</Link>
               <ProductCreateDialog key={action === "product" ? "product-create-open" : "product-create-closed"} branches={formBranches} categories={categories} suppliers={suppliers} defaultBranch={formDefaultBranch} canWrite={canWrite} orgName={orgName} fromInventory={fromInventory} initialOpen={action === "product"} />
+              <MultiProductModal key={formDefaultBranch} storeId={formDefaultBranch} branchName={currentBranchName} branches={formBranches} categories={categories} canWrite={canWrite} orgName={orgName} triggerLabel="Starter catalog" />
               <details className="products-add-menu">
                 <summary className="products-secondary-button"><AdminIcon name="more" size={15} /> More</summary>
                 <div className="products-popover products-add-popover">

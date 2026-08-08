@@ -34,6 +34,7 @@ export type AdminIconName =
   | "download"
   | "edit"
   | "more"
+  | "close"
   | "refresh"
   | "history"
   | "branches"
@@ -123,6 +124,8 @@ export function AdminIcon({ name, size = 18 }: { name: AdminIconName; size?: num
       return <svg {...common}><path d="m14 5 5 5M4 20l3.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z" /></svg>;
     case "more":
       return <svg {...common}><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" /></svg>;
+    case "close":
+      return <svg {...common}><path d="m7 7 10 10M17 7 7 17" /></svg>;
     case "refresh":
       return <svg {...common}><path d="M20 7v5h-5M4 17v-5h5" /><path d="M6.2 9A7 7 0 0 1 18.6 7M17.8 15A7 7 0 0 1 5.4 17" /></svg>;
     case "history":
