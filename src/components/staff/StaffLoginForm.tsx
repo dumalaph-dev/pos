@@ -24,7 +24,7 @@ export default function StaffLoginForm({ storeKey }: { storeKey: string }) {
       <p className="mt-3 text-xs leading-5 text-ink-muted">First time here? Use the temporary password from your owner, then create a private password.</p>
       {state.message && <p role="alert" className="mt-4 text-sm font-medium text-danger">{state.message}</p>}
 
-      <button type="submit" disabled={pending} className="mt-6 w-full rounded-btn bg-accent px-6 py-3 font-bold uppercase text-accent-fg disabled:opacity-50">{pending ? "Signing in…" : "Sign in to store"}</button>
+      <button type="submit" disabled={pending} className="mt-6 w-full rounded-btn bg-accent px-6 py-3 font-bold uppercase text-accent-fg disabled:opacity-50">{pending ? "Signing in..." : "Sign in to store"}</button>
     </form>
   );
 }

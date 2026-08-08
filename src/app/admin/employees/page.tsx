@@ -6,7 +6,7 @@ import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
-import { staffLoginPath } from "@/lib/store-access";
+import { legacyStaffLoginPath, staffLoginPath } from "@/lib/store-access";
 import {
   createEmployee,
   createLeaveRequest,
@@ -39,7 +39,7 @@ type EmployeeRecord = {
   is_active: boolean;
   created_at: string;
 };
-type BranchRecord = { id: string; name: string; is_active: boolean; staff_login_key?: string | null };
+type BranchRecord = { id: string; name: string; is_active: boolean; staff_login_key?: string | null; staff_login_slug?: string | null };
 type RoleRecord = {
   id: string;
   name: string;
@@ -298,7 +298,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
     ? null
     : supabase.from("leave_requests").select("id, employee_id, leave_type, start_date, end_date, reason, status, created_at").eq("org_id", profile.org_id).order("created_at", { ascending: false }).limit(3);
   const staffLinksQuery = profile.role === "admin"
-    ? supabase.from("stores").select("id, name, is_active, staff_login_key").eq("org_id", profile.org_id).order("name")
+    ? supabase.from("stores").select("id, name, is_active, staff_login_slug").eq("org_id", profile.org_id).order("name")
     : null;
   const [
     branchesResult,
@@ -311,7 +311,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
     activeLeaveResult,
     recentLeaveResult,
   ] = await Promise.all([
-    supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name"),
+    supabase.from("stores").select("id, name, is_active, staff_login_key").eq("org_id", profile.org_id).order("name"),
     staffLinksQuery ?? emptyResult,
     supabase.from("employee_records").select("id, profile_id, role_id, store_id, employee_code, full_name, email, phone, role, job_title, hired_on, schedule_days, schedule_start, schedule_end, is_active, created_at").eq("org_id", profile.org_id).order("is_active", { ascending: false }).order("full_name").limit(1000),
     supabase.from("employee_roles").select("id, name, slug, description, color, permissions, is_active").eq("org_id", profile.org_id).order("is_active", { ascending: false }).order("name"),
@@ -485,7 +485,7 @@ function StaffAccessPanel({ branches, migrationMissing }: { branches: BranchReco
         <span className="employee-data-badge"><AdminIcon name="employees" size={14} /> Staff access</span>
       </div>
 
-      {migrationMissing && <div role="status" className="employee-notice employee-notice--warning"><AdminIcon name="alert" size={16} /> Store links are not available until migration 0023 is applied. Your existing branches are still shown below.</div>}
+      {migrationMissing && <div role="status" className="employee-notice employee-notice--warning"><AdminIcon name="alert" size={16} /> Human-readable staff links could not be loaded. Existing UUID links remain available below; apply migration 0033 if this is the first rollout.</div>}
       {branches.length === 0
         ? <div className="employee-empty-state"><span><AdminIcon name="branches" size={23} /></span><strong>Create a branch first</strong><p>Each active branch receives its own staff login link.</p></div>
         : <div className="grid gap-3 md:grid-cols-2">{branches.map((branch) => <article key={branch.id} className="rounded-[9px] border border-[#f0e9e1] bg-[#fffefb] p-4">
@@ -496,9 +496,9 @@ function StaffAccessPanel({ branches, migrationMissing }: { branches: BranchReco
             </div>
             <span className="employee-data-badge">{branch.is_active ? "Ready to share" : "Disabled"}</span>
           </div>
-          {branch.staff_login_key
-            ? <StaffLinkCopy path={staffLoginPath(branch.staff_login_key)} disabled={!branch.is_active} />
-            : <p className="mt-4 rounded-btn border border-line bg-raised px-4 py-3 text-xs font-semibold text-ink-muted">This branch needs migration 0023 before a staff link can be generated.</p>}
+          {branch.staff_login_slug || branch.staff_login_key
+            ? <StaffLinkCopy path={branch.staff_login_slug ? staffLoginPath(branch.staff_login_slug) : legacyStaffLoginPath(branch.staff_login_key ?? "")} disabled={!branch.is_active} />
+            : <p className="mt-4 rounded-btn border border-line bg-raised px-4 py-3 text-xs font-semibold text-ink-muted">This branch needs migration 0033 before a staff link can be generated.</p>}
         </article>)}</div>}
     </div>
   </section>;
