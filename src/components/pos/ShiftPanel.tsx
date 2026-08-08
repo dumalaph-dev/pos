@@ -192,9 +192,9 @@ export default function ShiftPanel({
         openedAt: new Date().toISOString(),
         openingCash: amount,
       });
-      onToast(`Shift opened with ${displayPeso(amount)} float.`);
+      onToast(`Shift started with ${displayPeso(amount)} float.`);
     } catch (openError) {
-      setError(openError instanceof Error ? openError.message : "The shift could not be opened.");
+      setError(openError instanceof Error ? openError.message : "The shift could not be started.");
     } finally {
       setBusy(false);
     }
@@ -283,7 +283,7 @@ export default function ShiftPanel({
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-bold uppercase tracking-wide text-ink-muted">Shift &amp; till</p>
+            <p className="text-sm font-bold uppercase tracking-wide text-ink-muted">Cashier shift</p>
             <p className="mt-0.5 text-xs text-ink-muted">{profile.store_name ?? "Your branch"}</p>
           </div>
           <button
@@ -304,7 +304,7 @@ export default function ShiftPanel({
 
         {offline && (
           <p role="status" className="mt-3 rounded-btn border border-warning/35 bg-warning/10 px-3 py-2 text-sm font-semibold text-ink">
-            Shifts need a connection. Sales still ring up offline and stay attached to the last open shift on this tablet.
+            Shifts need a connection. Sales still ring up offline and stay attached to the last active shift on this tablet.
           </p>
         )}
 
@@ -334,7 +334,7 @@ export default function ShiftPanel({
         ) : !shift ? (
           <div className="mt-4">
             <p className="text-sm leading-6 text-ink-muted">
-              No till is open on this tablet. Count your starting cash and open a shift so every sale is attributed to it.
+              No shift is active on this tablet. Count your starting cash and start a shift so every sale is attributed to it.
             </p>
             <label className="mt-4 block">
               <span className="mb-1.5 block text-xs font-extrabold uppercase tracking-[0.12em] text-ink-muted">Opening cash float (₱)</span>
@@ -355,7 +355,7 @@ export default function ShiftPanel({
               disabled={offline || busy || !profile.store_id}
               className="mt-4 w-full rounded-btn bg-primary px-4 py-3 text-sm font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {busy ? "Opening…" : "Open shift"}
+              {busy ? "Starting…" : "Start shift"}
             </button>
             {!profile.store_id && (
               <p className="mt-3 text-xs leading-5 text-ink-muted">
@@ -389,7 +389,7 @@ export default function ShiftPanel({
                 </button>
 
                 <div className="mt-5 border-t border-line pt-4">
-                  <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-ink-muted">Close the till</p>
+                  <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-ink-muted">End shift</p>
                   <label className="mt-3 block">
                     <span className="mb-1.5 block text-xs font-extrabold uppercase tracking-[0.12em] text-ink-muted">Counted cash in drawer (₱)</span>
                     <input

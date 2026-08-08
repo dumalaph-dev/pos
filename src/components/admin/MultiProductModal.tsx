@@ -28,6 +28,7 @@ export type MultiProductModalProps = {
   canWrite: boolean;
   orgName?: string;
   initialPresetId?: string;
+  onPreviewSelectionChange?: (selection: { presetId: string; productIds: string[] }) => void;
   triggerLabel?: string;
   triggerClassName?: string;
 };
@@ -66,6 +67,7 @@ export function MultiProductModal({
   canWrite,
   orgName,
   initialPresetId,
+  onPreviewSelectionChange,
   triggerLabel = "Starter catalog",
   triggerClassName = "products-secondary-button",
 }: MultiProductModalProps) {
@@ -131,6 +133,14 @@ export function MultiProductModal({
 
   function openModal() {
     if (!canWrite || !selectedStoreId) return;
+    const nextPreset = getCatalogPreset(initialPresetId);
+    const previewPreset = nextPreset ?? selectedPreset;
+    if (nextPreset && nextPreset.id !== presetId) {
+      setPresetId(nextPreset.id);
+      setSelected(buildSelection(nextPreset));
+      setDrafts(buildDrafts(nextPreset));
+    }
+    onPreviewSelectionChange?.({ presetId: previewPreset.id, productIds: previewPreset.products.map((product) => product.id) });
     setFeedback(null);
     setOpen(true);
   }
@@ -141,15 +151,22 @@ export function MultiProductModal({
   }
 
   function choosePreset(nextPreset: CatalogPreset) {
+    const nextSelection = buildSelection(nextPreset);
     setPresetId(nextPreset.id);
-    setSelected(buildSelection(nextPreset));
+    setSelected(nextSelection);
     setDrafts(buildDrafts(nextPreset));
     setFeedback(null);
+    onPreviewSelectionChange?.({ presetId: nextPreset.id, productIds: nextPreset.products.map((product) => product.id) });
   }
 
   function toggleProduct(productId: string) {
-    setSelected((current) => ({ ...current, [productId]: !current[productId] }));
+    const nextSelection = { ...selected, [productId]: !selected[productId] };
+    setSelected(nextSelection);
     setFeedback(null);
+    onPreviewSelectionChange?.({
+      presetId: selectedPreset.id,
+      productIds: selectedPreset.products.filter((product) => nextSelection[product.id]).map((product) => product.id),
+    });
   }
 
   function updateDraft(productId: string, field: DraftField, value: string) {

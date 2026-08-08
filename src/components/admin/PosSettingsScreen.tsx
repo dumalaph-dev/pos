@@ -7,7 +7,7 @@ import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
 import { MultiProductModal } from "@/components/admin/MultiProductModal";
-import { CATALOG_PRESETS, getCatalogPreset } from "@/lib/catalog-presets";
+import { CATALOG_PRESETS, getCatalogPreset, type CatalogPreset } from "@/lib/catalog-presets";
 import { createDeviceSettings, savePosSettings, updateDeviceSettings } from "@/app/admin/pos/actions";
 import { buildReceipt } from "@/lib/receipt";
 import { getPrinter, type PrinterSettings } from "@/lib/printer";
@@ -72,8 +72,14 @@ type TabId = PosTabId;
 type PreviewDevice = "desktop" | "tablet";
 type UtilityPanel = "notifications" | "help" | "profile" | "";
 type CartLine = { product: AdminPosProduct; qty: number };
+type StarterPreviewSelection = { presetId: string; productIds: string[] };
 
-const DEFAULT_CATEGORY_NAMES = ["Lechon", "Rice Meals", "Drinks", "Sides", "Merchandise", "Combos"];
+const DEFAULT_PREVIEW_CATEGORIES = [
+  { id: "preview-lechon", name: "Lechon", icon: "pig" },
+  { id: "preview-rice", name: "Rice & Sides", icon: "rice" },
+  { id: "preview-drinks", name: "Drinks", icon: "drink" },
+  { id: "preview-extras", name: "Sauces & Extras", icon: "sauce" },
+];
 const PREVIEW_PRODUCTS: AdminPosProduct[] = [
   { id: "preview-regular", name: "Lechon Regular", pricing_mode: "per_kg", price: 65000, unit: "kg", category_id: "preview-lechon", image_url: "/food/whole-lechon-small.png" },
   { id: "preview-belly", name: "Lechon Belly", pricing_mode: "per_kg", price: 70000, unit: "kg", category_id: "preview-lechon", image_url: "/food/lechon-belly-one.png" },
@@ -183,23 +189,51 @@ function buildCatalog(products: AdminPosProduct[]) {
     price: Number(product.price),
     image_url: isProductImageUrl(product.image_url) ? product.image_url : IMAGE_FALLBACK,
   }));
-  if (normalized.length >= PREVIEW_PRODUCTS.length) return normalized.slice(0, 12);
-
-  const names = new Set(normalized.map((product) => product.name.trim().toLowerCase()));
-  return [...normalized, ...PREVIEW_PRODUCTS.filter((product) => !names.has(product.name.toLowerCase()))].slice(0, 12);
+  return normalized.length ? normalized.slice(0, 12) : PREVIEW_PRODUCTS;
 }
 
-function buildCategories(categories: AdminPosCategory[]) {
+function buildCategories(categories: AdminPosCategory[], useFallbackCategories: boolean) {
   const real = categories.map((category) => ({
     id: category.id,
     name: category.name,
     icon: category.icon || categoryIcon(category.name),
   }));
+  if (!useFallbackCategories) return [{ id: "all", name: "All Items", icon: "grid" as const }, ...real];
   const names = new Set(real.map((category) => category.name.toLowerCase()));
-  const preview = DEFAULT_CATEGORY_NAMES
-    .filter((name) => !names.has(name.toLowerCase()))
-    .map((name) => ({ id: `preview-${slug(name)}`, name, icon: categoryIcon(name) }));
+  const preview = DEFAULT_PREVIEW_CATEGORIES.filter((category) => !names.has(category.name.toLowerCase()));
   return [{ id: "all", name: "All Items", icon: "grid" as const }, ...real, ...preview];
+}
+
+function buildStarterPreviewCatalog(preset: CatalogPreset, selectedProductIds: string[]) {
+  const selectedIds = new Set(selectedProductIds);
+  const selectedProducts = preset.products.filter((product) => selectedIds.has(product.id));
+  const categoryIds = new Map(
+    preset.categories.map((category) => [category.name.trim().toLowerCase(), `starter-${preset.id}-${slug(category.name)}`]),
+  );
+  const products: AdminPosProduct[] = selectedProducts.map((product) => ({
+    id: `starter-${preset.id}-${product.id}`,
+    name: product.name,
+    pricing_mode: product.pricingMode,
+    price: Math.round(product.price * 100),
+    unit: product.unit,
+    category_id: categoryIds.get(product.category.trim().toLowerCase()) ?? `starter-${preset.id}-${slug(product.category)}`,
+    image_url: product.imageUrl,
+    track_stock: true,
+    min_stock: product.minStock,
+    stock_quantity: product.openingStock,
+  }));
+  const usedCategories = new Set(selectedProducts.map((product) => product.category.trim().toLowerCase()));
+  const categories = [
+    { id: "all", name: "All Items", icon: "grid" },
+    ...preset.categories
+      .filter((category) => usedCategories.has(category.name.trim().toLowerCase()))
+      .map((category) => ({
+        id: categoryIds.get(category.name.trim().toLowerCase()) ?? `starter-${preset.id}-${slug(category.name)}`,
+        name: category.name,
+        icon: category.icon || categoryIcon(category.name),
+      })),
+  ];
+  return { products, categories };
 }
 
 function initialCart(catalog: AdminPosProduct[]) {
@@ -312,7 +346,8 @@ export default function PosSettingsScreen({
 }) {
   const router = useRouter();
   const catalog = useMemo(() => buildCatalog(products), [products]);
-  const categoryOptions = useMemo(() => buildCategories(categories), [categories]);
+  const categoryOptions = useMemo(() => buildCategories(categories, products.length === 0), [categories, products.length]);
+  const [starterPreviewSelection, setStarterPreviewSelection] = useState<StarterPreviewSelection | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
   const [previewDevice, setPreviewDevice] = useState<PreviewDevice>("desktop");
   const [config, setConfig] = useState<PosConfig>(initialSettings);
@@ -345,6 +380,13 @@ export default function PosSettingsScreen({
   const currentBranchName = branchDetails.name || branchName;
   const currentAddress = branchDetails.address;
   const currentTin = branchDetails.tin;
+  const starterPreview = useMemo(() => {
+    if (!starterPreviewSelection) return null;
+    const preset = getCatalogPreset(starterPreviewSelection.presetId);
+    return preset ? buildStarterPreviewCatalog(preset, starterPreviewSelection.productIds) : null;
+  }, [starterPreviewSelection]);
+  const previewCatalog = starterPreview?.products ?? catalog;
+  const previewCategories = starterPreview?.categories ?? categoryOptions;
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
@@ -353,12 +395,12 @@ export default function PosSettingsScreen({
 
   const visibleProducts = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return catalog.filter((product) => {
+    return previewCatalog.filter((product) => {
       const matchesCategory = activeCategory === "all" || product.category_id === activeCategory;
       const matchesSearch = !query || product.name.toLowerCase().includes(query);
       return matchesCategory && matchesSearch;
     });
-  }, [activeCategory, catalog, search]);
+  }, [activeCategory, previewCatalog, search]);
 
   const terminalOnline = useMemo(() => devices.some((device) => {
     if (!device.is_active || !device.last_seen_at) return false;
@@ -393,6 +435,26 @@ export default function PosSettingsScreen({
 
   function updateConfig(patch: Partial<PosConfig>) {
     setConfig((current) => ({ ...current, ...patch }));
+  }
+
+  function handleStarterPreviewSelection(selection: StarterPreviewSelection) {
+    setStarterPreviewSelection(selection);
+    setActiveCategory("all");
+    setSearch("");
+    setDiscountRate(0);
+    setAmountTendered("");
+    setSaleComplete(false);
+
+    const preset = getCatalogPreset(selection.presetId);
+    if (!preset) {
+      setCart([]);
+      return;
+    }
+    const nextCatalog = buildStarterPreviewCatalog(preset, selection.productIds).products;
+    const productsById = new Map(nextCatalog.map((product) => [product.id, product]));
+    setCart((current) => current
+      .filter((line) => productsById.has(line.product.id))
+      .map((line) => ({ ...line, product: productsById.get(line.product.id) ?? line.product })));
   }
 
   function addProduct(product: AdminPosProduct) {
@@ -580,7 +642,7 @@ export default function PosSettingsScreen({
                   previewStyle={previewStyle}
                   previewDevice={previewDevice}
                   online={terminalOnline}
-                  categoryOptions={categoryOptions}
+                  categoryOptions={previewCategories}
                   activeCategory={activeCategory}
                   setActiveCategory={setActiveCategory}
                   visibleProducts={visibleProducts}
@@ -629,14 +691,6 @@ export default function PosSettingsScreen({
           </section>
 
           <div className="pos-settings-sidebar">
-            <CategoryPresetPanel
-              organizationName={organizationName}
-              branchName={branchName}
-              storeId={storeId}
-              canWrite={canWrite}
-              branchOptions={branchOptions}
-              categories={categories}
-            />
             <AppearancePanel
               config={config}
               choosePalette={choosePalette}
@@ -645,6 +699,18 @@ export default function PosSettingsScreen({
               setCustomPaletteOpen={setCustomPaletteOpen}
             />
           </div>
+        </div>
+
+        <div className="pos-category-section">
+          <CategoryPresetPanel
+            organizationName={organizationName}
+            branchName={branchName}
+            storeId={storeId}
+            canWrite={canWrite}
+            branchOptions={branchOptions}
+            categories={categories}
+            onPreviewSelectionChange={handleStarterPreviewSelection}
+          />
         </div>
       </div>
 
@@ -816,6 +882,7 @@ function CategoryPresetPanel({
   canWrite,
   branchOptions,
   categories,
+  onPreviewSelectionChange,
 }: {
   organizationName: string;
   branchName: string;
@@ -823,12 +890,23 @@ function CategoryPresetPanel({
   canWrite: boolean;
   branchOptions: Array<{ id: string; name: string }>;
   categories: AdminPosCategory[];
+  onPreviewSelectionChange: (selection: StarterPreviewSelection) => void;
 }) {
   const [presetId, setPresetId] = useState("lechon-house");
   const selectedPreset = getCatalogPreset(presetId) ?? CATALOG_PRESETS[0];
   const existingCategoryNames = new Set(categories.map((category) => category.name.trim().toLowerCase()));
   const matchedCategoryCount = selectedPreset.categories.filter((category) => existingCategoryNames.has(category.name.toLowerCase())).length;
   const catalogBranches = branchOptions.length ? branchOptions : storeId ? [{ id: storeId, name: branchName }] : [];
+
+  function choosePreset(nextPreset: CatalogPreset) {
+    setPresetId(nextPreset.id);
+    onPreviewSelectionChange({ presetId: nextPreset.id, productIds: nextPreset.products.map((product) => product.id) });
+  }
+
+  function handleModalPreviewSelection(selection: StarterPreviewSelection) {
+    setPresetId(selection.presetId);
+    onPreviewSelectionChange(selection);
+  }
 
   return (
     <section className="pos-category-card" aria-labelledby="pos-category-heading">
@@ -849,7 +927,7 @@ function CategoryPresetPanel({
             role="radio"
             aria-checked={preset.id === selectedPreset.id}
             className={"pos-category-preset " + (preset.id === selectedPreset.id ? "is-selected" : "")}
-            onClick={() => setPresetId(preset.id)}
+            onClick={() => choosePreset(preset)}
           >
             <span className="pos-category-preset__icon"><MiniIcon name={preset.icon} size={17} /></span>
             <span><strong>{preset.label}</strong><small>{preset.categories.length} categories</small></span>
@@ -874,7 +952,6 @@ function CategoryPresetPanel({
       <div className="pos-category-card__footer">
         <p>{matchedCategoryCount ? matchedCategoryCount + " category" + (matchedCategoryCount === 1 ? "" : "ies") + " already match this branch." : "Categories and products are added only when you confirm the starter menu."}</p>
         <MultiProductModal
-          key={selectedPreset.id + "-" + storeId}
           storeId={storeId}
           branchName={branchName}
           branches={catalogBranches}
@@ -882,6 +959,7 @@ function CategoryPresetPanel({
           canWrite={canWrite}
           orgName={organizationName}
           initialPresetId={selectedPreset.id}
+          onPreviewSelectionChange={handleModalPreviewSelection}
           triggerLabel="Add starter products"
           triggerClassName="pos-category-card__cta"
         />
