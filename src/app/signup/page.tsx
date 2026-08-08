@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
@@ -23,7 +24,21 @@ export default async function SignupPage() {
     <main className="min-h-screen bg-bg px-6 py-10 text-ink sm:py-16">
       <div className="mx-auto grid w-full max-w-5xl gap-6 lg:grid-cols-[minmax(260px,0.8fr)_minmax(0,1.2fr)] lg:items-start">
         <section className="rounded-card bg-primary p-7 text-primary-fg shadow-[var(--shadow-pop)] sm:p-9">
-          <Link href="/" className="text-sm font-semibold uppercase tracking-wide text-primary-fg/75 hover:text-primary-fg">Dumala POS</Link>
+          <Link
+            href="/"
+            aria-label="Dumala POS home"
+            className="inline-flex w-fit rounded-btn bg-primary-fg px-4 py-3 shadow-sm transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary-fg"
+          >
+            <Image
+              src="/brand-lockup.png"
+              alt="Dumala POS"
+              width={1535}
+              height={451}
+              priority
+              sizes="(max-width: 1023px) 220px, 240px"
+              className="h-10 w-auto sm:h-12"
+            />
+          </Link>
           <p className="mt-14 text-xs font-extrabold uppercase tracking-[0.16em] text-primary-fg/65">For store owners</p>
           <h1 className="mt-3 text-3xl font-extrabold tracking-[-0.04em] sm:text-4xl">Run your counter with a workspace built for your business.</h1>
           <p className="mt-4 text-sm leading-6 text-primary-fg/75">Start with your business identity and first branch. Add products, inventory, staff, and devices from the admin backoffice whenever you are ready.</p>
