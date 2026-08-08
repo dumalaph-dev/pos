@@ -53,7 +53,7 @@ server. Configure the PayMongo webhook URL as
 
 ## 4. Database migrations
 SQL lives in `supabase/migrations/` (run in order):
-The latest migrations add store staff access keys, subscription tracking, the single Premium billing plan, append-only privilege hardening, and the policy-first platform operations catalog: `0023_store_access_and_subscriptions.sql`, `0024_shifts_and_z_readings.sql`, `0025_premium_billing_plan.sql`, `0026_authenticated_append_only_hardening.sql`, `0027_platform_operations.sql`, `0028_support_cases.sql`, `0029_support_cases_privileges.sql`, and `0030_suspended_account_rls.sql`.
+The latest migrations add store staff access keys, subscription tracking, the single Premium billing plan, append-only privilege hardening, the policy-first platform operations catalog, and the initial annual billing offers: `0023_store_access_and_subscriptions.sql`, `0024_shifts_and_z_readings.sql`, `0025_premium_billing_plan.sql`, `0026_authenticated_append_only_hardening.sql`, `0027_platform_operations.sql`, `0028_support_cases.sql`, `0029_support_cases_privileges.sql`, `0030_suspended_account_rls.sql`, and `0031_enable_annual_billing_offers.sql`.
 1. `0001_schema.sql` — tables, enums, indexes
 2. `0002_rls.sql` — grants, helper functions, RLS policies, append-only triggers
 3. `0003_functions.sql` — `clone_menu` (multi-branch)
@@ -85,6 +85,7 @@ The latest migrations add store staff access keys, subscription tracking, the si
 28. `0028_support_cases.sql` - service-role-only support cases, SLA due-time indexes, and platform support workflow storage
 29. `0029_support_cases_privileges.sql` - remove inherited tenant grants from the service-role-only support-case table
 30. `0030_suspended_account_rls.sql` - make active organization/store helper contexts unavailable to suspended users while preserving their own organization status row
+31. `0031_enable_annual_billing_offers.sql` - make the default 1-, 2-, and 3-year pricing options visible to customers; the platform owner can still edit or disable them
 
 **Apply them** either way:
 - **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push`

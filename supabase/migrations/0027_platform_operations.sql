@@ -43,9 +43,9 @@ create unique index if not exists platform_billing_variants_cycle_idx
 insert into platform_billing_variants (label, billing_unit, interval_count, discount_percent, is_active, sort_order)
 values
   ('Monthly', 'month', 1, 0, true, 0),
-  ('1 year', 'year', 1, 10, false, 1),
-  ('2 years', 'year', 2, 15, false, 2),
-  ('3 years', 'year', 3, 20, false, 3)
+  ('1 year', 'year', 1, 10, true, 1),
+  ('2 years', 'year', 2, 15, true, 2),
+  ('3 years', 'year', 3, 20, true, 3)
 on conflict (billing_unit, interval_count) do nothing;
 
 create table if not exists platform_policies (

@@ -2,16 +2,17 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import LandingHeader from "@/components/landing/LandingHeader";
+import LandingPricing from "@/components/landing/LandingPricing";
 import ScrollReveal from "@/components/landing/ScrollReveal";
 import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
-import { DEFAULT_MONTHLY_PRICE_CENTAVOS } from "@/lib/platform-operations";
+import { DEFAULT_BILLING_VARIANTS, DEFAULT_MONTHLY_PRICE_CENTAVOS, type BillingCatalog, type BillingVariant } from "@/lib/platform-operations";
 import { readPlatformBillingCatalog } from "@/lib/platform-operations-server";
 
 export const metadata: Metadata = {
-  title: "Dumala POS | Run your business with less stress",
+  title: "Dumala POS | Modernize your business, one sale at a time",
   description:
-    "An offline-first POS for Philippine counters: a tablet sell screen for cashiers, an owner dashboard for the business, and every branch in one workspace. Start with a 14-day free trial.",
+    "A practical POS and business workspace for Philippine stores: quick tablet checkout for cashiers, clear records for owners, offline selling, and one view across branches. Try the full product free for 14 days.",
 };
 
 type FeatureIconName = "bag" | "chart" | "people" | "bolt";
@@ -24,27 +25,27 @@ const featureCards: Array<{
 }> = [
   {
     icon: "bag",
-    title: "Sell with speed",
-    description: "Keep checkout clear and quick for every customer, even during the rush.",
-    points: ["Fixed-price and by-weight items", "Senior and PWD discounts", "Cash, e-wallet, and card"],
+    title: "Make the counter easier",
+    description: "Give cashiers one focused screen for products, discounts, payments, and order slips.",
+    points: ["Fixed-price and by-weight items", "Senior and PWD discounts", "Cash, GCash, Maya, and card"],
   },
   {
     icon: "chart",
-    title: "See what is happening",
-    description: "Follow sales, orders, products, and stock from one calm workspace.",
-    points: ["Daily and period reports", "Best sellers and slow movers", "CSV export for your books"],
+    title: "Know what needs attention",
+    description: "See sales, orders, stock, expenses, and shifts without stitching reports together.",
+    points: ["Daily and period reports", "Best sellers and slow movers", "CSV export for your records"],
   },
   {
     icon: "people",
-    title: "Manage with ease",
-    description: "Give managers and cashiers the right access for the branch they work in.",
-    points: ["Owner, manager, cashier roles", "Branch-scoped by default", "Every change is logged"],
+    title: "Set clear responsibility",
+    description: "Give owners, managers, and cashiers the access that matches the work they do.",
+    points: ["Role-based access", "Branch-scoped records", "Audited changes"],
   },
   {
     icon: "bolt",
-    title: "Keep moving",
-    description: "Stay ready for busy shifts with a POS designed to work through interruptions.",
-    points: ["Sells with no internet", "Queues and syncs on its own", "Install it on any tablet"],
+    title: "Keep selling through weak signal",
+    description: "The counter stays usable when the connection is slow or gone, then syncs when it returns.",
+    points: ["Local-first orders", "Background sync", "Tablet and desktop install"],
   },
 ];
 
@@ -56,9 +57,9 @@ const detailPanels: Array<{
 }> = [
   {
     mark: "01",
-    title: "Checkout that keeps up",
+    title: "A counter that feels current",
     description:
-      "The sell screen is built products-first, so the tap a cashier makes most is the easiest one to reach. Weight items open a keypad; everything else is one tap.",
+      "The sell screen puts products first, with large targets for the taps cashiers make most. Weight items open a keypad; everything else stays quick to reach.",
     specs: [
       "Fixed-price and by-weight items on one ticket",
       "Senior and PWD discounts with ID capture",
@@ -68,9 +69,9 @@ const detailPanels: Array<{
   },
   {
     mark: "02",
-    title: "A sale is never lost",
+    title: "Records that survive the outage",
     description:
-      "The counter should not stop because the internet did. Every order is written to the device first and queued for sync, so the till keeps moving either way.",
+      "Dumala writes each order to the device before it needs the network. If the connection drops, the counter keeps working and the records catch up later.",
     specs: [
       "Orders save locally, then sync in the background",
       "Order numbers are prefixed per branch and device",
@@ -80,9 +81,9 @@ const detailPanels: Array<{
   },
   {
     mark: "03",
-    title: "Receipts on the printer you own",
+    title: "Use the printer you already have",
     description:
-      "One adapter covers the three ways a receipt printer usually connects, so you are not buying new hardware to start.",
+      "If your printer speaks ESC/POS, Dumala can usually work with it over Bluetooth, Wi-Fi, or USB, so modernizing the workflow does not have to mean replacing the counter hardware.",
     specs: [
       "Bluetooth, Wi-Fi, or USB behind one adapter",
       "52mm, 58mm, and 80mm ESC/POS layouts",
@@ -111,78 +112,87 @@ const workspaceModules: Array<{
   title: string;
   description: string;
 }> = [
-  { icon: "counter", title: "POS counter", description: "Ring up orders, hold tickets, and print receipts." },
-  { icon: "receipt", title: "Orders", description: "One register of every sale, with a receipt-style detail view." },
-  { icon: "box", title: "Products", description: "Prices, categories, units, and POS visibility in one place." },
-  { icon: "layers", title: "Inventory", description: "Track stock movement and catch low counts early." },
-  { icon: "user", title: "Customers", description: "Keep a live directory instead of scattered notes." },
-  { icon: "truck", title: "Suppliers", description: "Know who you buy from and how to reach them." },
-  { icon: "wallet", title: "Expenses", description: "Log operating costs per branch and keep them auditable." },
-  { icon: "bars", title: "Reports", description: "Read the period, compare payments, and export as CSV." },
-  { icon: "trend", title: "Sales", description: "Trends by day and hour, best sellers, and period summaries." },
+  { icon: "counter", title: "POS counter", description: "Ring up orders, hold tickets, and print order slips." },
+  { icon: "receipt", title: "Orders", description: "Keep one searchable record of every sale." },
+  { icon: "box", title: "Products", description: "Keep prices, categories, units, and visibility together." },
+  { icon: "layers", title: "Inventory", description: "Track movement and catch low counts earlier." },
+  { icon: "user", title: "Customers", description: "Keep a live directory for the people you serve." },
+  { icon: "truck", title: "Suppliers", description: "Keep purchasing contacts close to the products they provide." },
+  { icon: "wallet", title: "Expenses", description: "Log operating costs per branch with a clear history." },
+  { icon: "bars", title: "Reports", description: "Read the period, compare payments, and export records." },
+  { icon: "trend", title: "Sales", description: "See trends by day and hour, plus what sells most." },
   { icon: "clock", title: "Shifts", description: "Open and close the drawer with counted-versus-expected cash." },
-  { icon: "tag", title: "Promotions", description: "See which discounts ran and what they cost you." },
-  { icon: "store", title: "Branches & staff", description: "Add a branch, invite the team, set who sees what." },
+  { icon: "tag", title: "Promotions", description: "Know which discounts ran and what they cost you." },
+  { icon: "store", title: "Branches & staff", description: "Add locations, invite the team, and set access." },
 ];
 
 const roles: Array<{ label: string; title: string; points: string[] }> = [
   {
     label: "Owner",
-    title: "The whole business",
-    points: ["Every branch in one dashboard", "Catalog, pricing, and promotions", "Staff access and the audit log"],
+    title: "A business-wide view",
+    points: ["See every branch in one place", "Manage catalog, pricing, and promotions", "Review staff access and history"],
   },
   {
     label: "Manager",
-    title: "Their branch",
-    points: ["Review orders and inventory", "Log expenses and suppliers", "Close shifts and read the day"],
+    title: "Clear branch control",
+    points: ["Review branch sales and stock", "Log expenses and suppliers", "Close the shift with a cash count"],
   },
   {
     label: "Cashier",
-    title: "The counter",
-    points: ["The sell screen and held orders", "Their own shift and cash count", "No backoffice to get lost in"],
+    title: "A focused counter",
+    points: ["Sell and hold orders", "Open and close their shift", "No backoffice screens to navigate"],
   },
 ];
 
 const syncSteps: Array<{ step: string; title: string; text: string }> = [
   {
-    step: "Local first",
-    title: "The sale is saved on the device",
-    text: "Every order is written to the tablet before anything else happens. Nothing waits on a network call, so the total never hangs mid-queue.",
+    step: "Save first",
+    title: "The sale lands on the tablet",
+    text: "Every order is written to the device before it needs the network, so the total does not hang while a cashier is serving someone.",
   },
   {
-    step: "Offline",
-    title: "The queue keeps building",
-    text: "Signal drops, the counter carries on. Orders, receipts, and shift records keep working, and a status pill shows how many are still pending.",
+    step: "Keep selling",
+    title: "The counter stays usable",
+    text: "Signal drops, but orders, order slips, and shift records keep working. A status pill shows how many records are still waiting to sync.",
   },
   {
-    step: "Online",
-    title: "Everything syncs itself",
-    text: "When the connection returns the queue clears in the background. Order numbers are prefixed per branch and device, so nothing is entered twice.",
+    step: "Sync later",
+    title: "The records catch up",
+    text: "When the connection returns, the queue clears in the background. Branch and device prefixes keep order numbers from colliding.",
   },
 ];
 
 const pricingIncludes = [
   "The tablet POS and the owner dashboard",
-  "Offline-first selling with automatic sync",
+  "Selling through internet interruptions with automatic sync",
   "Unlimited branches, staff, and products",
-  "ESC/POS receipt printing over BT, Wi-Fi, USB",
+  "ESC/POS order-slip printing over Bluetooth, Wi-Fi, or USB",
   "Inventory, suppliers, and expense tracking",
-  "Sales, reports, and CSV export",
+  "Sales reports and CSV export",
   "Shifts, cash counts, and the audit log",
-  "Owner, manager, and cashier roles",
+  "Owner, manager, and cashier access",
 ];
 
-function buildFaqs(premiumPrice: string): Array<{ question: string; answer: string }> {
+function buildFaqs(premiumPrice: string, annualVariants: BillingVariant[]): Array<{ question: string; answer: string }> {
+  const annualOptions = annualVariants.length > 0
+    ? `You can also prepay ${annualVariants.map((variant) => `${variant.intervalCount} ${variant.intervalCount === 1 ? "year" : "years"} and save ${formatDiscount(variant.discountPercent)}`).join(", ")}; the current totals are shown above.`
+    : "Monthly billing is the current public option. Annual choices will appear here when they are enabled in Plans & Pricing.";
+
   return [
   {
     question: "How does the free trial work?",
     answer:
-      "You get 14 days of the full product, free. Every feature is switched on during the trial — nothing is held back or locked behind an upgrade. When the 14 days are up you can subscribe to Premium to keep going.",
+      "You get 14 days to use the current product with your own business, branch, products, and team setup. No card is required to start. When the trial ends, choose whether to continue on monthly or an available annual option.",
   },
   {
     question: "What does it cost after the trial?",
     answer:
-      `${premiumPrice} per month for Premium. That is the only paid plan — there are no tiers, no per-branch pricing, and no add-ons to compare. One subscription covers your whole business.`,
+      `${premiumPrice} per month for the complete workspace. There are no feature tiers or per-branch add-ons. ${annualOptions}`,
+  },
+  {
+    question: "Will the prices on this page stay current?",
+    answer:
+      "Yes. This page reads the same pricing catalog as the Plans & Pricing control center. When the platform owner changes the monthly base price, an annual duration, or its discount, the public options update with it. Price changes apply to new checkouts; existing subscriptions are not repriced automatically.",
   },
   {
     question: "Does it keep working when the internet drops?",
@@ -217,15 +227,19 @@ function buildFaqs(premiumPrice: string): Array<{ question: string; answer: stri
   ];
 }
 
+function formatDiscount(value: number) {
+  return `${Number.isInteger(value) ? value : value.toFixed(2)}%`;
+}
+
 const marqueeItems = [
-  "Offline-first, always",
-  "Tablet POS + owner dashboard",
+  "A practical POS",
+  "Tablet for the counter",
+  "Workspace for owners",
   "14-day free trial",
   "Multi-branch ready",
   "Role-based access",
-  "ESC/POS receipts",
-  "Shift handover",
-  "Peso-first pricing",
+  "ESC/POS printing",
+  "Peso pricing",
 ];
 
 function ArrowIcon() {
@@ -466,7 +480,7 @@ function HeroVisual() {
         </span>
         <span className="leading-tight">
           <strong className="block text-[13px] font-black text-[#173a2b]">Sale complete</strong>
-          <span className="block text-[10px] font-semibold text-[#798478]">Receipt printed</span>
+          <span className="block text-[10px] font-semibold text-[#798478]">Order slip printed</span>
         </span>
       </div>
     </div>
@@ -480,8 +494,15 @@ export const dynamic = "force-dynamic";
 export default async function LandingPage() {
   const admin = createAdminClient();
   const catalog = admin ? await readPlatformBillingCatalog(admin) : null;
-  const premiumPrice = formatPeso(catalog?.monthlyPriceCentavos ?? DEFAULT_MONTHLY_PRICE_CENTAVOS);
-  const faqs = buildFaqs(premiumPrice);
+  const billingCatalog: BillingCatalog = catalog ?? {
+    currency: "PHP",
+    monthlyPriceCentavos: DEFAULT_MONTHLY_PRICE_CENTAVOS,
+    variants: DEFAULT_BILLING_VARIANTS,
+    schemaAvailable: false,
+  };
+  const premiumPrice = formatPeso(billingCatalog.monthlyPriceCentavos);
+  const annualVariants = billingCatalog.variants.filter((variant) => variant.isActive && variant.intervalUnit === "year");
+  const faqs = buildFaqs(premiumPrice, annualVariants);
 
   return (
     <main className="lp min-h-screen bg-[#f8f3eb] text-[#102d21]">
@@ -518,17 +539,17 @@ export default async function LandingPage() {
               style={{ "--lp-delay": "60ms" } as React.CSSProperties}
             >
               <span className="lp-dot-pulse h-1.5 w-1.5 rounded-full bg-[#d1a05b]" />
-              Offline-first POS · 14-day free trial
+              Modern POS for Philippine stores · 14-day free trial
             </p>
 
             <h1
               className="lp-in mt-7 max-w-[560px] text-[clamp(3.1rem,6vw,5.9rem)] font-black leading-[0.94] tracking-[-0.065em] text-[#102d21]"
               style={{ "--lp-delay": "160ms" } as React.CSSProperties}
             >
-              Run your business.
+              Modernize your business.
               <br />
               <span className="relative inline-block text-[#b18448]">
-                Better sales.
+                Faster checkout.
                 <svg
                   aria-hidden="true"
                   viewBox="0 0 300 14"
@@ -540,15 +561,15 @@ export default async function LandingPage() {
                 </svg>
               </span>
               <br />
-              Less stress.
+              Clearer decisions.
             </h1>
 
             <p
               className="lp-in mt-7 max-w-[490px] text-base leading-7 text-[#526157] sm:text-lg sm:leading-8"
               style={{ "--lp-delay": "260ms" } as React.CSSProperties}
             >
-              A tablet POS for your cashiers and a dashboard for you, on one account. It sells offline first and syncs when
-              the connection comes back, so the counter never waits on the internet.
+              Dumala gives your cashiers a focused tablet POS and gives you a practical workspace for everything behind the
+              sale. Records save on the device first, branch activity stays together, and your team sees only what they need.
             </p>
 
             <div className="lp-in mt-8 flex flex-wrap items-center gap-5" style={{ "--lp-delay": "340ms" } as React.CSSProperties}>
@@ -556,13 +577,13 @@ export default async function LandingPage() {
                 href="/signup"
                 className="lp-btn inline-flex min-h-14 items-center gap-4 rounded-xl bg-[#15382a] px-5 text-sm font-bold text-[#fffaf1] shadow-[0_12px_28px_rgba(21,56,42,0.2)] hover:bg-[#0e2a20] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#bc9657] sm:px-6"
               >
-                Start your 14-day free trial <ArrowIcon />
+                Start with a 14-day trial <ArrowIcon />
               </Link>
               <a
                 href="#how-it-works"
                 className="group inline-flex items-center gap-3 text-sm font-bold text-[#173a2b] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#bc9657]"
               >
-                <PlayIcon /> See how it works
+                <PlayIcon /> See the product
               </a>
             </div>
 
@@ -570,9 +591,9 @@ export default async function LandingPage() {
               className="lp-in mt-8 flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold text-[#667269]"
               style={{ "--lp-delay": "420ms" } as React.CSSProperties}
             >
-              <span className="inline-flex items-center gap-2"><CheckIcon /> 14 days free, no card</span>
-              <span className="inline-flex items-center gap-2"><CheckIcon /> Then {premiumPrice}/month — one plan</span>
-              <span className="inline-flex items-center gap-2"><CheckIcon /> Sells with no internet</span>
+              <span className="inline-flex items-center gap-2"><CheckIcon /> 14 days free · no card</span>
+              <span className="inline-flex items-center gap-2"><CheckIcon /> {annualVariants.length > 0 ? `Monthly from ${premiumPrice} · annual savings shown below` : `${premiumPrice}/month after the trial`}</span>
+              <span className="inline-flex items-center gap-2"><CheckIcon /> Keeps selling through interruptions</span>
             </div>
           </div>
 
@@ -602,12 +623,12 @@ export default async function LandingPage() {
       <section id="features" className="lp-sec--features scroll-mt-24 py-14 sm:py-20">
         <div className="mx-auto max-w-[1380px] px-6 sm:px-10 lg:px-16">
           <div className="mx-auto max-w-2xl text-center" data-lp-reveal>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">Why Dumala</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">A more modern workday</p>
             <h2 className="mt-3 text-3xl font-black tracking-[-0.05em] text-[#173a2b] sm:text-[2.6rem] sm:leading-[1.05]">
-              Built around the counter, not the spreadsheet.
+              Modern operations without adding more admin.
             </h2>
             <p className="mt-4 text-sm leading-6 text-[#657168] sm:text-base">
-              Four things a growing shop needs on a busy day, and none of the enterprise weight that gets in the way of them.
+              Bring sales, stock, cash, and team access into one place without asking the counter to learn a backoffice.
             </p>
           </div>
 
@@ -646,13 +667,13 @@ export default async function LandingPage() {
       <section id="interfaces" className="lp-sec--interfaces scroll-mt-24 border-y border-[#e6dfd0] py-14 sm:py-20">
         <div className="mx-auto max-w-[1280px] px-6 sm:px-10 lg:px-16">
           <div className="mx-auto max-w-2xl text-center" data-lp-reveal>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">Two interfaces</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">Modernize both sides</p>
             <h2 className="mt-3 text-3xl font-black tracking-[-0.05em] text-[#173a2b] sm:text-[2.6rem] sm:leading-[1.05]">
-              A screen for the counter. A screen for the owner.
+              One business. Two focused workspaces.
             </h2>
             <p className="mt-4 text-sm leading-6 text-[#657168] sm:text-base">
-              Dumala is two purpose-built interfaces on one account — not one crowded screen asked to do both jobs. Both are
-              included in the same subscription.
+              Cashiers get a clear sell screen. Owners get the context behind each sale. Both use the same records and are
+              included in every plan.
             </p>
           </div>
 
@@ -670,10 +691,10 @@ export default async function LandingPage() {
                     For cashiers
                   </span>
                 </div>
-                <h3 className="mt-5 text-xl font-black tracking-[-0.03em] text-[#173a2b]">The tablet POS</h3>
+                <h3 className="mt-5 text-xl font-black tracking-[-0.03em] text-[#173a2b]">The counter workspace</h3>
                 <p className="mt-3 text-sm leading-6 text-[#68736a]">
-                  A full-screen sell interface sized for a tablet on the counter. Big tap targets, products first, and a
-                  running order panel the customer can follow. It keeps selling with no internet at all.
+                  A full-screen sell interface sized for a tablet on the counter. Products first, large tap targets, and a
+                  running order panel the customer can follow. It stays usable when the internet is unavailable.
                 </p>
                 <div className="mt-6">
                   <PosTabletMock />
@@ -682,8 +703,8 @@ export default async function LandingPage() {
                   {[
                     "Category rail, product grid, and live order panel",
                     "Weight keypad, discounts, and held orders",
-                    "Prints the receipt on the printer beside it",
-                    "Cashiers sign in with their own branch login",
+                    "Prints an order slip on the nearby printer",
+                    "Cashiers sign in with their branch access",
                   ].map((point) => (
                     <li key={point} className="lp-spec flex gap-2.5">
                       <BulletIcon />
@@ -724,10 +745,10 @@ export default async function LandingPage() {
                     For owners
                   </span>
                 </div>
-                <h3 className="mt-5 text-xl font-black tracking-[-0.03em] text-[#173a2b]">The admin dashboard</h3>
+                <h3 className="mt-5 text-xl font-black tracking-[-0.03em] text-[#173a2b]">The owner workspace</h3>
                 <p className="mt-3 text-sm leading-6 text-[#68736a]">
-                  A separate backoffice for the person running the business. Watch the day across every branch, manage the
-                  catalog and stock, and read the numbers without standing at the till.
+                  A separate workspace for the person running the business. Watch the day across every branch, manage the
+                  catalog and stock, and review the numbers without standing at the till.
                 </p>
                 <div className="mt-6">
                   <AdminDashboardMock />
@@ -735,9 +756,9 @@ export default async function LandingPage() {
                 <ul className="mt-6 grid gap-2.5 border-t border-[#eae3d5] pt-5 text-[13px] leading-5 text-[#5f6c62]">
                   {[
                     "Sales, orders, inventory, and expenses in one place",
-                    "Every branch on one dashboard, or one at a time",
+                    "Every branch together, or one at a time",
                     "Products, pricing, promotions, and staff access",
-                    "Open it from any browser, at the shop or at home",
+                    "Open it from a browser at the shop or at home",
                   ].map((point) => (
                     <li key={point} className="lp-spec flex gap-2.5">
                       <BulletIcon />
@@ -759,8 +780,8 @@ export default async function LandingPage() {
                   </svg>
                 </span>
                 <div>
-                  <h3 className="text-base font-black tracking-[-0.02em] text-[#173a2b]">The two screens stay in sync</h3>
-                  <p className="mt-1 text-sm leading-5 text-[#68736a]">One account, one set of records — no exporting between them.</p>
+                  <h3 className="text-base font-black tracking-[-0.02em] text-[#173a2b]">The records stay connected</h3>
+                  <p className="mt-1 text-sm leading-5 text-[#68736a]">One account, one set of records — less reconciliation at the end of the day.</p>
                 </div>
               </div>
               <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[#cfe0d2] bg-[#eef3ea] px-3.5 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#2f5c43]">
@@ -771,7 +792,7 @@ export default async function LandingPage() {
 
             <ol className="mt-6 grid gap-3 border-t border-[#eae3d5] pt-6 sm:grid-cols-3">
               {[
-                { n: "1", t: "Rung up on the tablet", d: "A cashier completes the sale and the receipt prints." },
+                { n: "1", t: "Rung up on the tablet", d: "A cashier completes the sale and the order slip prints." },
                 { n: "2", t: "Held on the device", d: "If the connection is down it queues locally and keeps selling." },
                 { n: "3", t: "In your dashboard", d: "The moment it syncs, the sale lands in your reports and stock." },
               ].map((item) => (
@@ -797,14 +818,15 @@ export default async function LandingPage() {
           <div className="max-w-2xl" data-lp-reveal="left">
             <p className="inline-flex items-center gap-2.5 rounded-full bg-[#1d4834] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[#fffaf1]">
               <span className="lp-dot-pulse h-1.5 w-1.5 rounded-full bg-[#d1a05b]" />
-              Offline first, online when it can be
+              Modern does not have to mean fragile
             </p>
             <h2 className="mt-6 text-3xl font-black leading-[1.04] tracking-[-0.05em] sm:text-[2.8rem]">
-              The counter never waits for the internet.
+              Keep selling when the connection does not cooperate.
             </h2>
             <p className="mt-5 max-w-xl text-sm leading-7 text-[#cad6ca] sm:text-base">
-              Dumala is local-first by design. The tablet is the source of truth during a sale, and the cloud catches up
-              afterwards — not the other way around. A brownout, a dead router, or a slow mobile signal does not stop a sale.
+              A cloud-only POS can make a weak connection the cashier&apos;s problem. Dumala saves the sale on the device
+              first, then syncs it when the connection returns. A dead router or slow mobile signal does not have to stop
+              the queue.
             </p>
           </div>
 
@@ -829,14 +851,14 @@ export default async function LandingPage() {
         <div className="mx-auto max-w-[1380px] px-6 sm:px-10 lg:px-16">
           <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between" data-lp-reveal="left">
             <div className="max-w-xl">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">In detail</p>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">Practical details</p>
               <h2 className="mt-3 text-3xl font-black tracking-[-0.05em] text-[#173a2b] sm:text-[2.6rem] sm:leading-[1.05]">
-                Made for the way a counter actually works.
+                The small details that make a real counter work.
               </h2>
             </div>
             <p className="max-w-sm text-sm leading-6 text-[#657168]">
-              Peso pricing, weighed goods, senior and PWD discounts, and a network that comes and goes. The details are the
-              product.
+              Peso pricing, weighed goods, discounts, printers, and a network that comes and goes. We focus on the work that
+              happens between the first order and the end-of-day count.
             </p>
           </div>
 
@@ -869,14 +891,14 @@ export default async function LandingPage() {
         <div className="mx-auto max-w-[1380px] px-6 sm:px-10 lg:px-16">
           <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between" data-lp-reveal="left">
             <div className="max-w-xl">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">One workspace</p>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">One working record</p>
               <h2 className="mt-3 text-3xl font-black tracking-[-0.05em] text-[#173a2b] sm:text-[2.6rem] sm:leading-[1.05]">
-                Everything the day needs, in one place.
+                Fewer places to reconcile at the end of the day.
               </h2>
             </div>
             <p className="max-w-sm text-sm leading-6 text-[#657168]">
-              Every part of Dumala shares the same branch context, so the counter, the stockroom, and the owner are never
-              looking at different numbers.
+              Sales, stock, expenses, shifts, and access share the same branch context, so the counter, the stockroom, and
+              the owner are working from the same record.
             </p>
           </div>
 
@@ -902,13 +924,13 @@ export default async function LandingPage() {
 
         <div className="relative mx-auto grid max-w-[1280px] gap-12 lg:grid-cols-[0.82fr_1.18fr] lg:items-center lg:gap-20">
           <div data-lp-reveal="left">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#d1a05b]">Simple by design</p>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#d1a05b]">Start where you are</p>
             <h2 className="mt-4 max-w-lg text-4xl font-black leading-[1.02] tracking-[-0.05em] sm:text-5xl">
-              The right tools for the work in front of you.
+              Modernize without a disruptive rollout.
             </h2>
             <p className="mt-5 max-w-md text-sm leading-7 text-[#cad6ca] sm:text-base">
-              Start small, then make the workspace your own as your business grows. Dumala keeps the important things close
-              without making the counter feel complicated.
+              Start with one branch and one device. Add staff, inventory, and more locations as the team settles in. You do
+              not have to change everything on day one.
             </p>
             <Link
               href="/signup"
@@ -941,13 +963,13 @@ export default async function LandingPage() {
       <section id="for-teams" className="lp-sec--teams scroll-mt-24 border-b border-[#e6dfd0] py-14 sm:py-20">
         <div className="mx-auto max-w-[1280px] px-6 sm:px-10 lg:px-16">
           <div className="mx-auto max-w-2xl text-center" data-lp-reveal>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">For teams</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">For the team</p>
             <h2 className="mt-3 text-3xl font-black tracking-[-0.05em] text-[#173a2b] sm:text-[2.6rem] sm:leading-[1.05]">
-              Everyone sees the part that is theirs.
+              Clear access. Less clutter.
             </h2>
             <p className="mt-4 text-sm leading-6 text-[#657168] sm:text-base">
-              Access follows the role and the branch, so a cashier never lands in the backoffice and a manager never has to
-              ask the owner for the day&apos;s numbers.
+              Access follows the role and the branch, so cashiers can focus on serving customers and managers can review
+              their day without asking the owner for every number.
             </p>
           </div>
 
@@ -980,75 +1002,14 @@ export default async function LandingPage() {
           <div className="mx-auto max-w-2xl text-center" data-lp-reveal>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">Pricing</p>
             <h2 className="mt-3 text-3xl font-black tracking-[-0.05em] text-[#173a2b] sm:text-[2.6rem] sm:leading-[1.05]">
-              Try it free for 14 days. Then one plan, one price.
+              Try the full workspace. Choose how you pay.
             </h2>
             <p className="mt-4 text-sm leading-6 text-[#657168] sm:text-base">
-              There is no Starter, no Pro, and no enterprise call. Every business on Dumala gets the same complete product —
-              the tablet POS and the owner dashboard together.
+              No tier maze and no feature guessing. Every business gets the same complete product. {annualVariants.length > 0 ? "Choose monthly billing or the annual terms currently enabled in Plans & Pricing." : "Monthly billing is the current public option."}
             </p>
           </div>
 
-          <div className="mt-11 grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-            <div data-lp-reveal="left">
-              <article className="flex h-full flex-col justify-center rounded-[24px] border border-dashed border-[#c9bfa6] bg-[#fdfaf3] p-7 text-center sm:p-9">
-                <span className="lp-dot-pulse mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[#dfe7dc] text-[#16392b]">
-                  <svg aria-hidden="true" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="8.4" />
-                    <path d="M12 7.2V12l3.3 2.1" />
-                  </svg>
-                </span>
-                <p className="mt-5 text-[11px] font-black uppercase tracking-[0.18em] text-[#b18448]">Start here</p>
-                <p className="mt-2 text-[3.4rem] font-black leading-none tracking-[-0.06em] text-[#173a2b]">14</p>
-                <p className="mt-1 text-lg font-black tracking-[-0.03em] text-[#173a2b]">days free</p>
-                <p className="mx-auto mt-4 max-w-[16rem] text-sm leading-6 text-[#68736a]">
-                  The complete product, unlocked, with no card required. Set up your branch and start ringing up real sales
-                  the same day.
-                </p>
-              </article>
-            </div>
-
-            <div data-lp-reveal="right">
-              <article className="relative h-full overflow-hidden rounded-[24px] border border-[#25503b] bg-[#15382a] p-7 text-[#fffaf1] shadow-[0_26px_54px_rgba(21,56,42,0.24)] sm:p-9">
-                <div className="lp-dots pointer-events-none absolute inset-0 text-[#fffaf1] opacity-[0.05]" />
-                <div className="lp-spin-slow pointer-events-none absolute -right-16 -top-16 h-52 w-52 rounded-full border border-dashed border-[#c39756]/30" />
-
-                <div className="relative flex flex-wrap items-center gap-3">
-                  <span className="rounded-full bg-[#c39756] px-3.5 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-[#16392b]">
-                    Premium
-                  </span>
-                  <span className="rounded-full border border-[#3f5f4c] px-3.5 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-[#a9c4ae]">
-                    The only paid plan
-                  </span>
-                </div>
-
-                <p className="relative mt-6 flex flex-wrap items-baseline gap-2">
-                  <span className="text-[3.6rem] font-black leading-none tracking-[-0.06em] tabular-nums">{premiumPrice}</span>
-                  <span className="text-sm font-bold text-[#a9c4ae]">/ month</span>
-                </p>
-                <p className="relative mt-3 max-w-md text-sm leading-6 text-[#cad6ca]">
-                  Premium is a monthly subscription, billed after your trial ends. One plan covers every branch, every staff
-                  login, and both interfaces — cancel whenever you like.
-                </p>
-
-                <ul className="relative mt-6 grid gap-2.5 border-t border-[#2c5341] pt-6 text-[13px] leading-5 text-[#dbe4da] sm:grid-cols-2">
-                  {pricingIncludes.map((item) => (
-                    <li key={item} className="flex gap-2.5">
-                      <BulletIcon tone="dark" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-
-                <Link
-                  href="/signup"
-                  className="lp-btn lp-btn--gold relative mt-7 inline-flex min-h-13 items-center gap-3 rounded-xl bg-[#c39756] px-5 py-3.5 text-sm font-black text-[#16392b] hover:bg-[#d4aa6b] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#fffaf1]"
-                >
-                  Start your 14-day free trial <ArrowIcon />
-                </Link>
-                <p className="relative mt-3 text-xs text-[#9fb5a5]">No card required to start. Subscribe when the trial ends.</p>
-              </article>
-            </div>
-          </div>
+          <LandingPricing catalog={billingCatalog} pricingIncludes={pricingIncludes} />
         </div>
       </section>
 
@@ -1096,11 +1057,10 @@ export default async function LandingPage() {
               <div className="max-w-2xl">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b18448]">Ready when you are</p>
                 <h2 className="mt-3 text-3xl font-black tracking-[-0.045em] text-[#173a2b] sm:text-4xl">
-                  Give your business a calmer way to run.
+                  Give your business a more modern way to run.
                 </h2>
                 <p className="mt-3 max-w-xl text-sm leading-6 text-[#657168] sm:text-base">
-                  Take the full product for 14 days, free and without a card. Keep it for {premiumPrice} a month — the one
-                  plan that includes both the tablet POS and your owner dashboard.
+                  Take the full product for 14 days, free and without a card. After that, {annualVariants.length > 0 ? "choose monthly or an available annual term" : "continue with monthly billing"} for the same tablet POS and owner workspace.
                 </p>
               </div>
               <div className="shrink-0">
@@ -1110,7 +1070,7 @@ export default async function LandingPage() {
                 >
                   Start your free trial <ArrowIcon />
                 </Link>
-                <p className="mt-3 text-xs text-[#7d887f]">14 days free · then {premiumPrice}/month</p>
+                <p className="mt-3 text-xs text-[#7d887f]">14 days free · monthly from {premiumPrice}{annualVariants.length > 0 ? " · annual savings shown above" : ""}</p>
               </div>
             </div>
           </div>
@@ -1126,8 +1086,8 @@ export default async function LandingPage() {
                 <Image src="/brand-lockup.png" alt="Dumala POS" width={1535} height={451} sizes="160px" className="h-11 w-auto" />
               </Link>
               <p className="mt-4 text-xs leading-5 text-[#708076]">
-                An offline-first tablet POS and owner dashboard, built for Philippine counters and peso pricing. Free for 14
-                days, then {premiumPrice} a month — one plan, everything included.
+                A practical tablet POS and owner workspace for Philippine counters and peso pricing. Free for 14 days, then
+                {annualVariants.length > 0 ? "choose monthly or annual billing" : "continue with monthly billing"} for the same complete product.
               </p>
             </div>
 

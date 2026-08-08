@@ -225,6 +225,7 @@ function migrationError(detail: string): PlatformActionState {
 }
 
 function revalidatePlatformPages() {
+  revalidatePath("/");
   revalidatePath("/platform");
   revalidatePath("/admin/billing");
   revalidatePath("/signup");

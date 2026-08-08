@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
-import { DEFAULT_MONTHLY_PRICE_CENTAVOS } from "@/lib/platform-operations";
+import { DEFAULT_BILLING_VARIANTS, DEFAULT_MONTHLY_PRICE_CENTAVOS } from "@/lib/platform-operations";
 import { readPlatformBillingCatalog } from "@/lib/platform-operations-server";
 import SignupForm from "./SignupForm";
 
@@ -17,6 +17,7 @@ export default async function SignupPage() {
   const admin = createAdminClient();
   const catalog = admin ? await readPlatformBillingCatalog(admin) : null;
   const monthlyPriceLabel = formatPeso(catalog?.monthlyPriceCentavos ?? DEFAULT_MONTHLY_PRICE_CENTAVOS);
+  const annualOptionsAvailable = (catalog?.variants ?? DEFAULT_BILLING_VARIANTS).some((variant) => variant.isActive && variant.intervalUnit === "year");
 
   return (
     <main className="min-h-screen bg-bg px-6 py-10 text-ink sm:py-16">
@@ -34,12 +35,12 @@ export default async function SignupPage() {
           <div className="mt-8 rounded-card border border-primary-fg/15 bg-primary-fg/10 p-4">
             <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-primary-fg/65">Premium workspace</p>
             <p className="mt-2 text-2xl font-extrabold">14 days free</p>
-            <p className="mt-1 text-sm leading-6 text-primary-fg/75">Then {monthlyPriceLabel}/month for every branch, staff member, and feature. No card required to start.</p>
+            <p className="mt-1 text-sm leading-6 text-primary-fg/75">Then {monthlyPriceLabel}/month, or choose an available annual term after the trial. No card required to start.</p>
           </div>
         </section>
 
         <section className="rounded-card border border-line bg-surface p-6 shadow-[var(--shadow-card)] sm:p-9" aria-labelledby="signup-heading">
-          <SignupForm monthlyPriceLabel={monthlyPriceLabel} />
+          <SignupForm monthlyPriceLabel={monthlyPriceLabel} annualOptionsAvailable={annualOptionsAvailable} />
         </section>
       </div>
     </main>

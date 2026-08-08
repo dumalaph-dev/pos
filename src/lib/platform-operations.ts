@@ -58,7 +58,7 @@ export const DEFAULT_BILLING_VARIANTS: BillingVariant[] = [
     intervalCount: 1,
     discountPercent: 10,
     paymongoPlanId: null,
-    isActive: false,
+    isActive: true,
     sortOrder: 1,
   },
   {
@@ -68,7 +68,7 @@ export const DEFAULT_BILLING_VARIANTS: BillingVariant[] = [
     intervalCount: 2,
     discountPercent: 15,
     paymongoPlanId: null,
-    isActive: false,
+    isActive: true,
     sortOrder: 2,
   },
   {
@@ -78,7 +78,7 @@ export const DEFAULT_BILLING_VARIANTS: BillingVariant[] = [
     intervalCount: 3,
     discountPercent: 20,
     paymongoPlanId: null,
-    isActive: false,
+    isActive: true,
     sortOrder: 3,
   },
 ];
