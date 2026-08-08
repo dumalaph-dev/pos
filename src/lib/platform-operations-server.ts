@@ -95,8 +95,8 @@ export async function supportCasesSchemaAvailable(admin: PlatformAdminClient) {
 export function payMongoConfiguration() {
   const secretKey = process.env.PAYMONGO_SECRET_KEY?.trim() || "";
   const publicKey = process.env.NEXT_PUBLIC_PAYMONGO_PUBLIC_KEY?.trim() || null;
-  const secretMode = payMongoKeyMode(secretKey);
-  const publicMode = payMongoKeyMode(publicKey);
+  const secretMode = payMongoKeyMode(secretKey, "sk");
+  const publicMode = payMongoKeyMode(publicKey, "pk");
   return {
     secretKeyConfigured: Boolean(secretKey),
     publicKeyConfigured: Boolean(publicKey),
@@ -108,9 +108,9 @@ export function payMongoConfiguration() {
   };
 }
 
-function payMongoKeyMode(value: string | null) {
-  if (value?.startsWith("sk_test_") || value?.startsWith("pk_test_")) return "test";
-  if (value?.startsWith("sk_live_") || value?.startsWith("pk_live_")) return "live";
+function payMongoKeyMode(value: string | null, prefix: "pk" | "sk") {
+  if (value?.startsWith(`${prefix}_test_`)) return "test";
+  if (value?.startsWith(`${prefix}_live_`)) return "live";
   return null;
 }
 

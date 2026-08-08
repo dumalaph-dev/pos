@@ -106,21 +106,21 @@ export async function ensurePayMongoPlan(input: PlanInput) {
 
 async function createScheduledPlan(input: PlanInput) {
   const idempotencyKey = `pos-plan-${input.variantId}-${input.amountCentavos}-${input.intervalUnit}-${input.intervalCount}`;
-  const currentBody = planBody(input, input.intervalUnit);
+  const subscriptionPlanBody = planBody(input, input.intervalUnit);
 
   try {
-    return await payMongoRequest("/v1/plans", {
+    return await payMongoRequest("/v1/subscriptions/plans", {
       method: "POST",
       idempotencyKey,
-      body: currentBody,
+      body: subscriptionPlanBody,
     });
   } catch (error) {
     if (!(error instanceof PayMongoApiError) || (error.status !== 404 && error.status !== 405)) throw error;
 
-    return payMongoRequest("/v1/subscriptions/plans", {
+    return payMongoRequest("/v1/plans", {
       method: "POST",
       idempotencyKey,
-      body: planBody(input, input.intervalUnit === "month" ? "monthly" : "yearly"),
+      body: planBody(input, input.intervalUnit),
     });
   }
 }
@@ -202,11 +202,11 @@ export async function getPayMongoPaymentIntent(paymentIntentId: string) {
 
 export async function getPayMongoPlan(planId: string) {
   try {
-    const response = await payMongoRequest(`/v1/plans/${encodeURIComponent(planId)}`);
+    const response = await payMongoRequest(`/v1/subscriptions/plans/${encodeURIComponent(planId)}`);
     return { response, attributes: resourceAttributes(response) };
   } catch (error) {
     if (!(error instanceof PayMongoApiError) || (error.status !== 404 && error.status !== 405)) throw error;
-    const response = await payMongoRequest(`/v1/subscriptions/plans/${encodeURIComponent(planId)}`);
+    const response = await payMongoRequest(`/v1/plans/${encodeURIComponent(planId)}`);
     return { response, attributes: resourceAttributes(response) };
   }
 }

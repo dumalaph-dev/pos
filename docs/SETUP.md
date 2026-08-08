@@ -35,6 +35,10 @@ Fill `.env.local` from Supabase → **Settings → API**:
 
 `.env.local` is gitignored. Set the same vars in Vercel (Project → Settings → Environment Variables) for preview + production.
 
+For a local PayMongo test, use matching `pk_test_...` and `sk_test_...` keys. Create a separate enabled test-mode webhook endpoint, copy its signing secret into `.env.local` as `PAYMONGO_WEBHOOK_SECRET`, then run `npm run paymongo:preflight`. The preflight prints only safe mode and status information; it never prints keys, webhook secrets, or API response bodies.
+
+For a successful subscription activation in PayMongo test mode, use `4120000000000007`, any future expiry, and a three-digit CVC; choose **Authorize** if the test prompt appears. Use `5234000000000106` and choose **Fail** to exercise failed activation, or `5123000000000001` to exercise a successful first payment followed by a recurring-payment failure.
+
 `EMPLOYEE_INITIAL_PASSWORD` is the common temporary password that the administrator gives to staff. It must be at least 8 characters and stays server-only; employees are forced to replace it after their first successful Employee ID login.
 
 `PLATFORM_ADMIN_EMAILS` is a comma-separated, server-only allowlist for the platform operator console at `/platform`. It should contain only the operator account(s) that may view cross-business metrics.
@@ -43,11 +47,13 @@ PayMongo recurring billing uses `NEXT_PUBLIC_PAYMONGO_PUBLIC_KEY` in the
 browser only for tokenizing card details, while `PAYMONGO_SECRET_KEY` and
 `PAYMONGO_WEBHOOK_SECRET` remain server-only. Set
 `PAYMONGO_SUBSCRIPTIONS_ENABLED=false` until PayMongo has activated
-Subscriptions for the account and test-mode first payments plus signed
-webhook delivery have passed. The app never sends raw card details to its
+Subscriptions for the account and the test webhook endpoint is configured.
+Set it to `true` only for the controlled checkout test after the preflight
+passes. The app never sends raw card details to its
 server. Configure the PayMongo webhook URL as
 `<your-site-origin>/api/paymongo/webhook` and subscribe to these events:
 `payment.paid`, `payment.failed`, `payment_intent.succeeded`,
+`subscription.activated`,
 `subscription.past_due`, `subscription.unpaid`, `subscription.updated`,
 `subscription.invoice.paid`, and `subscription.invoice.payment_failed`.
 

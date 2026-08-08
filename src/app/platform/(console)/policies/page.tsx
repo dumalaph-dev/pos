@@ -56,11 +56,11 @@ export default async function PlatformPoliciesPage() {
         </section>
 
         <section className="mt-6 grid gap-5 xl:grid-cols-2" aria-label="Platform policy editors">
-          <article className="rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6">
+          <article id="billing-policy" className="scroll-mt-24 rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6">
             <PolicyCardHeading policy={policies.billing} />
             <PlatformPolicyEditor policy={policies.billing} schemaAvailable={policies.schemaAvailable} />
           </article>
-          <article className="rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6">
+          <article id="support-policy" className="scroll-mt-24 rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6">
             <PolicyCardHeading policy={policies.support} />
             <PlatformPolicyEditor policy={policies.support} schemaAvailable={policies.schemaAvailable} />
           </article>

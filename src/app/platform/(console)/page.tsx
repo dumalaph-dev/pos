@@ -3,7 +3,7 @@ import { AdminIcon } from "@/components/admin/AdminIcon";
 import { getBillingPlan, normalizeSubscriptionStatus, subscriptionStatusLabel, subscriptionTone } from "@/lib/billing";
 import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
-import { isPolicyGateOpen } from "@/lib/platform-operations";
+import { getCheckoutReadiness, isPolicyGateOpen } from "@/lib/platform-operations";
 import { readPlatformOperations, payMongoConfiguration, supportCasesSchemaAvailable } from "@/lib/platform-operations-server";
 import { PlatformMetric, PlatformMigrationNotice, PlatformPageHeader, PlatformSectionHeading, PlatformUnavailable } from "../PlatformUI";
 import { countByOrg, formatDate, readPlatformDirectory } from "../_lib/platform-data";
@@ -31,7 +31,18 @@ export default async function PlatformOverviewPage() {
   const activeStores = stores.filter((store) => store.is_active).length;
   const activeStaff = employees.filter((employee) => employee.is_active).length;
   const accountOperationsReady = organizationsResult.accountFieldsAvailable && policies.schemaAvailable && supportCasesReady;
-  const checkoutReady = policyGateOpen && paymongo.secretKeyConfigured && paymongo.publicKeyConfigured && paymongo.keyModeConsistent && paymongo.webhookSecretConfigured && paymongo.subscriptionsEnabled;
+  const checkoutReadiness = getCheckoutReadiness({
+    catalog,
+    policies,
+    paymongo: {
+      secretKeyConfigured: paymongo.secretKeyConfigured,
+      publicKeyConfigured: paymongo.publicKeyConfigured,
+      keyModeConsistent: paymongo.keyModeConsistent,
+      webhookSecretConfigured: paymongo.webhookSecretConfigured,
+      subscriptionsEnabled: paymongo.subscriptionsEnabled,
+    },
+  });
+  const checkoutReady = checkoutReadiness.ready;
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
 
   return (

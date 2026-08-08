@@ -38,6 +38,30 @@ export type PlatformPolicies = {
   schemaAvailable: boolean;
 };
 
+export type PayMongoReadinessSignals = {
+  secretKeyConfigured: boolean;
+  publicKeyConfigured: boolean;
+  keyModeConsistent: boolean;
+  webhookSecretConfigured: boolean;
+  subscriptionsEnabled: boolean;
+};
+
+export type CheckoutReadinessItem = {
+  id: "plans" | "billing-policy" | "support-policy" | "secret-key" | "public-key" | "key-mode" | "webhook-secret" | "subscriptions";
+  label: string;
+  ready: boolean;
+  detail: string;
+  action: string;
+  href?: string;
+  linkLabel?: string;
+};
+
+export type CheckoutReadiness = {
+  ready: boolean;
+  items: CheckoutReadinessItem[];
+  remainingActions: CheckoutReadinessItem[];
+};
+
 export const DEFAULT_MONTHLY_PRICE_CENTAVOS = 79_900;
 
 export const DEFAULT_BILLING_VARIANTS: BillingVariant[] = [
@@ -153,6 +177,99 @@ export function normalizeDiscount(value: unknown) {
 
 export function isPolicyGateOpen(policies: Pick<PlatformPolicies, "billing" | "support">) {
   return policies.billing.status === "published" && policies.support.status === "published";
+}
+
+export function getCheckoutReadiness({
+  catalog,
+  policies,
+  paymongo,
+}: {
+  catalog: BillingCatalog;
+  policies: PlatformPolicies;
+  paymongo: PayMongoReadinessSignals;
+}): CheckoutReadiness {
+  const activeOffers = catalog.variants.filter((variant) => variant.isActive && Boolean(variant.id)).length;
+  const billingPolicyPublished = policies.schemaAvailable && policies.billing.status === "published";
+  const supportPolicyPublished = policies.schemaAvailable && policies.support.status === "published";
+  const keyPairConfigured = paymongo.secretKeyConfigured && paymongo.publicKeyConfigured;
+
+  const items: CheckoutReadinessItem[] = [
+    {
+      id: "plans",
+      label: "Plans & pricing",
+      ready: catalog.schemaAvailable && activeOffers > 0,
+      detail: catalog.schemaAvailable
+        ? (activeOffers > 0 ? `${activeOffers} active offer${activeOffers === 1 ? "" : "s"} ready for checkout` : "No active offers")
+        : "Pricing catalog storage is unavailable",
+      action: catalog.schemaAvailable
+        ? "Activate at least one checkout offer in Plans & Pricing."
+        : "Apply 0027_platform_operations.sql, then save an offer in Plans & Pricing.",
+      href: "/platform/plans#pricing-settings",
+      linkLabel: "Open Plans & Pricing",
+    },
+    {
+      id: "billing-policy",
+      label: "Billing policy",
+      ready: billingPolicyPublished,
+      detail: !policies.schemaAvailable ? "Policy storage is unavailable" : policies.billing.status === "published" ? "Published" : "Draft",
+      action: !policies.schemaAvailable
+        ? "Apply 0027_platform_operations.sql, then publish the billing policy in Policies."
+        : "Publish the billing policy in Policies.",
+      href: "/platform/policies#billing-policy",
+      linkLabel: "Open billing policy",
+    },
+    {
+      id: "support-policy",
+      label: "Support policy",
+      ready: supportPolicyPublished,
+      detail: !policies.schemaAvailable ? "Policy storage is unavailable" : policies.support.status === "published" ? "Published" : "Draft",
+      action: !policies.schemaAvailable
+        ? "Apply 0027_platform_operations.sql, then publish the support policy in Policies."
+        : "Publish the support policy in Policies.",
+      href: "/platform/policies#support-policy",
+      linkLabel: "Open support policy",
+    },
+    {
+      id: "secret-key",
+      label: "PayMongo server key",
+      ready: paymongo.secretKeyConfigured,
+      detail: paymongo.secretKeyConfigured ? "Configured on the server · value hidden" : "Missing from the server environment",
+      action: "Add PAYMONGO_SECRET_KEY to the server environment; keep its value out of the console.",
+    },
+    {
+      id: "public-key",
+      label: "PayMongo public key",
+      ready: paymongo.publicKeyConfigured,
+      detail: paymongo.publicKeyConfigured ? "Configured for tokenization · value not shown" : "Missing from the client environment",
+      action: "Add NEXT_PUBLIC_PAYMONGO_PUBLIC_KEY to the client environment; keep the key value out of the console.",
+    },
+    {
+      id: "key-mode",
+      label: "PayMongo key mode",
+      ready: paymongo.keyModeConsistent,
+      detail: paymongo.keyModeConsistent ? "Public and server keys use the same mode" : keyPairConfigured ? "Key prefixes or modes are invalid" : "Waiting for both keys",
+     action: keyPairConfigured
+        ? "Use pk_test_/pk_live_ for the public key and sk_test_/sk_live_ for the server key, with both in the same mode."
+        : "Configure both PayMongo keys, then use pk_ for public and sk_ for server in the same test or live mode.",
+    },
+    {
+      id: "webhook-secret",
+      label: "PayMongo webhook signing",
+      ready: paymongo.webhookSecretConfigured,
+      detail: paymongo.webhookSecretConfigured ? "Signing secret configured · value hidden" : "Signing secret is missing",
+      action: "Add PAYMONGO_WEBHOOK_SECRET to the server environment and configure signed webhook delivery.",
+    },
+    {
+      id: "subscriptions",
+      label: "PayMongo subscriptions",
+      ready: paymongo.subscriptionsEnabled,
+      detail: paymongo.subscriptionsEnabled ? "Subscription activation flag is on" : "Subscription activation flag is off",
+      action: "Request recurring-billing activation from PayMongo, then set PAYMONGO_SUBSCRIPTIONS_ENABLED=true.",
+    },
+  ];
+
+  const remainingActions = items.filter((item) => !item.ready);
+  return { ready: remainingActions.length === 0, items, remainingActions };
 }
 
 export function policyStatusLabel(status: PlatformPolicyStatus) {

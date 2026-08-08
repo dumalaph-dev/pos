@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "paymongo:preflight": "node scripts/paymongo-preflight.mjs",
     "pwa:icons": "node scripts/generate-pwa-icons.mjs",
     "printer:validate": "node --experimental-strip-types scripts/validate-printer.mjs",
     "printer:validate:mock": "node --experimental-strip-types scripts/validate-printer.mjs --mock"

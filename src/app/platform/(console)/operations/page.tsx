@@ -4,8 +4,9 @@ import { OrganizationOperations } from "@/app/platform/OrganizationOperations";
 import { getBillingPlan, normalizeSubscriptionStatus, subscriptionStatusLabel, subscriptionTone } from "@/lib/billing";
 import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
-import { isPolicyGateOpen } from "@/lib/platform-operations";
+import { getCheckoutReadiness, isPolicyGateOpen } from "@/lib/platform-operations";
 import { payMongoConfiguration, readPlatformOperations, supportCasesSchemaAvailable } from "@/lib/platform-operations-server";
+import { CheckoutReadinessChecklist } from "@/app/platform/CheckoutReadinessChecklist";
 import { PlatformMetric, PlatformMigrationNotice, PlatformPageHeader, PlatformSectionHeading, PlatformStatusBadge, PlatformUnavailable } from "../../PlatformUI";
 import { countByOrg, formatDate, readPlatformDirectory } from "../../_lib/platform-data";
 
@@ -25,7 +26,18 @@ export default async function PlatformOperationsPage() {
   const { catalog, policies } = operations;
   const policyGateOpen = isPolicyGateOpen(policies);
   const paymongo = payMongoConfiguration();
-  const checkoutReady = policyGateOpen && paymongo.secretKeyConfigured && paymongo.publicKeyConfigured && paymongo.keyModeConsistent && paymongo.webhookSecretConfigured && paymongo.subscriptionsEnabled;
+  const checkoutReadiness = getCheckoutReadiness({
+    catalog,
+    policies,
+    paymongo: {
+      secretKeyConfigured: paymongo.secretKeyConfigured,
+      publicKeyConfigured: paymongo.publicKeyConfigured,
+      keyModeConsistent: paymongo.keyModeConsistent,
+      webhookSecretConfigured: paymongo.webhookSecretConfigured,
+      subscriptionsEnabled: paymongo.subscriptionsEnabled,
+    },
+  });
+  const checkoutReady = checkoutReadiness.ready;
   const accountOperationsSchemaReady = organizationsResult.accountFieldsAvailable && policies.schemaAvailable && supportCasesReady;
   const activeSubscriptions = organizations.filter((organization) => organization.subscription_status && normalizeSubscriptionStatus(organization.subscription_status) === "active").length;
   const trialSubscriptions = organizations.filter((organization) => organization.subscription_status && normalizeSubscriptionStatus(organization.subscription_status) === "trialing").length;
@@ -58,21 +70,8 @@ export default async function PlatformOperationsPage() {
           <PlatformMetric label="Checkout" value={checkoutReady ? "Ready" : "Locked"} detail={checkoutReady ? "Provider and policy checks pass" : "Finish provider setup"} icon="dashboard" />
         </section>
 
-        <section className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)]" aria-label="Provider readiness and actions">
-          <article className="rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6">
-            <div className="flex items-start gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-secondary text-primary"><AdminIcon name="refresh" size={18} /></span>
-              <div><p className="text-xs font-extrabold uppercase tracking-[0.14em] text-accent">Payment provider</p><h2 className="mt-1 text-xl font-extrabold">PayMongo readiness</h2><p className="mt-1 text-sm leading-5 text-ink-muted">Recurring billing stays server-side. No secret key is sent to the browser.</p></div>
-            </div>
-            <div className="mt-5 space-y-2.5">
-              <ReadinessRow label="Secret API key" ready={paymongo.secretKeyConfigured} detail={paymongo.secretKeyConfigured ? "Configured on the server" : "Add PAYMONGO_SECRET_KEY"} />
-              <ReadinessRow label="Public API key" ready={paymongo.publicKeyConfigured} detail={paymongo.publicKeyConfigured ? "Browser tokenization key configured" : "Add NEXT_PUBLIC_PAYMONGO_PUBLIC_KEY"} />
-              <ReadinessRow label="Key mode" ready={paymongo.keyModeConsistent} detail={paymongo.keyModeConsistent ? "Public and secret keys match" : "Use both test keys or both live keys"} />
-              <ReadinessRow label="Webhook secret" ready={paymongo.webhookSecretConfigured} detail={paymongo.webhookSecretConfigured ? "Ready to verify events" : "Add PAYMONGO_WEBHOOK_SECRET"} />
-              <ReadinessRow label="Subscriptions" ready={paymongo.subscriptionsEnabled} detail={paymongo.subscriptionsEnabled ? "Marked ready for integration" : "Request provider activation"} />
-            </div>
-            <p className="mt-5 rounded-xl bg-raised px-3 py-2.5 text-xs leading-5 text-ink-muted">Provider activation, test-mode payment, and signed webhook delivery must pass before live checkout is enabled.</p>
-          </article>
+        <section className="mt-6 grid items-start gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]" aria-label="Checkout readiness and actions">
+          <CheckoutReadinessChecklist readiness={checkoutReadiness} />
 
           <article className="rounded-[22px] border border-dashed border-line-strong bg-raised p-5 shadow-[var(--shadow-card)] sm:p-6">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -80,7 +79,7 @@ export default async function PlatformOperationsPage() {
               <PlatformStatusBadge status={policyGateOpen && accountOperationsSchemaReady && checkoutReady ? "active" : "draft"} label={policyGateOpen && accountOperationsSchemaReady && checkoutReady ? "Ready" : "Locked"} />
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <LockedAction icon="wallet" label="Subscription checkout" detail={checkoutReady ? "Available from the owner Billing page" : policyGateOpen ? "Finish PayMongo setup" : "Publish billing + support policies"} href={checkoutReady ? "/admin/billing" : undefined} />
+              <LockedAction icon="wallet" label="Subscription checkout" detail={checkoutReady ? "Available from the owner Billing page" : checkoutReadiness.remainingActions[0]?.action ?? "Complete the checkout-readiness checklist"} href={checkoutReady ? "/admin/billing" : undefined} />
               <LockedAction icon="alert" label="Suspend account" detail={accountOperationsSchemaReady && policyGateOpen ? "Use the business controls below" : policyGateOpen ? "Apply the platform migrations" : "Publish both policies first"} href={accountOperationsSchemaReady && policyGateOpen ? "#business-controls-heading" : undefined} hrefLabel="Open controls" />
               <LockedAction icon="help" label="Open support case" detail={accountOperationsSchemaReady && policyGateOpen ? "Use the business controls below" : policyGateOpen ? "Apply the support migration" : "Publish both policies first"} href={accountOperationsSchemaReady && policyGateOpen ? "#business-controls-heading" : undefined} hrefLabel="Open controls" />
             </div>
@@ -115,10 +114,6 @@ export default async function PlatformOperationsPage() {
       </div>
     </main>
   );
-}
-
-function ReadinessRow({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
-  return <div className="flex items-center justify-between gap-3 rounded-xl bg-raised px-3 py-2.5"><span className="text-xs font-extrabold text-ink">{label}</span><span className={`text-right text-[11px] font-bold ${ready ? "text-success" : "text-ink-muted"}`}>{detail}</span></div>;
 }
 
 function LockedAction({ icon, label, detail, href, hrefLabel }: { icon: "wallet" | "alert" | "help"; label: string; detail: string; href?: string; hrefLabel?: string }) {
