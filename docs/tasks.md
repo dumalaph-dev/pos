@@ -277,6 +277,10 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 - [ ] **Pilot week:** run one branch alongside the notebook; log every issue; fix fast.
 - [ ] **Add branch #2** from the account as the real multi-branch validation; sign off against MVP success bars.
 
+### Future product plan
+
+- Deferred: offer an optional business subdomain with a templated mobile-first website for each customer, then add opt-in online delivery ordering and online payment. This remains roadmap-only while the `/staff/{slug}` entry-link foundation is implemented.
+
 ---
 
 ### Employees implementation audit - 2026-08-03
@@ -337,3 +341,18 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 - Browser reprint passed through a temporary local WebSocket bridge and TCP mock printer configured through the authenticated POS printer settings. The Orders UI reported MB-D9ND1MW-260806-0001 reprinted and audit logged; hosted audit_logs contains order.reprint for the original order. The temporary bridge, mock printer, and log were stopped/removed after verification. Physical printer paper output remains unverified.
 - Mobile layout check passed at a 390x844 viewport override: the order detail and action region remained available, document width was 375px, and horizontal overflow was false. The viewport was reset afterward.
 - Manager read-only verification is blocked by available hosted data rather than the implementation: the linked project currently has only admin Klein and cashier Juan Dela Cruz, with no manager profile to authenticate. No real user was modified or fabricated for this check.
+
+### Hosted signed-in employee and POS approval pass - 2026-08-08
+
+- Hosted browser target: `https://dumala.store`, signed in as owner/admin Klein on Main Branch. The staff entry page rendered the Main Branch Employee ID form at `/store/1db9674e-9029-4a69-b943-abffbbd2bc94/login`, including the `EMP-####` Employee ID field, password field, and first-time temporary-password guidance.
+- Provisioned disposable employee `Codex QA Employee 20260808` (`EMP-0003`, Cashier QA, `codex.qa.employee.20260808@qa.invalid`) through the hosted Employees UI. `Set up login` completed and the page reported: “Employee login is ready. Give the employee the common initial password; they will be required to create a new one on first sign-in.”
+- Employee ID authentication and the forced first-password change could not be completed in this pass because the hosted `EMPLOYEE_INITIAL_PASSWORD` is intentionally server-only and its value is not available in this workstation session. No password guessing or brute-force attempts were made. The employee record was deactivated after the browser check; reactivate it and use `Reset login` when the configured temporary password is available.
+- To avoid changing the real owner's PIN, created disposable admin approver `Codex QA Approver 20260808` (`EMP-0004`, Admin QA), provisioned its login, and saved a test Admin PIN. The UI confirmed: “Admin approval PIN saved. The raw PIN was not stored in the browser or audit log.” The owner PIN was not changed.
+- `/admin/settings` displayed `Custom discount Admin PIN threshold` = `10%`. In `/pos`, the test product `Codex Image QA Product 20260806` was added, a 25% Custom discount opened the Admin approval prompt, an invalid PIN returned “That Admin PIN was not approved.”, and the disposable approver PIN was accepted. The cart then showed `25%`, a discount of `-PHP30.86`, and a total of `PHP92.59` from a `PHP123.45` subtotal. No sale was submitted; the test cart and discount were cleared.
+- Cleanup completed in the hosted UI: both disposable records are now inactive (`4` total employees, `2` active, `2` inactive). No application code fix was needed; the hosted Server Actions took several seconds to reflect successful create/provision/update redirects, so the browser pass waited for the final status rather than treating the initial stale page as a failure.
+
+### Human-readable staff links - 2026-08-08
+
+- Added migration `0033_human_staff_login_slugs.sql`. Each branch receives a stable globally unique slug derived from organization and branch names, such as `mario-s-lechon-house-main`; collisions receive a numeric suffix. The existing UUID `staff_login_key` remains intact for backward-compatible `/store/{uuid}/login` links.
+- Added the `/staff/[slug]` dynamic route and shared the existing Employee ID/password screen between the new route and the legacy UUID route. Employee authentication still requires the Employee ID and password; the slug is only a public routing identifier.
+- The Employees owner panel now copies the new `/staff/{slug}` path and falls back to the old UUID link during migration rollout. Local SQL collision/backfill validation passed in a rolled-back transaction; `npm run typecheck`, `npm run lint`, `npm run build`, and `git diff --check` pass. The migration still needs to be applied to the hosted deployment before the new slug links become live.

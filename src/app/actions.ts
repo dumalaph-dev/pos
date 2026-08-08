@@ -7,7 +7,7 @@ import {
   normalizeEmployeeCode,
 } from "@/lib/employee-auth";
 import { createClient } from "@/lib/supabase/server";
-import { getStoreByStaffKey, isStoreAccessKey, normalizeStoreAccessKey } from "@/lib/store-access";
+import { getStoreByStaffKey, isStaffAccessValue, normalizeStaffAccessValue } from "@/lib/store-access";
 
 export type LoginState = { message: string };
 
@@ -29,10 +29,10 @@ const INVALID_LOGIN_MESSAGE = "Employee ID or password is incorrect.";
 
 export async function loginWithEmployeeId(_previousState: LoginState, formData: FormData): Promise<LoginState> {
   const employeeCode = normalizeEmployeeCode(String(formData.get("employee_code") ?? ""));
-  const storeKey = normalizeStoreAccessKey(String(formData.get("store_key") ?? ""));
+  const storeKey = normalizeStaffAccessValue(String(formData.get("store_key") ?? ""));
   const password = String(formData.get("password") ?? "");
 
-  if (!isEmployeeCode(employeeCode) || !isStoreAccessKey(storeKey) || !password) return { message: INVALID_LOGIN_MESSAGE };
+  if (!isEmployeeCode(employeeCode) || !isStaffAccessValue(storeKey) || !password) return { message: INVALID_LOGIN_MESSAGE };
 
   const admin = createAdminClient();
   if (!admin) {
