@@ -7,7 +7,7 @@
 
 ## Current project status
 
-**Last updated:** 2026-08-07
+**Last updated:** 2026-08-08
 
 This section is the current source of truth for delivered work and the next gate. Keep it updated in the same change as every feature, migration, QA pass, commit, or deployment.
 
@@ -19,15 +19,18 @@ This section is the current source of truth for delivered work and the next gate
 | Printing | In progress (6/7) | Physical LAN printer slip validation |
 | Multi-branch | Complete | Production second-branch sign-off |
 | Customer display | Not started | Build `/display` pairing and live cart mirror |
-| Admin backoffice | In progress (manager QA, employee save-flow, price-audit hardening, and kg metric verified) | Reachable LAN printer, staff-login configuration, and remaining P6 polish |
+| Admin backoffice | In progress (manager QA, employee save-flow, price-audit hardening, tender mix, settings scope map, local phone QA, hosted migrations, and hosted Admin PIN SQL QA verified) | Authenticated hosted employee-login/UI pass |
 | Inventory workflow | Complete | Maintain regression coverage |
 | Inventory reporting and exports | Authenticated admin and manager QA passed | Reconciliation against broader live data |
-| Shifts, till, and Z-readings | Implemented and verified on the local stack | Apply `0024` to the hosted project, then authenticated till QA |
+| Shifts, till, and Z-readings | Implemented; hosted authenticated RPC QA passed 2026-08-08 and rollback left counts unchanged | Reconcile reports against a real hosted sales day |
 | Store-owner onboarding and guidance | Implemented | Verify first-run and mobile behavior on the deployed app |
 | Admin workspace themes | Merged in PR #2 | Verify Classic/Light/Dark/Retro on the live main deployment |
 | Production pilot | Not started | Production Supabase, device setup, pilot week, and branch #2 |
 
 ### Recent delivery log
+
+- **2026-08-08 — P6/P8 closure slice (working tree):** Added reversal-aware cash/e-wallet/card tender mix to the admin dashboard, an explicit organization/branch/device settings map, and a raw-order reconciliation control to `/admin/reports`. The reconciliation uses the active branch/cashier/payment scope and blocks a balanced status when rows are truncated or the reversal lookup fails. A rollback-scoped authenticated hosted till QA then passed open shift, sale, X-reading, close, and Z-reading checks; the hosted counts returned to their starting values. `npm run typecheck`, `npm run lint`, `npm run build`, `npm run printer:validate:mock`, and `git diff --check` pass. Remaining hosted gates are the signed-in employee-login/UI pass and a real-day report reconciliation.
+- **2026-08-08 — Custom-discount approval + mobile pass:** Added the organization-configurable Admin PIN threshold (default 10%), employee Admin PIN management, server-hashed PINs, ten-minute one-use approvals, server-side `place_order` enforcement, and append-only approval/discount audit events in `supabase/migrations/0032_admin_pin_discount_policy.sql`. Local production-browser QA at `390x844` covered dashboard, settings, employees, reports, orders, inventory, POS, and the above-threshold approval sheet with no horizontal overflow. Hosted migrations `0031` and `0032` are now applied and match the local ledger. Rollback-scoped hosted Admin PIN QA passed PIN setup, cashier verification, a 25% custom-discount order, idempotent replay, and one-use approval rejection; the transaction rolled back with no residue.
 
 - **2026-08-05 — Admin workspace theme polish (working tree):** Added immediate theme preview on the Settings page, save pending feedback, shared `/admin` layout revalidation, more readable Classic/Light/Dark palettes, a new Retro theme, and updated swatches/previews. `npx tsc --noEmit`, `npm run lint`, `npm run build`, and `git diff --check` pass. The changes are currently uncommitted on `main`.
 - **2026-08-05 — P6 Orders operations (working tree):** Added migration `0020_order_actions.sql` for immutable, one-time admin void/refund reversals that restore tracked stock and write an audit event. The Orders detail now supports browser-configured reprint with post-print audit logging, reason-required admin actions, success/error feedback, and manager read-only messaging. `npm run typecheck` and `npm run lint` pass; migration application and hosted/browser verification remain pending.
@@ -41,10 +44,9 @@ This section is the current source of truth for delivered work and the next gate
 
 ### Immediate next task
 
-1. Apply `0024_shifts_and_z_readings.sql` to the hosted project, then run authenticated till QA: open a shift on the POS, ring a sale, read the X-reading, close with a counted drawer, and generate the Z-reading from `/admin/shifts`.
-2. Put the real LAN printer on the same network and provide/confirm its reachable IP; rerun the physical ESC/POS validation and observe the slip, including the new X/Z reading slips.
-3. Finish the remaining P6 configuration/polish: hosted employee-login provisioning needs a valid project service key plus `EMPLOYEE_INITIAL_PASSWORD`; the dashboard cash/e-wallet breakdown, settings split, and full-phone pass remain open.
-4. Reconcile reporting against a broader real-day data set; the remaining P8 sales/discount/branch-comparison reports are still open.
+1. Run the signed-in hosted employee-login/UI pass using the configured server-only runtime: provision or reset a disposable employee, confirm Employee ID login and forced first-password change, then verify Admin PIN management and the above-threshold POS approval path in the browser.
+2. Use an actual hosted sales day, then reconcile `/admin/reports` against the raw order ledger and sign off the report totals. The linked project currently contains only rollback/QA data, so this gate is not complete yet.
+3. Keep the separate P3 hardware gate moving: put the real LAN printer on the same network, confirm its reachable IP, and observe a physical receipt including the X/Z reading slips.
 
 ---
 
@@ -58,9 +60,9 @@ This section is the current source of truth for delivered work and the next gate
 | **P3** | Printing | 🟡 In progress | 6 / 7 | **Physical LAN printer validation pending (PRD §6.4)** |
 | **P4** | Multi-branch | ✅ Done | 8 / 8 | Schema from P0 |
 | **P5** | Customer display | ⬜ Not started | 0 / 6 | Needs P1 cart events |
-| **P6** | Backoffice | 🟡 In progress | Core admin slices implemented | Hosted/browser QA and production hardening |
+| **P6** | Backoffice | 🟡 In progress | Shell, dashboard tender mix, settings scopes, employee workspace, CRUD, audit, Admin PIN policy, and local phone QA implemented | Signed-in hosted employee-login/UI pass |
 | **P7** | Inventory | ✅ Done | 6 / 6 | Maintain regression coverage |
-| **P8** | Shifts & reports | 🟡 In progress | Shifts, X/Z readings, sales reports, and inventory reporting implemented | Authenticated till QA; reconcile against a real day's data |
+| **P8** | Shifts & reports | 🟡 In progress | Shifts, X/Z readings, sales reports, inventory reporting, and hosted RPC till QA implemented | Reconcile against a real hosted day's data |
 | **P9** | Pilot & production deploy | ⬜ Not started | 0 / 8 | Everything above |
 
 **Status legend:** ⬜ Not started · 🟡 In progress · ✅ Done · 🔴 Blocked
@@ -92,7 +94,7 @@ P0 implementation is complete in source (9/9). Production preview deployment ver
 - [x] Product grid from catalog; category rail filters; `/kg` badge for weight items.
 - [x] Fixed-price tap = add/increment; weight item = keypad modal (kg, 2 decimals, live line total). *(✅ 1.35kg × ₱850 → ₱1,147.50)*
 - [x] Cart: edit qty/weight, remove line, order note field, running total (tabular figures).
-- [x] Discounts: None / Senior / PWD (name + ID capture, 20%) / Custom % (Admin PIN above threshold). *(PIN threshold deferred to P6 settings)*
+- [x] Discounts: None / Senior / PWD (name + ID capture, 20%) / Custom % (server-enforced Admin PIN above the organization threshold; offline above-threshold custom discounts are blocked)
 - [x] Charge flow: Cash (tendered → change, quick-tender chips), GCash/Maya (ref), Card (last 4). *(✅ ₱4,097.50 sale / ₱5,000 tendered → ₱902.50 change)*
 - [x] Hold/park orders (tray, max 10); branch label in header.
 - [x] Write order + `order_items` with price snapshots; success state → fresh order. Audit-log the sale. *(✅ atomic `place_order` RPC — order AB1-260731-012528: 2 items + audit row verified in DB)*
@@ -154,15 +156,15 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 ## P6 — Admin Backoffice
 *Goal: enough tooling to run the business from a phone.*
 
-- [ ] Backoffice shell: responsive layout, branch switcher, nav, auth guards.
-- [ ] Dashboard: today's sales, orders, avg ticket, cash vs. e-wallet, top items, kg sold, low-stock alerts (per branch + consolidated). *(Overview slice implemented: live sales, top items, branch pulse, recent orders, low/out-of-stock alerts, and an explicit kg-sold metric; the cash/e-wallet breakdown remains pending.)*
+- [x] Backoffice shell: responsive layout, branch switcher, nav, auth guards. *(Manager read-only and unauthenticated guard checks passed 2026-08-06; branch context is shared across admin routes.)*
+- [x] Dashboard: today's sales, orders, avg ticket, cash vs. e-wallet, top items, kg sold, low-stock alerts (per branch + consolidated). *(Live reversal-aware KPIs, top items, branch pulse, recent orders, low/out-of-stock alerts, kg-sold metric, and cash/e-wallet/card tender mix are implemented.)*
 - [x] Products CRUD (per branch): pricing mode, price, image, active/track-stock toggles; copy to another branch; price changes versioned in audit. *(Hosted `0021_product_price_audit.sql` is applied; the `product_price_audit` trigger is present on `public.products`.)*
 - [x] Orders: filterable list (branch/date/cashier/method/status), detail drawer, admin-only reason-required immutable void/refund reversals with tracked-stock restoration and audit logging, browser reprint with audit.
-- [ ] Staff: invite/create, assign branch + role, set/reset PIN, deactivate.
-- [x] Employee workspace slice: reference-matched Employees dashboard with live employee KPIs, searchable/paginated directory, roles & permissions, attendance, payroll, leave requests, quick actions, and CSV export. *(Implemented 2026-08-03; authenticated route and reversible admin save/restore checks passed 2026-08-06; employee-login provisioning still needs valid server configuration.)*
+- [ ] Staff: invite/create, assign branch + role, set/reset PIN, deactivate. *(Create/update, branch + role assignment, active/deactivate, Employee ID login, Set up/Reset login, and Admin approval PIN controls are implemented; hosted migrations through `0032` and rollback SQL QA pass, while the signed-in employee provisioning/login/UI pass remains.)*
+- [x] Employee workspace slice: reference-matched Employees dashboard with live employee KPIs, searchable/paginated directory, roles & permissions, attendance, payroll, leave requests, quick actions, and CSV export. *(Implemented 2026-08-03; authenticated route and reversible admin save/restore checks passed 2026-08-06; hosted employee records are linked to Auth users, but the signed-in provisioning/login pass remains.)*
 - [x] Audit log viewer: append-only, filter by branch/actor/action/date. *(Implemented 2026-08-03; authenticated browser route check passed 2026-08-06 and showed existing order events.)*
-- [ ] Settings split: **org** / **branch** / **device** (per PRD §6.6).
-- [ ] Empty/loading/error states + mobile pass (owner uses a phone).
+- [x] Settings split: **org** / **branch** / **device** (per PRD §6.6). *(Organization settings and separate POS branch receipt/tax plus device/printer editors are linked through the configuration map.)*
+- [x] Empty/loading/error states + mobile pass (owner uses a phone). *(Local production-browser QA at `390x844` covered dashboard, settings, employees, reports, orders, inventory, POS, and the Admin PIN sheet on 2026-08-08; no horizontal overflow was observed.)*
 
 ### P6 backoffice and Inventory Reporting QA — 2026-08-06
 
@@ -172,7 +174,7 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 - Exact report result: 1 tracked product, 0 low stock, 1 out of stock, estimated value `₱0`; the row was `Codex Image QA Product 20260806`, `0 pcs` on hand, minimum `2 pcs`, Out of stock, `₱0`. Movements contained 2 records: POS sale net `-1 pcs` and manual adjustment net `+1 pcs`; yield entries were 0 and variance count lines were 0.
 - CSV export checks initiated all three browser downloads using the filter-preserving endpoints `kind=inventory`, `kind=movements`, and `kind=variance`. The in-app browser returned `net::ERR_ABORTED` for each download response (expected browser behavior for a file download); the report page remained available after each attempt. File contents were not inspected through the in-app browser API.
 - Responsive check passed at `390x844`: report and filter content remained available in the accessibility snapshot, document/body width was `375px`, and horizontal overflow was false. The viewport was restored afterward.
-- Follow-up gates: physical printer validation, hosted employee-login provisioning, dashboard cash/e-wallet breakdown, settings split, and the remaining full-phone polish checklist. Broader real-day report reconciliation and shifts/till reports remain P8 work.
+- Follow-up gates: signed-in hosted employee-login/UI validation and physical printer validation. Dashboard cash/e-wallet/card mix, settings scope map, local full-phone polish, hosted migrations `0031`/`0032`, and rollback-scoped hosted Admin PIN SQL QA are complete. Broader real-day report reconciliation remains P8 work.
 
 ### Remaining P6 gate pass — 2026-08-06
 
@@ -230,7 +232,9 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 - **The same reversal bug was then fixed everywhere else it appeared (2026-08-07).** `loadReversedOrderIds` and `selectNetSales` were extracted from the reports module so every revenue figure in the app applies one rule, and `loadSalesReport` was refactored onto them so there is genuinely a single implementation. Fixed: the dashboard (`src/app/admin/page.tsx` — today's KPIs, the seven-day series, and the item/category panels), Sales (`src/app/admin/sales/page.tsx` — both period summaries, the daily/hourly/weekday buckets, and best sellers), Promotions (`src/app/admin/promotions/page.tsx` — a discount on a sale that was later voided was never actually given), the Orders list metrics and trend (`src/app/admin/orders/page.tsx`; its existing reversal query only covers the visible page because it feeds the per-row badges, so the metrics take their own scope), and `/products` (`src/app/products/page.tsx`), which was a fifth page not in the original list. Every embedded `order_items` query now also filters `orders.reversal_of is null`.
 - A failed reversal lookup is surfaced through each page's existing `queryWarning` rather than swallowed, because falling back to "nothing was reversed" would silently overstate revenue — the exact bug being fixed.
 - Verified against seeded fixture rows on the local stack, run in a transaction and rolled back: a refunded sale is still returned by the `status = completed and reversal_of is null` query (confirming the id-keyed second pass is what removes it, not the query alone), the reversal lookup returns exactly the refunded order's id, the net selection leaves only the surviving sale, the discount on the refunded order drops out of the promotions totals, and the refunded order's line leaves the item rows. `npm run typecheck`, `npm run lint`, and `npm run build` pass.
-- Not done: reconciling reports against a real day's data. That needs real sales volume on the hosted project, which does not exist yet.
+- Hosted authenticated till QA passed on 2026-08-08 in a rollback-scoped SQL session: `open_shift` → `place_order` → `shift_reading` → `close_shift` → `record_z_reading`. The result asserted order count, net sales, cash sales, expected cash, declared cash, zero variance, and Z number; every check was true and final hosted counts were unchanged.
+- Hosted `0032` verification passed: `discount_approvals` and `orders.discount_approval_id` exist, authenticated execution is present for `set_profile_pin`, `verify_admin_pin`, and `place_order`, and a rollback-scoped Admin PIN/custom-discount test passed without leaving approval, order, stock, audit, or PIN rows behind.
+- Not done: reconciling reports against a real day's data. The linked project currently has only rollback/QA data (one completed sale paired with its void reversal), not a real sales day.
 
 ### Shift and Z-reading slice — 2026-08-07
 
@@ -259,7 +263,7 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 - [x] Reports: sales by day/week/month, item, category, cashier; hourly heatmap. *(`src/lib/admin/sales-reports.ts` is the single reversal-aware aggregation; `/admin/reports` renders it with day/week/month grouping plus cashier and payment filters.)*
 - [x] Discount report; branch-vs-branch comparison. *(Discounts grouped by `discount_type`; branch table shows orders, net sales, discounts, average order, and share.)*
 - [x] CSV export. *(`/admin/reports/export?kind=` for summary, periods, items, categories, cashiers, branches, discounts, and hourly. Amounts stay in centavos and the route refuses to emit a truncated file.)*
-- [ ] Reconcile reports against raw orders on a real day's data. *(Blocked: needs real sales volume on the hosted project. Not yet possible.)*
+- [ ] Reconcile reports against raw orders on a real day's data. *(The report now shows a scoped raw-ledger reconciliation control and blocks sign-off on truncation/query failure; completion still needs real hosted sales volume.)*
 
 ## P9 — Pilot & Production Deployment
 *Goal: live in a real store, then a second branch as the true multi-branch test.*
@@ -297,7 +301,7 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 - Added an admin-only Set up login / Reset login action on the Employees list. It creates a confirmed Supabase Auth user for new employee records, links the Auth user to `profiles` and `employee_records`, resets the configured common initial password when requested, and records an `auth.employee.login_provisioned` audit event without logging the password.
 - Added first-login password enforcement at `/account/password`. The required flag is checked by middleware before `/pos` and `/admin`, and the password-change action clears it server-side after Supabase Auth accepts the new password. The change is recorded as `auth.password.changed`.
 - Added migration `0012_employee_id_login.sql`; linked hosted verification passed with migrations `0001` through `0012` matching, `profiles.password_change_required` present with default `false`, the active employee-code lookup index present, and current hosted counts of 1 employee and 0 forced-password profiles.
-- Server configuration required before provisioning: set the real hosted `SUPABASE_SERVICE_ROLE_KEY` and a server-only `EMPLOYEE_INITIAL_PASSWORD` of at least 8 characters. The temporary password is never shipped to the client. Protected browser login/provisioning remains pending until those runtime values are configured and the in-app browser is signed in.
+- Server configuration required before provisioning: set the real hosted `SUPABASE_SERVICE_ROLE_KEY` and a server-only `EMPLOYEE_INITIAL_PASSWORD` of at least 8 characters. The temporary password is never shipped to the client. The linked hosted employee records now have Auth users; the protected browser provisioning/login pass remains pending, and this workstation does not expose the initial-password value for local verification.
 - Code verification passed: `npx tsc --noEmit`, `npm run lint`, and `npm run build`. The build exposes `/account/password`; only the existing middleware/OpenNext-on-Windows/punycode warnings remain.
 - Deployment follow-up: Sites initially rejected the publish for Cloudflare's 10 MiB Worker limit because the staged server bundle included an unused 4 MiB font-metrics file and duplicated static assets. The validated staging step now removes both server-only duplicates while preserving the UI's sans-serif fallback stack and the separate static asset directory.
 

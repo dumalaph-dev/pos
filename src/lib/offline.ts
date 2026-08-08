@@ -41,6 +41,8 @@ export type OfflineProfileSnapshot = {
   brand_logo_url: string | null;
   full_name: string | null;
   role: "admin" | "manager" | "cashier" | null;
+  /** Organization policy used to gate custom discounts while the till is online. */
+  discount_threshold?: number;
   device_id?: string | null;
   pos_config?: unknown;
 };
@@ -95,7 +97,8 @@ function isOfflineProfileSnapshot(value: unknown): value is OfflineProfileSnapsh
     isNullableString(value.store_tin) &&
     isNullableString(value.brand_logo_url) &&
     isNullableString(value.full_name) &&
-    (role === null || role === "admin" || role === "manager" || role === "cashier")
+    (role === null || role === "admin" || role === "manager" || role === "cashier") &&
+    (value.discount_threshold === undefined || (typeof value.discount_threshold === "number" && Number.isFinite(value.discount_threshold) && value.discount_threshold >= 0 && value.discount_threshold <= 100))
   );
 }
 

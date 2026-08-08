@@ -267,6 +267,38 @@ export async function provisionEmployeeLogin(formData: FormData) {
   employeesSaved("list", "login-provisioned", readReturnValues(formData));
 }
 
+export async function setEmployeePin(formData: FormData) {
+  const { supabase, actor } = await getActor();
+  if (actor.role !== "admin") employeesRedirect("Only organization admins can set staff PINs.");
+
+  const employeeId = readText(formData, "employee_id");
+  const pin = readText(formData, "pin");
+  const confirmation = readText(formData, "pin_confirmation");
+  if (!employeeId) employeesRedirect("Choose an employee before setting a PIN.");
+  if (!/^\d{4,6}$/.test(pin)) employeesRedirect("PIN must be 4 to 6 digits.");
+  if (pin !== confirmation) employeesRedirect("The PIN entries do not match.");
+
+  const { data: employee, error: employeeError } = await supabase
+    .from("employee_records")
+    .select("id, profile_id, store_id, role, is_active")
+    .eq("id", employeeId)
+    .eq("org_id", actor.org_id)
+    .maybeSingle();
+  if (employeeError || !employee) employeesRedirect("That employee record is not available.");
+  if (!employee.profile_id) employeesRedirect("Set up the employee login before setting a PIN.");
+  if (employee.role !== "admin") employeesRedirect("Only organization-admin profiles can hold an approval PIN.");
+  if (!employee.is_active) employeesRedirect("Activate the employee before setting a PIN.");
+
+  const { error: pinError } = await supabase.rpc("set_profile_pin", {
+    p_profile_id: employee.profile_id,
+    p_pin: pin,
+  });
+  if (pinError) employeesRedirect(pinError.message || "The employee PIN could not be saved.");
+
+  revalidateEmployees();
+  employeesSaved("list", "pin-updated", readReturnValues(formData));
+}
+
 export async function createEmployee(formData: FormData) {
   const { supabase, actor } = await getActor();
   if (actor.role !== "admin") employeesRedirect("Only organization admins can add employee records.");

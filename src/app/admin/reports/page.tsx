@@ -208,6 +208,20 @@ export default async function ReportsPage({
           <ReportMetric label="VAT collected" value={displayPeso(totals.vatAmount)} detail={`${displayPeso(totals.vatExemptSale)} VAT-exempt`} tone="bg-warning/15 text-warning" icon="reports" />
         </div>
 
+        <section aria-labelledby="ledger-check-heading" className="admin-panel mt-5 p-5">
+          <div className="admin-panel__header">
+            <div><p className="admin-panel__eyebrow">P8 control check</p><h2 id="ledger-check-heading" className="admin-panel__title">Raw order ledger reconciliation</h2><p className="admin-panel__subtitle">The report summary is checked against the raw order rows in this date and branch scope before it is shown as balanced.</p></div>
+            <span className={`rounded-pill px-3 py-1.5 text-xs font-extrabold ${report.reconciliation.balanced ? "bg-success/10 text-success" : "bg-danger-soft text-danger"}`}>{report.reconciliation.balanced ? "Balanced" : "Review required"}</span>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <LedgerCheck label="Raw sale rows" value={String(report.reconciliation.rawSaleCandidateCount)} detail={`${report.reconciliation.netOrderCount} net orders`} />
+            <LedgerCheck label="Raw reversals" value={String(report.reconciliation.rawReversalCount)} detail="Voids and refunds" />
+            <LedgerCheck label="Raw net sales" value={displayPeso(report.reconciliation.rawNetSales)} detail="Order ledger total" />
+            <LedgerCheck label="Summary net sales" value={displayPeso(report.reconciliation.summaryNetSales)} detail="Report aggregation" />
+          </div>
+          {!report.reconciliation.balanced && <p role="alert" className="mt-4 rounded-btn border border-danger/25 bg-danger-soft px-3 py-2 text-xs font-semibold text-danger">This range is not safe to sign off. Check the query warning or narrow the range if the row limit was reached.</p>}
+        </section>
+
         <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.7fr)]">
           <section aria-labelledby="trend-heading" className="admin-panel p-5">
             <div className="admin-panel__header">
@@ -418,6 +432,10 @@ function ReportHeatmap({ report }: { report: SalesReportData }) {
 
 function ReportMetric({ label, value, detail, tone, icon }: { label: string; value: string; detail: string; tone: string; icon: "wallet" | "chart" | "promotions" | "reports" }) {
   return <article className="admin-kpi-card min-h-[132px]"><div className="admin-kpi-card__inner"><div className="admin-kpi-card__top"><span className="admin-kpi-card__label">{label}</span><span className={`admin-kpi-card__icon ${tone}`}><AdminIcon name={icon} size={17} /></span></div><p className="admin-kpi-card__value tnums">{value}</p><p className="admin-kpi-card__trend">{detail}</p></div></article>;
+}
+
+function LedgerCheck({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return <div className="rounded-btn border border-line bg-surface-raised px-3 py-3"><p className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-ink-muted">{label}</p><strong className="mt-1 block tnums text-base font-extrabold text-ink">{value}</strong><small className="mt-1 block text-[10px] text-ink-muted">{detail}</small></div>;
 }
 
 function ReportTrend({ series }: { series: Array<{ label: string; value: number }> }) {

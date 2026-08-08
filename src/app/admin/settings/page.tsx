@@ -14,6 +14,7 @@ import {
   type AdminBranding,
 } from "@/lib/admin/branding";
 import { readAdminInventorySettings } from "@/lib/admin/inventory-settings";
+import { readAdminDiscountSettings } from "@/lib/admin/discount-settings";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { RestoreOwnerGuidanceButton } from "@/components/admin/OwnerOnboardingPanel";
 import { updateOrganizationSettings } from "./actions";
@@ -63,6 +64,7 @@ export default async function SettingsPage({
   const organization = data as OrganizationRecord | null;
   const branding = readAdminBranding(organization?.settings);
   const inventorySettings = readAdminInventorySettings(organization?.settings);
+  const discountSettings = readAdminDiscountSettings(organization?.settings);
   const canWrite = profile.role === "admin";
   const saved = readParam(params.saved);
   const savedMessage = saved === "organization" ? "Dashboard settings saved." : "";
@@ -118,6 +120,7 @@ export default async function SettingsPage({
                 assetLabel="logo"
               />
               <SettingsField label="Currency" htmlFor="organization-currency"><select id="organization-currency" name="currency" defaultValue={organization?.currency ?? "PHP"} disabled={!canWrite} className="inventory-input"><option value="PHP">PHP · Philippine peso</option><option value="USD">USD · US dollar</option><option value="SGD">SGD · Singapore dollar</option></select></SettingsField>
+              <SettingsField label="Custom discount Admin PIN threshold" htmlFor="discount-admin-pin-threshold"><div className="flex items-center gap-2"><input id="discount-admin-pin-threshold" name="discount_admin_pin_threshold" type="number" min="0" max="100" step="0.5" defaultValue={discountSettings.adminPinThresholdPercent} required disabled={!canWrite || !organization} className="inventory-input tnums" /><span className="text-xs font-semibold text-ink-muted">%</span></div><span className="mt-1.5 block text-xs leading-5 text-ink-muted">Custom discounts above this percentage require an active organization Admin PIN. Default: 10%.</span></SettingsField>
               <div className="admin-settings-inventory sm:col-span-2">
                 <div className="admin-settings-inventory__copy"><p className="admin-panel__eyebrow">Inventory alerts</p><h3 className="mt-1 text-base font-extrabold text-ink">Keep a shared low-stock floor on the dashboard</h3><p className="mt-1 text-xs leading-5 text-ink-muted">Use this as the organization-wide alert floor. Products with a higher minimum keep their higher threshold.</p></div>
                 <div className="admin-settings-inventory__controls">
@@ -142,7 +145,29 @@ export default async function SettingsPage({
 
         {canWrite && <section className="admin-panel owner-guidance-settings mt-5 p-5 sm:p-6" aria-labelledby="owner-guidance-settings-heading"><div><p className="admin-panel__eyebrow">Owner help</p><h2 id="owner-guidance-settings-heading" className="admin-panel__title">Bring back the setup guide</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">Show the first-time checklist and all feature tips again on your next visit. This only changes guidance visibility in this browser; it does not change your business data.</p></div><RestoreOwnerGuidanceButton /></section>}
 
-        <section className="admin-panel mt-5 p-5 sm:p-6" aria-labelledby="pos-configuration-heading"><div className="admin-panel__header"><div><p className="admin-panel__eyebrow">POS workspace</p><h2 id="pos-configuration-heading" className="admin-panel__title">Branch receipts and devices</h2><p className="admin-panel__subtitle">Keep the settings that affect checkout, printed receipts, and physical terminals beside the live POS preview.</p></div><Link href="/admin/pos" className="rounded-btn bg-primary px-4 py-2 text-xs font-extrabold text-primary-fg transition hover:bg-primary-hover">Open POS</Link></div><div className="mt-5 grid gap-3 md:grid-cols-2"><Link href="/admin/pos?tab=receipts" className="rounded-card border border-line bg-surface-raised p-4 transition hover:border-primary/40 hover:bg-primary-soft"><span className="text-xs font-extrabold uppercase tracking-[0.12em] text-accent">Receipt &amp; tax details</span><strong className="mt-2 block text-sm font-extrabold text-ink">Branch identity, TIN, VAT, and receipt output</strong><span className="mt-1 block text-xs leading-5 text-ink-muted">Edit the branch information that appears on the cashier preview and printed receipt.</span></Link><Link href="/admin/pos?tab=hardware" className="rounded-card border border-line bg-surface-raised p-4 transition hover:border-primary/40 hover:bg-primary-soft"><span className="text-xs font-extrabold uppercase tracking-[0.12em] text-accent">POS terminals &amp; printers</span><strong className="mt-2 block text-sm font-extrabold text-ink">Register counters and test printer connections</strong><span className="mt-1 block text-xs leading-5 text-ink-muted">Manage terminal prefixes, printer transport, network bridge details, and active status.</span></Link></div></section>
+        <section className="admin-panel mt-5 p-5 sm:p-6" aria-labelledby="settings-scopes-heading">
+          <div className="admin-panel__header">
+            <div><p className="admin-panel__eyebrow">Configuration map</p><h2 id="settings-scopes-heading" className="admin-panel__title">Organization, branch, and device settings</h2><p className="admin-panel__subtitle">Each scope has its own editor, so a branch receipt change or terminal repair cannot accidentally change organization branding.</p></div>
+            <Link href="/admin/pos" className="rounded-btn bg-primary px-4 py-2 text-xs font-extrabold text-primary-fg transition hover:bg-primary-hover">Open POS settings</Link>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <Link href="#dashboard-settings" className="rounded-card border border-primary/35 bg-primary-soft p-4 transition hover:border-primary/60">
+              <span className="text-xs font-extrabold uppercase tracking-[0.12em] text-accent">Organization</span>
+              <strong className="mt-2 block text-sm font-extrabold text-ink">Brand, currency, alerts, approvals</strong>
+              <span className="mt-1 block text-xs leading-5 text-ink-muted">Shared workspace identity, dashboard defaults, and the custom-discount approval threshold.</span>
+            </Link>
+            <Link href="/admin/pos?tab=receipts" className="rounded-card border border-line bg-surface-raised p-4 transition hover:border-primary/40 hover:bg-primary-soft">
+              <span className="text-xs font-extrabold uppercase tracking-[0.12em] text-accent">Branch</span>
+              <strong className="mt-2 block text-sm font-extrabold text-ink">Receipt identity and tax details</strong>
+              <span className="mt-1 block text-xs leading-5 text-ink-muted">Branch name, address, TIN, VAT, paper width, and receipt output.</span>
+            </Link>
+            <Link href="/admin/pos?tab=hardware" className="rounded-card border border-line bg-surface-raised p-4 transition hover:border-primary/40 hover:bg-primary-soft">
+              <span className="text-xs font-extrabold uppercase tracking-[0.12em] text-accent">Device</span>
+              <strong className="mt-2 block text-sm font-extrabold text-ink">Counters, printers, and status</strong>
+              <span className="mt-1 block text-xs leading-5 text-ink-muted">Terminal prefixes, printer transport, bridge details, active state, and test receipts.</span>
+            </Link>
+          </div>
+        </section>
       </div>
     </main>
   );

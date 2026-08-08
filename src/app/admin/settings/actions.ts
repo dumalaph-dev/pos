@@ -11,6 +11,7 @@ import {
 import { invalidateAdminProfile } from "@/lib/admin/profile";
 import { isAdminThemeId, mergeAdminBrandingSettings, readAdminBranding } from "@/lib/admin/branding";
 import { mergeAdminInventorySettings, readAdminInventorySettings } from "@/lib/admin/inventory-settings";
+import { DEFAULT_ADMIN_DISCOUNT_SETTINGS, mergeAdminDiscountSettings, readAdminDiscountSettings } from "@/lib/admin/discount-settings";
 import { createClient } from "@/lib/supabase/server";
 
 function settingsRedirect(message: string): never {
@@ -67,6 +68,10 @@ export async function updateOrganizationSettings(formData: FormData) {
   const brandLogoFile = readOrganizationImageFile(formData, "brand_logo_file");
   const lowStockAlertsEnabled = formData.get("low_stock_alerts_enabled") === "on";
   const defaultLowStockThreshold = Number(readText(formData, "default_low_stock_threshold"));
+  const discountThresholdInput = readText(formData, "discount_admin_pin_threshold");
+  const discountAdminPinThreshold = discountThresholdInput
+    ? Number(discountThresholdInput)
+    : DEFAULT_ADMIN_DISCOUNT_SETTINGS.adminPinThresholdPercent;
   validateRequiredText(name, "Organization name", 120);
   validateRequiredText(brandName, "Brand name", 48);
   if (brandTagline.length > 48) settingsRedirect("Brand tagline must be at most 48 characters.");
@@ -75,6 +80,9 @@ export async function updateOrganizationSettings(formData: FormData) {
   if (brandLogoFile === undefined) settingsRedirect("Choose a JPG, PNG, or WebP brand logo under 900 KB.");
   if (!Number.isFinite(defaultLowStockThreshold) || defaultLowStockThreshold < 0 || defaultLowStockThreshold > 100000) {
     settingsRedirect("The default low-stock threshold must be a number from 0 to 100,000.");
+  }
+  if (!Number.isFinite(discountAdminPinThreshold) || discountAdminPinThreshold < 0 || discountAdminPinThreshold > 100) {
+    settingsRedirect("The custom discount Admin PIN threshold must be a percentage from 0 to 100.");
   }
 
   const { data: organization, error: organizationError } = await supabase
@@ -107,8 +115,14 @@ export async function updateOrganizationSettings(formData: FormData) {
       ? defaultLowStockThreshold
       : currentInventorySettings.defaultLowStockThreshold,
   });
+  const currentDiscountSettings = readAdminDiscountSettings(organization.settings);
+  const settingsWithDiscount = mergeAdminDiscountSettings(settings, {
+    adminPinThresholdPercent: Number.isFinite(discountAdminPinThreshold)
+      ? discountAdminPinThreshold
+      : currentDiscountSettings.adminPinThresholdPercent,
+  });
 
-  const { error } = await supabase.from("organizations").update({ name, currency, settings }).eq("id", orgId);
+  const { error } = await supabase.from("organizations").update({ name, currency, settings: settingsWithDiscount }).eq("id", orgId);
   if (error) {
     await removeOrganizationImage(supabase, uploadedLogo?.path ?? null);
     settingsRedirect(error.message || "Organization settings could not be saved.");

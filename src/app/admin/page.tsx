@@ -320,6 +320,20 @@ export default async function AdminPage() {
   const completedOrders = selectNetSales(todayOrders, reversedIds);
   const totalSales = completedOrders.reduce((sum, order) => sum + Number(order.total), 0);
   const averageTicket = completedOrders.length ? Math.round(totalSales / completedOrders.length) : 0;
+  const tenderTotals = {
+    cash: { orders: 0, total: 0 },
+    eWallet: { orders: 0, total: 0 },
+    card: { orders: 0, total: 0 },
+  };
+  for (const order of completedOrders) {
+    const bucket = order.payment_method === "cash"
+      ? tenderTotals.cash
+      : order.payment_method === "card"
+        ? tenderTotals.card
+        : tenderTotals.eWallet;
+    bucket.orders += 1;
+    bucket.total += Number(order.total);
+  }
   const activeBranches = visibleBranches.filter((branch) => branch.is_active).length;
   const activeDevices = devices.filter((device) => device.is_active).length;
 
@@ -562,6 +576,14 @@ export default async function AdminPage() {
                 <OverviewMetric icon="orders" label="Returns & voids" value={displayPeso(returnsAndVoids)} />
                 <OverviewMetric icon="wallet" label="Tax collected" value={displayPeso(taxCollected)} />
               </div>
+              <div className="mt-5 border-t border-line pt-4">
+                <div className="flex items-center justify-between gap-3"><p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted">Tender mix</p><Link href={reportHref} className="text-[10px] font-extrabold text-primary hover:underline">Open report</Link></div>
+                <div className="mt-3 grid gap-3">
+                  <TenderMetric label="Cash" orders={tenderTotals.cash.orders} value={tenderTotals.cash.total} total={totalSales} tone="bg-primary" />
+                  <TenderMetric label="E-wallet" orders={tenderTotals.eWallet.orders} value={tenderTotals.eWallet.total} total={totalSales} tone="bg-success" />
+                  <TenderMetric label="Card" orders={tenderTotals.card.orders} value={tenderTotals.card.total} total={totalSales} tone="bg-[#8064a7]" />
+                </div>
+              </div>
             </section>
           </div>
 
@@ -631,6 +653,15 @@ function StockAlert({ name, detail, minimum, threshold, onHand, image, danger }:
 
 function OverviewMetric({ icon, label, value }: { icon: "chart" | "bag" | "promotions" | "orders" | "wallet"; label: string; value: string }) {
   return <div className="flex items-center gap-2 rounded-btn border border-[#f0e8dc] bg-[#fffdf9] px-3 py-2.5"><span className="grid h-7 w-7 place-items-center rounded-full bg-primary-soft text-primary"><AdminIcon name={icon} size={14} /></span><span className="min-w-0 flex-1 text-[10px] font-semibold text-ink-muted">{label}</span><strong className="tnums text-[11px] font-extrabold text-ink">{value}</strong></div>;
+}
+
+function TenderMetric({ label, orders, value, total, tone }: { label: string; orders: number; value: number; total: number; tone: string }) {
+  const share = total > 0 ? Math.round((value / total) * 100) : 0;
+  return <div>
+    <div className="flex items-center justify-between gap-3 text-xs"><span className="flex items-center gap-2 font-extrabold text-ink"><i className={`h-2.5 w-2.5 rounded-full ${tone}`} />{label}</span><span className="text-right"><strong className="tnums font-extrabold text-ink">{displayPeso(value)}</strong><small className="ml-1.5 text-[10px] text-ink-muted">{share}%</small></span></div>
+    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-secondary"><span className={`block h-full rounded-full ${tone}`} style={{ width: `${share}%` }} /></div>
+    <p className="mt-1 text-[10px] text-ink-muted">{orders} order{orders === 1 ? "" : "s"}</p>
+  </div>;
 }
 
 function SystemStatus({ name, status, warning = false }: { name: string; status: string; warning?: boolean }) {

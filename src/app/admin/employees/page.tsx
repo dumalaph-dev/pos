@@ -11,6 +11,7 @@ import {
   createEmployee,
   createLeaveRequest,
   provisionEmployeeLogin,
+  setEmployeePin,
   saveAttendance,
   savePayroll,
   saveRole,
@@ -250,6 +251,7 @@ function savedMessage(value: string) {
     "leave-approved": "Leave request approved.",
     "leave-rejected": "Leave request rejected.",
     "login-provisioned": "Employee login is ready. Give the employee the common initial password; they will be required to create a new one on first sign-in.",
+    "pin-updated": "Admin approval PIN saved. The raw PIN was not stored in the browser or audit log.",
   };
   return messages[value] ?? "Changes saved.";
 }
@@ -631,7 +633,51 @@ function LeaveEditor({ employees, canWrite }: { employees: EmployeeRecord[]; can
 function EmployeeEditor({ employee, branches, roles, today, canWrite, returnState }: { employee?: EmployeeRecord; branches: BranchRecord[]; roles: RoleRecord[]; today: string; canWrite: boolean; returnState: Record<string, string | undefined> }) {
   const defaultRoleId = employee?.role_id ?? roles.find((role) => role.slug === "cashier")?.id ?? roles[0]?.id ?? "";
   const returnHref = employeeHref({ tab: "list", ...returnState });
-  return <section className="employee-editor-panel"><div className="employee-tab-heading"><div><p className="employee-section-kicker">{employee ? "Edit record" : "Directory action"}</p><h2>{employee ? `Edit ${employee.full_name}` : "Add employee"}</h2><p>{employee ? "Update the employee directory and linked sign-in access." : "Create a staff record now; login access can be linked separately."}</p></div><Link href={returnHref} className="employee-icon-button" aria-label="Close employee form">×</Link></div><form action={employee ? updateEmployee : createEmployee} className="employee-entry-form"><input type="hidden" name="employee_id" value={employee?.id ?? ""} />{Object.entries(returnState).map(([key, value]) => value ? <input key={key} type="hidden" name={`return_${key}`} value={value} /> : null)}<div className="employee-entry-grid"><label><span>Full name</span><input name="full_name" defaultValue={employee?.full_name ?? ""} placeholder="Juan Dela Cruz" required maxLength={120} disabled={!canWrite} /></label><label><span>Email</span><input name="email" type="email" defaultValue={employee?.email ?? ""} placeholder="employee@email.com" disabled={!canWrite} /></label><label><span>Phone</span><input name="phone" defaultValue={employee?.phone ?? ""} placeholder="0917 123 4567" disabled={!canWrite} /></label><label><span>Job title</span><input name="job_title" defaultValue={employee?.job_title ?? ""} placeholder="Cashier" disabled={!canWrite} /></label><label><span>Workspace role</span><select name="role_id" defaultValue={defaultRoleId} disabled={!canWrite}><option value="">No role selected</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label><label><span>Sign-in access</span><select name="access_role" defaultValue={employee?.role ?? "cashier"} disabled={!canWrite}><option value="admin">Admin</option><option value="manager">Manager</option><option value="cashier">Cashier</option></select></label><label><span>Home branch</span><select name="store_id" defaultValue={employee?.store_id ?? ""} disabled={!canWrite}><option value="">All branches / unassigned</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.is_active ? "" : " (inactive)"}</option>)}</select></label><label><span>Date hired</span><input name="hired_on" type="date" defaultValue={employee?.hired_on ?? today} required disabled={!canWrite} /></label><label><span>Schedule start</span><input name="schedule_start" type="time" defaultValue={employee?.schedule_start?.slice(0, 5) ?? "09:00"} required disabled={!canWrite} /></label><label><span>Schedule end</span><input name="schedule_end" type="time" defaultValue={employee?.schedule_end?.slice(0, 5) ?? "17:00"} required disabled={!canWrite} /></label></div><fieldset className="employee-schedule-fieldset"><legend>Working days</legend><div className="employee-day-checkboxes">{DAYS.map(([key, label]) => <label key={key}><input type="checkbox" name="schedule_days" value={key} defaultChecked={employee ? employee.schedule_days.includes(key) : true} disabled={!canWrite} /><span>{label}</span></label>)}</div></fieldset>{employee && <label className="employee-checkbox"><input type="checkbox" name="is_active" defaultChecked={employee.is_active} disabled={!canWrite} /><span>Employee is active</span></label>}<button type="submit" disabled={!canWrite} className="employee-primary-button">{employee ? "Save employee" : "Add employee"}</button></form></section>;
+  return <section className="employee-editor-panel">
+    <div className="employee-tab-heading">
+      <div>
+        <p className="employee-section-kicker">{employee ? "Edit record" : "Directory action"}</p>
+        <h2>{employee ? `Edit ${employee.full_name}` : "Add employee"}</h2>
+        <p>{employee ? "Update the employee directory and linked sign-in access." : "Create a staff record now; login access can be linked separately."}</p>
+      </div>
+      <Link href={returnHref} className="employee-icon-button" aria-label="Close employee form">×</Link>
+    </div>
+    <form action={employee ? updateEmployee : createEmployee} className="employee-entry-form">
+      <input type="hidden" name="employee_id" value={employee?.id ?? ""} />
+      {Object.entries(returnState).map(([key, value]) => value ? <input key={key} type="hidden" name={`return_${key}`} value={value} /> : null)}
+      <div className="employee-entry-grid">
+        <label><span>Full name</span><input name="full_name" defaultValue={employee?.full_name ?? ""} placeholder="Juan Dela Cruz" required maxLength={120} disabled={!canWrite} /></label>
+        <label><span>Email</span><input name="email" type="email" defaultValue={employee?.email ?? ""} placeholder="employee@email.com" disabled={!canWrite} /></label>
+        <label><span>Phone</span><input name="phone" defaultValue={employee?.phone ?? ""} placeholder="0917 123 4567" disabled={!canWrite} /></label>
+        <label><span>Job title</span><input name="job_title" defaultValue={employee?.job_title ?? ""} placeholder="Cashier" disabled={!canWrite} /></label>
+        <label><span>Workspace role</span><select name="role_id" defaultValue={defaultRoleId} disabled={!canWrite}><option value="">No role selected</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label>
+        <label><span>Sign-in access</span><select name="access_role" defaultValue={employee?.role ?? "cashier"} disabled={!canWrite}><option value="admin">Admin</option><option value="manager">Manager</option><option value="cashier">Cashier</option></select></label>
+        <label><span>Home branch</span><select name="store_id" defaultValue={employee?.store_id ?? ""} disabled={!canWrite}><option value="">All branches / unassigned</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.is_active ? "" : " (inactive)"}</option>)}</select></label>
+        <label><span>Date hired</span><input name="hired_on" type="date" defaultValue={employee?.hired_on ?? today} required disabled={!canWrite} /></label>
+        <label><span>Schedule start</span><input name="schedule_start" type="time" defaultValue={employee?.schedule_start?.slice(0, 5) ?? "09:00"} required disabled={!canWrite} /></label>
+        <label><span>Schedule end</span><input name="schedule_end" type="time" defaultValue={employee?.schedule_end?.slice(0, 5) ?? "17:00"} required disabled={!canWrite} /></label>
+      </div>
+      <fieldset className="employee-schedule-fieldset">
+        <legend>Working days</legend>
+        <div className="employee-day-checkboxes">{DAYS.map(([key, label]) => <label key={key}><input type="checkbox" name="schedule_days" value={key} defaultChecked={employee ? employee.schedule_days.includes(key) : true} disabled={!canWrite} /><span>{label}</span></label>)}</div>
+      </fieldset>
+      {employee && <label className="employee-checkbox"><input type="checkbox" name="is_active" defaultChecked={employee.is_active} disabled={!canWrite} /><span>Employee is active</span></label>}
+      <button type="submit" disabled={!canWrite} className="employee-primary-button">{employee ? "Save employee" : "Add employee"}</button>
+    </form>
+    {employee?.profile_id && employee.role === "admin" && (
+      <form action={setEmployeePin} className="employee-entry-form mt-4 border-t border-line pt-5">
+        <input type="hidden" name="employee_id" value={employee.id} />
+        {Object.entries(returnState).map(([key, value]) => value ? <input key={key} type="hidden" name={`return_${key}`} value={value} /> : null)}
+        <div className="employee-entry-form__heading"><div><p className="employee-section-kicker">Sensitive approval</p><h3>Admin approval PIN</h3><p>Required when a cashier applies a custom discount above the organization threshold. Store a 4–6 digit PIN for this admin profile.</p></div></div>
+        <div className="employee-entry-grid">
+          <label><span>New PIN</span><input name="pin" type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{4,6}" minLength={4} maxLength={6} required disabled={!canWrite} /></label>
+          <label><span>Confirm PIN</span><input name="pin_confirmation" type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{4,6}" minLength={4} maxLength={6} required disabled={!canWrite} /></label>
+        </div>
+        <button type="submit" disabled={!canWrite || !employee.is_active} className="employee-primary-button">Save Admin PIN</button>
+      </form>
+    )}
+    {employee && employee.role === "admin" && !employee.profile_id && <p className="employee-muted mt-4 border-t border-line pt-4">Set up this employee&apos;s login before assigning an Admin approval PIN.</p>}
+  </section>;
 }
 
 function PayrollOverview({ breakdown, total, range }: { breakdown: { regular: number; overtime: number; allowances: number; deductions: number }; total: number; range: { start: string; end: string } }) {

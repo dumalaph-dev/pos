@@ -73,6 +73,16 @@ export type SalesCashierRow = { cashierId: string; name: string; orders: number;
 export type SalesBranchRow = { branchId: string; name: string; isActive: boolean; orders: number; netSales: number; discountTotal: number; averageOrder: number; share: number };
 export type SalesDiscountRow = { type: SalesDiscountType; label: string; orders: number; discountTotal: number; netSales: number };
 export type SalesHourCell = { weekday: number; hour: number; orders: number; netSales: number };
+export type SalesReportReconciliation = {
+  rawSaleCandidateCount: number;
+  rawReversalCount: number;
+  netOrderCount: number;
+  rawGrossSales: number;
+  rawNetSales: number;
+  summaryGrossSales: number;
+  summaryNetSales: number;
+  balanced: boolean;
+};
 
 export type SalesReportData = {
   filters: SalesReportFilters;
@@ -88,6 +98,7 @@ export type SalesReportData = {
   discountRows: SalesDiscountRow[];
   hourCells: SalesHourCell[];
   peakHour: SalesHourCell | null;
+  reconciliation: SalesReportReconciliation;
   branchName: string;
   canCompareBranches: boolean;
   queryWarning: boolean;
@@ -377,11 +388,14 @@ export async function loadSalesReport(
   }
   const reversalLookupFailed = reversalLookup.failed;
 
-  const netOrders = selectNetSales(saleCandidates, reversedIds).filter((order) => {
-    if (filters.cashierId && order.cashier_id !== filters.cashierId) return false;
-    if (filters.paymentMethod && order.payment_method !== filters.paymentMethod) return false;
+  const matchesReportFilters = (row: { cashier_id: string; payment_method: SalesPaymentMethod }) => {
+    if (filters.cashierId && row.cashier_id !== filters.cashierId) return false;
+    if (filters.paymentMethod && row.payment_method !== filters.paymentMethod) return false;
     return true;
-  });
+  };
+  const scopedSaleCandidates = saleCandidates.filter(matchesReportFilters);
+  const scopedReversalRows = reversalRows.filter(matchesReportFilters);
+  const netOrders = selectNetSales(saleCandidates, reversedIds).filter(matchesReportFilters);
   const netOrderIds = new Set(netOrders.map((order) => order.id));
 
   let itemsQuery = supabase
@@ -476,9 +490,7 @@ export async function loadSalesReport(
   // Reversals are reported as recorded in this window — that is when the money
   // left the drawer — while the net figures above exclude the underlying sale
   // whenever it was reversed.
-  for (const reversal of reversalRows) {
-    if (filters.cashierId && reversal.cashier_id !== filters.cashierId) continue;
-    if (filters.paymentMethod && reversal.payment_method !== filters.paymentMethod) continue;
+  for (const reversal of scopedReversalRows) {
     const total = num(reversal.total);
     if (reversal.status === "voided") {
       totals.voidCount += 1;
@@ -579,6 +591,24 @@ export async function loadSalesReport(
     null,
   );
 
+  const rawGrossSales = netOrders.reduce((sum, order) => sum + num(order.subtotal), 0);
+  const rawNetSales = netOrders.reduce((sum, order) => sum + num(order.total), 0);
+  const truncated = allOrders.length >= ORDER_ROW_LIMIT || orderItems.length >= ITEM_ROW_LIMIT;
+  const reconciliation: SalesReportReconciliation = {
+    rawSaleCandidateCount: scopedSaleCandidates.length,
+    rawReversalCount: scopedReversalRows.length,
+    netOrderCount: netOrders.length,
+    rawGrossSales,
+    rawNetSales,
+    summaryGrossSales: totals.grossSales,
+    summaryNetSales: totals.netSales,
+    balanced: !truncated
+      && !reversalLookupFailed
+      && totals.orderCount === netOrders.length
+      && totals.grossSales === rawGrossSales
+      && totals.netSales === rawNetSales,
+  };
+
   const cashiers = Array.from(new Set([...cashierMap.keys()]))
     .map((id) => ({ id, name: staffById.get(id) ?? "Unknown" }))
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -600,11 +630,12 @@ export async function loadSalesReport(
     discountRows,
     hourCells,
     peakHour,
+    reconciliation,
     branchName: branchId ? branches.find((branch) => branch.id === branchId)?.name ?? "Selected branch" : "All branches",
     canCompareBranches: !branchId && branches.length > 1,
     queryWarning: Boolean(
       branchesResult.error || ordersResult.error || staffResult.error || productsResult.error || categoriesResult.error || itemsResult.error || reversalLookupFailed,
     ),
-    truncated: allOrders.length >= ORDER_ROW_LIMIT || orderItems.length >= ITEM_ROW_LIMIT,
+    truncated,
   };
 }

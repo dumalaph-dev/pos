@@ -6,13 +6,14 @@
  * Orders are written to the local outbox FIRST (offline.ts), then synced via
  * the idempotent `place_order` RPC — the UI never awaits the network.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { formatPeso, weightLineTotal } from "@/lib/money";
 import { formatStockQuantity, stockMovementDelta, stockStatus } from "@/lib/inventory";
 import { isProductImageUrl } from "@/lib/product-images";
 import { readAdminBranding } from "@/lib/admin/branding";
+import { DEFAULT_ADMIN_DISCOUNT_SETTINGS, readAdminDiscountSettings } from "@/lib/admin/discount-settings";
 import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminMenu } from "@/components/admin/AdminMenu";
 import { SignOutButton } from "@/components/SignOutButton";
@@ -23,6 +24,7 @@ import OrderHistory from "@/components/pos/OrderHistory";
 import ShiftPanel, { useActiveShift } from "@/components/pos/ShiftPanel";
 import {
   buildOrderNo,
+  enqueueAuditLog,
   enqueueOrder,
   flushAuditOutbox,
   flushOutbox,
@@ -76,6 +78,7 @@ type DiscountState = {
   pct: number;
   name: string;
   id: string;
+  approval_id?: string | null;
 };
 const NO_DISCOUNT: DiscountState = { type: "none", pct: 0, name: "", id: "" };
 
@@ -138,6 +141,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readBoolean(value: unknown, fallback: boolean) {
   return typeof value === "boolean" ? value : fallback;
+}
+
+function normalizeAdminDiscountThreshold(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.min(100, Math.max(0, value))
+    : DEFAULT_ADMIN_DISCOUNT_SETTINGS.adminPinThresholdPercent;
 }
 
 function readNumber(value: unknown, fallback: number, min: number, max: number) {
@@ -385,6 +394,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
       brand_logo_url: nextProfile.brand_logo_url ?? null,
       full_name: nextProfile.full_name,
       role: nextProfile.role,
+      discount_threshold: normalizeAdminDiscountThreshold(nextProfile.discount_threshold),
       device_id: nextProfile.device_id ?? null,
       pos_config: nextConfig,
     };
@@ -504,6 +514,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
           const store = readStorePosConfig(effectiveStore);
           const organizationRelation = Array.isArray(prof.organizations) ? prof.organizations[0] : prof.organizations;
           const branding = readAdminBranding(isRecord(organizationRelation) ? organizationRelation.settings : undefined);
+          const discountSettings = readAdminDiscountSettings(isRecord(organizationRelation) ? organizationRelation.settings : undefined);
           if (effectiveStoreId && !databasePrinterSettings) {
             const { data: terminal } = await supabase
               .from("devices")
@@ -526,6 +537,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
             brand_logo_url: branding.logoUrl,
             full_name: (prof.full_name as string | null) ?? null,
             role: (prof.role as ProfileData["role"]) ?? null,
+            discount_threshold: discountSettings.adminPinThresholdPercent,
             device_id: databaseDeviceId,
             pos_config: store.posConfig,
           };
@@ -753,6 +765,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
   const discountAmount =
     discount.type === "none" ? 0 : round((subtotal * discount.pct) / 100);
   const total = subtotal - discountAmount;
+  const adminPinThreshold = normalizeAdminDiscountThreshold(profile?.discount_threshold);
   const vatAmount = posConfig.showVat && posConfig.vatRate > 0
     ? round((total * posConfig.vatRate) / (1 + posConfig.vatRate))
     : 0;
@@ -863,6 +876,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     const now = new Date();
     const orderNo = buildOrderNo(branchPrefix(profile.store_name));
     const isScPwd = discount.type === "senior" || discount.type === "pwd";
+    const discountRequiresApproval = discount.type === "custom" && discount.pct > adminPinThreshold;
 
     // VAT split (P3): prices are VAT-inclusive; SC/PWD sales are VAT-exempt.
     const vatExempt = isScPwd;
@@ -878,8 +892,9 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
       weight_kg: l.weightKg ?? null,
       line_total: l.lineTotal,
     }));
+    const localUuid = crypto.randomUUID();
     const p_order = {
-      local_uuid: crypto.randomUUID(),
+      local_uuid: localUuid,
       org_id: profile.org_id,
       store_id: profile.store_id,
       device_id: profile.device_id ?? "",
@@ -890,6 +905,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
       subtotal,
       discount_type: discount.type,
       discount_amount: discountAmount,
+      discount_approval_id: discount.approval_id ?? null,
       discount_ref: isScPwd ? `${discount.name} — ${discount.id}` : null,
       vatable_sale: vatableSale,
       vat_amount: orderVatAmount,
@@ -915,6 +931,26 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     } catch {
       setToast({ msg: "Couldn't save order on this device — please try again." });
       return;
+    }
+    if (discount.type !== "none") {
+      try {
+        await enqueueAuditLog({
+          org_id: profile.org_id,
+          store_id: profile.store_id,
+          actor_id: profile.id,
+          action: "discount.applied",
+          entity: "orders",
+          after: {
+            local_uuid: localUuid,
+            discount_type: discount.type,
+            discount_amount: discountAmount,
+            discount_percent: discount.pct,
+            admin_pin_required: discountRequiresApproval,
+          },
+        });
+      } catch {
+        setToast({ msg: "Sale saved; the discount audit could not be queued for sync." });
+      }
     }
     setStockByProductId((previous) => {
       const next = { ...previous };
@@ -1502,6 +1538,9 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
           <DiscountModal
             value={discount}
             onChange={setDiscount}
+            supabase={supabase}
+            offline={offline}
+            adminPinThreshold={adminPinThreshold}
             note={note}
             onNoteChange={setNote}
             enableOrderNotes={posConfig.enableOrderNotes}
@@ -1830,6 +1869,9 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
         <DiscountModal
           value={discount}
           onChange={setDiscount}
+          supabase={supabase}
+          offline={offline}
+          adminPinThreshold={adminPinThreshold}
           note={note}
           onNoteChange={setNote}
           enableOrderNotes={posConfig.enableOrderNotes}
@@ -1978,6 +2020,9 @@ function KeypadModal({
 function DiscountModal({
   value,
   onChange,
+  supabase,
+  offline,
+  adminPinThreshold,
   note,
   onNoteChange,
   enableOrderNotes,
@@ -1985,6 +2030,9 @@ function DiscountModal({
 }: {
   value: DiscountState;
   onChange: (d: DiscountState) => void;
+  supabase: ReturnType<typeof createClient>;
+  offline: boolean;
+  adminPinThreshold: number;
   note: string;
   onNoteChange: (note: string) => void;
   enableOrderNotes: boolean;
@@ -1994,17 +2042,64 @@ function DiscountModal({
   const [name, setName] = useState(value.name);
   const [id, setId] = useState(value.id);
   const [pct, setPct] = useState(value.pct > 0 ? String(value.pct) : "");
+  const [approvalOpen, setApprovalOpen] = useState(false);
+  const [adminPin, setAdminPin] = useState("");
+  const [approvalError, setApprovalError] = useState("");
+  const [approvalBusy, setApprovalBusy] = useState(false);
   const isScPwd = selType === "senior" || selType === "pwd";
+  const normalizedThreshold = normalizeAdminDiscountThreshold(adminPinThreshold);
+  const customPct = Math.min(100, Math.max(0, Number(pct) || 0));
+  const nextDiscount: DiscountState = {
+    type: selType,
+    pct: selType === "custom" ? customPct : isScPwd ? 20 : 0,
+    name: name.trim(),
+    id: id.trim(),
+  };
 
-  const commit = () => {
+  const commit = async () => {
     if (isScPwd && (!name.trim() || !id.trim())) return;
-    onChange({
-      type: selType,
-      pct: selType === "custom" ? Math.min(100, Math.max(0, Number(pct) || 0)) : selType === "senior" || selType === "pwd" ? 20 : 0,
-      name: name.trim(),
-      id: id.trim(),
-    });
+    if (selType === "custom" && customPct > normalizedThreshold) {
+      setApprovalError(offline ? "Admin approval is unavailable while the till is offline." : "");
+      setApprovalOpen(true);
+      return;
+    }
+    onChange(nextDiscount);
     onClose();
+  };
+
+  const approveCustomDiscount = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!/^[0-9]{4,6}$/.test(adminPin)) {
+      setApprovalError("Enter the active 4–6 digit Admin PIN.");
+      return;
+    }
+    setApprovalBusy(true);
+    setApprovalError("");
+    try {
+      const { data, error } = await supabase.rpc("verify_admin_pin", { p_pin: adminPin });
+      if (error) {
+        setApprovalError("Admin PIN approval could not be checked. Try again when the till is online.");
+        return;
+      }
+      if (typeof data !== "string" || !data) {
+        setApprovalError("That Admin PIN was not approved.");
+        return;
+      }
+      onChange({ ...nextDiscount, approval_id: data });
+      onClose();
+    } catch {
+      setApprovalError("Admin PIN approval could not be checked. Try again when the till is online.");
+    } finally {
+      setAdminPin("");
+      setApprovalBusy(false);
+    }
+  };
+
+  const selectType = (type: DiscountState["type"]) => {
+    setSelType(type);
+    setApprovalOpen(false);
+    setApprovalError("");
+    setAdminPin("");
   };
 
   return (
@@ -2022,7 +2117,8 @@ function DiscountModal({
           ).map(([t, label]) => (
             <button
               key={t}
-              onClick={() => setSelType(t)}
+              type="button"
+              onClick={() => selectType(t)}
               className={`rounded-btn py-3 text-sm font-bold ${selType === t ? "bg-primary text-primary-fg" : "bg-secondary text-ink"}`}
             >
               {label}
@@ -2057,7 +2153,48 @@ function DiscountModal({
               placeholder="Percent (0–100)"
               className="w-full rounded-btn border border-line-strong bg-raised px-3 py-2 text-sm text-ink outline-none focus:border-primary"
             />
-            <p className="mt-1 text-xs text-ink-muted">Admin-PIN threshold comes with backoffice settings (P6).</p>
+            <p className="mt-1 text-xs text-ink-muted">Custom discounts above {normalizedThreshold}% require an active Admin PIN; above-threshold approval is unavailable offline.</p>
+          </div>
+        )}
+
+        {approvalOpen && selType === "custom" && (
+          <div className="mt-3 rounded-btn border border-primary/30 bg-primary-soft p-3">
+            <p className="text-sm font-extrabold text-ink">Admin approval required</p>
+            <p className="mt-1 text-xs leading-5 text-ink-muted">This {customPct}% custom discount is above the {normalizedThreshold}% organization threshold.</p>
+            {offline ? (
+              <>
+                <p className="mt-2 text-xs font-semibold text-danger">{approvalError || "Reconnect the till to request an Admin PIN approval."}</p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => { setApprovalOpen(false); setApprovalError(""); }} className="rounded-btn bg-secondary py-3 font-bold text-ink">Back</button>
+                  <button type="button" onClick={onClose} className="rounded-btn bg-accent py-3 font-bold text-accent-fg">Close</button>
+                </div>
+              </>
+            ) : (
+              <form onSubmit={approveCustomDiscount} className="mt-3 space-y-2">
+                <label className="block text-xs font-bold uppercase tracking-wide text-ink-muted">
+                  Active Admin PIN
+                  <input
+                    value={adminPin}
+                    onChange={(event) => { setAdminPin(event.target.value.replace(/[^0-9]/g, "").slice(0, 6)); setApprovalError(""); }}
+                    type="password"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    pattern="[0-9]{4,6}"
+                    minLength={4}
+                    maxLength={6}
+                    autoFocus
+                    className="mt-1 w-full rounded-btn border border-line-strong bg-raised px-3 py-2 text-base tracking-[0.3em] text-ink outline-none focus:border-primary"
+                    aria-describedby="discount-admin-pin-help"
+                  />
+                </label>
+                <p id="discount-admin-pin-help" className="text-xs leading-5 text-ink-muted">The PIN is checked server-side and is never stored in the browser or audit log.</p>
+                {approvalError && <p className="text-xs font-semibold text-danger" role="alert">{approvalError}</p>}
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => { setApprovalOpen(false); setApprovalError(""); setAdminPin(""); }} className="rounded-btn bg-secondary py-3 font-bold text-ink">Back</button>
+                  <button type="submit" disabled={approvalBusy || !/^[0-9]{4,6}$/.test(adminPin)} className="rounded-btn bg-accent py-3 font-bold text-accent-fg disabled:opacity-40">{approvalBusy ? "Checking…" : "Approve & apply"}</button>
+                </div>
+              </form>
+            )}
           </div>
         )}
 
@@ -2072,18 +2209,19 @@ function DiscountModal({
           />
         </label>}
 
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <button onClick={() => { onChange(NO_DISCOUNT); onClose(); }} className="rounded-btn bg-secondary py-3 font-bold text-ink">
+        {!approvalOpen && <div className="mt-4 grid grid-cols-2 gap-2">
+          <button type="button" onClick={() => { onChange(NO_DISCOUNT); onClose(); }} className="rounded-btn bg-secondary py-3 font-bold text-ink">
             Remove
           </button>
           <button
-            onClick={commit}
+            type="button"
+            onClick={() => { void commit(); }}
             disabled={isScPwd && (!name.trim() || !id.trim())}
             className="rounded-btn bg-accent py-3 font-bold text-accent-fg disabled:opacity-40"
           >
             Apply
           </button>
-        </div>
+        </div>}
       </div>
     </div>
   );
