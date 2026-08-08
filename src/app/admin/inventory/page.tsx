@@ -5,6 +5,7 @@ import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { BranchProductSelector } from "@/components/admin/BranchProductSelector";
+import { MultiProductModal } from "@/components/admin/MultiProductModal";
 import { YieldEntryForm } from "@/components/admin/YieldEntryForm";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
@@ -602,6 +603,7 @@ export default async function InventoryPage({
               <Link href={buildInventoryHref({ ...baseHref, page: 1, movement: "yield_out" }) + "#stock-movement"} className="inventory-button gap-1.5 rounded-btn bg-secondary text-[11px] font-extrabold text-primary transition hover:bg-secondary-hover"><AdminIcon name="upload" size={14} />Stock out<AdminIcon name="chevron" size={12} /></Link>
               <Link href="/admin/inventory?yield=1#yield-entry" className="inventory-button gap-1.5 rounded-btn bg-secondary text-[11px] font-extrabold text-primary transition hover:bg-secondary-hover"><AdminIcon name="inventory" size={14} />Yield entry<AdminIcon name="chevron" size={12} /></Link>
               <Link href="/admin/inventory/variance" className="inventory-button gap-1.5 rounded-btn bg-secondary text-[11px] font-extrabold text-primary transition hover:bg-secondary-hover"><AdminIcon name="chart" size={14} />End-of-day count<AdminIcon name="chevron" size={12} /></Link>
+              <MultiProductModal key={defaultBranch} storeId={defaultBranch} branchName={currentBranchName} branches={activeBranches} categories={categories} canWrite={canWrite} orgName={branding.brandName} triggerLabel="Starter catalog" triggerClassName="inventory-button gap-1.5 rounded-btn bg-secondary text-[11px] font-extrabold text-primary transition hover:bg-secondary-hover" />
               <details className="relative">
                 <summary className="inventory-button list-none cursor-pointer gap-1.5 rounded-btn bg-primary text-[11px] font-extrabold text-primary-fg"><AdminIcon name="plus" size={14} />Add item<AdminIcon name="chevron" size={12} /></summary>
                 <div className="absolute right-0 top-full z-20 mt-1 grid min-w-40 gap-1 rounded-card border border-line bg-surface p-1.5 shadow-[var(--shadow-pop)]">

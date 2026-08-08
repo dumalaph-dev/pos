@@ -11,6 +11,7 @@ import {
 } from "@/lib/admin/image-storage";
 import { createClient } from "@/lib/supabase/server";
 import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
+import { getCatalogPreset } from "@/lib/catalog-presets";
 
 type PricingMode = "fixed" | "per_kg";
 
@@ -254,6 +255,7 @@ function refreshCatalog() {
   revalidatePath("/admin/catalog");
   revalidatePath("/admin/inventory");
   revalidatePath("/admin");
+  revalidatePath("/admin/pos");
   revalidatePath("/pos");
 }
 
@@ -427,6 +429,204 @@ export async function createProduct(formData: FormData) {
     redirect(`/admin/inventory?saved=product${result.usedLegacySchema ? "&legacy=1" : ""}`);
   }
   redirect(`/products?saved=product${result.usedLegacySchema ? "&legacy=1" : ""}`);
+}
+
+type BundleDraft = {
+  templateId: string;
+  price: number;
+  openingStock: number;
+  minStock: number;
+};
+
+function readBundleDrafts(value: string): BundleDraft[] | null {
+  if (!value) return null;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return null;
+  }
+
+  if (!Array.isArray(parsed) || parsed.length > 100) return null;
+
+  const drafts: BundleDraft[] = [];
+  for (const item of parsed) {
+    if (!item || typeof item !== "object") return null;
+    const record = item as Record<string, unknown>;
+    const templateId = typeof record.templateId === "string" ? record.templateId.trim() : "";
+    const price = Number(record.price);
+    const openingStock = Number(record.openingStock);
+    const minStock = Number(record.minStock);
+    if (
+      !templateId ||
+      !Number.isFinite(price) ||
+      price < 0 ||
+      price > 100_000_000 ||
+      !Number.isFinite(openingStock) ||
+      openingStock < 0 ||
+      openingStock > 1_000_000 ||
+      !Number.isFinite(minStock) ||
+      minStock < 0 ||
+      minStock > 1_000_000
+    ) {
+      return null;
+    }
+    drafts.push({ templateId, price, openingStock, minStock });
+  }
+
+  return drafts;
+}
+
+export type ProductBundleResult = {
+  ok: boolean;
+  message: string;
+  createdCount: number;
+  skippedCount: number;
+};
+
+export async function createProductBundle(formData: FormData): Promise<ProductBundleResult> {
+  const { supabase, orgId, selectedBranchId } = await requireAdmin();
+  const storeId = readText(formData, "store_id");
+  const presetId = readText(formData, "preset_id");
+  const preset = getCatalogPreset(presetId);
+  const drafts = readBundleDrafts(readText(formData, "products"));
+  const useStockPhotos = readBoolean(formData, "use_stock_photos");
+
+  if (!storeId || !(await validStore(supabase, orgId, storeId, selectedBranchId, true))) {
+    return { ok: false, message: "Choose a valid active branch before adding starter products.", createdCount: 0, skippedCount: 0 };
+  }
+  if (!preset) {
+    return { ok: false, message: "That starter catalog is no longer available. Refresh and try again.", createdCount: 0, skippedCount: 0 };
+  }
+  if (!drafts || drafts.length === 0) {
+    return { ok: false, message: "Select at least one product to add.", createdCount: 0, skippedCount: 0 };
+  }
+
+  const templateById = new Map(preset.products.map((product) => [product.id, product]));
+  const selectedTemplates = [];
+  const selectedIds = new Set<string>();
+  for (const draft of drafts) {
+    const template = templateById.get(draft.templateId);
+    if (!template || selectedIds.has(draft.templateId)) {
+      return { ok: false, message: "One or more selected products are invalid. Refresh and try again.", createdCount: 0, skippedCount: 0 };
+    }
+    selectedIds.add(draft.templateId);
+    selectedTemplates.push({ template, draft });
+  }
+
+  const { data: existingCategories, error: categoriesError } = await supabase
+    .from("categories")
+    .select("id, name")
+    .eq("org_id", orgId)
+    .eq("store_id", storeId);
+
+  if (categoriesError) {
+    return { ok: false, message: categoriesError.message || "The starter categories could not be loaded.", createdCount: 0, skippedCount: 0 };
+  }
+
+  const categoryIds = new Map<string, string>(
+    (existingCategories ?? []).map((category) => [String(category.name).trim().toLowerCase(), category.id]),
+  );
+  const categoryNames = new Set(selectedTemplates.map(({ template }) => template.category.toLowerCase()));
+
+  for (const category of preset.categories) {
+    const normalizedName = category.name.toLowerCase();
+    if (!categoryNames.has(normalizedName) || categoryIds.has(normalizedName)) continue;
+    const { data, error } = await supabase
+      .from("categories")
+      .insert({
+        org_id: orgId,
+        store_id: storeId,
+        name: category.name,
+        icon: category.icon,
+        sort_order: preset.categories.indexOf(category),
+        is_active: true,
+      })
+      .select("id, name")
+      .single();
+    if (error || !data) {
+      return { ok: false, message: error?.message || "The " + category.name + " category could not be created.", createdCount: 0, skippedCount: 0 };
+    }
+    categoryIds.set(normalizedName, data.id);
+  }
+
+  const { data: existingProducts, error: productsError } = await supabase
+    .from("products")
+    .select("name")
+    .eq("org_id", orgId)
+    .eq("store_id", storeId);
+
+  if (productsError) {
+    return { ok: false, message: productsError.message || "The existing product catalog could not be checked.", createdCount: 0, skippedCount: 0 };
+  }
+
+  const existingProductNames = new Set((existingProducts ?? []).map((product) => String(product.name).trim().toLowerCase()));
+  const newProducts = selectedTemplates.filter(({ template }) => !existingProductNames.has(template.name.toLowerCase()));
+  const skippedCount = selectedTemplates.length - newProducts.length;
+
+  if (!newProducts.length) {
+    refreshCatalog();
+    return {
+      ok: true,
+      message: "All " + skippedCount + " selected products already exist in this branch.",
+      createdCount: 0,
+      skippedCount,
+    };
+  }
+
+  const records = newProducts.map(({ template, draft }, index) => ({
+    id: crypto.randomUUID(),
+    org_id: orgId,
+    store_id: storeId,
+    category_id: categoryIds.get(template.category.toLowerCase()) ?? null,
+    name: template.name,
+    pricing_mode: template.pricingMode,
+    price: toCentavos(draft.price),
+    unit: template.unit,
+    track_stock: true,
+    image_url: useStockPhotos ? template.imageUrl : null,
+    is_active: true,
+    sort_order: index,
+    sku: null,
+    barcode: null,
+    cost_price: null,
+    min_stock: draft.minStock,
+    supplier_id: null,
+  }));
+
+  const result = await insertProductRecords(supabase, records);
+  if (result.error) {
+    return { ok: false, message: result.error.message || "The starter products could not be added.", createdCount: 0, skippedCount };
+  }
+
+  const stockWarnings: string[] = [];
+  for (const product of newProducts.map(({ template, draft }, index) => ({ ...records[index], template, draft }))) {
+    if (product.draft.openingStock <= 0) continue;
+    const { error } = await supabase.rpc("record_stock_movement", {
+      p_store_id: storeId,
+      p_product_id: product.id,
+      p_type: "receive",
+      p_qty: product.draft.openingStock,
+      p_unit_cost: null,
+      p_reason: "Opening stock - " + preset.label,
+    });
+    if (error) stockWarnings.push(product.template.name);
+  }
+
+  refreshCatalog();
+  const categoryCount = new Set(newProducts.map(({ template }) => template.category)).size;
+  const stockMessage = stockWarnings.length
+    ? " Opening stock still needs a quick review for " + stockWarnings.length + " item" + (stockWarnings.length === 1 ? "" : "s") + "."
+    : "";
+  return {
+    ok: true,
+    message: "Added " + newProducts.length + " product" + (newProducts.length === 1 ? "" : "s") + " and " + categoryCount + " categor" + (categoryCount === 1 ? "y" : "ies") + " to this branch." +
+      (skippedCount ? " Skipped " + skippedCount + " existing item" + (skippedCount === 1 ? "" : "s") + "." : "") +
+      stockMessage,
+    createdCount: newProducts.length,
+    skippedCount,
+  };
 }
 
 export async function updateProduct(formData: FormData) {

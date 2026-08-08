@@ -6,6 +6,8 @@ import { useEffect, useMemo, useRef, useState, useTransition, type CSSProperties
 import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
+import { MultiProductModal } from "@/components/admin/MultiProductModal";
+import { CATALOG_PRESETS, getCatalogPreset } from "@/lib/catalog-presets";
 import { createDeviceSettings, savePosSettings, updateDeviceSettings } from "@/app/admin/pos/actions";
 import { buildReceipt } from "@/lib/receipt";
 import { getPrinter, type PrinterSettings } from "@/lib/printer";
@@ -626,13 +628,23 @@ export default function PosSettingsScreen({
             {activeTab === "hardware" ? <HardwarePanel devices={devices} deviceBranches={deviceBranchOptions} currentStoreId={storeId} canWrite={canWrite} deviceTest={deviceTest} onTestDevice={testDevice} /> : null}
           </section>
 
-          <AppearancePanel
-            config={config}
-            choosePalette={choosePalette}
-            updateConfig={updateConfig}
-            customPaletteOpen={customPaletteOpen}
-            setCustomPaletteOpen={setCustomPaletteOpen}
-          />
+          <div className="pos-settings-sidebar">
+            <CategoryPresetPanel
+              organizationName={organizationName}
+              branchName={branchName}
+              storeId={storeId}
+              canWrite={canWrite}
+              branchOptions={branchOptions}
+              categories={categories}
+            />
+            <AppearancePanel
+              config={config}
+              choosePalette={choosePalette}
+              updateConfig={updateConfig}
+              customPaletteOpen={customPaletteOpen}
+              setCustomPaletteOpen={setCustomPaletteOpen}
+            />
+          </div>
         </div>
       </div>
 
@@ -794,6 +806,87 @@ function PreviewWindow({
         </aside>
       </div>
     </div>
+  );
+}
+
+function CategoryPresetPanel({
+  organizationName,
+  branchName,
+  storeId,
+  canWrite,
+  branchOptions,
+  categories,
+}: {
+  organizationName: string;
+  branchName: string;
+  storeId: string;
+  canWrite: boolean;
+  branchOptions: Array<{ id: string; name: string }>;
+  categories: AdminPosCategory[];
+}) {
+  const [presetId, setPresetId] = useState("lechon-house");
+  const selectedPreset = getCatalogPreset(presetId) ?? CATALOG_PRESETS[0];
+  const existingCategoryNames = new Set(categories.map((category) => category.name.trim().toLowerCase()));
+  const matchedCategoryCount = selectedPreset.categories.filter((category) => existingCategoryNames.has(category.name.toLowerCase())).length;
+  const catalogBranches = branchOptions.length ? branchOptions : storeId ? [{ id: storeId, name: branchName }] : [];
+
+  return (
+    <section className="pos-category-card" aria-labelledby="pos-category-heading">
+      <div className="pos-category-card__heading">
+        <div>
+          <p className="pos-category-card__eyebrow">Menu starter</p>
+          <h2 id="pos-category-heading">Categories &amp; products</h2>
+          <p>Start with a ready-made business menu, then keep only what this branch sells.</p>
+        </div>
+        <span className="pos-category-card__count">{selectedPreset.products.length} items</span>
+      </div>
+
+      <div className="pos-category-preset-grid" role="radiogroup" aria-label="Business category presets">
+        {CATALOG_PRESETS.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            role="radio"
+            aria-checked={preset.id === selectedPreset.id}
+            className={"pos-category-preset " + (preset.id === selectedPreset.id ? "is-selected" : "")}
+            onClick={() => setPresetId(preset.id)}
+          >
+            <span className="pos-category-preset__icon"><MiniIcon name={preset.icon} size={17} /></span>
+            <span><strong>{preset.label}</strong><small>{preset.categories.length} categories</small></span>
+          </button>
+        ))}
+      </div>
+
+      <div className="pos-category-card__selection">
+        <span className="pos-category-card__selection-image"><Image src={selectedPreset.products[0]?.imageUrl || IMAGE_FALLBACK} alt="" fill sizes="54px" /></span>
+        <div className="pos-category-card__selection-copy">
+          <p>Selected starter</p>
+          <h3>{selectedPreset.label}</h3>
+          <span>{selectedPreset.description}</span>
+          <div className="pos-category-card__tags">
+            <b>{selectedPreset.products.length} products</b>
+            <b>{selectedPreset.categories.length} categories</b>
+            <b>Stock photos included</b>
+          </div>
+        </div>
+      </div>
+
+      <div className="pos-category-card__footer">
+        <p>{matchedCategoryCount ? matchedCategoryCount + " category" + (matchedCategoryCount === 1 ? "" : "ies") + " already match this branch." : "Categories and products are added only when you confirm the starter menu."}</p>
+        <MultiProductModal
+          key={selectedPreset.id + "-" + storeId}
+          storeId={storeId}
+          branchName={branchName}
+          branches={catalogBranches}
+          categories={categories}
+          canWrite={canWrite}
+          orgName={organizationName}
+          initialPresetId={selectedPreset.id}
+          triggerLabel="Add starter products"
+          triggerClassName="pos-category-card__cta"
+        />
+      </div>
+    </section>
   );
 }
 
