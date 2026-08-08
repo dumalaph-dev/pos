@@ -54,8 +54,7 @@ Set it to `true` only for the controlled checkout test after the preflight
 passes. The app never sends raw card details to its
 server. Configure the PayMongo webhook URL as
 `<your-site-origin>/api/paymongo/webhook` and subscribe to these events:
-`payment.paid`, `payment.failed`, `payment_intent.succeeded`,
-`subscription.activated`,
+`payment.paid`, `payment.failed`, `subscription.activated`,
 `subscription.past_due`, `subscription.unpaid`, `subscription.updated`,
 `subscription.invoice.paid`, and `subscription.invoice.payment_failed`.
 

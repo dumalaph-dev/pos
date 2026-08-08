@@ -17,7 +17,6 @@ const supabaseServiceRoleKey = value("SUPABASE_SERVICE_ROLE_KEY");
 const requiredEvents = [
   "payment.paid",
   "payment.failed",
-  "payment_intent.succeeded",
   "subscription.activated",
   "subscription.past_due",
   "subscription.unpaid",
