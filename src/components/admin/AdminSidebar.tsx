@@ -19,7 +19,7 @@ type NavItem = {
   adminOnly?: boolean;
 };
 
-type AdminNavGroupId = "overview" | "operations" | "catalog" | "growth" | "insights" | "administration";
+type AdminNavGroupId = "operations" | "catalog" | "growth" | "insights" | "team";
 
 type AdminNavGroup = {
   id: AdminNavGroupId;
@@ -33,15 +33,12 @@ export type AdminSidebarConnection = {
   lastSyncedLabel: string | null;
 };
 
+const adminNavPrimaryItems: NavItem[] = [
+  { label: "Dashboard", href: "/admin", icon: "dashboard", active: "overview" },
+  { label: "Shifts & Z-readings", href: "/admin/shifts", icon: "history", active: "shifts" },
+];
+
 const adminNavGroups: AdminNavGroup[] = [
-  {
-    id: "overview",
-    label: "Overview",
-    icon: "dashboard",
-    items: [
-      { label: "Dashboard", href: "/admin", icon: "dashboard", active: "overview" },
-    ],
-  },
   {
     id: "operations",
     label: "Store operations",
@@ -50,7 +47,6 @@ const adminNavGroups: AdminNavGroup[] = [
       { label: "POS", href: "/admin/pos", icon: "pos", active: "pos" },
       { label: "Orders", href: "/admin/orders", icon: "orders", active: "orders" },
       { label: "Calendar", href: "/admin/calendar", icon: "calendar", active: "calendar" },
-      { label: "Shifts & Z-readings", href: "/admin/shifts", icon: "history", active: "shifts" },
     ],
   },
   {
@@ -83,17 +79,20 @@ const adminNavGroups: AdminNavGroup[] = [
     ],
   },
   {
-    id: "administration",
-    label: "Team & settings",
+    id: "team",
+    label: "Team",
     icon: "settings",
     items: [
       { label: "Employees", href: "/admin/employees", icon: "employees", active: "employees" },
       { label: "Branches", href: "/admin/branches", icon: "branches", active: "branches" },
-      { label: "Billing & plan", href: "/admin/billing", icon: "wallet", active: "billing", adminOnly: true },
       { label: "Audit log", href: "/admin/audit", icon: "history", active: "audit" },
-      { label: "Settings", href: "/admin/settings", icon: "settings", active: "settings" },
     ],
   },
+];
+
+const adminNavSecondaryItems: NavItem[] = [
+  { label: "Billing & Plan", href: "/admin/billing", icon: "wallet", active: "billing", adminOnly: true },
+  { label: "Settings", href: "/admin/settings", icon: "settings", active: "settings" },
 ];
 
 function activeSectionForPath(pathname: string | null): AdminSection {
@@ -128,8 +127,8 @@ function isVisibleNavItem(item: NavItem, canManageBranches: boolean) {
   return (!item.adminOnly || canManageBranches) && (item.active !== "branches" || canManageBranches);
 }
 
-function AdminNavItem({ item, active }: { item: NavItem; active: AdminSection }) {
-  const className = `admin-nav__item ${item.active === active ? "is-active" : ""}`;
+function AdminNavItem({ item, active, standalone = false }: { item: NavItem; active: AdminSection; standalone?: boolean }) {
+  const className = `admin-nav__item ${standalone ? "admin-nav__item--standalone" : ""} ${item.active === active ? "is-active" : ""}`;
 
   if (!item.href) {
     return (
@@ -167,13 +166,17 @@ export function AdminSidebar({ branding, branchName, active: activeOverride, con
         <AdminBranchSwitcher branchName={branchName} branches={branches} selectedBranchId={selectedBranchId} canSwitch={canSwitchBranches} canManageBranches={canManageBranches} />
 
         <nav aria-label="Admin navigation" className="admin-nav">
+          {adminNavPrimaryItems.map((item) => (
+            <AdminNavItem key={item.label} item={item} active={active} standalone />
+          ))}
+
           {adminNavGroups.map((group) => {
             const items = group.items.filter((item) => isVisibleNavItem(item, canManageBranches));
             const hasActiveItem = items.some((item) => item.active === active);
             if (!items.length) return null;
 
             return (
-              <details key={`${group.id}-${hasActiveItem}`} className={`admin-nav__section ${hasActiveItem ? "is-active" : ""}`} open={hasActiveItem || group.id === "overview"}>
+              <details key={`${group.id}-${hasActiveItem}`} className={`admin-nav__section ${hasActiveItem ? "is-active" : ""}`} open={hasActiveItem}>
                 <summary className="admin-nav__section-toggle">
                   <span className="admin-nav__section-icon"><AdminIcon name={group.icon} size={15} /></span>
                   <span>{group.label}</span>
@@ -186,6 +189,10 @@ export function AdminSidebar({ branding, branchName, active: activeOverride, con
               </details>
             );
           })}
+
+          {adminNavSecondaryItems.map((item) => (
+            <AdminNavItem key={item.label} item={item} active={active} standalone />
+          ))}
         </nav>
 
         <section className="admin-quick-actions" aria-labelledby="quick-actions-heading">
