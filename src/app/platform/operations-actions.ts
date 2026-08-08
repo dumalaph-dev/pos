@@ -246,6 +246,10 @@ async function writePlatformAudit(admin: PlatformAdminClient, input: {
 
 function revalidatePlatformPages() {
   revalidatePath("/platform");
+  revalidatePath("/platform/plans");
+  revalidatePath("/platform/policies");
+  revalidatePath("/platform/users");
+  revalidatePath("/platform/operations");
   revalidatePath("/admin");
   revalidatePath("/admin/billing");
   revalidatePath("/account");

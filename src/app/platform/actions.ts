@@ -227,6 +227,10 @@ function migrationError(detail: string): PlatformActionState {
 function revalidatePlatformPages() {
   revalidatePath("/");
   revalidatePath("/platform");
+  revalidatePath("/platform/plans");
+  revalidatePath("/platform/policies");
+  revalidatePath("/platform/users");
+  revalidatePath("/platform/operations");
   revalidatePath("/admin/billing");
   revalidatePath("/signup");
 }
