@@ -381,6 +381,8 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
   // P8: the till this terminal is ringing into. Cached on the device so an
   // offline sale still carries its shift through the outbox.
   const { shift: activeShift, setShift: setActiveShift } = useActiveShift(profile, offline);
+  const shiftButtonLabel = activeShift ? "Shift active" : "Start shift";
+  const shiftButtonAriaLabel = activeShift ? "View active shift" : "Start a shift";
 
   const applyProfile = useCallback((nextProfile: ProfileData | OfflineProfileSnapshot, nextPrinterSettings?: PrinterSettings) => {
     const nextConfig = normalizePosRuntimeConfig(nextProfile.pos_config);
@@ -1111,7 +1113,6 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
   }
 
   if (!loading) {
-    const brandName = storeName.replace(/\s+lechon\s+house$/i, "").trim() || storeName;
     const displayName = profile?.full_name?.split(/\s+/)[0] ?? "Admin";
     const initials = displayName.slice(0, 1).toUpperCase();
     const discountLabel =
@@ -1199,12 +1200,14 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
               </span>
             </button>
           ) : (
-            <div className="pos-topbar__expanded" id="pos-header-nav">
+            <nav className="pos-topbar__expanded" id="pos-header-nav" aria-label="POS navigation">
               <div className="pos-topbar__brand">
                 <div className="brand-lockup" aria-label={storeName}>
-                  <div className="brand-lockup__arc">{brandName.toUpperCase()}</div>
-                  <AdminBrandLogo logoUrl={profile?.brand_logo_url} className="brand-lockup__mark" iconSize={38} label="Brand logo" />
-                  <div className="brand-lockup__name">DUMALA<br />POS</div>
+                  <AdminBrandLogo logoUrl={profile?.brand_logo_url} className="brand-lockup__mark" iconSize={30} label="Brand logo" />
+                  <span className="brand-lockup__copy">
+                    <strong>{storeName}</strong>
+                    <small>POS TERMINAL</small>
+                  </span>
                 </div>
               </div>
 
@@ -1229,24 +1232,36 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                 </button>
               </div>
 
-              <div className="pos-toolbar">
-                <button type="button" className="pos-tool" onClick={() => searchInputRef.current?.focus()}>
+              <div className="pos-toolbar" role="group" aria-label="POS tools">
+                <button type="button" className="pos-tool" onClick={() => searchInputRef.current?.focus()} aria-label="Search products" title="Search products">
                   <Icon name="search" size={24} />
                   <span>Search</span>
                 </button>
-                <button type="button" className={"pos-tool" + (trayOpen ? " is-active" : "")} onClick={() => setTrayOpen((value) => !value)}>
+                <button
+                  type="button"
+                  className={"pos-tool" + (trayOpen ? " is-active" : "")}
+                  onClick={() => setTrayOpen((value) => !value)}
+                  aria-label={parked.length > 0 ? `View ${parked.length} held orders` : "View held orders"}
+                  title="Held orders"
+                >
                   <span className="pos-tool__icon-wrap"><Icon name="hold" size={24} />{parked.length > 0 && <b>{parked.length}</b>}</span>
                   <span>Hold</span>
                 </button>
-                <button type="button" className="pos-tool" onClick={() => setOrderHistoryOpen(true)}>
+                <button type="button" className="pos-tool" onClick={() => setOrderHistoryOpen(true)} aria-label="View receipts" title="Receipts">
                   <Icon name="receipt" size={24} />
                   <span>Receipts</span>
                 </button>
-                <button type="button" className={"pos-tool" + (activeShift ? " is-active" : "")} onClick={() => setShiftOpen(true)}>
+                <button
+                  type="button"
+                  className={"pos-tool pos-tool--shift" + (activeShift ? " is-active" : "")}
+                  onClick={() => setShiftOpen(true)}
+                  aria-label={shiftButtonAriaLabel}
+                  title={shiftButtonAriaLabel}
+                >
                   <Icon name="cash" size={24} />
-                  <span>{activeShift ? "Till open" : "Open till"}</span>
+                  <span>{shiftButtonLabel}</span>
                 </button>
-                <button type="button" className="pos-tool" onClick={() => setSettingsOpen(true)}>
+                <button type="button" className="pos-tool" onClick={() => setSettingsOpen(true)} aria-label="More POS options" title="More POS options">
                   <Icon name="more" size={24} />
                   <span>More</span>
                 </button>
@@ -1320,7 +1335,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                   ))}
                 </div>
               )}
-            </div>
+            </nav>
           )}
         </header>
 
@@ -1661,9 +1676,10 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
         <button
           onClick={() => setShiftOpen(true)}
           className="rounded-btn bg-secondary px-3 py-1.5 text-sm font-semibold text-ink"
-          title="Shift and till"
+          title={shiftButtonAriaLabel}
+          aria-label={shiftButtonAriaLabel}
         >
-          {activeShift ? "Till open" : "Open till"}
+          {shiftButtonLabel}
         </button>
         <button
           onClick={() => setSettingsOpen(true)}
