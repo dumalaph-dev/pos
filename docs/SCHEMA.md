@@ -370,7 +370,7 @@ RLS and security-definer business functions as well as the route UI.
 
 ## 9. Open schema questions
 
-- **Void/refund modeling:** linked reversing order vs. status column with an append-only history table? (Leaning: a `order_events` append-only table so `orders.status` is a projection, keeping BIR-CAS path open — PRD §8.)
+- **Void/refund modeling (implemented):** linked reversing orders remain the immutable accounting truth. POS voids use `order_action_approvals`, `verify_void_pin`, and `record_pos_order_void`; the approval is one-use, expires after five minutes, is branch-scoped for managers, and writes both approval and reversal audit events. Refunds continue through the admin order-action path.
 - **VAT computation:** store computed at sale time (snapshot) — confirm SC/PWD VAT-exempt split formula with the owner.
 - **Product images:** Supabase Storage bucket per org; cache in the PWA for offline tiles.
-- **`profiles.pin_hash`:** reserved for a future server-managed staff PIN; the current offline unlock stores only a salted device-local PBKDF2 verifier in IndexedDB (see ARCHITECTURE security).
+- **`profiles.pin_hash`:** used for server-managed manager/admin approval PINs. The offline unlock still stores only a salted device-local PBKDF2 verifier in IndexedDB (see ARCHITECTURE security).

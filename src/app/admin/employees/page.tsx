@@ -251,7 +251,7 @@ function savedMessage(value: string) {
     "leave-approved": "Leave request approved.",
     "leave-rejected": "Leave request rejected.",
     "login-provisioned": "Employee login is ready. Give the employee the common initial password; they will be required to create a new one on first sign-in.",
-    "pin-updated": "Admin approval PIN saved. The raw PIN was not stored in the browser or audit log.",
+    "pin-updated": "Approval PIN saved. The raw PIN was not stored in the browser or audit log.",
   };
   return messages[value] ?? "Changes saved.";
 }
@@ -664,19 +664,19 @@ function EmployeeEditor({ employee, branches, roles, today, canWrite, returnStat
       {employee && <label className="employee-checkbox"><input type="checkbox" name="is_active" defaultChecked={employee.is_active} disabled={!canWrite} /><span>Employee is active</span></label>}
       <button type="submit" disabled={!canWrite} className="employee-primary-button">{employee ? "Save employee" : "Add employee"}</button>
     </form>
-    {employee?.profile_id && employee.role === "admin" && (
+    {employee?.profile_id && (employee.role === "admin" || employee.role === "manager") && (
       <form action={setEmployeePin} className="employee-entry-form mt-4 border-t border-line pt-5">
         <input type="hidden" name="employee_id" value={employee.id} />
         {Object.entries(returnState).map(([key, value]) => value ? <input key={key} type="hidden" name={`return_${key}`} value={value} /> : null)}
-        <div className="employee-entry-form__heading"><div><p className="employee-section-kicker">Sensitive approval</p><h3>Admin approval PIN</h3><p>Required when a cashier applies a custom discount above the organization threshold. Store a 4–6 digit PIN for this admin profile.</p></div></div>
+        <div className="employee-entry-form__heading"><div><p className="employee-section-kicker">Sensitive approval</p><h3>{employee.role === "manager" ? "Manager approval PIN" : "Admin approval PIN"}</h3><p>Used for sensitive POS actions such as completed-order voids. Store a 4–6 digit PIN for this {employee.role} profile.</p></div></div>
         <div className="employee-entry-grid">
           <label><span>New PIN</span><input name="pin" type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{4,6}" minLength={4} maxLength={6} required disabled={!canWrite} /></label>
           <label><span>Confirm PIN</span><input name="pin_confirmation" type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{4,6}" minLength={4} maxLength={6} required disabled={!canWrite} /></label>
         </div>
-        <button type="submit" disabled={!canWrite || !employee.is_active} className="employee-primary-button">Save Admin PIN</button>
+        <button type="submit" disabled={!canWrite || !employee.is_active} className="employee-primary-button">Save Approval PIN</button>
       </form>
     )}
-    {employee && employee.role === "admin" && !employee.profile_id && <p className="employee-muted mt-4 border-t border-line pt-4">Set up this employee&apos;s login before assigning an Admin approval PIN.</p>}
+    {employee && (employee.role === "admin" || employee.role === "manager") && !employee.profile_id && <p className="employee-muted mt-4 border-t border-line pt-4">Set up this employee&apos;s login before assigning an approval PIN.</p>}
   </section>;
 }
 

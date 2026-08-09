@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "pos:void:validate": "npx supabase db query --linked --file scripts/pos-void-smoke.sql --output json",
     "paymongo:preflight": "node scripts/paymongo-preflight.mjs",
     "pwa:icons": "node scripts/generate-pwa-icons.mjs",
     "printer:validate": "node --experimental-strip-types scripts/validate-printer.mjs",
