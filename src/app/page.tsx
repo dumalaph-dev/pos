@@ -434,7 +434,8 @@ function HeroVisual() {
       data-lp-reveal="scale"
       style={{ "--lp-delay": "260ms" } as React.CSSProperties}
     >
-      <div className="lp-stage relative overflow-hidden rounded-[36px] border border-[#e6dfcd] bg-[linear-gradient(155deg,#fdfbf6_0%,#f6efe0_52%,#efe6d2_100%)] px-5 pb-6 pt-9 shadow-[0_26px_60px_rgba(23,58,43,0.13)] sm:px-9 sm:pb-8 sm:pt-11">
+      <div className="origin-[35%_50%] lg:scale-[1.15] xl:scale-[1.4]">
+        <div className="lp-stage relative overflow-hidden rounded-[36px] border border-[#e6dfcd] bg-[linear-gradient(155deg,#fdfbf6_0%,#f6efe0_52%,#efe6d2_100%)] px-5 pb-6 pt-9 shadow-[0_26px_60px_rgba(23,58,43,0.13)] sm:px-9 sm:pb-8 sm:pt-11">
         <div className="lp-dots pointer-events-none absolute inset-0 text-[#173a2b] opacity-[0.07]" />
         <div className="lp-spin-slow pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full border border-dashed border-[#c39756]/45" />
         <div className="pointer-events-none absolute -right-8 top-10 h-44 w-44 rounded-full border border-[#c39756]/30" />
@@ -463,9 +464,9 @@ function HeroVisual() {
             className="h-auto w-full drop-shadow-[0_28px_44px_rgba(18,43,32,0.26)]"
           />
         </div>
-      </div>
+        </div>
 
-      <div className="lp-chip lp-float-slow absolute -left-2 top-[26%] flex items-center gap-3 rounded-2xl border border-[#e2ddd0] bg-[#fffdf8]/95 px-3.5 py-2.5 shadow-[0_16px_34px_rgba(23,58,43,0.14)] backdrop-blur-sm sm:-left-5">
+        <div className="lp-chip lp-float-slow absolute -left-2 top-[26%] flex items-center gap-3 rounded-2xl border border-[#e2ddd0] bg-[#fffdf8]/95 px-3.5 py-2.5 shadow-[0_16px_34px_rgba(23,58,43,0.14)] backdrop-blur-sm sm:-left-5">
         <span className="lp-dot-pulse grid h-9 w-9 place-items-center rounded-xl bg-[#15382a] text-[#c39756]">
           <svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6">
             <path d="M3.5 13.5V8.9M8 13.5V5.7m4.5 7.8V2.5" />
@@ -475,9 +476,9 @@ function HeroVisual() {
           <span className="block text-[9px] font-bold uppercase tracking-[0.14em] text-[#8b968b]">Today</span>
           <strong className="block text-[13px] font-black tabular-nums text-[#173a2b]">₱28,650.00</strong>
         </span>
-      </div>
+        </div>
 
-      <div className="lp-chip absolute -bottom-4 right-0 flex items-center gap-3 rounded-2xl border border-[#e2ddd0] bg-[#fffdf8]/95 px-3.5 py-2.5 shadow-[0_16px_34px_rgba(23,58,43,0.14)] backdrop-blur-sm sm:right-4">
+        <div className="lp-chip absolute -bottom-4 right-0 flex items-center gap-3 rounded-2xl border border-[#e2ddd0] bg-[#fffdf8]/95 px-3.5 py-2.5 shadow-[0_16px_34px_rgba(23,58,43,0.14)] backdrop-blur-sm sm:right-4">
         <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#dfe7dc] text-[#16392b]">
           <svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2">
             <path d="m3.2 8.3 3 3 6.6-6.7" />
@@ -487,6 +488,7 @@ function HeroVisual() {
           <strong className="block text-[13px] font-black text-[#173a2b]">Sale complete</strong>
           <span className="block text-[10px] font-semibold text-[#798478]">Order slip printed</span>
         </span>
+        </div>
       </div>
     </div>
   );
@@ -544,7 +546,7 @@ export default async function LandingPage() {
               style={{ "--lp-delay": "60ms" } as React.CSSProperties}
             >
               <span className="lp-dot-pulse h-1.5 w-1.5 rounded-full bg-[#d1a05b]" />
-              For Philippine cafes, restaurants & food businesses · 14-day free trial
+              For Philippine cafes, restaurants &amp; food businesses
             </p>
 
             <h1
@@ -566,7 +568,6 @@ export default async function LandingPage() {
                 </svg>
               </span>
               <br />
-              Clearer decisions.
             </h1>
 
             <p
