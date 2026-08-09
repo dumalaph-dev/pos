@@ -17,9 +17,10 @@ export const metadata: Metadata = {
   description: "A simple POS workspace for owners, branches, teams, and busy counters.",
   icons: {
     icon: [
-      { url: "/badge.png", sizes: "250x225", type: "image/png" },
+      { url: "/icon-192x192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512x512.png", sizes: "512x512", type: "image/png" },
     ],
-    apple: "/badge.png",
+    apple: "/icon-192x192.png",
   },
   appleWebApp: {
     capable: true,

@@ -7,6 +7,21 @@ type InstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
 
+// `beforeinstallprompt` can be dispatched before React hydrates the root
+// layout. Keep the event at module scope so the prompt is not lost during the
+// initial document load, while the component listener below still handles
+// browsers that dispatch it later.
+let capturedInstallPrompt: InstallPromptEvent | null = null;
+
+function captureInstallPrompt(event: Event) {
+  event.preventDefault();
+  capturedInstallPrompt = event as InstallPromptEvent;
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeinstallprompt", captureInstallPrompt);
+}
+
 function isStandalone() {
   const iosStandalone = (navigator as Navigator & { standalone?: boolean }).standalone === true;
   return window.matchMedia("(display-mode: standalone)").matches || iosStandalone;
@@ -29,14 +44,16 @@ export default function PWAInstallPrompt() {
     setIos(!standalone && isIos());
 
     const onBeforeInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setDeferredPrompt(event as InstallPromptEvent);
+      captureInstallPrompt(event);
+      setDeferredPrompt(capturedInstallPrompt);
     };
     const onInstalled = () => {
       setInstalled(true);
+      capturedInstallPrompt = null;
       setDeferredPrompt(null);
     };
 
+    if (capturedInstallPrompt) setDeferredPrompt(capturedInstallPrompt);
     window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
     window.addEventListener("appinstalled", onInstalled);
     return () => {
@@ -48,10 +65,15 @@ export default function PWAInstallPrompt() {
   if (installed || (!deferredPrompt && !ios)) return null;
 
   async function install() {
-    if (!deferredPrompt) return;
-    await deferredPrompt.prompt();
-    await deferredPrompt.userChoice;
-    setDeferredPrompt(null);
+    const prompt = deferredPrompt;
+    if (!prompt) return;
+    try {
+      await prompt.prompt();
+      await prompt.userChoice;
+    } finally {
+      if (capturedInstallPrompt === prompt) capturedInstallPrompt = null;
+      setDeferredPrompt(null);
+    }
   }
 
   return (
