@@ -10,9 +10,9 @@ import { DEFAULT_BILLING_VARIANTS, DEFAULT_MONTHLY_PRICE_CENTAVOS, type BillingC
 import { readPlatformBillingCatalog } from "@/lib/platform-operations-server";
 
 export const metadata: Metadata = {
-  title: "Dumala POS | Modernize your business, one sale at a time",
+  title: "Dumala POS | POS for Cafes, Restaurants & Food Businesses",
   description:
-    "A practical POS and business workspace for Philippine stores: quick tablet checkout for cashiers, clear records for owners, offline selling, and one view across branches. Try the full product free for 14 days.",
+    "A practical POS and business workspace for Philippine cafes, restaurants, coffee shops, bakeshops, and other food businesses: faster counter checkout, clear owner records, offline selling, and one view across branches. Try the full product free for 14 days.",
 };
 
 type FeatureIconName = "bag" | "chart" | "people" | "bolt";
@@ -57,9 +57,9 @@ const detailPanels: Array<{
 }> = [
   {
     mark: "01",
-    title: "A counter that feels current",
+    title: "A counter that keeps service moving",
     description:
-      "The sell screen puts products first, with large targets for the taps cashiers make most. Weight items open a keypad; everything else stays quick to reach.",
+      "The sell screen puts your most-used menu items first, with large targets for quick taps. Weight items open a keypad; everything else stays easy to reach when the line is moving.",
     specs: [
       "Fixed-price and by-weight items on one ticket",
       "Senior and PWD discounts with ID capture",
@@ -69,7 +69,7 @@ const detailPanels: Array<{
   },
   {
     mark: "02",
-    title: "Records that survive the outage",
+    title: "Records that survive a weak connection",
     description:
       "Dumala writes each order to the device before it needs the network. If the connection drops, the counter keeps working and the records catch up later.",
     specs: [
@@ -112,9 +112,9 @@ const workspaceModules: Array<{
   title: string;
   description: string;
 }> = [
-  { icon: "counter", title: "POS counter", description: "Ring up orders, hold tickets, and print order slips." },
+  { icon: "counter", title: "POS counter", description: "Ring up coffee, meals, pastries, and other orders." },
   { icon: "receipt", title: "Orders", description: "Keep one searchable record of every sale." },
-  { icon: "box", title: "Products", description: "Keep prices, categories, units, and visibility together." },
+  { icon: "box", title: "Products", description: "Keep menu items, prices, categories, units, and visibility together." },
   { icon: "layers", title: "Inventory", description: "Track movement and catch low counts earlier." },
   { icon: "user", title: "Customers", description: "Keep a live directory for the people you serve." },
   { icon: "truck", title: "Suppliers", description: "Keep purchasing contacts close to the products they provide." },
@@ -147,7 +147,7 @@ const roles: Array<{ label: string; title: string; points: string[] }> = [
 const syncSteps: Array<{ step: string; title: string; text: string }> = [
   {
     step: "Save first",
-    title: "The sale lands on the tablet",
+    title: "The sale lands on the POS",
     text: "Every order is written to the device before it needs the network, so the total does not hang while a cashier is serving someone.",
   },
   {
@@ -163,7 +163,7 @@ const syncSteps: Array<{ step: string; title: string; text: string }> = [
 ];
 
 const pricingIncludes = [
-  "The tablet POS and the owner dashboard",
+  "The complete counter POS and owner workspace",
   "Selling through internet interruptions with automatic sync",
   "Unlimited branches, staff, and products",
   "ESC/POS order-slip printing over Bluetooth, Wi-Fi, or USB",
@@ -183,6 +183,11 @@ function buildFaqs(premiumPrice: string, annualVariants: BillingVariant[]): Arra
     question: "How does the free trial work?",
     answer:
       "You get 14 days to use the current product with your own business, branch, products, and team setup. No card is required to start. When the trial ends, choose whether to continue on monthly or an available annual option.",
+  },
+  {
+    question: "What kinds of businesses is Dumala built for?",
+    answer:
+      "Dumala is designed for owner-led cafes, restaurants, coffee shops, bakeshops, takeout counters, and other food businesses. It is especially well suited to counter-service teams that need fast checkout, clear stock and cash records, and a practical view of the business behind each sale.",
   },
   {
     question: "What does it cost after the trial?",
@@ -233,7 +238,7 @@ function formatDiscount(value: number) {
 
 const marqueeItems = [
   "A practical POS",
-  "Tablet for the counter",
+  "For cafes, restaurants & bakeshops",
   "Workspace for owners",
   "14-day free trial",
   "Multi-branch ready",
@@ -539,7 +544,7 @@ export default async function LandingPage() {
               style={{ "--lp-delay": "60ms" } as React.CSSProperties}
             >
               <span className="lp-dot-pulse h-1.5 w-1.5 rounded-full bg-[#d1a05b]" />
-              Modern POS for Philippine stores · 14-day free trial
+              For Philippine cafes, restaurants & food businesses · 14-day free trial
             </p>
 
             <h1
@@ -568,8 +573,9 @@ export default async function LandingPage() {
               className="lp-in mt-7 max-w-[490px] text-base leading-7 text-[#526157] sm:text-lg sm:leading-8"
               style={{ "--lp-delay": "260ms" } as React.CSSProperties}
             >
-              Dumala gives your cashiers a focused tablet POS and gives you a practical workspace for everything behind the
-              sale. Records save on the device first, branch activity stays together, and your team sees only what they need.
+              Built for owners of cafes, restaurants, coffee shops, bakeshops, and other counter-service businesses, Dumala
+              gives your cashiers a focused POS and gives you a practical workspace for everything behind each sale. Records
+              save on the device first, branch activity stays together, and your team sees only what they need.
             </p>
 
             <div className="lp-in mt-8 flex flex-wrap items-center gap-5" style={{ "--lp-delay": "340ms" } as React.CSSProperties}>
@@ -623,12 +629,13 @@ export default async function LandingPage() {
       <section id="features" className="lp-sec--features scroll-mt-24 py-14 sm:py-20">
         <div className="mx-auto max-w-[1380px] px-6 sm:px-10 lg:px-16">
           <div className="mx-auto max-w-2xl text-center" data-lp-reveal>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">A more modern workday</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">Built for food &amp; beverage owners</p>
             <h2 className="mt-3 text-3xl font-black tracking-[-0.05em] text-[#173a2b] sm:text-[2.6rem] sm:leading-[1.05]">
-              Modern operations without adding more admin.
+              Run the counter. See the business behind it.
             </h2>
             <p className="mt-4 text-sm leading-6 text-[#657168] sm:text-base">
-              Bring sales, stock, cash, and team access into one place without asking the counter to learn a backoffice.
+              Whether you serve coffee, meals, pastries, or takeout, Dumala brings sales, stock, cash, and team access into one
+              place without asking the counter to learn a backoffice.
             </p>
           </div>
 
@@ -667,13 +674,13 @@ export default async function LandingPage() {
       <section id="interfaces" className="lp-sec--interfaces scroll-mt-24 border-y border-[#e6dfd0] py-14 sm:py-20">
         <div className="mx-auto max-w-[1280px] px-6 sm:px-10 lg:px-16">
           <div className="mx-auto max-w-2xl text-center" data-lp-reveal>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">Modernize both sides</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">Built for the counter and the owner</p>
             <h2 className="mt-3 text-3xl font-black tracking-[-0.05em] text-[#173a2b] sm:text-[2.6rem] sm:leading-[1.05]">
               One business. Two focused workspaces.
             </h2>
             <p className="mt-4 text-sm leading-6 text-[#657168] sm:text-base">
-              Cashiers get a clear sell screen. Owners get the context behind each sale. Both use the same records and are
-              included in every plan.
+              For cafes, restaurants, coffee shops, bakeshops, and other counter-service businesses, cashiers get a clear sell
+              screen while owners get the context behind each sale. Both use the same records and are included in every plan.
             </p>
           </div>
 
@@ -693,8 +700,8 @@ export default async function LandingPage() {
                 </div>
                 <h3 className="mt-5 text-xl font-black tracking-[-0.03em] text-[#173a2b]">The counter workspace</h3>
                 <p className="mt-3 text-sm leading-6 text-[#68736a]">
-                  A full-screen sell interface sized for a tablet on the counter. Products first, large tap targets, and a
-                  running order panel the customer can follow. It stays usable when the internet is unavailable.
+                  Designed for busy counter service: products first, large tap targets, and a running order panel the customer
+                  can follow. It stays usable when the internet is unavailable.
                 </p>
                 <div className="mt-6">
                   <PosTabletMock />
@@ -747,8 +754,8 @@ export default async function LandingPage() {
                 </div>
                 <h3 className="mt-5 text-xl font-black tracking-[-0.03em] text-[#173a2b]">The owner workspace</h3>
                 <p className="mt-3 text-sm leading-6 text-[#68736a]">
-                  A separate workspace for the person running the business. Watch the day across every branch, manage the
-                  catalog and stock, and review the numbers without standing at the till.
+                  Whether you run one location or several cafe, restaurant, or bakeshop branches, watch the day across every location,
+                  manage the catalog and stock, and review the numbers without standing at the till.
                 </p>
                 <div className="mt-6">
                   <AdminDashboardMock />
@@ -781,7 +788,7 @@ export default async function LandingPage() {
                 </span>
                 <div>
                   <h3 className="text-base font-black tracking-[-0.02em] text-[#173a2b]">The records stay connected</h3>
-                  <p className="mt-1 text-sm leading-5 text-[#68736a]">One account, one set of records — less reconciliation at the end of the day.</p>
+                  <p className="mt-1 text-sm leading-5 text-[#68736a]">One owner account, one set of records — less reconciliation at the end of the day.</p>
                 </div>
               </div>
               <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[#cfe0d2] bg-[#eef3ea] px-3.5 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#2f5c43]">
@@ -792,7 +799,7 @@ export default async function LandingPage() {
 
             <ol className="mt-6 grid gap-3 border-t border-[#eae3d5] pt-6 sm:grid-cols-3">
               {[
-                { n: "1", t: "Rung up on the tablet", d: "A cashier completes the sale and the order slip prints." },
+                { n: "1", t: "Rung up on the POS", d: "A cashier completes the sale and the order slip prints." },
                 { n: "2", t: "Held on the device", d: "If the connection is down it queues locally and keeps selling." },
                 { n: "3", t: "In your dashboard", d: "The moment it syncs, the sale lands in your reports and stock." },
               ].map((item) => (
@@ -824,9 +831,9 @@ export default async function LandingPage() {
               Keep selling when the connection does not cooperate.
             </h2>
             <p className="mt-5 max-w-xl text-sm leading-7 text-[#cad6ca] sm:text-base">
-              A cloud-only POS can make a weak connection the cashier&apos;s problem. Dumala saves the sale on the device
-              first, then syncs it when the connection returns. A dead router or slow mobile signal does not have to stop
-              the queue.
+              A cloud-only POS can make a weak connection the cashier&apos;s problem. Dumala saves the sale on the device first,
+              then syncs it when the connection returns. A dead router or slow mobile signal does not have to stop the queue
+              at your cafe, restaurant, coffee shop, or bakeshop.
             </p>
           </div>
 
@@ -853,12 +860,12 @@ export default async function LandingPage() {
             <div className="max-w-xl">
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">Practical details</p>
               <h2 className="mt-3 text-3xl font-black tracking-[-0.05em] text-[#173a2b] sm:text-[2.6rem] sm:leading-[1.05]">
-                The small details that make a real counter work.
+                The details that matter when the line gets long.
               </h2>
             </div>
             <p className="max-w-sm text-sm leading-6 text-[#657168]">
-              Peso pricing, weighed goods, discounts, printers, and a network that comes and goes. We focus on the work that
-              happens between the first order and the end-of-day count.
+              From a morning coffee rush to weekend takeout, we focus on the work between the first order and the end-of-day
+              count: peso pricing, weighed goods, discounts, printers, and a network that comes and goes.
             </p>
           </div>
 
@@ -891,14 +898,14 @@ export default async function LandingPage() {
         <div className="mx-auto max-w-[1380px] px-6 sm:px-10 lg:px-16">
           <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between" data-lp-reveal="left">
             <div className="max-w-xl">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">One working record</p>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">For owners who need the whole picture</p>
               <h2 className="mt-3 text-3xl font-black tracking-[-0.05em] text-[#173a2b] sm:text-[2.6rem] sm:leading-[1.05]">
-                Fewer places to reconcile at the end of the day.
+                Run today&apos;s counter. Understand the business behind it.
               </h2>
             </div>
             <p className="max-w-sm text-sm leading-6 text-[#657168]">
-              Sales, stock, expenses, shifts, and access share the same branch context, so the counter, the stockroom, and
-              the owner are working from the same record.
+              From one location to multiple branches, sales, stock, expenses, shifts, and access share the same branch context.
+              Your counter, stockroom, and owner workspace stay on the same record.
             </p>
           </div>
 
@@ -924,13 +931,13 @@ export default async function LandingPage() {
 
         <div className="relative mx-auto grid max-w-[1280px] gap-12 lg:grid-cols-[0.82fr_1.18fr] lg:items-center lg:gap-20">
           <div data-lp-reveal="left">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#d1a05b]">Start where you are</p>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#d1a05b]">Start with the business you already run</p>
             <h2 className="mt-4 max-w-lg text-4xl font-black leading-[1.02] tracking-[-0.05em] sm:text-5xl">
               Modernize without a disruptive rollout.
             </h2>
             <p className="mt-5 max-w-md text-sm leading-7 text-[#cad6ca] sm:text-base">
-              Start with one branch and one device. Add staff, inventory, and more locations as the team settles in. You do
-              not have to change everything on day one.
+              Start with one cafe, restaurant, coffee shop, or bakeshop branch. Add staff, inventory, and more locations as the
+              team settles in. You do not have to change everything on day one.
             </p>
             <Link
               href="/signup"
@@ -941,8 +948,8 @@ export default async function LandingPage() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
-            {[
-              { number: "01", title: "Set up your workspace", text: "Create your business account and first branch in a few focused steps." },
+              {[
+                { number: "01", title: "Set up your business workspace", text: "Create your business account and first branch in a few focused steps." },
               { number: "02", title: "Give your team access", text: "Share a unique branch link with managers and cashiers, each with their own login." },
               { number: "03", title: "Run the day", text: "Sell, watch the numbers, and make decisions with less manual work." },
             ].map((step, index) => (
@@ -963,13 +970,13 @@ export default async function LandingPage() {
       <section id="for-teams" className="lp-sec--teams scroll-mt-24 border-b border-[#e6dfd0] py-14 sm:py-20">
         <div className="mx-auto max-w-[1280px] px-6 sm:px-10 lg:px-16">
           <div className="mx-auto max-w-2xl text-center" data-lp-reveal>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">For the team</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">For owners, managers &amp; cashiers</p>
             <h2 className="mt-3 text-3xl font-black tracking-[-0.05em] text-[#173a2b] sm:text-[2.6rem] sm:leading-[1.05]">
               Clear access. Less clutter.
             </h2>
             <p className="mt-4 text-sm leading-6 text-[#657168] sm:text-base">
-              Access follows the role and the branch, so cashiers can focus on serving customers and managers can review
-              their day without asking the owner for every number.
+              Whether your team is serving coffee, meals, pastries, or takeout, access follows the role and the branch. Cashiers
+              can focus on customers while managers review their day without asking the owner for every number.
             </p>
           </div>
 
@@ -1005,7 +1012,8 @@ export default async function LandingPage() {
               Try the full workspace. Choose how you pay.
             </h2>
             <p className="mt-4 text-sm leading-6 text-[#657168] sm:text-base">
-              No tier maze and no feature guessing. Every business gets the same complete product. {annualVariants.length > 0 ? "Choose monthly billing or the annual terms currently enabled in Plans & Pricing." : "Monthly billing is the current public option."}
+              No tier maze and no feature guessing. Every cafe, restaurant, coffee shop, bakeshop, and other food business gets
+              the same complete product. {annualVariants.length > 0 ? "Choose monthly billing or the annual terms currently enabled in Plans & Pricing." : "Monthly billing is the current public option."}
             </p>
           </div>
 
@@ -1057,10 +1065,10 @@ export default async function LandingPage() {
               <div className="max-w-2xl">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b18448]">Ready when you are</p>
                 <h2 className="mt-3 text-3xl font-black tracking-[-0.045em] text-[#173a2b] sm:text-4xl">
-                  Give your business a more modern way to run.
+                  Give your food business a calmer way to run.
                 </h2>
                 <p className="mt-3 max-w-xl text-sm leading-6 text-[#657168] sm:text-base">
-                  Take the full product for 14 days, free and without a card. After that, {annualVariants.length > 0 ? "choose monthly or an available annual term" : "continue with monthly billing"} for the same tablet POS and owner workspace.
+                  Take the full product for 14 days, free and without a card. After that, {annualVariants.length > 0 ? "choose monthly or an available annual term" : "continue with monthly billing"} for the same complete counter POS and owner workspace.
                 </p>
               </div>
               <div className="shrink-0">
@@ -1086,7 +1094,8 @@ export default async function LandingPage() {
                 <Image src="/brand-lockup.png" alt="Dumala POS" width={1535} height={451} sizes="160px" className="h-11 w-auto" />
               </Link>
               <p className="mt-4 text-xs leading-5 text-[#708076]">
-                A practical tablet POS and owner workspace for Philippine counters and peso pricing. Free for 14 days, then
+                A practical POS and owner workspace for Philippine cafes, restaurants, coffee shops, bakeshops, and other food
+                businesses. Free for 14 days, then
                 {annualVariants.length > 0 ? "choose monthly or annual billing" : "continue with monthly billing"} for the same complete product.
               </p>
             </div>
@@ -1096,7 +1105,7 @@ export default async function LandingPage() {
                 <p className="font-black uppercase tracking-[0.16em] text-[#173a2b]">Product</p>
                 <ul className="mt-3 grid gap-2 text-[#708076]">
                   <li><a href="#features" className="lp-navlink hover:text-[#b18448]">Features</a></li>
-                  <li><a href="#interfaces" className="lp-navlink hover:text-[#b18448]">Tablet POS &amp; dashboard</a></li>
+                  <li><a href="#interfaces" className="lp-navlink hover:text-[#b18448]">Counter POS &amp; dashboard</a></li>
                   <li><a href="#offline" className="lp-navlink hover:text-[#b18448]">Offline first</a></li>
                   <li><a href="#details" className="lp-navlink hover:text-[#b18448]">In detail</a></li>
                   <li><a href="#workspace" className="lp-navlink hover:text-[#b18448]">Workspace</a></li>
