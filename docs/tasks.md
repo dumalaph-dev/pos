@@ -7,7 +7,7 @@
 
 ## Current project status
 
-**Last updated:** 2026-08-08
+**Last updated:** 2026-08-09
 
 This section is the current source of truth for delivered work and the next gate. Keep it updated in the same change as every feature, migration, QA pass, commit, or deployment.
 
@@ -19,15 +19,24 @@ This section is the current source of truth for delivered work and the next gate
 | Printing | In progress (6/7) | Physical LAN printer slip validation |
 | Multi-branch | Complete | Production second-branch sign-off |
 | Customer display | Not started | Build `/display` pairing and live cart mirror |
-| Admin backoffice | In progress (manager QA, employee save-flow, price-audit hardening, tender mix, settings scope map, local phone QA, hosted migrations, and hosted Admin PIN SQL QA verified) | Authenticated hosted employee-login/UI pass |
+| Admin backoffice | Complete (9/9 checklist items; hosted Employee ID login and forced-password-change QA passed 2026-08-09) | Maintain regression coverage |
 | Inventory workflow | Complete | Maintain regression coverage |
 | Inventory reporting and exports | Authenticated admin and manager QA passed | Reconciliation against broader live data |
-| Shifts, till, and Z-readings | Implemented; hosted authenticated RPC QA passed 2026-08-08 and rollback left counts unchanged | Reconcile reports against a real hosted sales day |
+| Shifts, till, and Z-readings | Implemented; hosted authenticated RPC and manual open/close QA passed; shift-label collision fixed and verified 2026-08-09 | Reconcile reports against a real hosted sales day |
 | Store-owner onboarding and guidance | Implemented | Verify first-run and mobile behavior on the deployed app |
-| Admin workspace themes | Merged in PR #2 | Verify Classic/Light/Dark/Retro on the live main deployment |
+| Admin workspace themes | Live main deployment previews verified 2026-08-09 | Maintain regression coverage |
 | Production pilot | Not started | Production Supabase, device setup, pilot week, and branch #2 |
 
 ### Recent delivery log
+
+- **2026-08-09 — Hosted shift-label collision fixed:** Added `supabase/migrations/0035_fix_shift_sequence_rls.sql`. `open_shift` now keeps the caller restricted to their assigned branch while allocating the label as a security-definer, advisory-locked branch-wide sequence using the highest existing suffix. The linked migration ledger reports `0035` applied. `scripts/shift-sequence-smoke.sql` passed with two cashier identities receiving `SH-260809-001` and `SH-260809-002`, cross-branch opening rejected, and all smoke data rolled back; the existing hosted QA collision remains historical, and the next Main Branch label evaluates to `SH-260809-003`. `npm run typecheck`, `npm run lint`, and `npm run build` pass. Local Docker was unavailable, so the SQL smoke test ran against the hosted project.
+
+- **2026-08-09 — Hosted shift open/close QA:** The employee session opened `SH-260809-001` at Main Branch with a ₱0 float, closed it with 0 orders, expected cash ₱0, declared cash ₱2, and variance +₱2; `shift.opened` and `shift.closed` audit events are present. The POS now shows a second open shift `SH-260809-002` with a zero X-reading and no Z-reading exists. This also exposed duplicate branch-day labels: the earlier admin shift on the same branch/date is already `SH-260809-001`, because `open_shift` is `security invoker` and its branch-wide sequence count is narrowed by cashier RLS. Treat the label collision as a follow-up defect; the real-day report sign-off remains pending.
+
+- **2026-08-09 — Hosted report reconciliation preflight:** Read-only Main Branch ledger inspection found one completed hosted row on the Singapore business day `2026-08-09` for the QA product `Codex Image QA Product 20260806`: 1 raw sale row, 0 reversals, 1 net order, raw gross sales `₱123.45`, raw net sales `₱123.45`, and one order-item line totaling `₱123.45`. The report control would be `Balanced` for this scope; the 2026-08-06 QA void day also nets to zero after its linked reversal. These are QA/rollback records rather than a genuine store sales day, so the P8 sign-off remains pending and no real-day reconciliation was marked complete.
+
+- **2026-08-09 — Hosted employee-login/UI pass complete:** Reused disposable `Codex QA Employee 20260808` (`EMP-0003`), reset its login through the hosted Employees UI, and confirmed the server-only temporary password worked. The employee reached the forced password-change page, completed the new-password step, landed in the cashier `/pos` workspace, and remained on Main Branch with `role=cashier` and `password_change_required=false`. The hosted ledger contains the expected `auth.password.changed` event with `before.password_change_required=true` and `after.password_change_required=false`. The Admin PIN and 25% discount approval checks also passed: invalid PIN rejected, disposable Admin PIN accepted, and the test cart cleared without a sale. The current employee session remains active as requested; deactivate the disposable employee after signing out of the cashier session.
+- **2026-08-09 — Live Admin workspace theme verification:** On `https://dumala.store/admin/settings` as the hosted admin, verified the Default, Classic, Light, Dark, and Retro theme previews update both the live shell and the preview window. The preview was returned to the persisted Default theme; no dashboard setting was saved.
 
 - **2026-08-08 — P6/P8 closure slice (working tree):** Added reversal-aware cash/e-wallet/card tender mix to the admin dashboard, an explicit organization/branch/device settings map, and a raw-order reconciliation control to `/admin/reports`. The reconciliation uses the active branch/cashier/payment scope and blocks a balanced status when rows are truncated or the reversal lookup fails. A rollback-scoped authenticated hosted till QA then passed open shift, sale, X-reading, close, and Z-reading checks; the hosted counts returned to their starting values. `npm run typecheck`, `npm run lint`, `npm run build`, `npm run printer:validate:mock`, and `git diff --check` pass. Remaining hosted gates are the signed-in employee-login/UI pass and a real-day report reconciliation.
 - **2026-08-08 — Custom-discount approval + mobile pass:** Added the organization-configurable Admin PIN threshold (default 10%), employee Admin PIN management, server-hashed PINs, ten-minute one-use approvals, server-side `place_order` enforcement, and append-only approval/discount audit events in `supabase/migrations/0032_admin_pin_discount_policy.sql`. Local production-browser QA at `390x844` covered dashboard, settings, employees, reports, orders, inventory, POS, and the above-threshold approval sheet with no horizontal overflow. Hosted migrations `0031` and `0032` are now applied and match the local ledger. Rollback-scoped hosted Admin PIN QA passed PIN setup, cashier verification, a 25% custom-discount order, idempotent replay, and one-use approval rejection; the transaction rolled back with no residue.
@@ -44,9 +53,9 @@ This section is the current source of truth for delivered work and the next gate
 
 ### Immediate next task
 
-1. Run the signed-in hosted employee-login/UI pass using the configured server-only runtime: provision or reset a disposable employee, confirm Employee ID login and forced first-password change, then verify Admin PIN management and the above-threshold POS approval path in the browser.
-2. Use an actual hosted sales day, then reconcile `/admin/reports` against the raw order ledger and sign off the report totals. The linked project currently contains only rollback/QA data, so this gate is not complete yet.
-3. Keep the separate P3 hardware gate moving: put the real LAN printer on the same network, confirm its reachable IP, and observe a physical receipt including the X/Z reading slips.
+1. Use an actual hosted sales day, then reconcile `/admin/reports` against the raw order ledger and sign off the report totals. The linked project currently contains only rollback/QA data, so this gate is not complete yet.
+2. Keep the separate P3 hardware gate moving: put the real LAN printer on the same network, confirm its reachable IP, and observe a physical receipt including the X/Z reading slips.
+3. After the current cashier session is signed out, deactivate the disposable `EMP-0003` QA employee and confirm the hosted Employees directory returns to its pre-test active count.
 
 ---
 
@@ -60,7 +69,7 @@ This section is the current source of truth for delivered work and the next gate
 | **P3** | Printing | 🟡 In progress | 6 / 7 | **Physical LAN printer validation pending (PRD §6.4)** |
 | **P4** | Multi-branch | ✅ Done | 8 / 8 | Schema from P0 |
 | **P5** | Customer display | ⬜ Not started | 0 / 6 | Needs P1 cart events |
-| **P6** | Backoffice | 🟡 In progress | Shell, dashboard tender mix, settings scopes, employee workspace, CRUD, audit, Admin PIN policy, and local phone QA implemented | Signed-in hosted employee-login/UI pass |
+| **P6** | Backoffice | ✅ Done | 9 / 9; hosted Employee ID login, forced password change, cashier landing, and audit verification passed 2026-08-09 | Maintain regression coverage |
 | **P7** | Inventory | ✅ Done | 6 / 6 | Maintain regression coverage |
 | **P8** | Shifts & reports | 🟡 In progress | Shifts, X/Z readings, sales reports, inventory reporting, and hosted RPC till QA implemented | Reconcile against a real hosted day's data |
 | **P9** | Pilot & production deploy | ⬜ Not started | 0 / 8 | Everything above |
@@ -160,8 +169,8 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 - [x] Dashboard: today's sales, orders, avg ticket, cash vs. e-wallet, top items, kg sold, low-stock alerts (per branch + consolidated). *(Live reversal-aware KPIs, top items, branch pulse, recent orders, low/out-of-stock alerts, kg-sold metric, and cash/e-wallet/card tender mix are implemented.)*
 - [x] Products CRUD (per branch): pricing mode, price, image, active/track-stock toggles; copy to another branch; price changes versioned in audit. *(Hosted `0021_product_price_audit.sql` is applied; the `product_price_audit` trigger is present on `public.products`.)*
 - [x] Orders: filterable list (branch/date/cashier/method/status), detail drawer, admin-only reason-required immutable void/refund reversals with tracked-stock restoration and audit logging, browser reprint with audit.
-- [ ] Staff: invite/create, assign branch + role, set/reset PIN, deactivate. *(Create/update, branch + role assignment, active/deactivate, Employee ID login, Set up/Reset login, and Admin approval PIN controls are implemented; hosted migrations through `0032` and rollback SQL QA pass, while the signed-in employee provisioning/login/UI pass remains.)*
-- [x] Employee workspace slice: reference-matched Employees dashboard with live employee KPIs, searchable/paginated directory, roles & permissions, attendance, payroll, leave requests, quick actions, and CSV export. *(Implemented 2026-08-03; authenticated route and reversible admin save/restore checks passed 2026-08-06; hosted employee records are linked to Auth users, but the signed-in provisioning/login pass remains.)*
+- [x] Staff: invite/create, assign branch + role, set/reset PIN, deactivate. *(Create/update, branch + role assignment, active/deactivate, Employee ID login, Set up/Reset login, and Admin approval PIN controls are implemented; hosted Employee ID login, forced password change, cashier landing, and `auth.password.changed` audit verification passed 2026-08-09. Disposable `EMP-0003` remains active only because the current cashier session was preserved for the user.)*
+- [x] Employee workspace slice: reference-matched Employees dashboard with live employee KPIs, searchable/paginated directory, roles & permissions, attendance, payroll, leave requests, quick actions, and CSV export. *(Implemented 2026-08-03; authenticated route and reversible admin save/restore checks passed 2026-08-06; hosted employee records are linked to Auth users and the signed-in provisioning/login pass passed 2026-08-09.)*
 - [x] Audit log viewer: append-only, filter by branch/actor/action/date. *(Implemented 2026-08-03; authenticated browser route check passed 2026-08-06 and showed existing order events.)*
 - [x] Settings split: **org** / **branch** / **device** (per PRD §6.6). *(Organization settings and separate POS branch receipt/tax plus device/printer editors are linked through the configuration map.)*
 - [x] Empty/loading/error states + mobile pass (owner uses a phone). *(Local production-browser QA at `390x844` covered dashboard, settings, employees, reports, orders, inventory, POS, and the Admin PIN sheet on 2026-08-08; no horizontal overflow was observed.)*
