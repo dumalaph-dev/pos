@@ -10,6 +10,10 @@ export type OrderReprintResult =
   | { ok: true; message: string }
   | { ok: false; message: string };
 
+export type PosOrderVoidResult =
+  | { ok: true; message: string }
+  | { ok: false; message: string };
+
 function readText(formData: FormData, name: string) {
   const value = formData.get(name);
   return typeof value === "string" ? value.trim() : "";
@@ -51,6 +55,63 @@ function refreshOrderViews() {
   revalidatePath("/admin/reports");
   revalidatePath("/admin/reports/inventory");
   revalidatePath("/admin/inventory");
+}
+
+export async function recordPosOrderVoid(
+  orderId: string,
+  reason: string,
+  pin: string,
+): Promise<PosOrderVoidResult> {
+  const normalizedOrderId = orderId.trim();
+  const normalizedReason = reason.trim();
+  const normalizedPin = pin.trim();
+
+  if (!normalizedOrderId) return { ok: false, message: "The order could not be identified." };
+  if (!normalizedReason || normalizedReason.length > 180) {
+    return { ok: false, message: "Enter a void reason of 1 to 180 characters." };
+  }
+  if (!/^\d{4,6}$/.test(normalizedPin)) {
+    return { ok: false, message: "Enter the active 4–6 digit manager PIN." };
+  }
+
+  const supabase = await createClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData.user) {
+    return { ok: false, message: "Your session has expired. Sign in again before voiding an order." };
+  }
+
+  const { data: approvalId, error: approvalError } = await supabase.rpc("verify_void_pin", {
+    p_order_id: normalizedOrderId,
+    p_pin: normalizedPin,
+  });
+
+  if (approvalError) {
+    return { ok: false, message: "Manager approval could not be checked. Try again while the till is online." };
+  }
+  if (typeof approvalId !== "string" || !approvalId) {
+    return { ok: false, message: "That manager PIN was not approved for this branch." };
+  }
+
+  const { error: voidError } = await supabase.rpc("record_pos_order_void", {
+    p_order_id: normalizedOrderId,
+    p_reason: normalizedReason,
+    p_approval_id: approvalId,
+  });
+
+  if (voidError) {
+    const message = voidError.message || "The order could not be voided.";
+    if (message.includes("already has a void or refund")) {
+      return { ok: false, message: "This order already has a void or refund action." };
+    }
+    if (message.includes("approval is missing or expired")) {
+      return { ok: false, message: "The manager approval expired. Enter the PIN again." };
+    }
+    return { ok: false, message };
+  }
+
+  refreshOrderViews();
+  revalidatePath("/admin/audit");
+  return { ok: true, message: "Order voided and audit logged." };
 }
 
 export async function recordOrderAction(formData: FormData): Promise<never> {

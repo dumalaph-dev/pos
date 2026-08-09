@@ -286,7 +286,7 @@ export async function setEmployeePin(formData: FormData) {
     .maybeSingle();
   if (employeeError || !employee) employeesRedirect("That employee record is not available.");
   if (!employee.profile_id) employeesRedirect("Set up the employee login before setting a PIN.");
-  if (employee.role !== "admin") employeesRedirect("Only organization-admin profiles can hold an approval PIN.");
+  if (employee.role !== "admin" && employee.role !== "manager") employeesRedirect("Only admin or manager profiles can hold an approval PIN.");
   if (!employee.is_active) employeesRedirect("Activate the employee before setting a PIN.");
 
   const { error: pinError } = await supabase.rpc("set_profile_pin", {

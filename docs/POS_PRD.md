@@ -36,7 +36,7 @@ The account model is **Organization → Branches → Staff**. One owner account 
 | Ring up a sale, print receipt | ✅ | ✅ |
 | Open / close own shift | ✅ | ✅ |
 | Void a line item before payment | ✅ | ✅ |
-| Void a completed order / refund | ✅ | ⛔ (requires Admin PIN) |
+| Void a completed order / refund | ✅ | ⛔ (requires manager/admin PIN approval for voids) |
 | Manual price override | ✅ | ⛔ (requires Admin PIN) |
 | Apply discount above threshold | ✅ | ⛔ (requires Admin PIN) |
 | View X-reading (own shift) | ✅ | ✅ |
@@ -235,7 +235,7 @@ Routes under `/admin`, responsive (owner will check it on a phone). A **branch s
 - Every movement writes a row to `stock_movements` — stock on hand is always derivable from the ledger.
 - End-of-day variance view per branch: opening kg + received − sold − wasted = expected vs. counted.
 
-**Orders** — searchable/filterable list (**branch**, date range, cashier, payment method, status), order detail drawer, void/refund with reason (Admin only), reprint.
+**Orders** — searchable/filterable list (**branch**, date range, cashier, payment method, status), order detail drawer, manager/admin-PIN-gated POS voids with reason, admin-only refunds, reprint.
 
 **POS Logs (Audit Trail)** — immutable, append-only, filterable by **branch** / actor / action / date. Logged events: login, logout, failed PIN, shift open/close, sale completed, line void, order void, refund, discount applied, price override, product/price edit, stock movement, **branch created/edited**, **tablet/printer configured**, printer pairing, sync error, permission denied.
 

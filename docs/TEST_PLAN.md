@@ -102,6 +102,7 @@ Fixture: **2 orgs**, each with **2 branches**, each branch with an admin + a cas
 | 8.2 | Cashier navigates to `/admin` | E | redirect to `/pos` + audit logged |
 | 8.3 | 5 wrong PINs | E | 60s lockout |
 | 8.4 | Session survives app restart | M | no mid-shift logout |
+| 8.5 | Cashier selects a synced completed order and enters a manager/admin PIN | E | valid PIN creates a one-use approval; invalid PIN creates no reversal and records a failed approval audit event |
 
 ## 9. Shifts & cash (PRD §6.5)
 
@@ -117,6 +118,7 @@ Fixture: **2 orgs**, each with **2 branches**, each branch with an admin + a cas
 |---|---|---|---|
 | 10.1 | Sensitive actions logged | I | login, PIN fail, void, refund, discount, price edit, stock move, branch/device change, sync error, permission denied all appear |
 | 10.2 | Log is append-only | I | no update/delete path (see 1.4) |
+| 10.3 | POS void with reason and approval | I/E | original order remains immutable; linked `-VOIDED` row, returned stock, `order.voided` audit payload, and X-reading void totals are correct |
 
 ## 11. Hosted append-only privilege hardening 🔴
 
@@ -126,8 +128,15 @@ Fixture: **2 orgs**, each with **2 branches**, each branch with an admin + a cas
 | 11.2 | Authenticated `place_order` sale and idempotent replay | I | one order/items/audit set; replay adds no rows |
 | 11.3 | Admin `record_order_action` void/refund | I | linked reversal order/items/stock/audit rows; original unchanged |
 | 11.4 | Inventory movement/yield/count RPCs | I | append-only stock and audit rows still write successfully |
+| 11.5 | Manager/cashier calls `record_pos_order_void` without a valid one-use approval | I | rejected by the security-definer function; no reversal or stock movement is created |
 
 ✅ **Hosted and local verification passed 2026-08-07** in [SETUP.md](SETUP.md#hosted-hardening-verification--2026-08-07). The pre-migration hosted ACL query showed full `authenticated` table privileges; after `0026`, all four hosted and local rows returned `true, true, false, false`. Rollback-scoped authenticated smoke tests passed for sale/idempotent replay, reversal, inventory, and audit writes, with no smoke rows left behind. The local `scripts/rls-fixture.mjs` run also passed all 18 isolation and mutation assertions.
+
+### POS void approval verification — 2026-08-09
+
+- `npm run pos:void:validate` passed all 11 rollback-scoped authenticated checks against the linked project: invalid PIN rejection and audit, manager PIN approval, immutable `-VOIDED` reversal, returned stock, audit payload, X-reading void totals, one-use approval enforcement, and direct-RPC rejection without approval.
+- Migration `0034` is applied remotely. `verify_void_pin`, `record_pos_order_void`, and `set_profile_pin` are executable by `authenticated`; `order_action_approvals` has no direct `SELECT`/`INSERT`/`UPDATE`/`DELETE` privileges for `authenticated`.
+- The SQL smoke fixture rolls back all setup and test rows. Local Docker was unavailable during this run, so the linked hosted check is the recorded integration result; the application typecheck, lint, and production build also passed.
 
 ## 12. Non-functional
 

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { recordPosOrderVoid } from "@/app/admin/orders/actions";
 import { createClient } from "@/lib/supabase/client";
 import { formatPeso } from "@/lib/money";
 import {
@@ -56,6 +57,7 @@ type OrderHistoryRecord = {
   note: string | null;
   createdAtDevice: string;
   createdAt: string;
+  reversalOf: string | null;
   items: OrderHistoryItem[];
 };
 
@@ -81,6 +83,7 @@ type ServerOrderRow = {
   note: string | null;
   created_at_device: string;
   created_at: string;
+  reversal_of: string | null;
 };
 
 type ServerItemRow = {
@@ -261,6 +264,7 @@ function pendingOrder(row: PendingOrder, profile: OrderHistoryProfile): OrderHis
     note: readString(raw.note) || null,
     createdAtDevice: createdAt,
     createdAt,
+    reversalOf: null,
     items: itemRows(row.p_items),
   };
 }
@@ -289,6 +293,7 @@ function serverOrder(row: ServerOrderRow, items: OrderHistoryItem[]): OrderHisto
     note: row.note,
     createdAtDevice: row.created_at_device,
     createdAt: row.created_at,
+    reversalOf: row.reversal_of,
     items,
   };
 }
@@ -363,6 +368,11 @@ export default function OrderHistory({
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
   const [printingId, setPrintingId] = useState<string | null>(null);
+  const [voidDialogOpen, setVoidDialogOpen] = useState(false);
+  const [voidReason, setVoidReason] = useState("");
+  const [voidPin, setVoidPin] = useState("");
+  const [voidError, setVoidError] = useState("");
+  const [voidingId, setVoidingId] = useState<string | null>(null);
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -390,7 +400,7 @@ export default function OrderHistory({
       try {
         const { data, error } = await supabase
           .from("orders")
-          .select("id, local_uuid, order_no, store_id, cashier_id, status, subtotal, discount_type, discount_amount, discount_ref, vatable_sale, vat_amount, vat_exempt_sale, total, payment_method, payment_ref, amount_tendered, change_due, note, created_at_device, created_at")
+          .select("id, local_uuid, order_no, store_id, cashier_id, status, subtotal, discount_type, discount_amount, discount_ref, vatable_sale, vat_amount, vat_exempt_sale, total, payment_method, payment_ref, amount_tendered, change_due, note, created_at_device, created_at, reversal_of")
           .eq("store_id", profile.store_id)
           .order("created_at_device", { ascending: false })
           .limit(50);
@@ -459,6 +469,62 @@ export default function OrderHistory({
   }, [filter, orders, search]);
 
   const selectedOrder = orders.find((order) => order.id === selectedId) ?? null;
+  const selectedReversal = selectedOrder
+    ? orders.find((order) => order.reversalOf === selectedOrder.id) ?? null
+    : null;
+  const canVoidSelected = Boolean(
+    selectedOrder &&
+      selectedOrder.source === "server" &&
+      selectedOrder.status === "completed" &&
+      !selectedReversal &&
+      !offline,
+  );
+
+  const openVoidDialog = () => {
+    if (!canVoidSelected) return;
+    setVoidReason("");
+    setVoidPin("");
+    setVoidError("");
+    setVoidDialogOpen(true);
+  };
+
+  const closeVoidDialog = () => {
+    if (voidingId) return;
+    setVoidDialogOpen(false);
+    setVoidReason("");
+    setVoidPin("");
+    setVoidError("");
+  };
+
+  const submitVoid = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedOrder || !canVoidSelected || voidingId) return;
+
+    setVoidingId(selectedOrder.id);
+    setVoidError("");
+    let result: Awaited<ReturnType<typeof recordPosOrderVoid>>;
+    try {
+      result = await recordPosOrderVoid(selectedOrder.id, voidReason, voidPin);
+    } catch {
+      setVoidError("The void could not be completed. Check the till connection and try again.");
+      setVoidingId(null);
+      return;
+    }
+    if (!result.ok) {
+      setVoidError(result.message);
+      setVoidingId(null);
+      return;
+    }
+
+    const message = `${selectedOrder.orderNo} voided and audit logged.`;
+    setVoidDialogOpen(false);
+    setVoidReason("");
+    setVoidPin("");
+    onToast(message);
+    await loadOrders();
+    setNotice(message);
+    setVoidingId(null);
+  };
 
   const reprintSelected = async () => {
     if (!selectedOrder || printingId) return;
@@ -632,6 +698,20 @@ export default function OrderHistory({
                   <div className="order-history-pending-note"><HistoryIcon name="wifi" size={17} /><span>This order is safe on this device and will sync automatically when the branch connection returns.</span></div>
                 )}
 
+                {selectedReversal && (
+                  <div className="order-history-action-note" role="status">
+                    <HistoryIcon name="receipt" size={17} />
+                    <span>This order already has a {statusLabel(selectedReversal.status).toLowerCase()} action. The original sale stays here for audit history.</span>
+                  </div>
+                )}
+
+                {selectedOrder.status === "completed" && selectedOrder.source === "server" && !selectedReversal && offline && (
+                  <div className="order-history-action-note order-history-action-note--warning" role="status">
+                    <HistoryIcon name="wifi" size={17} />
+                    <span>Voids require a live connection so the manager approval and audit record are verified on the server.</span>
+                  </div>
+                )}
+
                 <div className="order-history-detail__scroll">
                   <div className="order-history-ticket">
                     <div className="order-history-ticket__columns" aria-hidden="true"><span>QTY</span><span>ITEM</span><span>AMOUNT</span></div>
@@ -665,12 +745,63 @@ export default function OrderHistory({
                   {selectedOrder.note && <div className="order-history-note"><span>Order note</span><p>{selectedOrder.note}</p></div>}
                 </div>
 
+                {voidDialogOpen && selectedOrder && (
+                  <form className="order-history-void-panel" onSubmit={(event) => void submitVoid(event)}>
+                    <div>
+                      <p className="order-history-void-panel__eyebrow">Manager approval required</p>
+                      <h3>Void {selectedOrder.orderNo}?</h3>
+                      <p>This creates a permanent audited reversal, returns tracked stock, and removes the sale from net totals.</p>
+                    </div>
+                    <label>
+                      <span>Reason</span>
+                      <textarea
+                        value={voidReason}
+                        onChange={(event) => setVoidReason(event.target.value)}
+                        maxLength={180}
+                        rows={2}
+                        placeholder="Example: Customer payment reversed at the counter"
+                        required
+                      />
+                    </label>
+                    <label>
+                      <span>Manager or admin PIN</span>
+                      <input
+                        type="password"
+                        value={voidPin}
+                        onChange={(event) => setVoidPin(event.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
+                        inputMode="numeric"
+                        autoComplete="off"
+                        pattern="[0-9]{4,6}"
+                        minLength={4}
+                        maxLength={6}
+                        placeholder="4–6 digits"
+                        required
+                      />
+                      <small>The PIN is checked server-side and never stored in the browser or audit log.</small>
+                    </label>
+                    {voidError && <p className="order-history-void-panel__error" role="alert">{voidError}</p>}
+                    <div className="order-history-void-panel__actions">
+                      <button type="button" className="order-history-button order-history-button--soft" onClick={closeVoidDialog} disabled={Boolean(voidingId)}>Cancel</button>
+                      <button type="submit" className="order-history-button order-history-button--void" disabled={Boolean(voidingId) || voidReason.trim().length === 0 || !/^\d{4,6}$/.test(voidPin)}>
+                        {voidingId ? "Voiding…" : "Approve & void"}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
                 <footer className="order-history-detail__footer">
                   <div><span>Receipt slip</span><small>Reprints are marked and logged for this order.</small></div>
-                  <button type="button" className="order-history-button order-history-button--reprint" onClick={() => void reprintSelected()} disabled={printingId !== null || selectedOrder.items.length === 0}>
-                    <HistoryIcon name="printer" size={18} />
-                    {printingId === selectedOrder.id ? "Printing…" : "Reprint receipt"}
-                  </button>
+                  <div className="order-history-detail__footer-actions">
+                    {canVoidSelected && !voidDialogOpen && (
+                      <button type="button" className="order-history-button order-history-button--void" onClick={openVoidDialog} disabled={voidingId !== null}>
+                        Void order
+                      </button>
+                    )}
+                    <button type="button" className="order-history-button order-history-button--reprint" onClick={() => void reprintSelected()} disabled={printingId !== null || selectedOrder.items.length === 0}>
+                      <HistoryIcon name="printer" size={18} />
+                      {printingId === selectedOrder.id ? "Printing…" : "Reprint receipt"}
+                    </button>
+                  </div>
                 </footer>
               </>
             ) : (
