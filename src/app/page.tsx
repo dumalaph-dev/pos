@@ -434,7 +434,7 @@ function HeroVisual() {
       data-lp-reveal="scale"
       style={{ "--lp-delay": "260ms" } as React.CSSProperties}
     >
-      <div className="origin-[35%_50%] lg:scale-[1.15] xl:scale-[1.4]">
+      <div className="origin-[35%_50%] lg:scale-[1.05] xl:scale-[1.2]">
         <div className="lp-stage relative overflow-hidden rounded-[36px] border border-[#e6dfcd] bg-[linear-gradient(155deg,#fdfbf6_0%,#f6efe0_52%,#efe6d2_100%)] px-5 pb-6 pt-9 shadow-[0_26px_60px_rgba(23,58,43,0.13)] sm:px-9 sm:pb-8 sm:pt-11">
         <div className="lp-dots pointer-events-none absolute inset-0 text-[#173a2b] opacity-[0.07]" />
         <div className="lp-spin-slow pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full border border-dashed border-[#c39756]/45" />
