@@ -3,6 +3,7 @@ import { getAdminProfile } from "@/lib/admin/profile";
 import { normalizeSubscriptionStatus } from "@/lib/billing";
 import { createAdminClient } from "@/lib/employee-auth";
 import { isPolicyGateOpen, calculateBillingVariantPrice, type BillingVariant } from "@/lib/platform-operations";
+import { readPromotionQuote, recordPromotionRedemption } from "@/lib/platform-promotions-server";
 import { payMongoConfiguration, readPlatformOperations } from "@/lib/platform-operations-server";
 import {
   createPayMongoCustomer,
@@ -88,6 +89,7 @@ export async function POST(request: NextRequest) {
 
     const body = await readJson(request);
     const variantId = isRecord(body) && typeof body.variantId === "string" ? body.variantId.trim() : "";
+    const promoCode = isRecord(body) && typeof body.promoCode === "string" ? body.promoCode.trim() : "";
     const variant = operations.catalog.variants.find((candidate) => candidate.id === variantId && candidate.isActive);
     if (!variant || !variant.id) return errorResponse("Choose an active subscription option from the current pricing catalog.", 400);
     if (variant.intervalUnit === "year" && operations.policies.billing.settings.annualRenewal === "manual_review") {
@@ -107,30 +109,39 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const amountCentavos = calculateBillingVariantPrice(
+    const baseAmountCentavos = calculateBillingVariantPrice(
       operations.catalog.monthlyPriceCentavos,
       variant.intervalUnit,
       variant.intervalCount,
       variant.discountPercent,
     );
+    const promotionQuote = await readPromotionQuote(admin, {
+      code: promoCode,
+      organizationId: organization.id,
+      variant,
+      baseAmountCentavos,
+    });
+    if (!promotionQuote.ok) return errorResponse(promotionQuote.message, promotionQuote.schemaAvailable ? 422 : 503);
+    const hasPromotion = Boolean(promotionQuote.promotionId && promotionQuote.code);
+    const amountCentavos = promotionQuote.finalAmountCentavos;
     if (amountCentavos < 2_000) return errorResponse("The selected price is below PayMongo's minimum subscription amount.", 400);
 
     if (status === "incomplete" && organization.subscription_provider_subscription_id) {
-      const existing = await resumeIncompleteSubscription(organization, variant, amountCentavos);
+      const existing = await resumeIncompleteSubscription(organization, variant, amountCentavos, hasPromotion ? null : variant.paymongoPlanId);
       if (existing instanceof NextResponse) return existing;
       if (existing) return NextResponse.json(existing);
     }
 
     const plan = await ensurePayMongoPlan({
-      existingPlanId: variant.paymongoPlanId,
-      variantId: variant.id,
-      label: variant.label,
+      existingPlanId: hasPromotion ? null : variant.paymongoPlanId,
+      variantId: hasPromotion ? `${variant.id}-${promotionQuote.code}` : variant.id,
+      label: hasPromotion ? `${variant.label} · ${promotionQuote.code}` : variant.label,
       amountCentavos,
       intervalUnit: variant.intervalUnit,
       intervalCount: variant.intervalCount,
     });
 
-    if (plan.id !== variant.paymongoPlanId) {
+    if (!hasPromotion && plan.id !== variant.paymongoPlanId) {
       const planUpdate = await admin
         .from("platform_billing_variants")
         .update({ paymongo_plan_id: plan.id, updated_at: new Date().toISOString() })
@@ -172,6 +183,20 @@ export async function POST(request: NextRequest) {
       .eq("id", organization.id);
     if (variantSaved.error) console.warn("[billing/subscribe] Billing variant could not be recorded", variantSaved.error.message);
 
+    if (hasPromotion) {
+      await recordPromotionRedemption(admin, {
+        promotionId: promotionQuote.promotionId!,
+        organizationId: organization.id,
+        billingVariantId: variant.id,
+        checkoutMode: "recurring",
+        status: localStatus === "active" ? "converted" : "started",
+        baseAmountCentavos: promotionQuote.baseAmountCentavos,
+        discountAmountCentavos: promotionQuote.discountAmountCentavos,
+        finalAmountCentavos: promotionQuote.finalAmountCentavos,
+        providerReference: subscription.id,
+      });
+    }
+
     // Migration 0036 adds the temporary QR Ph mode. Keep this update
     // best-effort so a rolling deploy remains compatible before that
     // migration is applied, while a later Maya/card checkout restores the
@@ -189,6 +214,9 @@ export async function POST(request: NextRequest) {
       clientKey: paymentIntent.clientKey,
       paymentIntentStatus: paymentIntent.status,
       amountCentavos,
+      baseAmountCentavos: promotionQuote.baseAmountCentavos,
+      discountAmountCentavos: promotionQuote.discountAmountCentavos,
+      promotionCode: promotionQuote.code,
       currency: "PHP",
     });
   } catch (error) {
@@ -208,11 +236,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function resumeIncompleteSubscription(organization: OrganizationRecord, variant: BillingVariant, amountCentavos: number) {
+async function resumeIncompleteSubscription(organization: OrganizationRecord, variant: BillingVariant, amountCentavos: number, expectedPlanId: string | null) {
   try {
     const existing = await getPayMongoSubscription(organization.subscription_provider_subscription_id!);
     const attributes = existing.attributes;
-    if (!providerSubscriptionMatchesVariant(attributes, variant.paymongoPlanId, variant, amountCentavos)) {
+    if (!providerSubscriptionMatchesVariant(attributes, expectedPlanId, variant, amountCentavos)) {
       return errorResponse("A different subscription payment is already in progress. Finish it or wait for it to expire before choosing another plan.", 409);
     }
 

@@ -3,6 +3,7 @@ import { getAdminProfile } from "@/lib/admin/profile";
 import { normalizeSubscriptionStatus } from "@/lib/billing";
 import { createAdminClient } from "@/lib/employee-auth";
 import { calculateBillingVariantPrice, isPolicyGateOpen } from "@/lib/platform-operations";
+import { readPromotionQuote, recordPromotionRedemption } from "@/lib/platform-promotions-server";
 import {
   createPayMongoQrPhCheckoutSession,
   PayMongoApiError,
@@ -65,6 +66,7 @@ export async function POST(request: NextRequest) {
 
     const body = await readJson(request);
     const variantId = isRecord(body) && typeof body.variantId === "string" ? body.variantId.trim() : "";
+    const promoCode = isRecord(body) && typeof body.promoCode === "string" ? body.promoCode.trim() : "";
     const variant = operations.catalog.variants.find((candidate) => candidate.id === variantId && candidate.isActive);
     if (!variant || !variant.id) return errorResponse("Choose an active payment option from the current pricing catalog.", 400);
 
@@ -82,12 +84,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const amountCentavos = calculateBillingVariantPrice(
+    const baseAmountCentavos = calculateBillingVariantPrice(
       operations.catalog.monthlyPriceCentavos,
       variant.intervalUnit,
       variant.intervalCount,
       variant.discountPercent,
     );
+    const promotionQuote = await readPromotionQuote(admin, {
+      code: promoCode,
+      organizationId: organization.id,
+      variant,
+      baseAmountCentavos,
+    });
+    if (!promotionQuote.ok) return errorResponse(promotionQuote.message, promotionQuote.schemaAvailable ? 422 : 503);
+    const amountCentavos = promotionQuote.finalAmountCentavos;
     if (amountCentavos < 100) return errorResponse("The selected price is below PayMongo's minimum QR Ph amount.", 400);
 
     const attemptId = crypto.randomUUID().replace(/-/g, "");
@@ -98,6 +108,10 @@ export async function POST(request: NextRequest) {
       variant_id: variant.id,
       interval_unit: variant.intervalUnit,
       interval_count: String(variant.intervalCount),
+      promotion_id: promotionQuote.promotionId ?? "",
+      promotion_code: promotionQuote.code ?? "",
+      base_amount_centavos: String(promotionQuote.baseAmountCentavos),
+      discount_amount_centavos: String(promotionQuote.discountAmountCentavos),
       amount_centavos: String(amountCentavos),
     };
     const successUrl = new URL("/admin/billing?qrph=success", request.nextUrl.origin).toString();
@@ -124,11 +138,28 @@ export async function POST(request: NextRequest) {
       .eq("id", organization.id);
     if (saved.error) throw new Error("The QR Ph checkout was created but its pending state could not be saved.");
 
+    if (promotionQuote.promotionId && promotionQuote.code) {
+      await recordPromotionRedemption(admin, {
+        promotionId: promotionQuote.promotionId,
+        organizationId: organization.id,
+        billingVariantId: variant.id,
+        checkoutMode: "temporary_qrph",
+        status: "started",
+        baseAmountCentavos: promotionQuote.baseAmountCentavos,
+        discountAmountCentavos: promotionQuote.discountAmountCentavos,
+        finalAmountCentavos: promotionQuote.finalAmountCentavos,
+        providerReference: checkout.id,
+      });
+    }
+
     return NextResponse.json({
       ok: true,
       checkoutSessionId: checkout.id,
       checkoutUrl: checkout.checkoutUrl,
       amountCentavos,
+      baseAmountCentavos: promotionQuote.baseAmountCentavos,
+      discountAmountCentavos: promotionQuote.discountAmountCentavos,
+      promotionCode: promotionQuote.code,
       currency: "PHP",
       variantId: variant.id,
     });

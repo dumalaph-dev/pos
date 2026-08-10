@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { createAdminClient } from "@/lib/employee-auth";
+import { markLatestPromotionRedemptionConverted, markPromotionRedemptionConverted } from "@/lib/platform-promotions-server";
 import { getPayMongoPaymentIntent, PayMongoApiError, readPayMongoString } from "@/lib/paymongo-server";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
 
@@ -23,25 +24,37 @@ export async function GET(request: NextRequest) {
 
     const organizationResult = await admin
       .from("organizations")
-      .select("id, subscription_status, subscription_provider_payment_intent_id")
+      .select("id, subscription_status, subscription_provider_payment_intent_id, subscription_provider_subscription_id")
       .eq("id", profile.org_id)
       .maybeSingle();
     if (organizationResult.error) return responseError("Apply Supabase migrations 0025 and 0027 before checking payment status.", 503);
 
-    const organization = organizationResult.data as { id: string; subscription_status: string | null; subscription_provider_payment_intent_id: string | null } | null;
+    const organization = organizationResult.data as {
+      id: string;
+      subscription_status: string | null;
+      subscription_provider_payment_intent_id: string | null;
+      subscription_provider_subscription_id: string | null;
+    } | null;
     if (!organization || organization.subscription_provider_payment_intent_id !== paymentIntentId) {
       return responseError("That payment intent is not associated with this organization.", 404);
     }
 
     const paymentIntent = await getPayMongoPaymentIntent(paymentIntentId);
     const status = readPayMongoString(paymentIntent.attributes, "status") || "awaiting_payment_method";
-    if (status === "succeeded" && organization.subscription_status !== "active") {
-      const update = await admin
-        .from("organizations")
-        .update({ subscription_status: "active", subscription_updated_at: new Date().toISOString() })
-        .eq("id", organization.id)
-        .eq("subscription_provider_payment_intent_id", paymentIntentId);
-      if (update.error) throw new Error("The payment was confirmed but the organization billing record could not be updated.");
+    if (status === "succeeded") {
+      if (organization.subscription_status !== "active") {
+        const update = await admin
+          .from("organizations")
+          .update({ subscription_status: "active", subscription_updated_at: new Date().toISOString() })
+          .eq("id", organization.id)
+          .eq("subscription_provider_payment_intent_id", paymentIntentId);
+        if (update.error) throw new Error("The payment was confirmed but the organization billing record could not be updated.");
+      }
+      if (organization.subscription_provider_subscription_id) {
+        await markPromotionRedemptionConverted(admin, organization.subscription_provider_subscription_id, paymentIntentId);
+      } else {
+        await markLatestPromotionRedemptionConverted(admin, organization.id);
+      }
     }
 
     return NextResponse.json({ ok: true, paymentIntentId, status });

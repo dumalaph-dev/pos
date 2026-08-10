@@ -10,6 +10,7 @@ import {
   parsePhpToCentavos,
   type BillingIntervalUnit,
 } from "@/lib/platform-operations";
+import { normalizePromotionCode } from "@/lib/platform-promotions";
 
 export type PlatformActionState = {
   ok: boolean;
@@ -150,6 +151,80 @@ export async function savePlatformPolicy(_previousState: PlatformActionState, fo
   };
 }
 
+export async function savePlatformPromotion(_previousState: PlatformActionState, formData: FormData): Promise<PlatformActionState> {
+  const actor = await requirePlatformAdmin();
+  if (!actor.ok) return actor;
+
+  const code = normalizePromotionCode(readText(formData, "code"));
+  const name = readText(formData, "name");
+  const description = readText(formData, "description");
+  const discountType = readText(formData, "discount_type");
+  const discountValue = Number(readText(formData, "discount_value"));
+  const appliesTo = readText(formData, "applies_to");
+  const startsAtInput = readText(formData, "starts_at");
+  const endsAtInput = readText(formData, "ends_at");
+  const startsAt = readDateTime(startsAtInput);
+  const endsAt = readDateTime(endsAtInput);
+  const maxRedemptionsValue = readText(formData, "max_redemptions");
+
+  if (!/^[A-Z0-9_-]{3,32}$/.test(code)) return { ok: false, message: "Use 3–32 letters, numbers, hyphens, or underscores for the code." };
+  if (!name || name.length > 80) return { ok: false, message: "Add a promotion name of 1–80 characters." };
+  if (description.length > 240) return { ok: false, message: "Keep the description to 240 characters or fewer." };
+  if (discountType !== "percentage" && discountType !== "fixed") return { ok: false, message: "Choose a valid discount type." };
+  if (!Number.isFinite(discountValue) || discountValue <= 0) return { ok: false, message: "Enter a discount value greater than zero." };
+  if (discountType === "percentage" && (discountValue < 0.01 || discountValue > 100)) return { ok: false, message: "Percentage discounts must be between 0.01 and 100." };
+  if (discountType === "fixed" && (!Number.isSafeInteger(Math.round(discountValue * 100)) || Math.round(discountValue * 100) < 1 || discountValue > 10_000)) return { ok: false, message: "Fixed discounts must be a valid PHP amount from ₱0.01 to ₱10,000." };
+  if (appliesTo !== "all" && appliesTo !== "monthly" && appliesTo !== "annual") return { ok: false, message: "Choose which billing options the promotion applies to." };
+  if ((startsAtInput && !startsAt) || (endsAtInput && !endsAt)) return { ok: false, message: "Enter valid campaign dates using Singapore time." };
+  if (startsAt && endsAt && new Date(endsAt).getTime() <= new Date(startsAt).getTime()) return { ok: false, message: "The end date must be after the start date." };
+
+  const maxRedemptions = maxRedemptionsValue ? Number(maxRedemptionsValue) : null;
+  if (maxRedemptions !== null && (!Number.isInteger(maxRedemptions) || maxRedemptions < 1 || maxRedemptions > 1_000_000)) {
+    return { ok: false, message: "Redemption limits must be whole numbers from 1 to 1,000,000." };
+  }
+
+  const result = await actor.admin.from("platform_promotions").insert({
+    code,
+    name,
+    description,
+    discount_type: discountType,
+    discount_percent: discountType === "percentage" ? Math.round(discountValue * 100) / 100 : null,
+    discount_amount_centavos: discountType === "fixed" ? Math.round(discountValue * 100) : null,
+    applies_to: appliesTo,
+    starts_at: startsAt,
+    ends_at: endsAt,
+    max_redemptions: maxRedemptions,
+    is_active: true,
+    created_by: actor.userId,
+    updated_at: new Date().toISOString(),
+  });
+  if (result.error) {
+    if (result.error.code === "23505") return { ok: false, message: "That promotion code already exists. Use a different code." };
+    return promotionMigrationError(result.error.message);
+  }
+
+  revalidatePlatformPages();
+  return { ok: true, message: `${code} is live and ready to use in checkout.` };
+}
+
+export async function togglePlatformPromotion(_previousState: PlatformActionState, formData: FormData): Promise<PlatformActionState> {
+  const actor = await requirePlatformAdmin();
+  if (!actor.ok) return actor;
+
+  const id = readText(formData, "promotion_id");
+  const isActive = readText(formData, "is_active") === "true";
+  if (!isUuid(id)) return { ok: false, message: "That promotion could not be identified." };
+
+  const result = await actor.admin
+    .from("platform_promotions")
+    .update({ is_active: !isActive, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (result.error) return promotionMigrationError(result.error.message);
+
+  revalidatePlatformPages();
+  return { ok: true, message: !isActive ? "Promotion activated." : "Promotion paused." };
+}
+
 async function requirePlatformAdmin(): Promise<{ ok: true; admin: NonNullable<ReturnType<typeof createAdminClient>>; userId: string } | PlatformActionFailure> {
   const user = await getAuthenticatedUser();
   if (!user) return { ok: false, message: "Your session has expired. Sign in again to manage platform operations." };
@@ -224,6 +299,14 @@ function migrationError(detail: string): PlatformActionState {
   return { ok: false, message: detail || "The platform operation could not be saved." };
 }
 
+function promotionMigrationError(detail: string): PlatformActionState {
+  const lower = detail.toLowerCase();
+  if (lower.includes("does not exist") || lower.includes("relation") || lower.includes("column")) {
+    return { ok: false, message: "Apply Supabase migration 0040_platform_promotions.sql before managing promotion codes." };
+  }
+  return { ok: false, message: detail || "The promotion could not be saved." };
+}
+
 function revalidatePlatformPages() {
   revalidatePath("/");
   revalidatePath("/platform");
@@ -231,6 +314,29 @@ function revalidatePlatformPages() {
   revalidatePath("/platform/policies");
   revalidatePath("/platform/users");
   revalidatePath("/platform/operations");
+  revalidatePath("/platform/promotions");
   revalidatePath("/admin/billing");
   revalidatePath("/signup");
+}
+
+function readDateTime(value: string) {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6] ?? "00");
+  const localDate = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+  if (
+    localDate.getUTCFullYear() !== year
+    || localDate.getUTCMonth() !== month - 1
+    || localDate.getUTCDate() !== day
+    || localDate.getUTCHours() !== hour
+    || localDate.getUTCMinutes() !== minute
+    || localDate.getUTCSeconds() !== second
+  ) return null;
+  return new Date(localDate.getTime() - 8 * 60 * 60 * 1000).toISOString();
 }

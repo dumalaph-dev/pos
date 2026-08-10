@@ -75,6 +75,7 @@ export default async function PlatformOverviewPage() {
             <PlatformSectionHeading eyebrow="Workspace map" title="Manage the platform by feature" description="Each area now has one job, so the control you need is never buried in a long page." />
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <FeatureLink href="/platform/plans" icon="wallet" label="Plans & Pricing" detail={`${catalog.variants.filter((variant) => variant.isActive).length} live offers · ${formatPeso(catalog.monthlyPriceCentavos)} monthly base`} />
+              <FeatureLink href="/platform/promotions" icon="tag" label="Promo & Marketing" detail="Create checkout codes and measure paid conversion" />
               <FeatureLink href="/platform/users" icon="customers" label="Users" detail={`${profiles.length} user profiles across ${organizations.length} businesses`} />
               <FeatureLink href="/platform/policies" icon="lock" label="Policies" detail={`${publishedPolicies}/2 published · controls stay gated until complete`} />
               <FeatureLink href="/platform/operations" icon="refresh" label="Operations" detail={accountOperationsReady ? "Lifecycle and support controls are available" : "Finish migrations before using account controls"} />
@@ -123,7 +124,7 @@ export default async function PlatformOverviewPage() {
   );
 }
 
-function FeatureLink({ href, icon, label, detail }: { href: string; icon: "wallet" | "customers" | "lock" | "refresh"; label: string; detail: string }) {
+function FeatureLink({ href, icon, label, detail }: { href: string; icon: "wallet" | "customers" | "lock" | "refresh" | "tag"; label: string; detail: string }) {
   return <Link href={href} className="group flex min-h-[104px] items-start gap-3 rounded-[18px] border border-line bg-raised/60 p-4 transition hover:-translate-y-0.5 hover:border-primary/35 hover:bg-primary-soft/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary transition group-hover:bg-primary group-hover:text-primary-fg"><AdminIcon name={icon} size={16} /></span><span><strong className="block text-sm font-extrabold">{label}</strong><span className="mt-1 block text-xs leading-5 text-ink-muted">{detail}</span></span><AdminIcon name="arrow" size={14} /></Link>;
 }
 

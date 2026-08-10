@@ -1,16 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AdminIcon } from "@/components/admin/AdminIcon";
 import { formatBillingDate } from "@/lib/billing";
-
-type CheckoutVariant = {
-  id: string;
-  label: string;
-  priceLabel: string;
-  cadenceLabel: string;
-  monthlyEquivalentLabel: string;
-  discountPercent: number;
-};
+import { formatPeso } from "@/lib/money";
+import { CheckoutPlanPicker, type CheckoutVariant } from "./CheckoutPlanPicker";
+import { PromotionCodeInput, type PromotionQuoteState } from "./PromotionCodeInput";
 
 type TemporaryQrPhCheckoutProps = {
   variants: CheckoutVariant[];
@@ -33,18 +28,27 @@ type StatusResponse = {
   periodEnd?: string;
 };
 
+type PromotionValidationResponse = {
+  ok?: boolean;
+  message?: string;
+  code?: string | null;
+  name?: string | null;
+  discountAmountCentavos?: number;
+  finalAmountCentavos?: number;
+};
+
 const SESSION_STORAGE_KEY = "dumala:temporary-qrph-checkout-session";
 
-export default function TemporaryQrPhCheckout({
-  variants,
-  policyGateOpen,
-  providerReady,
-  providerDetail,
-}: TemporaryQrPhCheckoutProps) {
+export default function TemporaryQrPhCheckout({ variants, policyGateOpen, providerReady, providerDetail }: TemporaryQrPhCheckoutProps) {
   const [selectedId, setSelectedId] = useState(variants[0]?.id ?? "");
+  const [promoCode, setPromoCode] = useState("");
+  const [promoQuote, setPromoQuote] = useState<PromotionQuoteState | null>(null);
+  const [promoMessage, setPromoMessage] = useState<{ kind: "error" | "success"; text: string } | null>(null);
+  const [promoPending, setPromoPending] = useState(false);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [messageKind, setMessageKind] = useState<"error" | "success" | "neutral">("error");
+
   useEffect(() => {
     const result = new URLSearchParams(window.location.search).get("qrph");
     if (!result) return;
@@ -78,9 +82,7 @@ export default function TemporaryQrPhCheckout({
       setMessage(attempt === 0 ? "Payment returned. Confirming your payment…" : "Your payment is still being confirmed…");
 
       try {
-        const response = await fetch(`/api/billing/qrph/status?checkout_session_id=${encodeURIComponent(checkoutSessionId)}`, {
-          headers: { Accept: "application/json" },
-        });
+        const response = await fetch(`/api/billing/qrph/status?checkout_session_id=${encodeURIComponent(checkoutSessionId)}`, { headers: { Accept: "application/json" } });
         const payload = await response.json() as StatusResponse;
         if (!response.ok || !payload.ok) throw new Error(payload.message || "The QR Ph payment could not be verified.");
         if (cancelled) return;
@@ -122,9 +124,45 @@ export default function TemporaryQrPhCheckout({
   }, []);
 
   const selectedVariant = variants.find((variant) => variant.id === selectedId) ?? variants[0];
+  const discountedAmount = promoQuote?.variantId === selectedId ? promoQuote.finalAmountCentavos : selectedVariant?.baseAmountCentavos ?? 0;
+
+  function selectVariant(id: string) {
+    setSelectedId(id);
+    setPromoQuote(null);
+    setPromoMessage(null);
+  }
+
+  async function applyPromotion() {
+    const code = promoCode.trim();
+    if (!selectedVariant) return setPromoMessage({ kind: "error", text: "Choose a plan before applying a code." });
+    if (!code) return setPromoMessage({ kind: "error", text: "Enter a discount code first." });
+
+    setPromoPending(true);
+    setPromoMessage(null);
+    try {
+      const response = await fetch("/api/billing/promotion/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ code, variantId: selectedVariant.id }),
+      });
+      const payload = await response.json() as PromotionValidationResponse;
+      if (!response.ok || !payload.ok || !payload.code || typeof payload.finalAmountCentavos !== "number" || typeof payload.discountAmountCentavos !== "number") {
+        throw new Error(payload.message || "That discount code could not be applied.");
+      }
+      setPromoCode(payload.code);
+      setPromoQuote({ code: payload.code, name: payload.name ?? null, discountAmountCentavos: payload.discountAmountCentavos, finalAmountCentavos: payload.finalAmountCentavos, variantId: selectedVariant.id });
+      setPromoMessage({ kind: "success", text: `${payload.code} is valid for this plan.` });
+    } catch (error) {
+      setPromoQuote(null);
+      setPromoMessage({ kind: "error", text: error instanceof Error ? error.message : "That discount code could not be applied." });
+    } finally {
+      setPromoPending(false);
+    }
+  }
+
   async function submit() {
-      if (!selectedVariant) {
-        setMessageKind("error");
+    if (!selectedVariant) {
+      setMessageKind("error");
       setMessage("Choose a plan first.");
       return;
     }
@@ -135,12 +173,10 @@ export default function TemporaryQrPhCheckout({
       const response = await fetch("/api/billing/qrph", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ variantId: selectedVariant.id }),
+        body: JSON.stringify({ variantId: selectedVariant.id, promoCode: promoQuote?.code ?? "" }),
       });
       const payload = await response.json() as CheckoutResponse;
-      if (!response.ok || !payload.ok || !payload.checkoutSessionId || !payload.checkoutUrl) {
-        throw new Error(payload.message || "Secure checkout could not be started.");
-      }
+      if (!response.ok || !payload.ok || !payload.checkoutSessionId || !payload.checkoutUrl) throw new Error(payload.message || "Secure checkout could not be started.");
 
       const target = new URL(payload.checkoutUrl);
       if (target.protocol !== "https:") throw new Error("The secure checkout link is invalid.");
@@ -153,76 +189,53 @@ export default function TemporaryQrPhCheckout({
     }
   }
 
-  if (!policyGateOpen) {
-    return <CheckoutNotice title="Online payment is unavailable" detail="Please try again later or contact support if you need help starting your plan." tone="warning" />;
-  }
-  if (!providerReady) {
-    return <CheckoutNotice title="Online payment is unavailable" detail={providerDetail} tone="neutral" />;
-  }
-  if (variants.length === 0) {
-    return <CheckoutNotice title="No plans are available" detail="Please contact support to continue." tone="neutral" />;
-  }
+  if (!policyGateOpen) return <CheckoutNotice title="Online payment is unavailable" detail="Please try again later or contact support if you need help starting your plan." tone="warning" />;
+  if (!providerReady) return <CheckoutNotice title="Online payment is unavailable" detail={providerDetail} tone="neutral" />;
+  if (variants.length === 0) return <CheckoutNotice title="No plans are available" detail="Please contact support to continue." tone="neutral" />;
 
   return (
-    <div className="mt-6 border-t border-line pt-6">
+    <div className="mt-5 border-t border-line pt-5">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-accent">Payment options</p>
-          <h3 className="mt-1 text-xl font-extrabold">Pay with QR Ph</h3>
-          <p className="mt-1 max-w-xl text-sm leading-5 text-ink-muted">Pay securely by scanning the QR code with GCash, Maya, or your banking app. No card details are required.</p>
+          <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-accent">Secure payment</p>
+          <h3 className="mt-1 text-xl font-extrabold tracking-[-0.025em]">Pay with QR Ph</h3>
+          <p className="mt-1 max-w-xl text-sm leading-5 text-ink-muted">Scan with GCash, Maya, or your banking app. No card details are required.</p>
         </div>
-        <span className="rounded-pill bg-warning/15 px-3 py-1.5 text-xs font-extrabold text-ink">One-time payment</span>
+        <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-warning/15 px-3 py-1.5 text-xs font-extrabold text-ink"><AdminIcon name="lock" size={13} /> Secure one-time payment</span>
       </div>
 
-      <div className="mt-4 rounded-btn border border-warning/25 bg-warning/10 px-4 py-3 text-xs leading-5 text-ink">
-        Pay once for your selected plan. Your Premium access will be available through the date shown on your billing page.
-      </div>
-
-      <fieldset className="mt-5">
-        <legend className="text-xs font-extrabold uppercase tracking-[0.12em] text-ink-muted">Choose a plan</legend>
-        <div className="mt-2 grid gap-3 sm:grid-cols-2">
-          {variants.map((variant) => (
-            <label key={variant.id} className={`cursor-pointer rounded-card border p-4 transition ${selectedId === variant.id ? "border-primary bg-primary-soft ring-1 ring-primary/20" : "border-line bg-raised hover:border-line-strong"}`}>
-              <span className="flex items-start gap-3">
-                <input type="radio" name="temporary_qrph_variant" value={variant.id} checked={selectedId === variant.id} onChange={() => setSelectedId(variant.id)} className="mt-1 accent-primary" />
-                <span className="min-w-0"><strong className="block text-sm font-extrabold text-ink">{variant.label}</strong><span className="mt-1 block text-xs leading-5 text-ink-muted">{variant.priceLabel} {variant.cadenceLabel}{variant.discountPercent > 0 ? ` · Save ${variant.discountPercent}%` : ""}</span>{variant.cadenceLabel !== "per month" && <span className="mt-1 block text-xs font-semibold text-primary">About {variant.monthlyEquivalentLabel}/month</span>}</span>
-              </span>
-            </label>
-          ))}
+      <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.18fr)_minmax(260px,0.82fr)]">
+        <div className="space-y-4">
+          <div className="rounded-xl border border-warning/25 bg-warning/10 px-3 py-2.5 text-xs leading-5 text-ink">Pay once for the selected term. Your Premium access remains active through the date shown on the billing page.</div>
+          <CheckoutPlanPicker variants={variants} selectedId={selectedId} onChange={selectVariant} inputName="temporary_qrph_variant" />
         </div>
-      </fieldset>
 
-      {message && <p role="status" aria-live="polite" className={`mt-5 rounded-btn border px-4 py-3 text-sm font-semibold leading-5 ${messageKind === "success" ? "border-success/25 bg-success/10 text-success" : messageKind === "neutral" ? "border-line bg-raised text-ink-muted" : "border-danger/25 bg-danger-soft text-danger"}`}>{message}</p>}
-      <button type="button" onClick={() => void submit()} disabled={pending} className="mt-5 w-full rounded-btn bg-accent px-5 py-3.5 text-sm font-extrabold uppercase tracking-wide text-accent-fg transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50">{pending ? "Opening secure checkout…" : `Continue to secure checkout${selectedVariant ? ` · ${selectedVariant.priceLabel}` : ""}`}</button>
-      <p className="mt-3 text-xs leading-5 text-ink-muted">Your payment is securely confirmed before Premium access is enabled.</p>
+        <aside className="h-fit rounded-[16px] border border-line bg-surface-raised p-4" aria-label="QR Ph checkout summary">
+          <div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-accent">Order summary</p><h4 className="mt-1 text-base font-extrabold">Premium access</h4></div><AdminIcon name="wallet" size={17} /></div>
+          <div className="mt-4 space-y-2 text-sm"><div className="flex items-center justify-between gap-3"><span className="text-ink-muted">{selectedVariant?.label ?? "Selected plan"}</span><span className="font-extrabold tabular-nums text-ink">{formatPeso(selectedVariant?.baseAmountCentavos ?? 0)}</span></div>{promoQuote?.variantId === selectedId && <div className="flex items-center justify-between gap-3 text-success"><span>{promoQuote.code} discount</span><span className="font-extrabold tabular-nums">-{formatPeso(promoQuote.discountAmountCentavos)}</span></div>}</div>
+          <div className="mt-4 border-t border-dashed border-line pt-3"><div className="flex items-end justify-between gap-3"><span className="text-xs font-extrabold uppercase tracking-wide text-ink-muted">Pay once</span><strong className="text-2xl font-extrabold tracking-[-0.04em] tabular-nums text-primary">{formatPeso(discountedAmount)}</strong></div><p className="mt-1 text-[11px] leading-4 text-ink-muted">{selectedVariant?.cadenceLabel ?? "Selected term"}</p></div>
+          <div className="mt-4"><PromotionCodeInput value={promoCode} onChange={(value) => { setPromoCode(value); setPromoQuote(null); setPromoMessage(null); }} onApply={() => void applyPromotion()} pending={promoPending} quote={promoQuote?.variantId === selectedId ? promoQuote : null} message={promoMessage} /></div>
+          {message && <p role="status" aria-live="polite" className={`mt-4 rounded-xl border px-3 py-2.5 text-xs font-semibold leading-5 ${messageKind === "success" ? "border-success/25 bg-success/10 text-success" : messageKind === "neutral" ? "border-line bg-raised text-ink-muted" : "border-danger/25 bg-danger-soft text-danger"}`}>{message}</p>}
+          <button type="button" onClick={() => void submit()} disabled={pending} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-xs font-extrabold uppercase tracking-wide text-accent-fg transition hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50">{pending ? "Opening secure checkout…" : `Continue · ${formatPeso(discountedAmount)}`}<AdminIcon name="arrow" size={14} /></button>
+          <p className="mt-3 text-[11px] leading-4 text-ink-muted">Payment is securely confirmed before Premium access is enabled.</p>
+        </aside>
+      </div>
     </div>
   );
 }
 
 function storeSession(value: string) {
-  try {
-    window.sessionStorage.setItem(SESSION_STORAGE_KEY, value);
-  } catch {
-    /* The redirect still works; the webhook remains the source of truth. */
-  }
+  try { window.sessionStorage.setItem(SESSION_STORAGE_KEY, value); } catch { /* The webhook remains the source of truth. */ }
 }
 
 function readStoredSession() {
-  try {
-    return window.sessionStorage.getItem(SESSION_STORAGE_KEY);
-  } catch {
-    return null;
-  }
+  try { return window.sessionStorage.getItem(SESSION_STORAGE_KEY); } catch { return null; }
 }
 
 function clearStoredSession() {
-  try {
-    window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
-  } catch {
-    /* Ignore storage failures. */
-  }
+  try { window.sessionStorage.removeItem(SESSION_STORAGE_KEY); } catch { /* Ignore storage failures. */ }
 }
 
 function CheckoutNotice({ title, detail, tone }: { title: string; detail: string; tone: "warning" | "neutral" }) {
-  return <div className={`mt-6 rounded-card border px-4 py-4 text-sm leading-6 ${tone === "warning" ? "border-warning/30 bg-warning/10 text-ink" : "border-line bg-raised text-ink-muted"}`}><p className="font-extrabold text-ink">{title}</p><p className="mt-1">{detail}</p></div>;
+  return <div className={`mt-5 rounded-xl border px-4 py-3 text-sm leading-5 ${tone === "warning" ? "border-warning/30 bg-warning/10 text-ink" : "border-line bg-raised text-ink-muted"}`}><p className="font-extrabold text-ink">{title}</p><p className="mt-1">{detail}</p></div>;
 }

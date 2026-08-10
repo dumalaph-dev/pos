@@ -1,4 +1,5 @@
 import { normalizeSubscriptionStatus } from "@/lib/billing";
+import { markPromotionRedemptionConverted } from "@/lib/platform-promotions-server";
 import { readNestedResourceId, type PayMongoResourceAttributes } from "@/lib/paymongo-server";
 
 export type TemporaryQrPhCheckoutMetadata = {
@@ -7,6 +8,7 @@ export type TemporaryQrPhCheckoutMetadata = {
   intervalUnit: "month" | "year";
   intervalCount: number;
   amountCentavos: number;
+  promotionId: string | null;
 };
 
 type TemporaryQrPhOrganization = {
@@ -35,7 +37,7 @@ export function readTemporaryQrPhCheckoutMetadata(attributes: PayMongoResourceAt
   const amountCentavos = readInteger(metadata.amount_centavos);
   if (!organizationId || !variantId || !intervalUnit || !intervalCount || !amountCentavos || amountCentavos < 100) return null;
 
-  return { organizationId, variantId, intervalUnit, intervalCount, amountCentavos };
+  return { organizationId, variantId, intervalUnit, intervalCount, amountCentavos, promotionId: readString(metadata.promotion_id) };
 }
 
 export function readCheckoutPaymentStatus(attributes: PayMongoResourceAttributes) {
@@ -102,6 +104,7 @@ export async function activateTemporaryQrPhCheckout(
     organization.subscription_current_period_end
   ) {
     await persistBillingVariant(admin, organization.id, input.metadata.variantId);
+    await markPromotionRedemptionConverted(admin, input.checkoutSessionId);
     return { periodEnd: organization.subscription_current_period_end, duplicate: true };
   }
 
@@ -126,6 +129,7 @@ export async function activateTemporaryQrPhCheckout(
   if (update.error) throw new Error("The QR Ph payment was confirmed but the organization billing record could not be updated.");
 
   await persistBillingVariant(admin, organization.id, input.metadata.variantId);
+  await markPromotionRedemptionConverted(admin, input.checkoutSessionId);
 
   return { periodEnd: periodEnd.toISOString(), duplicate: false };
 }

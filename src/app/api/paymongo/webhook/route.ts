@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/employee-auth";
 import { normalizeSubscriptionStatus } from "@/lib/billing";
+import { markPromotionRedemptionConverted } from "@/lib/platform-promotions-server";
 import { readPayMongoString, resourceAttributes } from "@/lib/paymongo-server";
 import { activateTemporaryQrPhCheckout, readCheckoutPaymentStatus, readTemporaryQrPhCheckoutMetadata } from "@/lib/temporary-qrph";
 
@@ -21,6 +22,7 @@ type NormalizedProviderEvent = {
 type OrganizationBillingRecord = {
   id: string;
   subscription_status: string | null;
+  subscription_provider_subscription_id: string | null;
 };
 
 export const runtime = "nodejs";
@@ -115,6 +117,9 @@ async function applyProviderEvent(admin: NonNullable<ReturnType<typeof createAdm
 
   const result = await admin.from("organizations").update(update).eq("id", organization.id);
   if (result.error) throw new Error("Organization billing status could not be updated.");
+  if (status === "active") {
+    await markPromotionRedemptionConverted(admin, organization.subscription_provider_subscription_id ?? subscriptionId ?? paymentIntentId, paymentIntentId);
+  }
 }
 
 async function applyTemporaryQrPhEvent(admin: NonNullable<ReturnType<typeof createAdminClient>>, resource: ProviderResource | null) {
@@ -138,7 +143,7 @@ async function findOrganization(admin: NonNullable<ReturnType<typeof createAdmin
   if (subscriptionId) {
     const result = await admin
       .from("organizations")
-      .select("id, subscription_status")
+      .select("id, subscription_status, subscription_provider_subscription_id")
       .eq("subscription_provider_subscription_id", subscriptionId)
       .limit(1);
     if (result.error) throw new Error("Subscription provider fields are not available.");
@@ -149,7 +154,7 @@ async function findOrganization(admin: NonNullable<ReturnType<typeof createAdmin
   if (customerId) {
     const result = await admin
       .from("organizations")
-      .select("id, subscription_status")
+      .select("id, subscription_status, subscription_provider_subscription_id")
       .eq("subscription_provider_customer_id", customerId)
       .limit(1);
     if (result.error) throw new Error("Customer provider fields are not available.");
@@ -160,7 +165,7 @@ async function findOrganization(admin: NonNullable<ReturnType<typeof createAdmin
   if (paymentIntentId) {
     const result = await admin
       .from("organizations")
-      .select("id, subscription_status")
+      .select("id, subscription_status, subscription_provider_subscription_id")
       .eq("subscription_provider_payment_intent_id", paymentIntentId)
       .limit(1);
     if (result.error) throw new Error("Payment intent provider fields are not available.");
