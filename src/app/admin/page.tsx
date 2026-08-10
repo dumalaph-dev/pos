@@ -629,7 +629,7 @@ export default async function AdminPage() {
                 <div className="mt-3 grid gap-3">
                   <TenderMetric label="Cash" orders={tenderTotals.cash.orders} value={tenderTotals.cash.total} total={totalSales} tone="bg-primary" />
                   <TenderMetric label="E-wallet" orders={tenderTotals.eWallet.orders} value={tenderTotals.eWallet.total} total={totalSales} tone="bg-success" />
-                  <TenderMetric label="Card" orders={tenderTotals.card.orders} value={tenderTotals.card.total} total={totalSales} tone="bg-[#8064a7]" />
+                  <TenderMetric label="Card" orders={tenderTotals.card.orders} value={tenderTotals.card.total} total={totalSales} tone="bg-accent" />
                 </div>
               </div>
             </section>
@@ -657,7 +657,7 @@ export default async function AdminPage() {
 }
 
 function KpiCard({ label, value, detail, trend, icon, tone, spark, href }: { label: string; value: string; detail: string; trend?: string; icon: "wallet" | "bag" | "chart" | "box"; tone: "brown" | "orange" | "green" | "purple" | "yellow" | "red"; spark?: number[]; href?: string }) {
-  const toneClass = { brown: "bg-primary text-primary-fg", orange: "bg-[#f3972e] text-white", green: "bg-[#4f9661] text-white", purple: "bg-[#8064a7] text-white", yellow: "bg-[#f2ad32] text-white", red: "bg-[#e64646] text-white" }[tone];
+  const toneClass = { brown: "bg-primary text-primary-fg", orange: "bg-warning text-primary-fg", green: "bg-success text-primary-fg", purple: "bg-accent text-primary-fg", yellow: "bg-warning text-primary-fg", red: "bg-danger text-primary-fg" }[tone];
   return (
     <article className="admin-kpi-card">
       <div className="admin-kpi-card__inner">
@@ -688,7 +688,7 @@ function SalesChart({ series }: { series: Array<{ label: string; value: number }
     <div className="mt-4">
       <div className="flex gap-3">
         <div className="flex h-[190px] flex-col justify-between py-1 text-[9px] font-semibold text-ink-muted"><span>{compactPeso(max)}</span><span>{compactPeso(max * 0.75)}</span><span>{compactPeso(max * 0.5)}</span><span>{compactPeso(max * 0.25)}</span><span>₱0</span></div>
-        <div className="min-w-0 flex-1"><svg viewBox="0 0 608 190" className="h-[190px] w-full" role="img" aria-label="Sales summary for the last seven days"><g stroke="#eee4d7" strokeWidth="1"><path d="M32 26H582M32 61H582M32 96H582M32 131H582M32 166H582" /></g><polygon points={areaPoints} fill="#eadac6" fillOpacity=".58" /><polyline points={points} fill="none" stroke="#8b4c16" strokeWidth="2.2" /><g fill="#8b4c16" stroke="#fffdf9" strokeWidth="2">{series.map((point, index) => { const x = 34 + (index / Math.max(series.length - 1, 1)) * 540; const y = 165 - (point.value / max) * 126; return <circle key={point.label} cx={x} cy={y} r="4" />; })}</g></svg><div className="flex justify-between pl-1 text-[9px] font-semibold text-ink-muted">{series.map((point) => <span key={point.label}>{point.label}</span>)}</div></div>
+        <div className="min-w-0 flex-1"><svg viewBox="0 0 608 190" className="h-[190px] w-full" role="img" aria-label="Sales summary for the last seven days"><g stroke="var(--border)" strokeWidth="1"><path d="M32 26H582M32 61H582M32 96H582M32 131H582M32 166H582" /></g><polygon points={areaPoints} fill="var(--primary-soft)" fillOpacity=".58" /><polyline points={points} fill="none" stroke="var(--primary)" strokeWidth="2.2" /><g fill="var(--primary)" stroke="var(--surface-raised)" strokeWidth="2">{series.map((point, index) => { const x = 34 + (index / Math.max(series.length - 1, 1)) * 540; const y = 165 - (point.value / max) * 126; return <circle key={point.label} cx={x} cy={y} r="4" />; })}</g></svg><div className="flex justify-between pl-1 text-[9px] font-semibold text-ink-muted">{series.map((point) => <span key={point.label}>{point.label}</span>)}</div></div>
       </div>
     </div>
   );
@@ -700,7 +700,7 @@ function StockAlert({ name, detail, minimum, threshold, onHand, image, danger }:
 }
 
 function OverviewMetric({ icon, label, value }: { icon: "chart" | "bag" | "promotions" | "orders" | "wallet"; label: string; value: string }) {
-  return <div className="flex items-center gap-2 rounded-btn border border-[#f0e8dc] bg-[#fffdf9] px-3 py-2.5"><span className="grid h-7 w-7 place-items-center rounded-full bg-primary-soft text-primary"><AdminIcon name={icon} size={14} /></span><span className="min-w-0 flex-1 text-[10px] font-semibold text-ink-muted">{label}</span><strong className="tnums text-[11px] font-extrabold text-ink">{value}</strong></div>;
+  return <div className="flex items-center gap-2 rounded-btn border border-line bg-surface-raised px-3 py-2.5"><span className="grid h-7 w-7 place-items-center rounded-full bg-primary-soft text-primary"><AdminIcon name={icon} size={14} /></span><span className="min-w-0 flex-1 text-[10px] font-semibold text-ink-muted">{label}</span><strong className="tnums text-[11px] font-extrabold text-ink">{value}</strong></div>;
 }
 
 function TenderMetric({ label, orders, value, total, tone }: { label: string; orders: number; value: number; total: number; tone: string }) {

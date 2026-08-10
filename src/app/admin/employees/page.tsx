@@ -3,6 +3,7 @@ import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import StaffLinkCopy from "@/components/admin/StaffLinkCopy";
 import { SignOutButton } from "@/components/SignOutButton";
+import { readAdminBranding } from "@/lib/admin/branding";
 import { formatPeso } from "@/lib/money";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
@@ -80,7 +81,7 @@ type LeaveRecord = {
   status: "pending" | "approved" | "rejected";
   created_at: string;
 };
-type CurrentProfile = { full_name: string | null; role: AccessRole | null; org_id: string; store_id: string | null; password_change_required: boolean };
+type CurrentProfile = { full_name: string | null; role: AccessRole | null; org_id: string; store_id: string | null; password_change_required: boolean; organizations: { settings?: unknown } | null };
 type SearchParams = Record<string, string | string[] | undefined>;
 
 const DEFAULT_STORE_NAME = "Your Store";
@@ -266,6 +267,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   if (profile?.password_change_required) redirect("/account/password?required=1");
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile) return <EmployeesProfileMissing />;
+  const branding = readAdminBranding(profile.organizations?.settings);
 
   const today = todayInSingapore();
   const fallbackRange = weekRange(today);
@@ -398,7 +400,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   const staffLinksUnavailable = canWrite && Boolean(staffLinksResult.error);
 
   return (
-    <main className="admin-page employee-page text-ink">
+    <main data-admin-theme={branding.theme} className="admin-page employee-page text-ink">
       <div className="min-w-0 px-4 pb-10 sm:px-6 lg:px-8">
           <header className="employee-topbar">
             <div className="employee-topbar__tools">
@@ -488,11 +490,11 @@ function StaffAccessPanel({ branches, migrationMissing }: { branches: BranchReco
       {migrationMissing && <div role="status" className="employee-notice employee-notice--warning"><AdminIcon name="alert" size={16} /> Human-readable staff links could not be loaded. Existing UUID links remain available below; apply migration 0033 if this is the first rollout.</div>}
       {branches.length === 0
         ? <div className="employee-empty-state"><span><AdminIcon name="branches" size={23} /></span><strong>Create a branch first</strong><p>Each active branch receives its own staff login link.</p></div>
-        : <div className="grid gap-3 md:grid-cols-2">{branches.map((branch) => <article key={branch.id} className="rounded-[9px] border border-[#f0e9e1] bg-[#fffefb] p-4">
+        : <div className="grid gap-3 md:grid-cols-2">{branches.map((branch) => <article key={branch.id} className="rounded-[9px] border border-line bg-surface-raised p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="employee-section-kicker">{branch.is_active ? "Active branch" : "Inactive branch"}</p>
-              <h3 className="mt-1 text-sm font-extrabold text-[#261e19]">{branch.name}</h3>
+              <h3 className="mt-1 text-sm font-extrabold text-ink">{branch.name}</h3>
             </div>
             <span className="employee-data-badge">{branch.is_active ? "Ready to share" : "Disabled"}</span>
           </div>
@@ -688,7 +690,7 @@ function AttendanceOverview({ breakdown, total, range }: { breakdown: Record<"pr
   const presentEnd = total ? breakdown.present / total * 100 : 0;
   const absentEnd = presentEnd + (total ? breakdown.absent / total * 100 : 0);
   const lateEnd = absentEnd + (total ? breakdown.late / total * 100 : 0);
-  const gradient = total ? `conic-gradient(#4b8e4e 0 ${presentEnd}%, #f05a21 ${presentEnd}% ${absentEnd}%, #f9ae36 ${absentEnd}% ${lateEnd}%, #9ba0a3 ${lateEnd}% 100%)` : "conic-gradient(#e8ded2 0 100%)";
+  const gradient = total ? `conic-gradient(var(--success) 0 ${presentEnd}%, var(--danger) ${presentEnd}% ${absentEnd}%, var(--warning) ${absentEnd}% ${lateEnd}%, var(--text-subtle) ${lateEnd}% 100%)` : "conic-gradient(var(--border) 0 100%)";
   return <section className="employee-side-card"><div className="employee-side-card__heading"><div><p className="employee-section-kicker">Attendance Summary</p><h2>{formatDateRange(range.start, range.end)}</h2></div><span className="employee-side-select">Live data</span></div><div className="employee-attendance-chart"><div className="employee-donut" style={{ background: gradient }}><div>{total}</div></div><div className="employee-legend">{(["present", "absent", "late", "on_leave"] as const).map((status) => <span key={status}><i className={`employee-legend-dot employee-legend-dot--${status}`} /> <b>{statusLabel(status)}</b> <small>{breakdown[status]} ({total ? Math.round(breakdown[status] / total * 100) : 0}%)</small></span>)}</div></div><div className="employee-total-logs"><span>Total Logs</span><strong>{total}</strong></div></section>;
 }
 

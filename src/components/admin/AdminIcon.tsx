@@ -22,6 +22,10 @@ export type AdminIconName =
   | "bag"
   | "wallet"
   | "box"
+  | "drink"
+  | "rice"
+  | "sauce"
+  | "package"
   | "chart"
   | "eye"
   | "pig"
@@ -100,6 +104,14 @@ export function AdminIcon({ name, size = 18 }: { name: AdminIconName; size?: num
       return <svg {...common}><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H19v16H6.5A2.5 2.5 0 0 1 4 17.5v-11Z" /><path d="M4 8h15M16 13h3" /><circle cx="16" cy="13" r=".6" fill="currentColor" stroke="none" /></svg>;
     case "box":
       return <svg {...common}><path d="m4 7 8-4 8 4v10l-8 4-8-4V7Z" /><path d="m4 7 8 4 8-4M12 11v10" /></svg>;
+    case "drink":
+      return <svg {...common}><path d="M8 5h8l-1 15H9L8 5Z" /><path d="M9 9h6M10 2h4M10 2v3" /></svg>;
+    case "rice":
+      return <svg {...common}><path d="M5 11h14c-.4 5.2-3 8-7 8s-6.6-2.8-7-8Z" /><path d="M8 8c.6-1.8 1.9-3 4-3s3.4 1.2 4 3M4 11h16" /></svg>;
+    case "sauce":
+      return <svg {...common}><path d="M10 4h4v3h-4zM9 7h6l1 13H8L9 7Z" /><path d="M9 12h6" /></svg>;
+    case "package":
+      return <svg {...common}><path d="m4 8 8-4 8 4-8 4-8-4Z" /><path d="M4 8v8l8 4 8-4V8M12 12v8" /></svg>;
     case "chart":
       return <svg {...common}><path d="M4 19V5M4 19h17" /><path d="m7 15 4-4 3 2 5-6" /><path d="M16 7h3v3" /></svg>;
     case "eye":

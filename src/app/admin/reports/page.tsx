@@ -245,7 +245,7 @@ export default async function ReportsPage({
               {report.paymentRows.map((payment) => (
                 <div key={payment.method} className="flex items-center justify-between gap-3 py-3">
                   <span className="flex items-center gap-2 text-xs font-extrabold text-ink">
-                    <i className={`h-2.5 w-2.5 rounded-full ${payment.method === "cash" ? "bg-primary" : payment.method === "gcash" ? "bg-success" : payment.method === "maya" ? "bg-warning" : "bg-[#8064a7]"}`} />
+                    <i className={`h-2.5 w-2.5 rounded-full ${payment.method === "cash" ? "bg-primary" : payment.method === "gcash" ? "bg-success" : payment.method === "maya" ? "bg-warning" : "bg-accent"}`} />
                     {paymentLabel(payment.method)}
                   </span>
                   <span className="text-right">

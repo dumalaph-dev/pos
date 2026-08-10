@@ -9,6 +9,7 @@ import { MultiProductModal } from "@/components/admin/MultiProductModal";
 import { YieldEntryForm } from "@/components/admin/YieldEntryForm";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
+import { categoryIconName } from "@/lib/category-icons";
 import { isProductImageUrl } from "@/lib/product-images";
 import {
   formatStockQuantity,
@@ -626,60 +627,46 @@ export default async function InventoryPage({
           <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <InventoryMetric label="Total items" value={String(allRows.length)} detail={`Tracked for ${currentBranchName}`} tone="bg-primary text-primary-fg" icon="box" />
             <InventoryMetric label="Low stock items" value={String(lowStockCount)} detail="Need to reorder soon" tone="bg-accent text-accent-fg" icon="inventory" />
-            <InventoryMetric label="Out of stock" value={String(outOfStockCount)} detail="Require immediate attention" tone="bg-warning text-white" icon="alert" />
-            <InventoryMetric label="Total inventory value" value={estimatedValue ? formatPeso(Math.round(estimatedValue)) : "₱0.00"} detail={estimatedValueItems ? `Estimated for ${estimatedValueItems} item${estimatedValueItems === 1 ? "" : "s"}` : "Based on cost price"} tone="bg-success text-white" icon="wallet" />
-            <InventoryMetric label="Items moved today" value={String(movedToday)} detail={`Since ${formatToday(todayStart)}`} tone="bg-[#2f7df4] text-white" icon="chart" />
+            <InventoryMetric label="Out of stock" value={String(outOfStockCount)} detail="Require immediate attention" tone="bg-warning text-primary-fg" icon="alert" />
+            <InventoryMetric label="Total inventory value" value={estimatedValue ? formatPeso(Math.round(estimatedValue)) : "₱0.00"} detail={estimatedValueItems ? `Estimated for ${estimatedValueItems} item${estimatedValueItems === 1 ? "" : "s"}` : "Based on cost price"} tone="bg-success text-primary-fg" icon="wallet" />
+            <InventoryMetric label="Items moved today" value={String(movedToday)} detail={`Since ${formatToday(todayStart)}`} tone="bg-primary text-primary-fg" icon="chart" />
           </div>
 
           <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_252px]">
             <div className="min-w-0">
-              <section aria-labelledby="inventory-filters-heading" className="admin-panel p-2.5 sm:p-3">
-                <form action="/admin/inventory" method="get" className="inventory-filter-bar">
-                  <input type="hidden" name="page" value="1" />
-                  <input type="hidden" name="pageSize" value={pageSize} />
-                  <label className="inventory-search">
-                    <span className="sr-only" id="inventory-filters-heading">Search inventory</span>
-                    <span className="pointer-events-none absolute inset-y-0 left-2.5 grid place-items-center text-ink-muted"><AdminIcon name="search" size={15} /></span>
-                    <input name="q" defaultValue={searchQuery} placeholder="Search inventory" className="inventory-input inventory-input--compact inventory-search__input" />
-                  </label>
-
-                  <div className="inventory-filter-bar__actions">
-                    <details className="relative" open={activeFilterCount > 0}>
-                      <summary className="inventory-button list-none cursor-pointer gap-1.5 rounded-btn border border-line bg-surface text-[11px] font-extrabold text-primary"><AdminIcon name="filter" size={14} />Filters{activeFilterCount > 0 && <span className="inventory-filter-count">{activeFilterCount}</span>}<AdminIcon name="chevron" size={12} /></summary>
-                      <div className="inventory-filter-menu">
-                        <label className="grid gap-1"><span className="inventory-filter-menu__label">Category</span><select id="inventory-category" name="category" defaultValue={category} className="inventory-input inventory-input--compact text-xs font-bold"><option value="all">All categories</option>{categories.filter((item) => item.is_active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}<option value="uncategorized">Others</option></select></label>
-                        <label className="grid gap-1"><span className="inventory-filter-menu__label">Status</span><select id="inventory-status" name="status" defaultValue={status} className="inventory-input inventory-input--compact text-xs font-bold">{statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-                        <label className="grid gap-1"><span className="inventory-filter-menu__label">Supplier</span><select id="inventory-supplier" name="supplier" defaultValue={supplier || ""} className="inventory-input inventory-input--compact text-xs font-bold"><option value="">All suppliers</option>{suppliers.filter((item) => item.is_active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-                        <div className="inventory-filter-menu__actions">
-                          {activeFilterCount > 0 && <Link href={buildInventoryHref({ ...baseHref, category: "all", status: "all", supplier: "", page: 1 })} className="inventory-button inventory-button--ghost">Reset</Link>}
-                          <button type="submit" className="inventory-button rounded-btn bg-primary text-[11px] font-extrabold text-primary-fg transition hover:bg-primary-hover">Apply</button>
-                        </div>
-                      </div>
-                    </details>
-
-                    <details className="relative" open={hiddenColumnCount > 0}>
-                      <summary className="inventory-button list-none cursor-pointer gap-1.5 rounded-btn border border-line bg-surface text-[11px] font-extrabold text-primary"><AdminIcon name="columns" size={14} />Columns{hiddenColumnCount > 0 && <span className="inventory-filter-count">{hiddenColumnCount}</span>}<AdminIcon name="chevron" size={12} /></summary>
-                      <div className="inventory-filter-menu inventory-filter-menu--columns">
-                        {columnOptions.map((column) => <label key={column.value} className="flex items-center gap-2 text-[11px] font-bold text-ink"><input type="checkbox" name="columns" value={column.value} defaultChecked={visibleColumns.has(column.value)} className="h-3.5 w-3.5 accent-primary" />{column.label}</label>)}
-                        <button type="submit" className="inventory-button mt-1 rounded-btn bg-primary text-[11px] font-extrabold text-primary-fg transition hover:bg-primary-hover">Apply</button>
-                      </div>
-                    </details>
-
-                    <button type="submit" className="inventory-button rounded-btn bg-primary text-[11px] font-extrabold text-primary-fg transition hover:bg-primary-hover" aria-label="Apply inventory search"><AdminIcon name="search" size={14} /><span className="hidden sm:inline">Search</span><span className="sm:hidden">Go</span></button>
-                  </div>
-                </form>
-              </section>
-
-              <nav aria-label="Inventory categories" className="admin-panel mt-3 overflow-x-auto p-2">
-                <div className="flex min-w-max gap-1">
+              <section aria-label="Inventory browsing controls" className="admin-panel inventory-directory-controls overflow-visible p-0">
+                <nav aria-label="Inventory categories" className="products-category-tabs inventory-category-tabs">
                   {categoryTabs.map((tab) => (
-                    <Link key={tab.id} href={buildInventoryHref({ ...baseHref, category: tab.id, page: 1 })} className={`inventory-category-tab ${category === tab.id ? "is-active" : ""}`}>
-                      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-secondary text-xs text-primary" aria-hidden="true">{tab.icon}</span>
-                      <span className="min-w-0"><strong className="block truncate text-[11px] font-extrabold">{tab.label}</strong><small className="block text-[10px] font-semibold text-ink-muted">{tab.count} items</small></span>
+                    <Link key={tab.id} href={buildInventoryHref({ ...baseHref, category: tab.id, page: 1 })} aria-current={category === tab.id ? "page" : undefined} className={`products-category-tab ${category === tab.id ? "is-active" : ""}`}>
+                      <span className="products-category-tab__icon"><AdminIcon name={categoryIconName(tab.icon, tab.label)} size={14} /></span>
+                      <strong>{tab.label}</strong>
+                      <small>{tab.count}</small>
                     </Link>
                   ))}
-                </div>
-              </nav>
+                </nav>
+                <form id="inventory-filters" action="/admin/inventory" method="get" className="products-filter-bar inventory-filter-bar">
+                  <input type="hidden" name="page" value="1" />
+                  <input type="hidden" name="pageSize" value={pageSize} />
+                  <label className="products-search-field">
+                    <span className="sr-only" id="inventory-filters-heading">Search inventory</span>
+                    <AdminIcon name="search" size={16} />
+                    <input name="q" defaultValue={searchQuery} placeholder="Search by item name, SKU or barcode…" />
+                  </label>
+                  <select name="category" defaultValue={category} aria-label="Filter inventory by category"><option value="all">All categories</option>{categories.filter((item) => item.is_active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}<option value="uncategorized">Others</option></select>
+                  <select name="status" defaultValue={status} aria-label="Filter inventory by status">{statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
+                  <select name="supplier" defaultValue={supplier || ""} aria-label="Filter inventory by supplier"><option value="">All suppliers</option>{suppliers.filter((item) => item.is_active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+                  {activeFilterCount > 0 && <Link href={buildInventoryHref({ ...baseHref, category: "all", status: "all", supplier: "", page: 1 })} className="products-secondary-button inventory-filter-reset" aria-label="Reset inventory filters">Reset</Link>}
+                  <details className="products-columns-menu">
+                    <summary className="products-secondary-button"><AdminIcon name="columns" size={15} /> Columns{hiddenColumnCount > 0 && <span className="products-filter-count">{hiddenColumnCount}</span>}</summary>
+                    <div className="products-popover products-columns-popover">
+                      <p className="products-popover__label">Visible columns</p>
+                      {columnOptions.map((column) => <label key={column.value} className="products-column-option"><input type="checkbox" name="columns" value={column.value} defaultChecked={visibleColumns.has(column.value)} />{column.label}</label>)}
+                      <button type="submit" className="products-small-primary">Apply columns</button>
+                    </div>
+                  </details>
+                  <button type="submit" className="products-small-primary products-search-button" aria-label="Search inventory"><AdminIcon name="search" size={14} /><span>Search</span></button>
+                </form>
+              </section>
 
               <section id="inventory-table" aria-labelledby="inventory-table-heading" className="admin-panel mt-3 overflow-hidden">
                 <div className="flex flex-wrap items-end justify-between gap-3 border-b border-line px-4 py-4">

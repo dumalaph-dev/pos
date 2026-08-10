@@ -5,11 +5,12 @@ import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { ProductCreateDialog } from "@/components/admin/ProductCreateDialog";
+import { ProductEditDialog } from "@/components/admin/ProductEditDialog";
 import { MultiProductModal } from "@/components/admin/MultiProductModal";
-import { ProductFields } from "@/components/admin/ProductFields";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatStockQuantity, salesQuantity, stockMovementDelta, stockStatus, type StockMovementType } from "@/lib/inventory";
 import { formatPeso } from "@/lib/money";
+import { categoryIconName } from "@/lib/category-icons";
 import { isProductImageUrl } from "@/lib/product-images";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { readBusinessPresetId } from "@/lib/admin/business";
@@ -23,7 +24,6 @@ import {
   importProducts,
   toggleProductVisibility,
   updateCategory,
-  updateProduct,
 } from "@/app/admin/catalog/actions";
 
 type AdminRole = "admin" | "manager" | "cashier";
@@ -634,7 +634,7 @@ export default async function ProductsPage({
           {(productsSchemaWarning || suppliersSchemaWarning) && <div role="status" className="products-alert products-alert--warning"><strong>Some product fields are unavailable.</strong> Ensure <code>0009_admin_business_records.sql</code> is applied before <code>0010_inventory_catalog_fields.sql</code> in Supabase to enable suppliers and advanced inventory fields.</div>}
           {dataWarning && <div role="status" className="products-alert products-alert--warning">Some product insights could not refresh. The page is showing the data that was available; product edits remain protected by your admin role.</div>}
 
-          {action === "edit" && selectedProduct && <ProductEditPanel product={selectedProduct} branches={visibleBranches} categories={categories} suppliers={suppliers} canWrite={canWrite} />}
+          {action === "edit" && selectedProduct && <ProductEditDialog key={selectedProduct.id} product={selectedProduct} branches={visibleBranches} categories={categories} suppliers={suppliers} canWrite={canWrite} initialOpen />}
           {action === "category" && <CategoryActionPanel branches={formBranches} categories={categories} defaultBranch={formDefaultBranch} canWrite={canWrite} branchById={branchById} />}
           {action === "import" && <ImportPanel branches={formBranches} defaultBranch={formDefaultBranch} canWrite={canWrite} />}
           {action === "bulk" && <BulkUpdatePanel canWrite={canWrite} />}
@@ -652,7 +652,7 @@ export default async function ProductsPage({
             <div className="min-w-0">
               <section className="products-table-card" aria-labelledby="products-table-heading">
                 <nav className="products-category-tabs" aria-label="Product categories">
-                  {categoryTabs.map((tab) => <Link key={tab.id} href={buildProductsHref({ ...baseHref, category: tab.id, page: 1 })} className={`products-category-tab ${categoryFilter === tab.id ? "is-active" : ""}`}><span>{tab.icon}</span><strong>{tab.name}</strong><small>{tab.count}</small></Link>)}
+                  {categoryTabs.map((tab) => <Link key={tab.id} href={buildProductsHref({ ...baseHref, category: tab.id, page: 1 })} className={`products-category-tab ${categoryFilter === tab.id ? "is-active" : ""}`}><span className="products-category-tab__icon"><AdminIcon name={categoryIconName(tab.icon, tab.name)} size={14} /></span><strong>{tab.name}</strong><small>{tab.count}</small></Link>)}
                 </nav>
 
                 <form id="product-filters" action="/products" method="get" className="products-filter-bar">
@@ -703,7 +703,7 @@ export default async function ProductsPage({
             </div>
 
             <aside className="products-sidebar-panels">
-              <section className="products-side-card" aria-labelledby="categories-overview-heading"><div className="products-side-card__header"><div><h2 id="categories-overview-heading">Categories overview</h2><p>Manage your product categories</p></div></div><div className="products-category-list">{categoryOverview.length === 0 ? <p className="products-side-empty">No categories yet.</p> : categoryOverview.map((category) => <Link key={category.id} href={buildProductsHref({ ...baseHref, category: category.id, page: 1 })} className="products-category-row"><span className="products-category-row__icon">{category.icon || "•"}</span><strong>{category.name}</strong><small>{category.count} product{category.count === 1 ? "" : "s"}</small></Link>)}</div><Link href="/products?create=category#category-form" className="products-outline-button"><AdminIcon name="box" size={14} /> Manage categories</Link></section>
+              <section className="products-side-card" aria-labelledby="categories-overview-heading"><div className="products-side-card__header"><div><h2 id="categories-overview-heading">Categories overview</h2><p>Manage your product categories</p></div></div><div className="products-category-list">{categoryOverview.length === 0 ? <p className="products-side-empty">No categories yet.</p> : categoryOverview.map((category) => <Link key={category.id} href={buildProductsHref({ ...baseHref, category: category.id, page: 1 })} className="products-category-row"><span className="products-category-row__icon"><AdminIcon name={categoryIconName(category.icon, category.name)} size={15} /></span><strong>{category.name}</strong><small>{category.count} product{category.count === 1 ? "" : "s"}</small></Link>)}</div><Link href="/products?create=category#category-form" className="products-outline-button"><AdminIcon name="box" size={14} /> Manage categories</Link></section>
               <section className="products-side-card" aria-labelledby="top-selling-heading"><div className="products-side-card__header"><div><h2 id="top-selling-heading">Top selling products</h2><p>{range === "7d" ? "This week" : `Last ${selectedDays} days`}</p></div><details className="products-side-period"><summary className="products-side-select">{rangeOptions.find((option) => option.value === range)?.label ?? "Period"} <AdminIcon name="chevron" size={11} /></summary><div className="products-popover products-side-period-popover">{rangeOptions.map((option) => <Link key={option.value} href={buildProductsHref({ ...baseHref, range: option.value, page: 1 })} className={`products-menu-link ${range === option.value ? "is-active" : ""}`}>{option.label}</Link>)}</div></details></div><div className="products-ranking">{topSelling.slice(0, 3).length === 0 ? <p className="products-side-empty">Completed POS sales will appear here.</p> : topSelling.slice(0, 3).map((item, index) => <div key={`${item.productId ?? item.name}-${index}`} className="products-ranking__item"><span className={`products-ranking__rank ${index === 0 ? "is-first" : ""}`}>{index + 1}</span><Image src={productImage({ name: item.name, image_url: item.imageUrl })} alt="" width={32} height={32} className="products-ranking__image" /><span className="products-ranking__copy"><strong>{item.name}</strong><small>{displayPeso(item.total)} · {item.orderIds.size} order{item.orderIds.size === 1 ? "" : "s"}</small></span><small className="products-ranking__qty">{formatStockQuantity(item.qty)} {item.unit} sold</small></div>)}</div><Link href={`/admin/sales?range=${range}`} className="products-outline-button"><AdminIcon name="chart" size={14} /> View sales report</Link></section>
               <section id="product-tips" className="products-tip-card"><span className="products-tip-card__icon"><AdminIcon name="alert" size={15} /></span><h2>Product tips</h2><strong>Keep your menu updated</strong><p>Review prices, POS visibility, and stock thresholds regularly so customers see accurate availability.</p><Link href="/admin/inventory#inventory-help">Learn more <AdminIcon name="arrow" size={13} /></Link></section>
             </aside>
@@ -716,10 +716,6 @@ export default async function ProductsPage({
 function ProductKpi({ label, value, detail, icon, tone, href }: { label: string; value: string; detail: string; icon: AdminIconName; tone: "brown" | "green" | "gray" | "red" | "yellow"; href?: string }) {
   const toneClass = { brown: "is-brown", green: "is-green", gray: "is-gray", red: "is-red", yellow: "is-yellow" }[tone];
   return <article className="products-kpi-card"><div className={`products-kpi-card__icon ${toneClass}`}><AdminIcon name={icon} size={17} /></div><div className="products-kpi-card__copy"><span>{label}</span><strong className={label === "Top selling" ? "is-text-value" : "tnums"}>{value}</strong>{href ? <Link href={href}>{detail} <AdminIcon name="arrow" size={12} /></Link> : <small>{detail}</small>}</div></article>;
-}
-
-function ProductEditPanel({ product, branches, categories, suppliers, canWrite }: { product: ProductRecord; branches: BranchRecord[]; categories: CategoryRecord[]; suppliers: SupplierRecord[]; canWrite: boolean }) {
-  return <section id="product-edit" className="products-action-panel" aria-labelledby="product-edit-heading"><div className="products-action-panel__header"><div><p className="products-action-panel__eyebrow">Product record · {product.sku || "SKU not set"}</p><h2 id="product-edit-heading">Edit {product.name}</h2><p>Update the product master data used by POS and inventory.</p></div><Link href="/products" className="products-icon-button" aria-label="Close product editor">×</Link></div><form action={updateProduct} className="products-form-grid"><input type="hidden" name="product_id" value={product.id} /><ProductFields product={product} branches={branches} categories={categories} suppliers={suppliers} defaultBranch={product.store_id} canWrite={canWrite} prefix={`edit-product-${product.id}`} /><div className="products-form-actions"><label className="products-checkbox-label"><input type="checkbox" name="track_stock" defaultChecked={product.track_stock} disabled={!canWrite} /> Track stock in inventory</label><label className="products-checkbox-label"><input type="checkbox" name="is_active" defaultChecked={product.is_active} disabled={!canWrite} /> Visible in POS</label><button type="submit" disabled={!canWrite} className="products-primary-button products-form-submit">Save product</button></div></form></section>;
 }
 
 function CategoryActionPanel({ branches, categories, defaultBranch, canWrite, branchById }: { branches: BranchRecord[]; categories: CategoryRecord[]; defaultBranch: string; canWrite: boolean; branchById: Map<string, BranchRecord> }) {

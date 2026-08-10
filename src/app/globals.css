@@ -3466,7 +3466,7 @@ textarea.inventory-input {
 
 .inventory-button:focus-visible,
 .inventory-icon-button:focus-visible,
-.inventory-category-tab:focus-visible,
+.products-category-tab:focus-visible,
 .inventory-page-button:focus-visible,
 .inventory-menu-item:focus-visible {
   outline: 2px solid var(--primary);
@@ -3497,108 +3497,33 @@ textarea.inventory-input {
   background: var(--primary-soft);
 }
 
+
 .inventory-filter-bar {
-  display: flex;
-  min-width: 0;
   align-items: center;
-  gap: 8px;
 }
 
-.inventory-search {
-  position: relative;
-  display: block;
-  min-width: 0;
-  max-width: 280px;
-  flex: 1 1 220px;
-}
-
-.inventory-search__input {
-  padding-left: 32px;
-  border-radius: 999px;
-}
-
-.inventory-filter-bar__actions {
-  display: flex;
+.inventory-filter-reset {
   flex: 0 0 auto;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  margin-left: auto;
 }
 
-.inventory-filter-count {
-  display: inline-grid;
-  min-width: 17px;
-  height: 17px;
-  place-items: center;
-  padding: 0 4px;
-  border-radius: 999px;
-  color: var(--primary-fg);
-  background: var(--primary);
-  font-size: 9px;
-  line-height: 1;
+.inventory-directory-controls .products-filter-bar {
+  border-bottom: 0;
 }
 
-.inventory-filter-menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  z-index: 30;
+.products-category-tab__icon {
   display: grid;
-  width: min(260px, calc(100vw - 32px));
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface);
-  box-shadow: var(--shadow-pop);
-}
-
-.inventory-filter-menu--columns {
-  width: 208px;
-  gap: 8px;
-}
-
-.inventory-filter-menu__label {
-  color: var(--text-muted);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.inventory-filter-menu__actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  padding-top: 2px;
-  border-top: 1px solid var(--border);
-}
-
-.inventory-category-tab {
-  display: flex;
-  min-width: 92px;
-  align-items: center;
-  gap: 7px;
-  padding: 8px 10px;
-  border: 1px solid transparent;
-  border-radius: 9px;
-  color: var(--text-muted);
-  text-decoration: none;
-  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
-}
-
-.inventory-category-tab:hover {
-  border-color: var(--border);
-  background: var(--surface-raised);
-}
-
-.inventory-category-tab.is-active {
-  border-color: rgba(91, 42, 10, 0.35);
+  width: 23px;
+  height: 23px;
+  flex: 0 0 23px;
+  place-items: center;
+  border-radius: 6px;
   color: var(--primary);
-  background: rgba(248, 240, 232, 0.72);
+  background: var(--primary-soft);
+  font-size: 0;
+}
+
+.products-category-tab__icon svg {
+  display: block;
 }
 
 .inventory-page-button {
@@ -3637,8 +3562,7 @@ textarea.inventory-input {
   list-style: none;
 }
 
-.inventory-section-summary::-webkit-details-marker,
-.inventory-filter-bar summary::-webkit-details-marker {
+.inventory-section-summary::-webkit-details-marker {
   display: none;
 }
 
@@ -3783,23 +3707,6 @@ textarea.inventory-input {
 
   .inventory-yield-form__footer .inventory-button {
     width: 100%;
-  }
-}
-
-@media (max-width: 640px) {
-  .inventory-filter-bar {
-    align-items: stretch;
-    flex-wrap: wrap;
-  }
-
-  .inventory-search {
-    max-width: none;
-    flex-basis: 100%;
-  }
-
-  .inventory-filter-bar__actions {
-    width: 100%;
-    margin-left: 0;
   }
 }
 
@@ -6752,6 +6659,147 @@ body.products-modal-open {
   margin: 0;
 }
 
+.product-edit-dialog {
+  width: min(900px, 100%);
+  max-height: min(840px, calc(100dvh - 32px));
+}
+
+.product-edit-dialog .products-dialog__header {
+  gap: 12px;
+  padding: 15px 18px 12px;
+}
+
+.product-edit-dialog .products-dialog__title {
+  gap: 10px;
+}
+
+.product-edit-dialog .products-dialog__mark {
+  width: 32px;
+  height: 32px;
+  flex-basis: 32px;
+  border-radius: 9px;
+}
+
+.product-edit-dialog .products-dialog__title h2 {
+  margin-top: 3px;
+  font-size: 18px;
+}
+
+.product-edit-dialog .products-dialog__title p:last-child {
+  margin-top: 3px;
+  font-size: 9px;
+}
+
+.products-edit-dialog__hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 18px 0;
+  padding: 8px 10px;
+  border: 1px solid #f0dfcb;
+  border-radius: 9px;
+  color: var(--text-muted);
+  background: #fff7ee;
+  font-size: 8px;
+  line-height: 1.35;
+}
+
+.products-edit-dialog__hint > span:last-child {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.products-edit-dialog__hint i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+.product-edit-dialog .products-dialog__form {
+  gap: 8px;
+  padding: 12px 18px 18px;
+}
+
+.product-edit-dialog .products-form-section {
+  padding: 11px;
+  border-radius: 11px;
+}
+
+.product-edit-dialog .products-form-section__header {
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.product-edit-dialog .products-form-section__header h3 {
+  font-size: 12px;
+}
+
+.product-edit-dialog .products-form-section__header > small {
+  max-width: 300px;
+  font-size: 8px;
+}
+
+.product-edit-dialog .products-form-section__grid {
+  gap: 8px;
+}
+
+.product-edit-dialog .products-form-field {
+  gap: 4px;
+}
+
+.product-edit-dialog .products-form-field > span {
+  font-size: 8px;
+}
+
+.product-edit-dialog .inventory-input {
+  height: 36px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.product-edit-dialog .products-category-picker {
+  gap: 4px;
+}
+
+.product-edit-dialog .products-category-picker__row {
+  gap: 5px;
+}
+
+.product-edit-dialog .products-new-category-button {
+  min-height: 36px;
+  padding: 0 9px;
+  border-radius: 8px;
+  font-size: 9px;
+}
+
+.product-edit-dialog .products-category-picker__message {
+  min-height: 10px;
+  font-size: 8px;
+}
+
+.product-edit-dialog .products-image-upload__body {
+  gap: 8px;
+  padding: 7px;
+}
+
+.product-edit-dialog .products-image-upload__preview {
+  width: 52px;
+  height: 52px;
+  flex-basis: 52px;
+}
+
+.product-edit-dialog .products-image-upload__help {
+  font-size: 8px;
+}
+
 .products-dialog__footer {
   position: sticky;
   z-index: 2;
@@ -6766,6 +6814,31 @@ body.products-modal-open {
   border-top: 1px solid #eee2d5;
   background: rgba(255, 253, 249, 0.94);
   backdrop-filter: blur(8px);
+}
+
+.products-edit-dialog__footer {
+  margin-right: -18px;
+  margin-bottom: -18px;
+  margin-left: -18px;
+  padding: 10px 18px;
+}
+
+.products-edit-dialog__flags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.products-edit-dialog__flags .products-checkbox-label {
+  min-height: 24px;
+  font-size: 9px;
+}
+
+.products-edit-dialog__save {
+  min-width: 126px;
+  min-height: 34px;
+  font-size: 10px;
 }
 
 .products-dialog__stock-option {
@@ -14910,5 +14983,617 @@ body.products-modal-open {
   .admin-quick-actions__item:hover,
   .admin-quick-actions__item:hover > svg:last-child {
     transform: none;
+  }
+}
+
+/* Theme bridge for the Employees workspace. The workspace predates the
+   persisted admin themes and carried its own Classic brown palette, which
+   made it ignore the active dashboard identity. Keep its layout intact while
+   mapping every surface, control, and semantic accent to the shared tokens. */
+.employee-page[data-admin-theme] {
+  --employee-brown: var(--primary);
+  --employee-brown-dark: var(--primary-hover);
+  --employee-cream: var(--surface-raised);
+  --employee-line: var(--border);
+  --employee-muted: var(--text-muted);
+  --employee-green: var(--success);
+  --employee-orange: var(--warning);
+  --employee-blue: var(--primary);
+  color: var(--text);
+}
+
+.employee-page[data-admin-theme] .employee-date-control,
+.employee-page[data-admin-theme] .employee-tool-button,
+.employee-page[data-admin-theme] .employee-outline-button,
+.employee-page[data-admin-theme] .employee-export-button,
+.employee-page[data-admin-theme] .employee-icon-button,
+.employee-page[data-admin-theme] .employee-pagination a,
+.employee-page[data-admin-theme] .employee-side-select {
+  border-color: var(--border);
+  color: var(--text);
+  background: var(--surface-raised);
+}
+
+.employee-page[data-admin-theme] .employee-date-control:hover,
+.employee-page[data-admin-theme] .employee-tool-button:hover,
+.employee-page[data-admin-theme] .employee-outline-button:hover,
+.employee-page[data-admin-theme] .employee-export-button:hover,
+.employee-page[data-admin-theme] .employee-icon-button:hover,
+.employee-page[data-admin-theme] .employee-side-select:hover {
+  border-color: var(--border-strong);
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.employee-page[data-admin-theme] .employee-date-menu__form,
+.employee-page[data-admin-theme] .employee-add-menu__items {
+  border-color: var(--border);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-pop);
+}
+
+.employee-page[data-admin-theme] .employee-date-menu__form label > span,
+.employee-page[data-admin-theme] .employee-date-form label > span,
+.employee-page[data-admin-theme] .employee-entry-form label > span,
+.employee-page[data-admin-theme] .employee-role-card > label > span,
+.employee-page[data-admin-theme] .employee-wide-field > span,
+.employee-page[data-admin-theme] .employee-schedule-fieldset legend,
+.employee-page[data-admin-theme] .employee-permission-fieldset legend {
+  color: var(--text-muted);
+}
+
+.employee-page[data-admin-theme] .employee-date-menu__form input,
+.employee-page[data-admin-theme] .employee-filter-form input,
+.employee-page[data-admin-theme] .employee-filter-form select,
+.employee-page[data-admin-theme] .employee-entry-form input,
+.employee-page[data-admin-theme] .employee-entry-form select,
+.employee-page[data-admin-theme] .employee-entry-form textarea,
+.employee-page[data-admin-theme] .employee-role-card input,
+.employee-page[data-admin-theme] .employee-role-card select,
+.employee-page[data-admin-theme] .employee-role-card textarea,
+.employee-page[data-admin-theme] .employee-date-form input,
+.employee-page[data-admin-theme] .employee-table input,
+.employee-page[data-admin-theme] .employee-table select {
+  border-color: var(--border);
+  color: var(--text);
+  background: var(--surface-raised);
+}
+
+.employee-page[data-admin-theme] .employee-date-menu__form input:focus,
+.employee-page[data-admin-theme] .employee-filter-form input:focus,
+.employee-page[data-admin-theme] .employee-filter-form select:focus,
+.employee-page[data-admin-theme] .employee-entry-form input:focus,
+.employee-page[data-admin-theme] .employee-entry-form select:focus,
+.employee-page[data-admin-theme] .employee-entry-form textarea:focus,
+.employee-page[data-admin-theme] .employee-role-card input:focus,
+.employee-page[data-admin-theme] .employee-role-card select:focus,
+.employee-page[data-admin-theme] .employee-role-card textarea:focus,
+.employee-page[data-admin-theme] .employee-date-form input:focus,
+.employee-page[data-admin-theme] .employee-table input:focus,
+.employee-page[data-admin-theme] .employee-table select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+.employee-page[data-admin-theme] .employee-date-menu__form input,
+.employee-page[data-admin-theme] .employee-filter-form input,
+.employee-page[data-admin-theme] .employee-filter-form select,
+.employee-page[data-admin-theme] .employee-entry-form input,
+.employee-page[data-admin-theme] .employee-entry-form select,
+.employee-page[data-admin-theme] .employee-entry-form textarea,
+.employee-page[data-admin-theme] .employee-role-card input,
+.employee-page[data-admin-theme] .employee-role-card select,
+.employee-page[data-admin-theme] .employee-role-card textarea,
+.employee-page[data-admin-theme] .employee-date-form input,
+.employee-page[data-admin-theme] .employee-table input,
+.employee-page[data-admin-theme] .employee-table select {
+  outline-color: var(--primary);
+}
+
+.employee-page[data-admin-theme] .employee-primary-button,
+.employee-page[data-admin-theme] .employee-filter-apply {
+  border-color: var(--primary);
+  color: var(--primary-fg);
+  background: var(--primary);
+}
+
+.employee-page[data-admin-theme] .employee-primary-button:hover,
+.employee-page[data-admin-theme] .employee-filter-apply:hover {
+  border-color: var(--primary-hover);
+  color: var(--primary-fg);
+  background: var(--primary-hover);
+}
+
+.employee-page[data-admin-theme] .employee-add-menu__items a {
+  color: var(--text);
+}
+
+.employee-page[data-admin-theme] .employee-add-menu__items a:hover {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.employee-page[data-admin-theme] .employee-user-menu {
+  color: var(--text);
+}
+
+.employee-page[data-admin-theme] .employee-user-menu__avatar {
+  border-color: var(--surface-raised);
+  background: linear-gradient(135deg, var(--success), var(--accent));
+  box-shadow: var(--shadow-card);
+}
+
+.employee-page[data-admin-theme] .employee-signout button {
+  border-color: var(--border);
+  color: var(--primary);
+}
+
+.employee-page[data-admin-theme] .employee-heading h1,
+.employee-page[data-admin-theme] .employee-kpi__value,
+.employee-page[data-admin-theme] .employee-side-total {
+  color: var(--text);
+}
+
+.employee-page[data-admin-theme] .employee-heading p:last-child,
+.employee-page[data-admin-theme] .employee-kpi__label,
+.employee-page[data-admin-theme] .employee-kpi > span:last-child {
+  color: var(--text-muted);
+}
+
+.employee-page[data-admin-theme] .employee-access-note {
+  border-color: var(--border);
+  color: var(--text-muted);
+  background: var(--surface-panel);
+}
+
+.employee-page[data-admin-theme] .employee-access-note--enabled {
+  border-color: color-mix(in srgb, var(--success) 32%, var(--border));
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 11%, var(--surface));
+}
+
+.employee-page[data-admin-theme] .employee-notice--success {
+  border-color: color-mix(in srgb, var(--success) 34%, var(--border));
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 11%, var(--surface));
+}
+
+.employee-page[data-admin-theme] .employee-notice--error {
+  border-color: color-mix(in srgb, var(--danger) 34%, var(--border));
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.employee-page[data-admin-theme] .employee-notice--warning {
+  border-color: color-mix(in srgb, var(--warning) 34%, var(--border));
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 11%, var(--surface));
+}
+
+.employee-page[data-admin-theme] .employee-notice--info {
+  border-color: var(--border);
+  color: var(--text-muted);
+  background: var(--surface-panel);
+}
+
+.employee-page[data-admin-theme] .employee-kpi,
+.employee-page[data-admin-theme] .employee-workspace-panel,
+.employee-page[data-admin-theme] .employee-editor-panel,
+.employee-page[data-admin-theme] .employee-assignment-panel,
+.employee-page[data-admin-theme] .employee-entry-form,
+.employee-page[data-admin-theme] .employee-side-card,
+.employee-page[data-admin-theme] .employee-role-card {
+  border-color: var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.employee-page[data-admin-theme] .employee-kpi-icon--brown,
+.employee-page[data-admin-theme] .employee-kpi-icon--blue,
+.employee-page[data-admin-theme] .employee-role-mark.employee-role--brown,
+.employee-page[data-admin-theme] .employee-role-mark.employee-role--blue {
+  color: var(--primary-fg);
+  background: var(--primary);
+}
+
+.employee-page[data-admin-theme] .employee-kpi-icon--green,
+.employee-page[data-admin-theme] .employee-role-mark.employee-role--green {
+  color: var(--primary-fg);
+  background: var(--success);
+}
+
+.employee-page[data-admin-theme] .employee-kpi-icon--orange,
+.employee-page[data-admin-theme] .employee-role-mark.employee-role--amber {
+  color: var(--primary-fg);
+  background: var(--warning);
+}
+
+.employee-page[data-admin-theme] .employee-kpi-icon--gray {
+  color: var(--primary-fg);
+  background: var(--text-subtle);
+}
+
+.employee-page[data-admin-theme] .employee-tabs {
+  border-bottom-color: var(--border);
+}
+
+.employee-page[data-admin-theme] .employee-tabs a {
+  color: var(--text);
+}
+
+.employee-page[data-admin-theme] .employee-tabs a:hover,
+.employee-page[data-admin-theme] .employee-tabs a.is-active {
+  color: var(--primary);
+}
+
+.employee-page[data-admin-theme] .employee-tabs a.is-active::after {
+  background: var(--primary);
+}
+
+.employee-page[data-admin-theme] .employee-search-field > svg {
+  color: var(--text-subtle);
+}
+
+.employee-page[data-admin-theme] .employee-table-wrap {
+  border-color: var(--border);
+}
+
+.employee-page[data-admin-theme] .employee-table th {
+  border-bottom-color: var(--border);
+  color: var(--text-muted);
+}
+
+.employee-page[data-admin-theme] .employee-table td,
+.employee-page[data-admin-theme] .employee-assignment-row {
+  border-bottom-color: var(--border);
+  color: var(--text);
+}
+
+.employee-page[data-admin-theme] .employee-table tbody tr:hover {
+  background: var(--primary-soft);
+}
+
+.employee-page[data-admin-theme] .employee-person-cell strong,
+.employee-page[data-admin-theme] .employee-contact strong,
+.employee-page[data-admin-theme] .employee-assignment-row strong,
+.employee-page[data-admin-theme] .employee-side-card__heading h2,
+.employee-page[data-admin-theme] .employee-side-total,
+.employee-page[data-admin-theme] .employee-total-logs strong,
+.employee-page[data-admin-theme] .employee-recent-leaves strong,
+.employee-page[data-admin-theme] .employee-tab-heading h2,
+.employee-page[data-admin-theme] .employee-entry-form__heading h3,
+.employee-page[data-admin-theme] .employee-role-card__head strong,
+.employee-page[data-admin-theme] .employee-leave-copy strong,
+.employee-page[data-admin-theme] .employee-empty-state strong {
+  color: var(--text);
+}
+
+.employee-page[data-admin-theme] .employee-person-cell small,
+.employee-page[data-admin-theme] .employee-contact small,
+.employee-page[data-admin-theme] .employee-assignment-row small,
+.employee-page[data-admin-theme] .employee-tab-heading p:last-child,
+.employee-page[data-admin-theme] .employee-role-card__head small,
+.employee-page[data-admin-theme] .employee-leave-copy small,
+.employee-page[data-admin-theme] .employee-leave-copy p,
+.employee-page[data-admin-theme] .employee-empty-state p {
+  color: var(--text-muted);
+}
+
+.employee-page[data-admin-theme] .employee-avatar {
+  color: var(--primary-fg);
+  background: linear-gradient(145deg, var(--primary), var(--accent));
+}
+
+.employee-page[data-admin-theme] .employee-role--brown,
+.employee-page[data-admin-theme] .employee-role--blue {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.employee-page[data-admin-theme] .employee-role--amber {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 13%, var(--surface));
+}
+
+.employee-page[data-admin-theme] .employee-role--green,
+.employee-page[data-admin-theme] .employee-status--green {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 13%, var(--surface));
+}
+
+.employee-page[data-admin-theme] .employee-status--amber {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 13%, var(--surface));
+}
+
+.employee-page[data-admin-theme] .employee-status--red {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.employee-page[data-admin-theme] .employee-status--muted {
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-muted) 11%, var(--surface));
+}
+
+.employee-page[data-admin-theme] .employee-schedule,
+.employee-page[data-admin-theme] .employee-table-footer,
+.employee-page[data-admin-theme] .employee-breakdown span,
+.employee-page[data-admin-theme] .employee-total-logs,
+.employee-page[data-admin-theme] .employee-legend span,
+.employee-page[data-admin-theme] .employee-muted {
+  color: var(--text-muted);
+}
+
+.employee-page[data-admin-theme] .employee-table-footer small,
+.employee-page[data-admin-theme] .employee-legend small {
+  color: var(--text-subtle);
+}
+
+.employee-page[data-admin-theme] .employee-icon-button:hover,
+.employee-page[data-admin-theme] .employee-pagination a:hover,
+.employee-page[data-admin-theme] .employee-pagination a.is-active {
+  border-color: var(--primary);
+  color: var(--primary-fg);
+  background: var(--primary);
+}
+
+.employee-page[data-admin-theme] .employee-side-link,
+.employee-page[data-admin-theme] .employee-text-link {
+  color: var(--primary);
+}
+
+.employee-page[data-admin-theme] .employee-breakdown,
+.employee-page[data-admin-theme] .employee-total-logs,
+.employee-page[data-admin-theme] .employee-mini-stats > div {
+  border-color: var(--border);
+}
+
+.employee-page[data-admin-theme] .employee-donut::before {
+  background: var(--surface-raised);
+}
+
+.employee-page[data-admin-theme] .employee-donut > div {
+  color: var(--text);
+}
+
+.employee-page[data-admin-theme] .employee-legend-dot--present,
+.employee-page[data-admin-theme] .employee-status-dot.employee-status--green,
+.employee-page[data-admin-theme] .employee-leave-icon.employee-status--green {
+  background: var(--success);
+}
+
+.employee-page[data-admin-theme] .employee-legend-dot--absent,
+.employee-page[data-admin-theme] .employee-status-dot.employee-status--red,
+.employee-page[data-admin-theme] .employee-leave-icon.employee-status--red {
+  background: var(--danger);
+}
+
+.employee-page[data-admin-theme] .employee-legend-dot--late,
+.employee-page[data-admin-theme] .employee-status-dot.employee-status--amber,
+.employee-page[data-admin-theme] .employee-leave-icon.employee-status--amber {
+  background: var(--warning);
+}
+
+.employee-page[data-admin-theme] .employee-legend-dot--on_leave,
+.employee-page[data-admin-theme] .employee-status-dot.employee-status--muted {
+  background: var(--text-subtle);
+}
+
+.employee-page[data-admin-theme] .employee-leave-cta,
+.employee-page[data-admin-theme] .employee-leave-row {
+  border-color: var(--border);
+  color: var(--text);
+  background: var(--surface-raised);
+}
+
+.employee-page[data-admin-theme] .employee-leave-cta:hover {
+  border-color: var(--border-strong);
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.employee-page[data-admin-theme] .employee-data-badge {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.employee-page[data-admin-theme] .employee-mini-stats strong {
+  color: var(--text);
+}
+
+.employee-page[data-admin-theme] .employee-mini-stats small {
+  color: var(--text-muted);
+}
+
+.employee-page[data-admin-theme] .employee-save-button {
+  border-color: color-mix(in srgb, var(--success) 34%, var(--border));
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 11%, var(--surface));
+}
+
+.employee-page[data-admin-theme] .employee-reject-button {
+  border-color: color-mix(in srgb, var(--danger) 34%, var(--border));
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.employee-page[data-admin-theme] .employee-day-checkboxes label {
+  border-color: var(--border);
+  color: var(--text);
+  background: var(--surface-raised);
+}
+
+.employee-page[data-admin-theme] .employee-day-checkboxes label,
+.employee-page[data-admin-theme] .employee-checkbox,
+.employee-page[data-admin-theme] .employee-permissions label {
+  color: var(--text);
+}
+
+.employee-page[data-admin-theme] .employee-day-checkboxes input,
+.employee-page[data-admin-theme] .employee-checkbox input,
+.employee-page[data-admin-theme] .employee-permissions input {
+  accent-color: var(--primary);
+}
+
+.employee-page[data-admin-theme] .employee-assignment-row {
+  border-bottom-color: var(--border);
+}
+
+.employee-page[data-admin-theme] .employee-empty-state > span {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.employee-page[data-admin-theme] .employee-login-button {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.employee-page[data-admin-theme] .employee-login-button:hover,
+.employee-page[data-admin-theme] .employee-login-button--ready {
+  border-color: var(--border-strong);
+  color: var(--primary);
+  background: var(--surface-panel);
+}
+
+/* Tablet POS header ------------------------------------------------------- */
+/* The desktop header centers the POS/Orders switcher independently of the
+   toolbar. On tablet widths those two regions compete for the same pixels,
+   so the switcher becomes a normal grid item with reserved space. */
+@media (min-width: 981px) and (max-width: 1200px) {
+  .pos-topbar.is-open {
+    min-height: 62px;
+    flex-basis: 62px;
+    height: 62px;
+  }
+
+  .pos-topbar__expanded {
+    display: grid;
+    grid-template-columns: minmax(155px, 1fr) 200px minmax(210px, auto) auto 34px;
+    grid-template-rows: 1fr;
+    align-content: center;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+  }
+
+  .pos-topbar__brand {
+    grid-column: 1;
+    grid-row: 1;
+    width: 100%;
+    max-width: none;
+    align-self: center;
+  }
+
+  .pos-mode-tabs {
+    position: static;
+    grid-column: 2;
+    grid-row: 1;
+    width: 200px;
+    height: 44px;
+    justify-self: start;
+    transform: none;
+  }
+
+  .pos-toolbar {
+    grid-column: 3;
+    grid-row: 1;
+    width: auto;
+    min-width: 0;
+    margin-left: 0;
+    overflow-x: auto;
+  }
+
+  .pos-tool,
+  .pos-tool--shift {
+    flex: 0 0 auto;
+  }
+
+  .pos-topbar__expanded > .admin-menu {
+    grid-column: 4;
+    grid-row: 1;
+    justify-self: end;
+    margin-left: 0;
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .pos-topbar__collapse {
+    position: static;
+    grid-column: 5;
+    grid-row: 1;
+    width: 34px;
+    justify-content: center;
+    justify-self: end;
+    padding: 0;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 980px) {
+  .pos-topbar.is-open {
+    min-height: 112px;
+    flex-basis: 112px;
+    height: 112px;
+  }
+
+  .pos-topbar__expanded {
+    display: grid;
+    grid-template-columns: minmax(155px, 1fr) minmax(0, auto) minmax(280px, 1.2fr) auto;
+    grid-template-rows: 42px 48px;
+    align-content: center;
+    align-items: center;
+    gap: 6px 12px;
+    padding: 8px 14px 10px;
+  }
+
+  .pos-topbar__brand {
+    grid-column: 1;
+    grid-row: 1;
+    width: 100%;
+    max-width: none;
+    align-self: center;
+  }
+
+  .pos-mode-tabs {
+    position: static;
+    grid-column: 1 / span 2;
+    grid-row: 2;
+    width: min(220px, 100%);
+    height: 44px;
+    justify-self: start;
+    transform: none;
+  }
+
+  .pos-toolbar {
+    grid-column: 3;
+    grid-row: 2;
+    width: 100%;
+    min-width: 0;
+    justify-content: flex-end;
+    margin-left: 0;
+    overflow-x: auto;
+  }
+
+  .pos-tool,
+  .pos-tool--shift {
+    flex: 0 0 auto;
+  }
+
+  .pos-topbar__expanded > .admin-menu {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+    margin-left: 0;
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .pos-topbar__collapse {
+    position: static;
+    grid-column: 4;
+    grid-row: 1;
+    justify-self: end;
   }
 }
