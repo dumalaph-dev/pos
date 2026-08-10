@@ -11,6 +11,7 @@ import { billingVariantPriceLabel, DEFAULT_BILLING_VARIANTS, DEFAULT_MONTHLY_PRI
 import { payMongoConfiguration, readPayMongoSubscriptionReadiness, readPlatformOperations } from "@/lib/platform-operations-server";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import SubscriptionCheckout from "./SubscriptionCheckout";
+import TemporaryQrPhCheckout from "./TemporaryQrPhCheckout";
 
 type OrganizationRecord = {
   id: string;
@@ -20,6 +21,7 @@ type OrganizationRecord = {
   subscription_plan?: string | null;
   subscription_current_period_end?: string | null;
   subscription_updated_at?: string | null;
+  subscription_billing_mode?: "recurring" | "temporary_qrph" | null;
 };
 
 type BranchRecord = { id: string; is_active: boolean };
@@ -37,7 +39,7 @@ export default async function BillingPage() {
   const supabase = await createClient();
   const richResult = await supabase
     .from("organizations")
-    .select("id, name, currency, subscription_status, subscription_plan, subscription_current_period_end, subscription_updated_at")
+    .select("id, name, currency, subscription_status, subscription_plan, subscription_current_period_end, subscription_updated_at, subscription_billing_mode")
     .eq("id", profile.org_id)
     .maybeSingle();
 
@@ -52,6 +54,9 @@ export default async function BillingPage() {
   const branches = (branchesResult.data ?? []) as BranchRecord[];
   const activeBranches = branches.filter((branch) => branch.is_active).length;
   const status = subscriptionFieldsAvailable ? normalizeSubscriptionStatus(organization?.subscription_status) : null;
+  const currentTemporaryAccess = status === "active"
+    && organization?.subscription_billing_mode === "temporary_qrph"
+    && Boolean(organization?.subscription_current_period_end);
   const currentPlan = getBillingPlan(organization?.subscription_plan);
   const platformAdmin = createAdminClient();
   const operations = platformAdmin
@@ -65,6 +70,8 @@ export default async function BillingPage() {
   const paymongo = payMongoConfiguration();
   const paymongoSubscriptionReadiness = await readPayMongoSubscriptionReadiness();
   const providerReady = policyGateOpen && paymongo.secretKeyConfigured && paymongo.publicKeyConfigured && paymongo.keyModeConsistent && paymongo.webhookSecretConfigured && paymongo.subscriptionsEnabled && paymongoSubscriptionReadiness.subscriptionsApiAvailable === true && hasSubscriptionPaymentMethod(paymongoSubscriptionReadiness.subscriptionPaymentMethods);
+  const qrPhCapabilityReady = paymongoSubscriptionReadiness.subscriptionPaymentMethods?.some((method) => method.toLowerCase() === "qrph") === true;
+  const temporaryQrPhReady = subscriptionFieldsAvailable && policyGateOpen && paymongo.secretKeyConfigured && paymongo.webhookSecretConfigured && paymongo.temporaryQrPhEnabled && qrPhCapabilityReady;
   const providerDetail = !paymongo.secretKeyConfigured || !paymongo.publicKeyConfigured || !paymongo.keyModeConsistent || !paymongo.webhookSecretConfigured
     ? "The platform owner must configure matching PayMongo keys and the webhook signing secret before checkout can collect a payment."
     : !paymongo.subscriptionsEnabled || paymongoSubscriptionReadiness.subscriptionsApiAvailable !== true
@@ -72,6 +79,17 @@ export default async function BillingPage() {
       : !hasSubscriptionPaymentMethod(paymongoSubscriptionReadiness.subscriptionPaymentMethods)
         ? "Enable Visa/Mastercard cards or Maya for this PayMongo organization, then request Subscriptions activation for that payment method."
         : "PayMongo checkout is being prepared. Run the checkout preflight to verify the remaining provider settings.";
+  const temporaryQrPhDetail = !subscriptionFieldsAvailable
+    ? "Apply migration 0036_temporary_qrph_checkout.sql before enabling temporary QR Ph checkout."
+    : !paymongo.secretKeyConfigured || !paymongo.webhookSecretConfigured
+    ? "The platform owner must configure PAYMONGO_SECRET_KEY and PAYMONGO_WEBHOOK_SECRET on the server before QR Ph can collect a payment."
+    : !paymongo.temporaryQrPhEnabled
+      ? "Temporary QR Ph checkout is disabled by PAYMONGO_QRPH_CHECKOUT_ENABLED."
+      : paymongoSubscriptionReadiness.subscriptionPaymentMethods === null
+        ? "PayMongo payment capabilities could not be checked. Run the PayMongo preflight and try again."
+        : !qrPhCapabilityReady
+          ? "QR Ph is not active on this PayMongo account yet. Activate the account, then rerun the PayMongo preflight."
+          : "Temporary QR Ph checkout is ready.";
   const annualAutoRenewalAllowed = operations.policies.billing.settings.annualRenewal !== "manual_review";
   const monthlyPriceLabel = formatPeso(catalog.monthlyPriceCentavos);
   const offeredVariants = catalog.variants.filter((variant) => variant.isActive);
@@ -161,13 +179,17 @@ export default async function BillingPage() {
           <div>
             <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Secure checkout</p>
             <h2 id="checkout-heading" className="mt-2 text-2xl font-extrabold">Connect billing to keep your workspace active.</h2>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-ink-muted">The first payment creates the PayMongo subscription and stores a tokenized payment method for future scheduled invoices.</p>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-ink-muted">Use temporary QR Ph prepayment now, then switch to automatic recurring billing when PayMongo enables Maya or cards for this account.</p>
             {!annualAutoRenewalAllowed && <p className="mt-3 max-w-2xl rounded-btn bg-warning/10 px-3 py-2.5 text-xs font-semibold leading-5 text-ink">Annual options are hidden because the published billing policy requires manual review instead of automatic annual renewal.</p>}
           </div>
-          <SubscriptionCheckout variants={checkoutVariants} policyGateOpen={policyGateOpen} providerReady={providerReady} providerDetail={providerDetail} publicKey={paymongo.publicKey} apiBaseUrl={paymongo.apiBaseUrl} ownerEmail={user.email ?? ""} />
+          {providerReady ? (
+            <SubscriptionCheckout variants={checkoutVariants} policyGateOpen={policyGateOpen} providerReady={providerReady} providerDetail={providerDetail} publicKey={paymongo.publicKey} apiBaseUrl={paymongo.apiBaseUrl} ownerEmail={user.email ?? ""} />
+          ) : (
+            <TemporaryQrPhCheckout variants={checkoutVariants} policyGateOpen={policyGateOpen} providerReady={temporaryQrPhReady} providerDetail={temporaryQrPhDetail} currentAccessCandidate={currentTemporaryAccess} currentPeriodEnd={organization?.subscription_current_period_end ?? null} />
+          )}
         </section>
 
-        <section className="mt-8 rounded-card border border-line bg-surface-raised p-5 sm:p-6" aria-labelledby="billing-next-heading"><div className="flex gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary"><AdminIcon name="alert" size={17} /></span><div><h2 id="billing-next-heading" className="text-base font-extrabold">What happens next</h2><p className="mt-1 text-sm leading-6 text-ink-muted">{policyGateOpen && providerReady ? "Checkout is available. PayMongo will send signed subscription and payment events to keep this status current." : "Pricing is managed from Platform Operations. Checkout remains locked until both policies are published and PayMongo subscription activation plus keys are configured."}</p></div></div></section>
+        <section className="mt-8 rounded-card border border-line bg-surface-raised p-5 sm:p-6" aria-labelledby="billing-next-heading"><div className="flex gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary"><AdminIcon name="alert" size={17} /></span><div><h2 id="billing-next-heading" className="text-base font-extrabold">What happens next</h2><p className="mt-1 text-sm leading-6 text-ink-muted">{policyGateOpen && providerReady ? "Checkout is available. PayMongo will send signed subscription and payment events to keep this status current." : policyGateOpen && temporaryQrPhReady ? "QR Ph checkout is available for prepaid access. PayMongo's signed checkout payment webhook activates the selected period; it does not auto-renew." : "Pricing is managed from Platform Operations. Checkout remains locked until both policies are published and the required PayMongo keys and payment capability are configured."}</p></div></div></section>
       </div>
     </main>
   );
