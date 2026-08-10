@@ -364,6 +364,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shiftOpen, setShiftOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
+  const [categoryRailOpen, setCategoryRailOpen] = useState(false);
   const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const collapsedNavRef = useRef<HTMLButtonElement>(null);
@@ -1126,6 +1127,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     const categoryOptions = categories.some((category) => category.id === "all")
       ? categories
       : [{ id: "all", name: "All Items", icon: "grid" }, ...categories];
+    const activeCategoryName = categoryOptions.find((category) => category.id === activeCat)?.name ?? "All Items";
     const palette = getPosPalette(posConfig.palette, posConfig.customColor);
     const primary = palette.primary;
     const theme = getPosTheme(posConfig.uiStyle);
@@ -1339,8 +1341,13 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
           )}
         </header>
 
-        <div className="pos-body">
-          <nav className="category-rail" aria-label="Product categories">
+        <div className={"pos-body " + (categoryRailOpen ? "category-rail-open" : "category-rail-collapsed")}>
+          <nav
+            id="pos-category-rail"
+            className="category-rail"
+            aria-label="Product categories"
+            aria-hidden={!categoryRailOpen}
+          >
             <div className="category-rail__items">
               {categoryOptions.map((category) => (
                 <button
@@ -1348,6 +1355,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                   key={category.id}
                   onClick={() => setActiveCat(category.id)}
                   className={"category-item" + (activeCat === category.id ? " is-active" : "")}
+                  aria-pressed={activeCat === category.id}
                 >
                   <Icon name={category.id === "all" ? "grid" : categoryIcon(category.name)} size={22} />
                   <span>{category.name}</span>
@@ -1357,20 +1365,37 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
           </nav>
 
           <section className="catalog-panel" aria-label="Product catalog">
-            <div className="catalog-search">
-              <Icon name="search" size={25} />
-              <input
-                ref={searchInputRef}
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
+            <div className="catalog-toolbar">
+              <div className="catalog-search">
+                <Icon name="search" size={25} />
+                <input
+                  ref={searchInputRef}
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search products…"
-                aria-label="Search products"
-              />
-              {search && (
-                <button type="button" className="catalog-search__clear" onClick={() => setSearch("")} aria-label="Clear search">
-                  <Icon name="close" size={18} />
-                </button>
-              )}
+                  aria-label="Search products"
+                />
+                {search && (
+                  <button type="button" className="catalog-search__clear" onClick={() => setSearch("")} aria-label="Clear search">
+                    <Icon name="close" size={18} />
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                className={"category-toggle" + (categoryRailOpen ? " is-active" : "")}
+                aria-expanded={categoryRailOpen}
+                aria-controls="pos-category-rail"
+                onClick={() => setCategoryRailOpen((value) => !value)}
+                aria-label={categoryRailOpen ? "Hide product categories" : "Show product categories"}
+              >
+                <Icon name="grid" size={18} />
+                <span className="category-toggle__copy">
+                  <strong>{categoryRailOpen ? "Hide categories" : "Categories"}</strong>
+                  <small>{activeCategoryName}</small>
+                </span>
+                <Icon name="chevron" size={15} />
+              </button>
             </div>
 
             <div className="catalog-scroll">
