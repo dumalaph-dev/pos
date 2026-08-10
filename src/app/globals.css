@@ -4712,6 +4712,10 @@ textarea.inventory-input {
   background: var(--warning);
 }
 
+.admin-menu__dot.is-trial {
+  background: var(--accent);
+}
+
 .admin-menu__notification-copy {
   display: grid;
   min-width: 0;

@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/employee-auth";
+import { normalizeTrialFeedbackStatus, type TrialFeedbackStatus } from "@/lib/trial";
 
 export type PlatformAdminClient = NonNullable<ReturnType<typeof createAdminClient>>;
 
@@ -9,7 +10,10 @@ export type OrganizationRecord = {
   owner_profile_id: string | null;
   subscription_status?: string | null;
   subscription_plan?: string | null;
+  subscription_trial_started_at?: string | null;
+  subscription_trial_ends_at?: string | null;
   subscription_current_period_end?: string | null;
+  settings?: unknown;
   account_status?: "active" | "suspended" | null;
   suspension_reason?: string | null;
   suspended_at?: string | null;
@@ -37,6 +41,21 @@ export type EmployeeRecord = {
   is_active: boolean;
 };
 
+export type TrialFeedbackRecord = {
+  org_id: string;
+  submitted_by: string | null;
+  reason: string;
+  details: string;
+  wants_discount: boolean;
+  status: TrialFeedbackStatus;
+  platform_notes: string;
+  acted_at: string | null;
+  acted_by: string | null;
+  updated_at: string;
+};
+
+export type TrialFeedbackStorage = "table" | "table_legacy" | "settings" | "unavailable";
+
 export type OrganizationsResult = {
   records: OrganizationRecord[];
   subscriptionFieldsAvailable: boolean;
@@ -50,12 +69,16 @@ export type PlatformDirectory = {
   stores: StoreRecord[];
   employees: EmployeeRecord[];
   authEmailById: Map<string, string>;
+  trialFeedbackByOrg: Map<string, TrialFeedbackRecord>;
+  trialFeedbackAvailable: boolean;
+  trialFeedbackStorage: TrialFeedbackStorage;
+  trialFeedbackWorkflowAvailable: boolean;
 };
 
 export async function readOrganizations(admin: PlatformAdminClient): Promise<OrganizationsResult> {
   const rich = await admin
     .from("organizations")
-    .select("id, name, created_at, owner_profile_id, subscription_status, subscription_plan, subscription_current_period_end, account_status, suspension_reason, suspended_at")
+    .select("id, name, created_at, owner_profile_id, settings, subscription_status, subscription_plan, subscription_trial_started_at, subscription_trial_ends_at, subscription_current_period_end, account_status, suspension_reason, suspended_at")
     .order("created_at", { ascending: false })
     .limit(100);
 
@@ -67,9 +90,23 @@ export async function readOrganizations(admin: PlatformAdminClient): Promise<Org
     };
   }
 
+  const legacy = await admin
+    .from("organizations")
+    .select("id, name, created_at, owner_profile_id, settings, subscription_status, subscription_plan, subscription_current_period_end, account_status, suspension_reason, suspended_at")
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  if (!legacy.error) {
+    return {
+      records: (legacy.data ?? []) as OrganizationRecord[],
+      subscriptionFieldsAvailable: true,
+      accountFieldsAvailable: true,
+    };
+  }
+
   const basic = await admin
     .from("organizations")
-    .select("id, name, created_at, owner_profile_id")
+    .select("id, name, created_at, owner_profile_id, settings")
     .order("created_at", { ascending: false })
     .limit(100);
 
@@ -93,6 +130,38 @@ export async function readPlatformDirectory(admin: PlatformAdminClient): Promise
   const stores = (storesResult.data ?? []) as StoreRecord[];
   const employees = (employeesResult.data ?? []) as EmployeeRecord[];
   const authUsers = authUsersResult.data?.users ?? [];
+  const organizations = organizationsResult.records;
+  const richFeedbackResult = await admin
+    .from("trial_feedback")
+    .select("org_id, submitted_by, reason, details, wants_discount, status, platform_notes, acted_at, acted_by, updated_at")
+    .order("updated_at", { ascending: false })
+    .limit(10000);
+  let trialFeedback: TrialFeedbackRecord[] = [];
+  let trialFeedbackStorage: TrialFeedbackStorage = "unavailable";
+  let trialFeedbackWorkflowAvailable = false;
+
+  if (!richFeedbackResult.error) {
+    trialFeedback = (richFeedbackResult.data ?? []).map((feedback) => normalizeTrialFeedbackRecord(feedback));
+    trialFeedbackStorage = "table";
+    trialFeedbackWorkflowAvailable = true;
+  } else {
+    const legacyFeedbackResult = await admin
+      .from("trial_feedback")
+      .select("org_id, submitted_by, reason, details, wants_discount, updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(10000);
+
+    if (!legacyFeedbackResult.error) {
+      trialFeedback = (legacyFeedbackResult.data ?? []).map((feedback) => normalizeTrialFeedbackRecord(feedback));
+      trialFeedbackStorage = "table_legacy";
+    } else {
+      trialFeedback = organizations
+        .map((organization) => readSettingsTrialFeedback(organization))
+        .filter((feedback): feedback is TrialFeedbackRecord => feedback !== null);
+      trialFeedbackStorage = "settings";
+      trialFeedbackWorkflowAvailable = true;
+    }
+  }
 
   return {
     organizationsResult,
@@ -101,7 +170,49 @@ export async function readPlatformDirectory(admin: PlatformAdminClient): Promise
     stores,
     employees,
     authEmailById: new Map(authUsers.map((authUser) => [authUser.id, authUser.email ?? ""])),
+    trialFeedbackByOrg: new Map(trialFeedback.map((feedback) => [feedback.org_id, feedback])),
+    trialFeedbackAvailable: true,
+    trialFeedbackStorage,
+    trialFeedbackWorkflowAvailable,
   };
+}
+
+function normalizeTrialFeedbackRecord(value: Partial<TrialFeedbackRecord> & Record<string, unknown>): TrialFeedbackRecord {
+  return {
+    org_id: typeof value.org_id === "string" ? value.org_id : "",
+    submitted_by: typeof value.submitted_by === "string" ? value.submitted_by : null,
+    reason: typeof value.reason === "string" ? value.reason : "other",
+    details: typeof value.details === "string" ? value.details : "",
+    wants_discount: value.wants_discount === true,
+    status: normalizeTrialFeedbackStatus(value.status),
+    platform_notes: typeof value.platform_notes === "string" ? value.platform_notes : "",
+    acted_at: typeof value.acted_at === "string" ? value.acted_at : null,
+    acted_by: typeof value.acted_by === "string" ? value.acted_by : null,
+    updated_at: typeof value.updated_at === "string" ? value.updated_at : new Date(0).toISOString(),
+  };
+}
+
+function readSettingsTrialFeedback(organization: OrganizationRecord): TrialFeedbackRecord | null {
+  const settings = isRecord(organization.settings) ? organization.settings : null;
+  const value = settings && isRecord(settings.trial_retention_feedback) ? settings.trial_retention_feedback : null;
+  if (!value || typeof value.reason !== "string" || !value.reason) return null;
+
+  return normalizeTrialFeedbackRecord({
+    org_id: organization.id,
+    submitted_by: typeof value.submittedBy === "string" ? value.submittedBy : null,
+    reason: value.reason,
+    details: typeof value.details === "string" ? value.details : "",
+    wants_discount: value.wantsDiscount === true,
+    status: normalizeTrialFeedbackStatus(value.status),
+    platform_notes: typeof value.platformNotes === "string" ? value.platformNotes : "",
+    acted_at: typeof value.actedAt === "string" ? value.actedAt : null,
+    acted_by: typeof value.actedBy === "string" ? value.actedBy : null,
+    updated_at: typeof value.updatedAt === "string" ? value.updatedAt : organization.created_at,
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export function countByOrg<T extends { org_id: string }>(rows: T[]) {

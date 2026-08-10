@@ -7,9 +7,12 @@ import { getAdminProfile } from "@/lib/admin/profile";
 import { formatBillingDate, getBillingPlan, isBillingPeriodCurrent, normalizeSubscriptionStatus, subscriptionStatusLabel, type BillingPlan, type SubscriptionStatus } from "@/lib/billing";
 import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
-import { billingVariantMonthlyEquivalent, billingVariantPriceLabel, DEFAULT_MONTHLY_PRICE_CENTAVOS, DEFAULT_PLATFORM_POLICIES, hasSubscriptionPaymentMethod, isPolicyGateOpen, type BillingCatalog, type BillingVariant } from "@/lib/platform-operations";
+import { billingVariantMonthlyEquivalent, billingVariantPriceLabel, DEFAULT_MONTHLY_PRICE_CENTAVOS, DEFAULT_PLATFORM_POLICIES, hasSubscriptionPaymentMethod, isPolicyGateOpen, readPolicyNumber, type BillingCatalog, type BillingVariant } from "@/lib/platform-operations";
 import { payMongoConfiguration, readPayMongoSubscriptionReadiness, readPlatformOperations } from "@/lib/platform-operations-server";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
+import { formatTrialRemaining, readTrialLifecycle, type TrialLifecycle } from "@/lib/trial";
+import TrialCountdown from "./TrialCountdown";
+import TrialFeedbackForm from "./TrialFeedbackForm";
 import SubscriptionCheckout from "./SubscriptionCheckout";
 import TemporaryQrPhCheckout from "./TemporaryQrPhCheckout";
 
@@ -17,8 +20,11 @@ type OrganizationRecord = {
   id: string;
   name: string;
   currency: string;
+  created_at?: string | null;
   subscription_status?: string | null;
   subscription_plan?: string | null;
+  subscription_trial_started_at?: string | null;
+  subscription_trial_ends_at?: string | null;
   subscription_current_period_end?: string | null;
   subscription_updated_at?: string | null;
   subscription_billing_mode?: "recurring" | "temporary_qrph" | null;
@@ -42,15 +48,20 @@ export default async function BillingPage() {
   const supabase = await createClient();
   const richResult = await supabase
     .from("organizations")
-    .select("id, name, currency, subscription_status, subscription_plan, subscription_current_period_end, subscription_updated_at, subscription_billing_mode, subscription_provider_plan_id, subscription_provider_subscription_id")
+    .select("id, name, currency, created_at, subscription_status, subscription_plan, subscription_trial_started_at, subscription_trial_ends_at, subscription_current_period_end, subscription_updated_at, subscription_billing_mode, subscription_provider_plan_id, subscription_provider_subscription_id")
     .eq("id", profile.org_id)
     .maybeSingle();
 
   let organization: OrganizationRecord | null = richResult.data as OrganizationRecord | null;
-  const subscriptionFieldsAvailable = !richResult.error;
+  let subscriptionFieldsAvailable = !richResult.error;
   if (richResult.error) {
-    const fallback = await supabase.from("organizations").select("id, name, currency").eq("id", profile.org_id).maybeSingle();
+    const fallback = await supabase
+      .from("organizations")
+      .select("id, name, currency, created_at, subscription_status, subscription_plan, subscription_current_period_end, subscription_updated_at")
+      .eq("id", profile.org_id)
+      .maybeSingle();
     organization = fallback.data as OrganizationRecord | null;
+    subscriptionFieldsAvailable = !fallback.error;
   }
 
   if (organization && subscriptionFieldsAvailable) {
@@ -73,7 +84,6 @@ export default async function BillingPage() {
   const status = subscriptionFieldsAvailable ? normalizeSubscriptionStatus(organization?.subscription_status) : null;
   const currentPeriodEnd = organization?.subscription_current_period_end ?? null;
   const billingMode = organization?.subscription_billing_mode ?? "recurring";
-  const currentAccessIsValid = status === "active" && (billingMode !== "temporary_qrph" || isBillingPeriodCurrent(currentPeriodEnd));
   const currentPlan = getBillingPlan(organization?.subscription_plan);
   const platformAdmin = createAdminClient();
   const operations = platformAdmin
@@ -107,6 +117,27 @@ export default async function BillingPage() {
       monthlyEquivalentLabel: formatPeso(billingVariantMonthlyEquivalent(catalog, variant)),
       discountPercent: variant.discountPercent,
     }));
+  const trialDays = operations.policies.schemaAvailable
+    ? readPolicyNumber(operations.policies.billing, "trialDays", 14)
+    : 14;
+  const trial = readTrialLifecycle({
+    status: organization?.subscription_status,
+    createdAt: organization?.created_at,
+    trialStartedAt: organization?.subscription_trial_started_at,
+    trialEndsAt: organization?.subscription_trial_ends_at,
+    currentPeriodEnd: status === "trialing" ? currentPeriodEnd : null,
+    trialDays,
+  });
+  const trialAccessIsCurrent = status === "trialing" && trial.known && trial.isActive;
+  const currentAccessIsValid = (
+    (status === "active" && (billingMode !== "temporary_qrph" || isBillingPeriodCurrent(currentPeriodEnd)))
+    || trialAccessIsCurrent
+  );
+  const showCheckout = status !== "active" || !currentAccessIsValid;
+  const feedbackResult = trial.isLastDay || trial.isExpired
+    ? await supabase.from("trial_feedback").select("id").eq("org_id", profile.org_id).maybeSingle()
+    : null;
+  const feedbackSubmitted = Boolean(feedbackResult?.data) && !feedbackResult?.error;
 
   return (
     <main className="admin-page min-h-screen bg-bg px-4 pb-12 pt-6 text-ink sm:px-6 lg:px-8">
@@ -130,6 +161,7 @@ export default async function BillingPage() {
         <CurrentPlanCard
           status={status}
           accessIsCurrent={currentAccessIsValid}
+          trial={trial}
           plan={currentPlan}
           variant={currentVariant}
           catalog={catalog}
@@ -140,7 +172,10 @@ export default async function BillingPage() {
           monthlyPriceLabel={monthlyPriceLabel}
         />
 
-        {!currentAccessIsValid && (
+        {trial.reminder && <TrialReminder trial={trial} monthlyPriceLabel={monthlyPriceLabel} />}
+        {(trial.isLastDay || trial.isExpired) && <TrialFeedbackForm submitted={feedbackSubmitted} />}
+
+        {showCheckout && (
           <section className="mt-8" aria-labelledby="plans-heading">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
@@ -156,7 +191,7 @@ export default async function BillingPage() {
           </section>
         )}
 
-        {!currentAccessIsValid && (
+        {showCheckout && (
           <section className="mt-8 rounded-card border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="checkout-heading">
             <div>
               <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Secure payment</p>
@@ -171,7 +206,7 @@ export default async function BillingPage() {
           </section>
         )}
 
-        {!currentAccessIsValid && <BillingSteps trial={status === "trialing"} />}
+        {showCheckout && <BillingSteps trial={status === "trialing" && trial.isActive} />}
       </div>
     </main>
   );
@@ -180,6 +215,7 @@ export default async function BillingPage() {
 function CurrentPlanCard({
   status,
   accessIsCurrent,
+  trial,
   plan,
   variant,
   catalog,
@@ -191,6 +227,7 @@ function CurrentPlanCard({
 }: {
   status: SubscriptionStatus | null;
   accessIsCurrent: boolean;
+  trial: TrialLifecycle;
   plan: BillingPlan;
   variant: BillingVariant | null;
   catalog: BillingCatalog;
@@ -200,14 +237,18 @@ function CurrentPlanCard({
   totalBranches: number;
   monthlyPriceLabel: string;
 }) {
-  const isTrial = status === null || status === "trialing";
+  const isTrialing = status === null || status === "trialing";
+  const trialExpired = status === "trialing" && trial.isExpired;
+  const isTrial = isTrialing && !trialExpired;
   const isActive = status === "active" && accessIsCurrent;
   const accessEnded = status === "active" && !accessIsCurrent;
   const isRecurring = billingMode !== "temporary_qrph";
-  const statusLabel = isActive ? "Active" : isTrial ? "Trial active" : accessEnded ? "Access ended" : status ? subscriptionStatusLabel(status) : "Not connected";
-  const title = isTrial ? "Premium trial" : "Premium";
+  const statusLabel = isActive ? "Active" : trialExpired ? "Trial ended" : isTrial ? "Trial active" : accessEnded ? "Access ended" : status ? subscriptionStatusLabel(status) : "Not connected";
+  const title = trialExpired ? "Trial ended" : isTrial ? "Premium trial" : "Premium";
   const summary = isActive
     ? "Your Premium plan is active across every branch and staff account."
+    : trialExpired
+      ? "Your 14-day trial has ended. Subscribe to keep the complete Premium workspace available."
     : isTrial
       ? "Your 14-day trial includes the complete Premium workspace."
       : accessEnded
@@ -217,8 +258,10 @@ function CurrentPlanCard({
   const monthlyEquivalentLabel = variant ? formatPeso(billingVariantMonthlyEquivalent(catalog, variant)) : monthlyPriceLabel;
   const variantLabel = variant?.label ?? "Monthly";
   const planCadence = variant?.intervalUnit === "year" ? `Paid for ${variant.intervalCount} ${variant.intervalCount === 1 ? "year" : "years"}` : "Billed monthly";
-  const timingLabel = isTrial ? "Trial ends" : isRecurring ? "Next billing" : "Access through";
-  const timingValue = currentPeriodEnd ? formatBillingDate(currentPeriodEnd) : isTrial ? "14 days included" : "Not scheduled";
+  const timingLabel = isTrialing ? "Trial ends" : isRecurring ? "Next billing" : "Access through";
+  const timingValue = isTrialing
+    ? trial.endsAt ? formatBillingDate(trial.endsAt) : "14 days included"
+    : currentPeriodEnd ? formatBillingDate(currentPeriodEnd) : "Not scheduled";
   const cardTone = isActive
     ? "border-primary/20 bg-primary text-primary-fg shadow-[var(--shadow-pop)]"
     : isTrial
@@ -245,10 +288,12 @@ function CurrentPlanCard({
           <p className={`mt-5 max-w-xl text-sm leading-6 ${mutedTone}`}>{summary}</p>
 
           <div className={`mt-7 grid gap-3 border-t pt-5 sm:grid-cols-3 ${isActive ? "border-primary-fg/15" : "border-line"}`}>
-            <PlanMetric inverse={isActive} label={isTrial ? "Trial access" : "Plan"} value={isTrial ? "14 days" : variantLabel} detail={isTrial ? "Full Premium access" : planCadence} />
-            <PlanMetric inverse={isActive} label={isTrial ? "Starting price" : "Monthly equivalent"} value={isTrial ? monthlyPriceLabel : monthlyEquivalentLabel} detail={isTrial ? "Monthly billing" : variant?.discountPercent ? `${variant.discountPercent}% plan savings` : "Premium rate"} />
-            <PlanMetric inverse={isActive} label={timingLabel} value={timingValue} detail={isTrial ? "All features included" : isRecurring ? "Automatic renewal" : "Renew before this date"} />
+            <PlanMetric inverse={isActive} label={isTrialing ? "Trial remaining" : "Plan"} value={isTrialing ? formatTrialRemaining(trial.remainingMs) : variantLabel} detail={isTrialing ? "Live countdown below" : planCadence} />
+            <PlanMetric inverse={isActive} label={isTrialing ? "Starting price" : "Monthly equivalent"} value={isTrialing ? monthlyPriceLabel : monthlyEquivalentLabel} detail={isTrialing ? "Monthly billing" : variant?.discountPercent ? `${variant.discountPercent}% plan savings` : "Premium rate"} />
+            <PlanMetric inverse={isActive} label={timingLabel} value={timingValue} detail={isTrialing ? "All features included" : isRecurring ? "Automatic renewal" : "Renew before this date"} />
           </div>
+
+          {isTrialing && trial.known && trial.endsAt && trial.remainingMs !== null && <TrialCountdown endsAt={trial.endsAt} initialRemainingMs={trial.remainingMs} inverse={isActive} />}
 
           {isActive && <p className={`mt-5 text-xs leading-5 ${mutedTone}`}>Current total: <strong className={isActive ? "text-primary-fg" : "text-ink"}>{totalPriceLabel}</strong>{variant?.intervalUnit === "year" ? ` for ${variant.intervalCount} ${variant.intervalCount === 1 ? "year" : "years"}` : " per month"} · {activeBranches} of {totalBranches} branches active.</p>}
         </div>
@@ -262,6 +307,29 @@ function CurrentPlanCard({
             {plan.features.map((feature) => <li key={feature} className="flex gap-2.5"><AdminIcon name="check" size={16} /><span>{feature}</span></li>)}
           </ul>
         </aside>
+      </div>
+    </section>
+  );
+}
+
+function TrialReminder({ trial, monthlyPriceLabel }: { trial: TrialLifecycle; monthlyPriceLabel: string }) {
+  if (!trial.reminder || trial.remainingDays === null) return null;
+
+  const isLastDay = trial.reminder === "last_day";
+  const daysLabel = trial.remainingDays === 1 ? "less than a day" : `${trial.remainingDays} days`;
+
+  return (
+    <section className={`mt-5 rounded-card border px-5 py-4 sm:px-6 ${isLastDay ? "border-danger/30 bg-danger-soft" : "border-warning/30 bg-warning/10"}`} role="status" aria-live="polite">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${isLastDay ? "bg-danger text-white" : "bg-warning text-white"}`}><AdminIcon name="bell" size={17} /></span>
+          <div>
+            <p className={`text-xs font-extrabold uppercase tracking-[0.14em] ${isLastDay ? "text-danger" : "text-accent"}`}>Trial reminder</p>
+            <h2 className="mt-1 text-base font-extrabold text-ink">Your trial ends in {daysLabel}.</h2>
+            <p className="mt-1 text-sm leading-5 text-ink-muted">Subscribe to Premium at {monthlyPriceLabel}/month to keep every branch, staff member, and feature active.</p>
+          </div>
+        </div>
+        <Link href="#checkout-heading" className="inline-flex shrink-0 items-center justify-center rounded-btn bg-primary px-4 py-2.5 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover">Choose Premium</Link>
       </div>
     </section>
   );

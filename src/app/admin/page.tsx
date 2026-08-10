@@ -15,6 +15,7 @@ import { dashboardLowStockThreshold, readAdminInventorySettings } from "@/lib/ad
 import { buildOwnerOnboardingState, hasConfiguredOwnerBusinessProfile, hasConfiguredOwnerDashboardSettings } from "@/lib/admin/onboarding";
 import { loadReversedOrderIds, selectNetSales } from "@/lib/admin/sales-reports";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
+import { formatTrialRemaining, readTrialLifecycle } from "@/lib/trial";
 import { OwnerGuidance, OwnerOnboardingPanel } from "@/components/admin/OwnerOnboardingPanel";
 
 type AdminRole = "admin" | "manager" | "cashier";
@@ -83,6 +84,13 @@ type StockRow = {
 
 type DeviceRecord = {
   is_active: boolean;
+};
+
+type TrialOrganizationRecord = {
+  created_at?: string | null;
+  subscription_status?: string | null;
+  subscription_trial_ends_at?: string | null;
+  subscription_current_period_end?: string | null;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -224,6 +232,11 @@ export default async function AdminPage() {
     .select("is_active")
     .eq("org_id", profile.org_id)
     .limit(100);
+  const subscriptionQuery = supabase
+    .from("organizations")
+    .select("created_at, subscription_status, subscription_trial_ends_at, subscription_current_period_end")
+    .eq("id", profile.org_id)
+    .maybeSingle();
 
   const onboardingStaffQuery = profile.role === "admin"
     ? supabase.from("employee_records").select("id, role").eq("org_id", profile.org_id).eq("is_active", true).limit(100)
@@ -257,7 +270,7 @@ export default async function AdminPage() {
     .order("created_at", { ascending: false })
     .limit(2000);
 
-  const [productsResult, categoriesResult, ordersResult, stockResult, itemsResult, devicesResult, onboardingStaffResult, onboardingInventoryResult, onboardingDevicesResult, onboardingCategoriesResult, onboardingProductsResult] = await Promise.all([
+  const [productsResult, categoriesResult, ordersResult, stockResult, itemsResult, devicesResult, subscriptionResult, onboardingStaffResult, onboardingInventoryResult, onboardingDevicesResult, onboardingCategoriesResult, onboardingProductsResult] = await Promise.all([
     productsQuery,
     categoriesQuery,
     ordersQuery,
@@ -269,12 +282,23 @@ export default async function AdminPage() {
     // sequential query with a huge .in() filter.
     itemsQuery,
     devicesQuery,
+    subscriptionQuery,
     onboardingStaffQuery ?? Promise.resolve({ data: [], error: null }),
     onboardingInventoryQuery ?? Promise.resolve({ data: [], error: null }),
     onboardingDevicesQuery ?? Promise.resolve({ data: [], error: null }),
     onboardingCategoriesQuery ?? Promise.resolve({ data: [], error: null }),
     onboardingProductsQuery ?? Promise.resolve({ data: [], error: null }),
   ]);
+
+  let trialOrganization = subscriptionResult.data as TrialOrganizationRecord | null;
+  if (subscriptionResult.error) {
+    const fallbackSubscription = await supabase
+      .from("organizations")
+      .select("created_at, subscription_status, subscription_current_period_end")
+      .eq("id", profile.org_id)
+      .maybeSingle();
+    trialOrganization = fallbackSubscription.data as TrialOrganizationRecord | null;
+  }
 
   const products = ((productsResult.data ?? []) as ProductRecord[]).filter((product) => !selectedBranchId || product.store_id === selectedBranchId);
   const categories = ((categoriesResult.data ?? []) as CategoryRecord[]).filter((category) => !selectedBranchId || category.store_id === selectedBranchId);
@@ -364,6 +388,19 @@ export default async function AdminPage() {
   const lowStockCount = stockRows.filter((row) => row.status === "low").length;
   const outOfStockCount = stockRows.filter((row) => row.status === "out").length;
   const inventoryAlertCount = lowStockCount + outOfStockCount;
+  const trial = readTrialLifecycle({
+    status: trialOrganization?.subscription_status,
+    createdAt: trialOrganization?.created_at,
+    trialEndsAt: trialOrganization?.subscription_trial_ends_at,
+    currentPeriodEnd: trialOrganization?.subscription_current_period_end,
+  });
+  const trialNotification = profile.role === "admin" && trial.reminder && trial.remainingDays !== null
+    ? {
+      title: trial.reminder === "last_day" ? "Your trial ends today" : `Your trial ends in ${trial.remainingDays} days`,
+      detail: `${formatTrialRemaining(trial.remainingMs)} · Subscribe to keep Premium active`,
+    }
+    : null;
+  const notificationCount = inventoryAlertCount + (trialNotification ? 1 : 0);
 
   const completedOrderIds = new Set(completedOrders.map((order) => order.id));
   const topItemsByName = new Map<string, { name: string; qty: number; unit: string; total: number }>();
@@ -446,20 +483,26 @@ export default async function AdminPage() {
 
             <AdminMenu
               triggerClassName="admin-icon-button admin-icon-button--alert"
-              triggerLabel={inventoryAlertCount ? `Notifications: ${inventoryAlertCount} inventory alerts` : "Notifications"}
+              triggerLabel={notificationCount ? `Notifications: ${notificationCount} alert${notificationCount === 1 ? "" : "s"}` : "Notifications"}
               panelTitle="Notifications"
               panelClassName="admin-menu__panel--wide"
               trigger={
                 <>
                   <AdminIcon name="bell" size={19} />
-                  {inventoryAlertCount > 0 && <span className="admin-icon-button__badge" aria-hidden="true">{inventoryAlertCount > 9 ? "9+" : inventoryAlertCount}</span>}
+                  {notificationCount > 0 && <span className="admin-icon-button__badge" aria-hidden="true">{notificationCount > 9 ? "9+" : notificationCount}</span>}
                 </>
               }
             >
+              {trialNotification && (
+                <Link href="/admin/billing" className="admin-menu__notification">
+                  <span className="admin-menu__dot is-trial" aria-hidden="true" />
+                  <span className="admin-menu__notification-copy"><strong>{trialNotification.title}</strong><small>{trialNotification.detail}</small></span>
+                </Link>
+              )}
               {!inventorySettings.lowStockAlertsEnabled ? (
                 <p className="admin-menu__empty">Inventory alerts are turned off. <Link href="/admin/settings#dashboard-settings" className="font-extrabold text-primary hover:underline">Configure them in Settings</Link>.</p>
               ) : lowStockRows.length === 0 ? (
-                <p className="admin-menu__empty">Nothing needs attention. Stock levels look good.</p>
+                <p className="admin-menu__empty">No inventory alerts. Stock levels look good.</p>
               ) : (
                 lowStockRows.map((row) => (
                   <Link key={`${row.branch.id}:${row.product.id}`} href={`/admin/inventory?status=${row.status === "out" ? "out" : "low"}`} className="admin-menu__notification">
@@ -471,7 +514,10 @@ export default async function AdminPage() {
                   </Link>
                 ))
               )}
-              <Link href="/admin/inventory" className="admin-menu__footer-link">View all inventory</Link>
+              <div className="flex flex-wrap items-center gap-3">
+                <Link href="/admin/inventory" className="admin-menu__footer-link">View all inventory</Link>
+                {trialNotification && <Link href="/admin/billing" className="admin-menu__footer-link">Open Billing &amp; Plan</Link>}
+              </div>
             </AdminMenu>
 
             <Link href="#system-status" className="admin-icon-button admin-icon-button--help" aria-label="View system status"><AdminIcon name="help" size={19} /></Link>

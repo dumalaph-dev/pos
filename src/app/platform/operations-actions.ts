@@ -6,6 +6,7 @@ import { isPlatformAdminEmail } from "@/lib/platform-admin";
 import { isPolicyGateOpen, readPolicyNumber } from "@/lib/platform-operations";
 import { readPlatformPolicies } from "@/lib/platform-operations-server";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
+import { normalizeTrialFeedbackStatus, type TrialFeedbackStatus } from "@/lib/trial";
 
 export type OperationsActionState = {
   ok: boolean;
@@ -194,6 +195,71 @@ export async function openSupportCase(_previousState: OperationsActionState, for
   return { ok: true, message: `Support case opened for ${organization.record.name}. First response target: ${formatHours(responseHours)}.` };
 }
 
+export async function updateTrialFeedback(_previousState: OperationsActionState, formData: FormData): Promise<OperationsActionState> {
+  const actor = await requirePlatformAdmin();
+  if (!actor.ok) return actor;
+
+  const organizationId = readText(formData, "organization_id");
+  const status = normalizeTrialFeedbackStatus(readText(formData, "status"));
+  const platformNotes = readText(formData, "platform_notes");
+  if (!isUuid(organizationId)) return { ok: false, message: "Choose a valid business account." };
+  if (platformNotes.length > 2000) return { ok: false, message: "Keep internal notes to 2,000 characters or fewer." };
+
+  const organization = await readOrganization(actor.admin, organizationId);
+  if (!organization.ok) return organization;
+
+  const actedAt = status === "new" ? null : new Date().toISOString();
+  const update = await actor.admin
+    .from("trial_feedback")
+    .update({
+      status,
+      platform_notes: platformNotes,
+      acted_at: actedAt,
+      acted_by: status === "new" ? null : actor.userId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("org_id", organizationId)
+    .select("org_id")
+    .maybeSingle();
+
+  if (update.error && isMissingTrialFeedbackWorkflowSchema(update.error.message)) {
+    return { ok: false, message: "Apply Supabase migration 0039_trial_feedback_workflow.sql to enable follow-up tracking." };
+  }
+
+  if (update.error && isMissingTrialFeedbackTable(update.error.message)) {
+    const fallback = await updateFeedbackInOrganizationSettings(actor.admin, organizationId, {
+      status,
+      platformNotes,
+      actedAt,
+      actedBy: status === "new" ? null : actor.userId,
+    });
+    if (!fallback.found) return { ok: false, message: "No trial feedback was found for this business account." };
+    if (!fallback.ok) return { ok: false, message: "The follow-up could not be saved. Please try again." };
+  } else if (update.error) {
+    return { ok: false, message: "The follow-up could not be saved. Please try again." };
+  } else if (!update.data) {
+    return { ok: false, message: "No trial feedback was found for this business account." };
+  }
+
+  const auditError = await writePlatformAudit(actor.admin, {
+    orgId: organizationId,
+    actorId: actor.userId,
+    action: "platform.trial_feedback.updated",
+    entity: "trial_feedback",
+    entityId: organizationId,
+    before: null,
+    after: {
+      status,
+      platform_notes: platformNotes,
+      acted_at: actedAt,
+    },
+  });
+
+  revalidatePlatformPages();
+  if (auditError) return { ok: false, message: "The follow-up was saved, but its audit record could not be written. Review the audit log before retrying." };
+  return { ok: true, message: `${organization.record.name} follow-up saved as ${trialFeedbackStatusLabel(status)}.` };
+}
+
 async function requirePlatformAdmin(): Promise<{ ok: true; admin: PlatformAdminClient; userId: string } | OperationsActionFailure> {
   const user = await getAuthenticatedUser();
   if (!user) return { ok: false, message: "Your session has expired. Sign in again to manage platform operations." };
@@ -221,6 +287,34 @@ async function readOrganization(admin: PlatformAdminClient, organizationId: stri
   if (result.error) return platformMigrationError(result.error.message, "0027_platform_operations.sql");
   if (!result.data) return { ok: false, message: "That business account could not be found." };
   return { ok: true, record: result.data as OrganizationLifecycle };
+}
+
+async function updateFeedbackInOrganizationSettings(admin: PlatformAdminClient, organizationId: string, input: {
+  status: TrialFeedbackStatus;
+  platformNotes: string;
+  actedAt: string | null;
+  actedBy: string | null;
+}) {
+  const current = await admin.from("organizations").select("settings").eq("id", organizationId).maybeSingle();
+  if (current.error || !current.data) return { ok: false, found: false };
+  const settings = isRecord(current.data.settings) ? current.data.settings : {};
+  const existingFeedback = isRecord(settings.trial_retention_feedback) ? settings.trial_retention_feedback : null;
+  if (!existingFeedback || typeof existingFeedback.reason !== "string") return { ok: true, found: false };
+
+  const update = await admin.from("organizations").update({
+    settings: {
+      ...settings,
+      trial_retention_feedback: {
+        ...existingFeedback,
+        status: input.status,
+        platformNotes: input.platformNotes,
+        actedAt: input.actedAt,
+        actedBy: input.actedBy,
+        updatedAt: new Date().toISOString(),
+      },
+    },
+  }).eq("id", organizationId);
+  return { ok: !update.error, found: true };
 }
 
 async function writePlatformAudit(admin: PlatformAdminClient, input: {
@@ -278,4 +372,22 @@ function formatHours(value: number) {
   if (value < 24) return `${value} hours`;
   const days = value / 24;
   return Number.isInteger(days) ? `${days} day${days === 1 ? "" : "s"}` : `${value} hours`;
+}
+
+function isMissingTrialFeedbackWorkflowSchema(message: string | null | undefined) {
+  const normalized = (message ?? "").toLowerCase();
+  return normalized.includes("platform_notes") || normalized.includes("acted_at") || (normalized.includes("column") && normalized.includes("status"));
+}
+
+function isMissingTrialFeedbackTable(message: string | null | undefined) {
+  const normalized = (message ?? "").toLowerCase();
+  return normalized.includes("trial_feedback") && (normalized.includes("does not exist") || normalized.includes("schema cache") || normalized.includes("relation"));
+}
+
+function trialFeedbackStatusLabel(status: TrialFeedbackStatus) {
+  return status === "offer_sent" ? "offer sent" : status;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
