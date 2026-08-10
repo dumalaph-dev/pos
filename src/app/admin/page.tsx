@@ -9,6 +9,7 @@ import { formatPeso } from "@/lib/money";
 import { formatStockQuantity, salesQuantity, stockStatus } from "@/lib/inventory";
 import { isProductImageUrl } from "@/lib/product-images";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
+import { isLechonHouseBusinessForCatalog } from "@/lib/admin/business";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { readAdminBranding } from "@/lib/admin/branding";
 import { dashboardLowStockThreshold, readAdminInventorySettings } from "@/lib/admin/inventory-settings";
@@ -302,6 +303,7 @@ export default async function AdminPage() {
 
   const products = ((productsResult.data ?? []) as ProductRecord[]).filter((product) => !selectedBranchId || product.store_id === selectedBranchId);
   const categories = ((categoriesResult.data ?? []) as CategoryRecord[]).filter((category) => !selectedBranchId || category.store_id === selectedBranchId);
+  const isLechonHouseBusiness = isLechonHouseBusinessForCatalog(profile.organizations?.settings, categories, products);
   const allOrders = ((ordersResult.data ?? []) as OrderRecord[]).filter((order) => !selectedBranchId || order.store_id === selectedBranchId);
   const stock = ((stockResult.data ?? []) as StockRow[]).filter((row) => !selectedBranchId || row.store_id === selectedBranchId);
   const devices = (devicesResult.data ?? []) as DeviceRecord[];
@@ -557,7 +559,7 @@ export default async function AdminPage() {
 
           {queryWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink">Some data could not refresh. The dashboard is showing the data that was available; the POS remains available.</div>}
 
-          {onboardingState && <div className="mt-5"><OwnerOnboardingPanel state={onboardingState} /></div>}
+          {onboardingState && <div className="mt-5"><OwnerOnboardingPanel state={onboardingState} isLechonHouseBusiness={isLechonHouseBusiness} /></div>}
           {profile.role === "admin" && <div className="mt-5"><OwnerGuidance topic="dashboard" /></div>}
 
           <section aria-label="Key performance indicators" className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">

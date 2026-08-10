@@ -6,6 +6,7 @@ import { toCentavos } from "@/lib/money";
 import { STOCK_MOVEMENT_TYPES, type StockMovementType } from "@/lib/inventory";
 import { createClient } from "@/lib/supabase/server";
 import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
+import { isLechonHouseBusinessForCatalog, readBusinessPresetId } from "@/lib/admin/business";
 
 function inventoryRedirect(message: string): never {
   redirect(`/admin/inventory?error=${encodeURIComponent(message)}`);
@@ -168,8 +169,31 @@ async function requireInventoryAdmin() {
   return { supabase, profile, selectedBranchId };
 }
 
+async function canRecordLechonYield(supabase: Awaited<ReturnType<typeof createClient>>, orgId: string) {
+  const { data: organization, error: organizationError } = await supabase
+    .from("organizations")
+    .select("settings")
+    .eq("id", orgId)
+    .maybeSingle();
+  const selectedPresetId = readBusinessPresetId(organization?.settings);
+  if (selectedPresetId || organizationError) {
+    return isLechonHouseBusinessForCatalog(organization?.settings, [], []);
+  }
+
+  const [{ data: categories, error: categoriesError }, { data: products, error: productsError }] = await Promise.all([
+    supabase.from("categories").select("id, name").eq("org_id", orgId).eq("is_active", true),
+    supabase.from("products").select("category_id, name").eq("org_id", orgId).eq("is_active", true).eq("track_stock", true),
+  ]);
+
+  if (categoriesError || productsError) return false;
+  return isLechonHouseBusinessForCatalog(organization?.settings, categories ?? [], products ?? []);
+}
+
 export async function recordYieldEntry(formData: FormData) {
   const { supabase, profile, selectedBranchId } = await requireInventoryAdmin();
+  if (!(await canRecordLechonYield(supabase, profile.org_id))) {
+    yieldRedirect("Guided yield is only available for Lechon House businesses.");
+  }
   const storeId = readText(formData, "store_id");
   const sourceProductId = readText(formData, "source_product_id");
   const outputProductId = readText(formData, "output_product_id");

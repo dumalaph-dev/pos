@@ -6,6 +6,9 @@ import { createClient } from "@/lib/supabase/server";
 import { POS_PALETTE_IDS } from "@/lib/pos-palette";
 import { POS_THEME_IDS } from "@/lib/pos-theme";
 import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
+import { invalidateAdminProfile } from "@/lib/admin/profile";
+import { saveOrganizationBusinessPreset } from "@/lib/admin/business-server";
+import { getCatalogPreset } from "@/lib/catalog-presets";
 import { normalizePaperWidth, parsePaperWidth, toPaperWidthValue } from "@/lib/paper-width";
 
 type JsonRecord = Record<string, unknown>;
@@ -95,7 +98,7 @@ async function requireAdminStore(storeId: string) {
 
   if (!store || (selectedBranchId && selectedBranchId !== storeId)) posRedirect("Choose the branch currently selected in the workspace.", "receipts");
 
-  return { supabase, store, orgId: profile.org_id };
+  return { supabase, store, orgId: profile.org_id, userId: user.id };
 }
 
 function normalizePosSettings(value: JsonRecord, fallback: JsonRecord, fallbackVatRate: number, fallbackShowVat: boolean): JsonRecord {
@@ -141,7 +144,10 @@ export async function savePosSettings(formData: FormData) {
   const incoming = readSettings(serialized);
   if (!incoming) return { ok: false, message: "POS settings could not be read." };
 
-  const { supabase, store, orgId } = await requireAdminStore(storeId);
+  const businessPresetId = readText(formData, "business_preset_id");
+  if (businessPresetId && !getCatalogPreset(businessPresetId)) return { ok: false, message: "Choose a valid business starter preset." };
+
+  const { supabase, store, orgId, userId } = await requireAdminStore(storeId);
   const branchName = formData.has("branch_name") ? readText(formData, "branch_name") : String(store.name ?? "");
   const address = formData.has("address") ? readText(formData, "address") : String(store.address ?? "");
   const tin = formData.has("tin") ? readText(formData, "tin") : String(store.tin ?? "");
@@ -180,6 +186,12 @@ export async function savePosSettings(formData: FormData) {
     .eq("is_active", true);
 
   if (error) return { ok: false, message: error.message || "POS settings could not be saved." };
+
+  if (businessPresetId) {
+    const businessPresetError = await saveOrganizationBusinessPreset(supabase, orgId, businessPresetId);
+    if (businessPresetError) return { ok: false, message: "POS settings were saved, but the business selection could not be saved. Try again." };
+    invalidateAdminProfile(userId);
+  }
 
   revalidatePath("/admin/pos");
   revalidatePath("/admin/settings");

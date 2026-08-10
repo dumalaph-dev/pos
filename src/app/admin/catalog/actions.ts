@@ -11,6 +11,8 @@ import {
 } from "@/lib/admin/image-storage";
 import { createClient } from "@/lib/supabase/server";
 import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
+import { invalidateAdminProfile } from "@/lib/admin/profile";
+import { saveOrganizationBusinessPreset } from "@/lib/admin/business-server";
 import { getCatalogPreset } from "@/lib/catalog-presets";
 
 type PricingMode = "fixed" | "per_kg";
@@ -185,7 +187,7 @@ async function requireAdmin() {
     profile.store_id,
   );
 
-  return { supabase, orgId: profile.org_id, selectedBranchId };
+  return { supabase, orgId: profile.org_id, userId: user.id, selectedBranchId };
 }
 
 async function validStore(
@@ -486,7 +488,7 @@ export type ProductBundleResult = {
 };
 
 export async function createProductBundle(formData: FormData): Promise<ProductBundleResult> {
-  const { supabase, orgId, selectedBranchId } = await requireAdmin();
+  const { supabase, orgId, userId, selectedBranchId } = await requireAdmin();
   const storeId = readText(formData, "store_id");
   const presetId = readText(formData, "preset_id");
   const preset = getCatalogPreset(presetId);
@@ -566,10 +568,12 @@ export async function createProductBundle(formData: FormData): Promise<ProductBu
   const skippedCount = selectedTemplates.length - newProducts.length;
 
   if (!newProducts.length) {
+    const businessPresetError = await saveOrganizationBusinessPreset(supabase, orgId, preset.id);
+    if (!businessPresetError) invalidateAdminProfile(userId);
     refreshCatalog();
     return {
       ok: true,
-      message: "All " + skippedCount + " selected products already exist in this branch.",
+      message: "All " + skippedCount + " selected products already exist in this branch." + (businessPresetError ? " The business selection could not be saved; try again from POS settings." : ""),
       createdCount: 0,
       skippedCount,
     };
@@ -619,11 +623,13 @@ export async function createProductBundle(formData: FormData): Promise<ProductBu
   const stockMessage = stockWarnings.length
     ? " Opening stock still needs a quick review for " + stockWarnings.length + " item" + (stockWarnings.length === 1 ? "" : "s") + "."
     : "";
+  const businessPresetError = await saveOrganizationBusinessPreset(supabase, orgId, preset.id);
+  if (!businessPresetError) invalidateAdminProfile(userId);
   return {
     ok: true,
     message: "Added " + newProducts.length + " product" + (newProducts.length === 1 ? "" : "s") + " and " + categoryCount + " categor" + (categoryCount === 1 ? "y" : "ies") + " to this branch." +
       (skippedCount ? " Skipped " + skippedCount + " existing item" + (skippedCount === 1 ? "" : "s") + "." : "") +
-      stockMessage,
+      stockMessage + (businessPresetError ? " The business selection could not be saved; try again from POS settings." : ""),
     createdCount: newProducts.length,
     skippedCount,
   };

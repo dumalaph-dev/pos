@@ -12,6 +12,7 @@ import { formatStockQuantity, salesQuantity, stockMovementDelta, stockStatus, ty
 import { formatPeso } from "@/lib/money";
 import { isProductImageUrl } from "@/lib/product-images";
 import { getAdminProfile } from "@/lib/admin/profile";
+import { readBusinessPresetId } from "@/lib/admin/business";
 import { loadReversedOrderIds, selectNetSales } from "@/lib/admin/sales-reports";
 import { readAdminBranding } from "@/lib/admin/branding";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
@@ -616,7 +617,7 @@ export default async function ProductsPage({
               </details>
               <Link href="#product-filters" className="products-secondary-button"><AdminIcon name="filter" size={15} /> Filters{(searchQuery || categoryFilter !== "all" || status !== "all" || posOnly) && <span className="products-filter-count">!</span>}</Link>
               <ProductCreateDialog key={action === "product" ? "product-create-open" : "product-create-closed"} branches={formBranches} categories={categories} suppliers={suppliers} defaultBranch={formDefaultBranch} canWrite={canWrite} orgName={orgName} fromInventory={fromInventory} initialOpen={action === "product"} />
-              <MultiProductModal key={formDefaultBranch} storeId={formDefaultBranch} branchName={currentBranchName} branches={formBranches} categories={categories} canWrite={canWrite} orgName={orgName} triggerLabel="Starter catalog" />
+              <MultiProductModal key={formDefaultBranch} storeId={formDefaultBranch} branchName={currentBranchName} branches={formBranches} categories={categories} canWrite={canWrite} orgName={orgName} initialPresetId={readBusinessPresetId(profile.organizations?.settings) ?? undefined} triggerLabel="Starter catalog" />
               <details className="products-add-menu">
                 <summary className="products-secondary-button"><AdminIcon name="more" size={15} /> More</summary>
                 <div className="products-popover products-add-popover">

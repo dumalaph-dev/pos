@@ -323,6 +323,7 @@ export default function PosSettingsScreen({
   categories,
   devices,
   initialSettings,
+  initialBusinessPresetId,
 }: {
   organizationName: string;
   logoUrl: string | null;
@@ -343,11 +344,13 @@ export default function PosSettingsScreen({
   categories: AdminPosCategory[];
   devices: AdminPosDevice[];
   initialSettings: PosConfig;
+  initialBusinessPresetId: string | null;
 }) {
   const router = useRouter();
   const catalog = useMemo(() => buildCatalog(products), [products]);
   const categoryOptions = useMemo(() => buildCategories(categories, products.length === 0), [categories, products.length]);
   const [starterPreviewSelection, setStarterPreviewSelection] = useState<StarterPreviewSelection | null>(null);
+  const [businessPresetId, setBusinessPresetId] = useState(initialBusinessPresetId);
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
   const [previewDevice, setPreviewDevice] = useState<PreviewDevice>("desktop");
   const [config, setConfig] = useState<PosConfig>(initialSettings);
@@ -438,6 +441,7 @@ export default function PosSettingsScreen({
   }
 
   function handleStarterPreviewSelection(selection: StarterPreviewSelection) {
+    setBusinessPresetId(selection.presetId);
     setStarterPreviewSelection(selection);
     setActiveCategory("all");
     setSearch("");
@@ -528,6 +532,7 @@ export default function PosSettingsScreen({
     const formData = new FormData();
     formData.set("store_id", storeId);
     formData.set("settings", JSON.stringify(config));
+    if (businessPresetId) formData.set("business_preset_id", businessPresetId);
     formData.set("branch_name", branchDetails.name);
     formData.set("address", branchDetails.address);
     formData.set("tin", branchDetails.tin);
@@ -709,6 +714,7 @@ export default function PosSettingsScreen({
             canWrite={canWrite}
             branchOptions={branchOptions}
             categories={categories}
+            initialPresetId={businessPresetId}
             onPreviewSelectionChange={handleStarterPreviewSelection}
           />
         </div>
@@ -882,6 +888,7 @@ function CategoryPresetPanel({
   canWrite,
   branchOptions,
   categories,
+  initialPresetId,
   onPreviewSelectionChange,
 }: {
   organizationName: string;
@@ -890,9 +897,10 @@ function CategoryPresetPanel({
   canWrite: boolean;
   branchOptions: Array<{ id: string; name: string }>;
   categories: AdminPosCategory[];
+  initialPresetId: string | null;
   onPreviewSelectionChange: (selection: StarterPreviewSelection) => void;
 }) {
-  const [presetId, setPresetId] = useState("lechon-house");
+  const [presetId, setPresetId] = useState(() => getCatalogPreset(initialPresetId)?.id ?? CATALOG_PRESETS[0].id);
   const selectedPreset = getCatalogPreset(presetId) ?? CATALOG_PRESETS[0];
   const existingCategoryNames = new Set(categories.map((category) => category.name.trim().toLowerCase()));
   const matchedCategoryCount = selectedPreset.categories.filter((category) => existingCategoryNames.has(category.name.toLowerCase())).length;

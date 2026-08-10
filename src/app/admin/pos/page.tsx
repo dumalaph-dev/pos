@@ -5,6 +5,7 @@ import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { POS_PALETTE_IDS } from "@/lib/pos-palette";
 import { POS_THEME_IDS } from "@/lib/pos-theme";
 import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
+import { readBusinessPresetId } from "@/lib/admin/business";
 import { isProductImageUrl } from "@/lib/product-images";
 import { normalizePaperWidth, toPaperWidthValue } from "@/lib/paper-width";
 import PosSettingsScreen, {
@@ -217,6 +218,7 @@ export default async function AdminPosPage({ searchParams }: { searchParams: Pro
       categories={categories}
       devices={devices}
       initialSettings={store ? readPosConfig(store) : readPosConfig({ id: "", name: DEFAULT_STORE_NAME, address: null, tin: null, vat_registered: true, vat_rate: 0.12, settings: {} })}
+      initialBusinessPresetId={readBusinessPresetId(profile.organizations?.settings)}
     />
   );
 }

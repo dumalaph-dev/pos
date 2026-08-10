@@ -63,7 +63,7 @@ const STEP_ICONS = {
   dashboard: "chart",
 } as const;
 
-function OwnerSetupDialog({ state, nextStep, onClose }: { state: OwnerOnboardingState; nextStep: OwnerOnboardingState["steps"][number] | undefined; onClose: () => void }) {
+function OwnerSetupDialog({ state, nextStep, onClose, isLechonHouseBusiness }: { state: OwnerOnboardingState; nextStep: OwnerOnboardingState["steps"][number] | undefined; onClose: () => void; isLechonHouseBusiness: boolean }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
@@ -168,7 +168,7 @@ function OwnerSetupDialog({ state, nextStep, onClose }: { state: OwnerOnboarding
             <div className="owner-onboarding-dialog__section-heading"><div><p className="owner-onboarding__eyebrow">After setup</p><h3 id="owner-onboarding-monitoring-heading">How to monitor the business</h3></div></div>
             <p className="owner-onboarding-dialog__section-description">Once the basics are ready, use this simple rhythm to keep the operation accurate.</p>
             <div className="owner-onboarding__monitoring-list">
-              {OWNER_MONITORING_GUIDE.map((item, index) => (
+              {OWNER_MONITORING_GUIDE.filter((item) => isLechonHouseBusiness || item.title !== "Record preparation honestly").map((item, index) => (
                 <article key={item.title} className="owner-onboarding__monitoring-item">
                   <span className="owner-onboarding__monitoring-number">{index + 1}</span>
                   <div><h4>{item.title}</h4><p>{item.body}</p><NextLink href={item.href}>{item.actionLabel}<AdminIcon name="arrow" size={12} /></NextLink></div>
@@ -184,7 +184,7 @@ function OwnerSetupDialog({ state, nextStep, onClose }: { state: OwnerOnboarding
   );
 }
 
-export function OwnerOnboardingPanel({ state }: { state: OwnerOnboardingState }) {
+export function OwnerOnboardingPanel({ state, isLechonHouseBusiness }: { state: OwnerOnboardingState; isLechonHouseBusiness: boolean }) {
   const dismissed = useDismissedGuidance(ONBOARDING_DISMISSED_KEY);
   const [isOpen, setIsOpen] = useState(false);
   const nextStep = state.steps.find((step) => !step.complete);
@@ -221,10 +221,10 @@ export function OwnerOnboardingPanel({ state }: { state: OwnerOnboardingState })
           <div className="owner-onboarding__progress-meta"><span>{state.completedCount} of {state.totalCount} complete</span><strong>{state.progressPercent}%</strong></div>
           <div className="owner-onboarding__progress-track"><span style={{ width: `${state.progressPercent}%` }} /></div>
         </div>
-        <div className="owner-onboarding__next">{nextStep ? <><strong>Next: {nextStep.title}</strong><span>{nextStep.suggestion}</span></> : <><strong>Next: keep monitoring</strong><span>Use the dashboard, inventory yield, supplier, and closing-count guides as your routine grows.</span></>}</div>
+        <div className="owner-onboarding__next">{nextStep ? <><strong>Next: {nextStep.title}</strong><span>{nextStep.suggestion}</span></> : <><strong>Next: keep monitoring</strong><span>{isLechonHouseBusiness ? "Use the dashboard, inventory yield, supplier, and closing-count guides as your routine grows." : "Use the dashboard, supplier, and closing-count guides as your routine grows."}</span></>}</div>
       </div>
 
-      {isOpen && <OwnerSetupDialog state={state} nextStep={nextStep} onClose={closeDialog} />}
+      {isOpen && <OwnerSetupDialog state={state} nextStep={nextStep} onClose={closeDialog} isLechonHouseBusiness={isLechonHouseBusiness} />}
     </section>
   );
 }

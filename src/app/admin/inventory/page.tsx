@@ -16,6 +16,7 @@ import {
   type StockMovementType,
 } from "@/lib/inventory";
 import { getAdminProfile } from "@/lib/admin/profile";
+import { isLechonHouseBusinessForCatalog, readBusinessPresetId } from "@/lib/admin/business";
 import { readAdminBranding } from "@/lib/admin/branding";
 import { dashboardLowStockThreshold, readAdminInventorySettings } from "@/lib/admin/inventory-settings";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
@@ -547,6 +548,7 @@ export default async function InventoryPage({
   const activeBranches = visibleBranches.filter((branch) => branch.is_active);
   const activeBranchIds = new Set(activeBranches.map((branch) => branch.id));
   const formProducts = trackedProducts.filter((product) => product.is_active && activeBranchIds.has(product.store_id));
+  const isLechonHouseBusiness = isLechonHouseBusinessForCatalog(profile.organizations?.settings, categories, products);
   const selectedMovementProduct = selectedProductId ? productById.get(selectedProductId) : undefined;
   const defaultProduct = formProducts.find((product) => product.id === selectedMovementProduct?.id) ?? formProducts[0];
   const defaultBranch = selectedBranchId ?? defaultProduct?.store_id ?? activeBranches[0]?.id ?? visibleBranches[0]?.id ?? "";
@@ -566,7 +568,7 @@ export default async function InventoryPage({
     ...categories.filter((item) => item.is_active).map((item) => ({ id: item.id, label: item.name, icon: item.icon ?? "•", count: categoryCounts.get(item.id) ?? 0 })),
     { id: "uncategorized", label: "Others", icon: "⋯", count: categoryCounts.get("uncategorized") ?? 0 },
   ];
-  const savedMessage = readParam(params.saved) === "yield"
+  const savedMessage = isLechonHouseBusiness && readParam(params.saved) === "yield"
     ? "Yield entry recorded. Source, output, and waste movements are linked in the ledger."
     : readParam(params.saved) === "1"
       ? "Stock movement recorded. The ledger and POS balance are up to date."
@@ -601,9 +603,9 @@ export default async function InventoryPage({
             <div className="admin-compact-toolbar">
               <Link href={buildInventoryHref({ ...baseHref, page: 1, movement: "receive" }) + "#stock-movement"} className="inventory-button gap-1.5 rounded-btn bg-secondary text-[11px] font-extrabold text-primary transition hover:bg-secondary-hover"><AdminIcon name="download" size={14} />Stock in<AdminIcon name="chevron" size={12} /></Link>
               <Link href={buildInventoryHref({ ...baseHref, page: 1, movement: "yield_out" }) + "#stock-movement"} className="inventory-button gap-1.5 rounded-btn bg-secondary text-[11px] font-extrabold text-primary transition hover:bg-secondary-hover"><AdminIcon name="upload" size={14} />Stock out<AdminIcon name="chevron" size={12} /></Link>
-              <Link href="/admin/inventory?yield=1#yield-entry" className="inventory-button gap-1.5 rounded-btn bg-secondary text-[11px] font-extrabold text-primary transition hover:bg-secondary-hover"><AdminIcon name="inventory" size={14} />Yield entry<AdminIcon name="chevron" size={12} /></Link>
+              {isLechonHouseBusiness && <Link href="/admin/inventory?yield=1#yield-entry" className="inventory-button gap-1.5 rounded-btn bg-secondary text-[11px] font-extrabold text-primary transition hover:bg-secondary-hover"><AdminIcon name="inventory" size={14} />Yield entry<AdminIcon name="chevron" size={12} /></Link>}
               <Link href="/admin/inventory/variance" className="inventory-button gap-1.5 rounded-btn bg-secondary text-[11px] font-extrabold text-primary transition hover:bg-secondary-hover"><AdminIcon name="chart" size={14} />End-of-day count<AdminIcon name="chevron" size={12} /></Link>
-              <MultiProductModal key={defaultBranch} storeId={defaultBranch} branchName={currentBranchName} branches={activeBranches} categories={categories} canWrite={canWrite} orgName={branding.brandName} triggerLabel="Starter catalog" triggerClassName="inventory-button gap-1.5 rounded-btn bg-secondary text-[11px] font-extrabold text-primary transition hover:bg-secondary-hover" />
+              <MultiProductModal key={defaultBranch} storeId={defaultBranch} branchName={currentBranchName} branches={activeBranches} categories={categories} canWrite={canWrite} orgName={branding.brandName} initialPresetId={readBusinessPresetId(profile.organizations?.settings) ?? undefined} triggerLabel="Starter catalog" triggerClassName="inventory-button gap-1.5 rounded-btn bg-secondary text-[11px] font-extrabold text-primary transition hover:bg-secondary-hover" />
               <details className="relative">
                 <summary className="inventory-button list-none cursor-pointer gap-1.5 rounded-btn bg-primary text-[11px] font-extrabold text-primary-fg"><AdminIcon name="plus" size={14} />Add item<AdminIcon name="chevron" size={12} /></summary>
                 <div className="absolute right-0 top-full z-20 mt-1 grid min-w-40 gap-1 rounded-card border border-line bg-surface p-1.5 shadow-[var(--shadow-pop)]">
@@ -619,7 +621,7 @@ export default async function InventoryPage({
           {catalogFieldsWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-3 py-2.5 text-xs text-ink"><strong className="font-extrabold">Some inventory fields are unavailable.</strong> Ensure <code className="font-bold">0009_admin_business_records.sql</code> is applied before <code className="font-bold">0010_inventory_catalog_fields.sql</code> in Supabase to enable suppliers and advanced inventory fields.</div>}
           {queryWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-3 py-2.5 text-xs text-ink">Some inventory data could not refresh. Check the connection and try again.</div>}
           {!canWrite && <div role="status" className="mt-5 rounded-card border border-line bg-secondary px-4 py-3 text-sm font-semibold text-primary">This inventory view is read-only for your role. Ask an organization admin to record stock movements or edit catalog fields.</div>}
-          {canWrite && <div className="mt-5"><OwnerGuidance topic="yield" /></div>}
+          {canWrite && isLechonHouseBusiness && <div className="mt-5"><OwnerGuidance topic="yield" /></div>}
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <InventoryMetric label="Total items" value={String(allRows.length)} detail={`Tracked for ${currentBranchName}`} tone="bg-primary text-primary-fg" icon="box" />
@@ -712,7 +714,7 @@ export default async function InventoryPage({
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3"><span className="text-[10px] font-semibold text-ink-muted">Showing {firstRow} to {lastRow} of {filteredRows.length} items</span><div className="flex items-center gap-1">{page > 1 ? <Link href={buildInventoryHref({ ...baseHref, page: page - 1 })} className="inventory-icon-button border border-line text-primary hover:bg-primary-soft" aria-label="Previous page">‹</Link> : <span className="inventory-icon-button border border-line text-ink-subtle" aria-hidden="true">‹</span>}{Array.from({ length: Math.min(totalPages, 5) }, (_, index) => index + 1).map((pageNumber) => <Link key={pageNumber} href={buildInventoryHref({ ...baseHref, page: pageNumber })} className={`inventory-page-button ${pageNumber === page ? "is-active" : ""}`}>{pageNumber}</Link>)}{page < totalPages ? <Link href={buildInventoryHref({ ...baseHref, page: page + 1 })} className="inventory-icon-button border border-line text-primary hover:bg-primary-soft" aria-label="Next page">›</Link> : <span className="inventory-icon-button border border-line text-ink-subtle" aria-hidden="true">›</span>}</div><form action="/admin/inventory" method="get" className="flex items-center gap-2"><input type="hidden" name="q" value={searchQuery} /><input type="hidden" name="category" value={category} /><input type="hidden" name="status" value={status} /><input type="hidden" name="supplier" value={supplier} /><input type="hidden" name="columns" value={[...visibleColumns].join(",")} /><label htmlFor="inventory-page-size" className="text-[10px] font-semibold text-ink-muted">Rows per page:</label><select id="inventory-page-size" name="pageSize" defaultValue={String(pageSize)} className="inventory-input inventory-input--compact w-auto text-[10px]"><option value="10">10</option><option value="25">25</option><option value="50">50</option></select><button type="submit" className="inventory-button inventory-button--ghost">Apply</button></form></div>
               </section>
 
-              <YieldEntryForm branches={activeBranches} products={formProducts} defaultBranch={defaultBranch} defaultSourceProductId={defaultProduct?.id ?? ""} defaultOutputProductId={defaultYieldOutputProduct?.id ?? ""} canWrite={canWrite} open={Boolean(readParam(params.yield) || readParam(params.saved) === "yield")} />
+              {isLechonHouseBusiness && <YieldEntryForm branches={activeBranches} products={formProducts} defaultBranch={defaultBranch} defaultSourceProductId={defaultProduct?.id ?? ""} defaultOutputProductId={defaultYieldOutputProduct?.id ?? ""} canWrite={canWrite} open={Boolean(readParam(params.yield) || readParam(params.saved) === "yield")} />}
               <StockMovementForm branches={activeBranches} products={formProducts} defaultBranch={defaultBranch} defaultProductId={defaultProduct?.id ?? ""} defaultMovement={defaultMovement} canWrite={canWrite} open={Boolean(readParam(params.movement) || selectedProductId || (readParam(params.error) && !readParam(params.yield)))} />
             </div>
 
