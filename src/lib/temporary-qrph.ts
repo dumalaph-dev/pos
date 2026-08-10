@@ -101,6 +101,7 @@ export async function activateTemporaryQrPhCheckout(
     currentStatus === "active" &&
     organization.subscription_current_period_end
   ) {
+    await persistBillingVariant(admin, organization.id, input.metadata.variantId);
     return { periodEnd: organization.subscription_current_period_end, duplicate: true };
   }
 
@@ -124,7 +125,21 @@ export async function activateTemporaryQrPhCheckout(
     .eq("id", organization.id);
   if (update.error) throw new Error("The QR Ph payment was confirmed but the organization billing record could not be updated.");
 
+  await persistBillingVariant(admin, organization.id, input.metadata.variantId);
+
   return { periodEnd: periodEnd.toISOString(), duplicate: false };
+}
+
+async function persistBillingVariant(
+  admin: NonNullable<ReturnType<typeof import("@/lib/employee-auth").createAdminClient>>,
+  organizationId: string,
+  variantId: string,
+) {
+  const result = await admin
+    .from("organizations")
+    .update({ subscription_billing_variant_id: variantId })
+    .eq("id", organizationId);
+  if (result.error) console.warn("[billing/qrph] Billing variant could not be recorded", result.error.message);
 }
 
 function addBillingMonths(value: Date, months: number) {

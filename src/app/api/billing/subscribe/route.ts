@@ -166,6 +166,12 @@ export async function POST(request: NextRequest) {
     });
     if (!saved) throw new Error("The subscription was created but the organization billing record could not be saved.");
 
+    const variantSaved = await admin
+      .from("organizations")
+      .update({ subscription_billing_variant_id: variant.id })
+      .eq("id", organization.id);
+    if (variantSaved.error) console.warn("[billing/subscribe] Billing variant could not be recorded", variantSaved.error.message);
+
     // Migration 0036 adds the temporary QR Ph mode. Keep this update
     // best-effort so a rolling deploy remains compatible before that
     // migration is applied, while a later Maya/card checkout restores the

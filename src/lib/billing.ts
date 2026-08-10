@@ -79,3 +79,9 @@ export function formatBillingDate(value: string | null | undefined) {
   if (Number.isNaN(date.getTime())) return "Not scheduled";
   return new Intl.DateTimeFormat("en-PH", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Singapore" }).format(date);
 }
+
+export function isBillingPeriodCurrent(value: string | null | undefined) {
+  if (!value) return false;
+  const time = Date.parse(value);
+  return Number.isFinite(time) && time > Date.now();
+}

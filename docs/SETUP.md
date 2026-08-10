@@ -63,7 +63,7 @@ server. Configure the PayMongo webhook URL as
 
 ## 4. Database migrations
 SQL lives in `supabase/migrations/` (run in order):
-The latest migrations add store staff access keys, subscription tracking, the single Premium billing plan, append-only privilege hardening, the policy-first platform operations catalog, the initial annual billing offers, POS approval hardening, and temporary QR Ph access: `0023_store_access_and_subscriptions.sql`, `0024_shifts_and_z_readings.sql`, `0025_premium_billing_plan.sql`, `0026_authenticated_append_only_hardening.sql`, `0027_platform_operations.sql`, `0028_support_cases.sql`, `0029_support_cases_privileges.sql`, `0030_suspended_account_rls.sql`, `0031_enable_annual_billing_offers.sql`, `0032_admin_pin_discount_policy.sql`, `0033_human_staff_login_slugs.sql`, `0034_pos_void_manager_approval.sql`, `0035_fix_shift_sequence_rls.sql`, and `0036_temporary_qrph_checkout.sql`.
+The latest migrations add store staff access keys, subscription tracking, the single Premium billing plan, append-only privilege hardening, the policy-first platform operations catalog, the initial annual billing offers, POS approval hardening, QR Ph access, and current-plan variant tracking: `0023_store_access_and_subscriptions.sql`, `0024_shifts_and_z_readings.sql`, `0025_premium_billing_plan.sql`, `0026_authenticated_append_only_hardening.sql`, `0027_platform_operations.sql`, `0028_support_cases.sql`, `0029_support_cases_privileges.sql`, `0030_suspended_account_rls.sql`, `0031_enable_annual_billing_offers.sql`, `0032_admin_pin_discount_policy.sql`, `0033_human_staff_login_slugs.sql`, `0034_pos_void_manager_approval.sql`, `0035_fix_shift_sequence_rls.sql`, `0036_temporary_qrph_checkout.sql`, and `0037_subscription_billing_variant.sql`.
 1. `0001_schema.sql` — tables, enums, indexes
 2. `0002_rls.sql` — grants, helper functions, RLS policies, append-only triggers
 3. `0003_functions.sql` — `clone_menu` (multi-branch)
@@ -101,6 +101,7 @@ The latest migrations add store staff access keys, subscription tracking, the si
 34. `0034_pos_void_manager_approval.sql` — add manager-approved POS void reversals
 35. `0035_fix_shift_sequence_rls.sql` — fix shift sequence access for the authenticated POS path
 36. `0036_temporary_qrph_checkout.sql` — record one-time QR Ph access periods and pending hosted checkout sessions
+37. `0037_subscription_billing_variant.sql` — remember the selected local billing option for the current-plan display
 
 **Apply them** either way:
 - **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push`

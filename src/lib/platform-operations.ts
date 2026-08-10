@@ -156,6 +156,14 @@ export function billingVariantPriceLabel(catalog: Pick<BillingCatalog, "monthlyP
   return formatPeso(calculateBillingVariantPrice(catalog.monthlyPriceCentavos, variant.intervalUnit, variant.intervalCount, variant.discountPercent));
 }
 
+export function billingVariantMonthlyEquivalent(
+  catalog: Pick<BillingCatalog, "monthlyPriceCentavos">,
+  variant: Pick<BillingVariant, "intervalUnit" | "intervalCount" | "discountPercent">,
+) {
+  const months = variant.intervalUnit === "year" ? variant.intervalCount * 12 : variant.intervalCount;
+  return Math.round(calculateBillingVariantPrice(catalog.monthlyPriceCentavos, variant.intervalUnit, variant.intervalCount, variant.discountPercent) / Math.max(months, 1));
+}
+
 export function formatMonthlyPriceInput(monthlyPriceCentavos: number) {
   return (monthlyPriceCentavos / 100).toFixed(2);
 }

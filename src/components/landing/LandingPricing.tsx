@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { formatPeso } from "@/lib/money";
-import { calculateBillingVariantPrice, type BillingCatalog, type BillingVariant } from "@/lib/platform-operations";
+import { billingVariantMonthlyEquivalent, calculateBillingVariantPrice, type BillingCatalog, type BillingVariant } from "@/lib/platform-operations";
 
 type LandingPricingProps = {
   catalog: BillingCatalog;
@@ -27,7 +27,7 @@ export default function LandingPricing({ catalog, pricingIncludes }: LandingPric
   const isAnnual = selected.intervalUnit === "year";
   const months = isAnnual ? selected.intervalCount * 12 : 1;
   const price = calculateBillingVariantPrice(catalog.monthlyPriceCentavos, selected.intervalUnit, selected.intervalCount, selected.discountPercent);
-  const monthlyEquivalent = Math.round(price / months);
+  const monthlyEquivalent = billingVariantMonthlyEquivalent(catalog, selected);
   const monthlyCostForTerm = catalog.monthlyPriceCentavos * months;
   const savings = Math.max(0, monthlyCostForTerm - price);
   const durationLabel = billingDurationLabel(selected);

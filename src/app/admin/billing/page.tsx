@@ -4,10 +4,10 @@ import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { SignOutButton } from "@/components/SignOutButton";
 import { getAdminProfile } from "@/lib/admin/profile";
-import { getBillingPlan, formatBillingDate, normalizeSubscriptionStatus, subscriptionStatusLabel, subscriptionTone } from "@/lib/billing";
+import { formatBillingDate, getBillingPlan, isBillingPeriodCurrent, normalizeSubscriptionStatus, subscriptionStatusLabel, type BillingPlan, type SubscriptionStatus } from "@/lib/billing";
 import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
-import { billingVariantPriceLabel, DEFAULT_BILLING_VARIANTS, DEFAULT_MONTHLY_PRICE_CENTAVOS, DEFAULT_PLATFORM_POLICIES, hasSubscriptionPaymentMethod, isPolicyGateOpen } from "@/lib/platform-operations";
+import { billingVariantMonthlyEquivalent, billingVariantPriceLabel, DEFAULT_MONTHLY_PRICE_CENTAVOS, DEFAULT_PLATFORM_POLICIES, hasSubscriptionPaymentMethod, isPolicyGateOpen, type BillingCatalog, type BillingVariant } from "@/lib/platform-operations";
 import { payMongoConfiguration, readPayMongoSubscriptionReadiness, readPlatformOperations } from "@/lib/platform-operations-server";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import SubscriptionCheckout from "./SubscriptionCheckout";
@@ -22,6 +22,9 @@ type OrganizationRecord = {
   subscription_current_period_end?: string | null;
   subscription_updated_at?: string | null;
   subscription_billing_mode?: "recurring" | "temporary_qrph" | null;
+  subscription_billing_variant_id?: string | null;
+  subscription_provider_plan_id?: string | null;
+  subscription_provider_subscription_id?: string | null;
 };
 
 type BranchRecord = { id: string; is_active: boolean };
@@ -39,7 +42,7 @@ export default async function BillingPage() {
   const supabase = await createClient();
   const richResult = await supabase
     .from("organizations")
-    .select("id, name, currency, subscription_status, subscription_plan, subscription_current_period_end, subscription_updated_at, subscription_billing_mode")
+    .select("id, name, currency, subscription_status, subscription_plan, subscription_current_period_end, subscription_updated_at, subscription_billing_mode, subscription_provider_plan_id, subscription_provider_subscription_id")
     .eq("id", profile.org_id)
     .maybeSingle();
 
@@ -50,153 +53,279 @@ export default async function BillingPage() {
     organization = fallback.data as OrganizationRecord | null;
   }
 
+  if (organization && subscriptionFieldsAvailable) {
+    const variantResult = await supabase
+      .from("organizations")
+      .select("subscription_billing_variant_id")
+      .eq("id", profile.org_id)
+      .maybeSingle();
+    if (!variantResult.error) {
+      organization = {
+        ...organization,
+        subscription_billing_variant_id: (variantResult.data as { subscription_billing_variant_id?: string | null } | null)?.subscription_billing_variant_id ?? null,
+      };
+    }
+  }
+
   const branchesResult = await supabase.from("stores").select("id, is_active").eq("org_id", profile.org_id);
   const branches = (branchesResult.data ?? []) as BranchRecord[];
   const activeBranches = branches.filter((branch) => branch.is_active).length;
   const status = subscriptionFieldsAvailable ? normalizeSubscriptionStatus(organization?.subscription_status) : null;
-  const currentTemporaryAccess = status === "active"
-    && organization?.subscription_billing_mode === "temporary_qrph"
-    && Boolean(organization?.subscription_current_period_end);
+  const currentPeriodEnd = organization?.subscription_current_period_end ?? null;
+  const billingMode = organization?.subscription_billing_mode ?? "recurring";
+  const currentAccessIsValid = status === "active" && (billingMode !== "temporary_qrph" || isBillingPeriodCurrent(currentPeriodEnd));
   const currentPlan = getBillingPlan(organization?.subscription_plan);
   const platformAdmin = createAdminClient();
   const operations = platformAdmin
     ? await readPlatformOperations(platformAdmin)
     : {
-      catalog: { currency: "PHP" as const, monthlyPriceCentavos: DEFAULT_MONTHLY_PRICE_CENTAVOS, variants: DEFAULT_BILLING_VARIANTS, schemaAvailable: false },
+      catalog: { currency: "PHP" as const, monthlyPriceCentavos: DEFAULT_MONTHLY_PRICE_CENTAVOS, variants: [], schemaAvailable: false },
       policies: { ...DEFAULT_PLATFORM_POLICIES, schemaAvailable: false },
     };
-  const catalog = operations.catalog;
+  const catalog = operations.catalog.schemaAvailable
+    ? operations.catalog
+    : { ...operations.catalog, variants: [] };
+  const currentVariant = findCurrentBillingVariant(catalog.variants, organization);
   const policyGateOpen = operations.policies.schemaAvailable && isPolicyGateOpen(operations.policies);
   const paymongo = payMongoConfiguration();
   const paymongoSubscriptionReadiness = await readPayMongoSubscriptionReadiness();
   const providerReady = policyGateOpen && paymongo.secretKeyConfigured && paymongo.publicKeyConfigured && paymongo.keyModeConsistent && paymongo.webhookSecretConfigured && paymongo.subscriptionsEnabled && paymongoSubscriptionReadiness.subscriptionsApiAvailable === true && hasSubscriptionPaymentMethod(paymongoSubscriptionReadiness.subscriptionPaymentMethods);
   const qrPhCapabilityReady = paymongoSubscriptionReadiness.subscriptionPaymentMethods?.some((method) => method.toLowerCase() === "qrph") === true;
   const temporaryQrPhReady = subscriptionFieldsAvailable && policyGateOpen && paymongo.secretKeyConfigured && paymongo.webhookSecretConfigured && paymongo.temporaryQrPhEnabled && qrPhCapabilityReady;
-  const providerDetail = !paymongo.secretKeyConfigured || !paymongo.publicKeyConfigured || !paymongo.keyModeConsistent || !paymongo.webhookSecretConfigured
-    ? "The platform owner must configure matching PayMongo keys and the webhook signing secret before checkout can collect a payment."
-    : !paymongo.subscriptionsEnabled || paymongoSubscriptionReadiness.subscriptionsApiAvailable !== true
-      ? "Request PayMongo Subscriptions activation for this organization, then rerun the checkout preflight and keep PAYMONGO_SUBSCRIPTIONS_ENABLED=true only after access is confirmed."
-      : !hasSubscriptionPaymentMethod(paymongoSubscriptionReadiness.subscriptionPaymentMethods)
-        ? "Enable Visa/Mastercard cards or Maya for this PayMongo organization, then request Subscriptions activation for that payment method."
-        : "PayMongo checkout is being prepared. Run the checkout preflight to verify the remaining provider settings.";
-  const temporaryQrPhDetail = !subscriptionFieldsAvailable
-    ? "Apply migration 0036_temporary_qrph_checkout.sql before enabling temporary QR Ph checkout."
-    : !paymongo.secretKeyConfigured || !paymongo.webhookSecretConfigured
-    ? "The platform owner must configure PAYMONGO_SECRET_KEY and PAYMONGO_WEBHOOK_SECRET on the server before QR Ph can collect a payment."
-    : !paymongo.temporaryQrPhEnabled
-      ? "Temporary QR Ph checkout is disabled by PAYMONGO_QRPH_CHECKOUT_ENABLED."
-      : paymongoSubscriptionReadiness.subscriptionPaymentMethods === null
-        ? "PayMongo payment capabilities could not be checked. Run the PayMongo preflight and try again."
-        : !qrPhCapabilityReady
-          ? "QR Ph is not active on this PayMongo account yet. Activate the account, then rerun the PayMongo preflight."
-          : "Temporary QR Ph checkout is ready.";
+  const providerDetail = "Online payment is not available right now. Please try again later or contact support.";
+  const temporaryQrPhDetail = "Online payment is not available right now. Please try again later or contact support.";
   const annualAutoRenewalAllowed = operations.policies.billing.settings.annualRenewal !== "manual_review";
-  const monthlyPriceLabel = formatPeso(catalog.monthlyPriceCentavos);
-  const offeredVariants = catalog.variants.filter((variant) => variant.isActive);
-  const checkoutVariants = offeredVariants.filter((variant): variant is typeof variant & { id: string } => Boolean(variant.id) && (variant.intervalUnit !== "year" || annualAutoRenewalAllowed)).map((variant) => ({
-    id: variant.id,
-    label: variant.label,
-    priceLabel: billingVariantPriceLabel(catalog, variant),
-    cadenceLabel: variant.intervalUnit === "month" ? "/ month" : `/ ${variant.intervalCount} ${variant.intervalCount === 1 ? "year" : "years"}`,
-    discountPercent: variant.discountPercent,
-  }));
+  const monthlyPriceLabel = catalog.schemaAvailable ? formatPeso(catalog.monthlyPriceCentavos) : "Unavailable";
+  const offeredVariants = catalog.variants.filter((variant) => variant.isActive && (variant.intervalUnit !== "year" || annualAutoRenewalAllowed));
+  const checkoutVariants = offeredVariants
+    .filter((variant): variant is typeof variant & { id: string } => Boolean(variant.id))
+    .map((variant) => ({
+      id: variant.id,
+      label: variant.label,
+      priceLabel: billingVariantPriceLabel(catalog, variant),
+      cadenceLabel: variant.intervalUnit === "month" ? "per month" : `for ${variant.intervalCount} ${variant.intervalCount === 1 ? "year" : "years"}`,
+      monthlyEquivalentLabel: formatPeso(billingVariantMonthlyEquivalent(catalog, variant)),
+      discountPercent: variant.discountPercent,
+    }));
 
   return (
     <main className="admin-page min-h-screen bg-bg px-4 pb-12 pt-6 text-ink sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
-        <AdminPageHeader title="Billing & plan">
+        <AdminPageHeader title="Billing">
           <Link href="/admin" className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Overview</Link>
           <SignOutButton className="px-3 py-2 text-xs" />
         </AdminPageHeader>
 
-        <section className="mt-7 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <section className="mt-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Owner workspace</p>
-            <h1 className="mt-2 text-3xl font-extrabold tracking-[-0.04em] sm:text-4xl">One plan. Everything included.</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">Every business gets the complete Premium workspace: {monthlyPriceLabel}/month after the 14-day free trial, with every branch and staff member included.</p>
+            <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Account billing</p>
+            <h1 className="mt-2 text-3xl font-extrabold tracking-[-0.04em] sm:text-4xl">Your plan, at a glance.</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">Manage your Dumala POS plan and keep every branch, staff member, and sale moving smoothly.</p>
           </div>
           <div className="flex items-center gap-2 rounded-pill bg-primary-soft px-3 py-2 text-xs font-extrabold text-primary"><AdminIcon name="wallet" size={15} /> {organization?.name ?? "Your business"}</div>
         </section>
 
-        {(!subscriptionFieldsAvailable || !catalog.schemaAvailable) && <div role="status" className="mt-7 rounded-card border border-warning/35 bg-warning/10 px-5 py-4 text-sm font-semibold text-ink">{!subscriptionFieldsAvailable ? "Subscription tracking is not active yet. Apply migration 0025 before connecting checkout or recording plan changes." : "Pricing is using the default catalog until the platform operations migration is applied."}</div>}
+        {(!subscriptionFieldsAvailable || !catalog.schemaAvailable) && <div role="status" className="mt-7 rounded-card border border-warning/35 bg-warning/10 px-5 py-4 text-sm font-semibold text-ink">Billing details are still being set up. Please contact support if this message continues.</div>}
 
-        <section className="mt-7 grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)]" aria-labelledby="current-plan-heading">
-          <div className="rounded-card border border-primary/20 bg-primary p-6 text-primary-fg shadow-[var(--shadow-pop)] sm:p-7">
-            <div className="flex flex-wrap items-start justify-between gap-4">
+        <CurrentPlanCard
+          status={status}
+          accessIsCurrent={currentAccessIsValid}
+          plan={currentPlan}
+          variant={currentVariant}
+          catalog={catalog}
+          currentPeriodEnd={currentPeriodEnd}
+          billingMode={billingMode}
+          activeBranches={activeBranches}
+          totalBranches={branches.length}
+          monthlyPriceLabel={monthlyPriceLabel}
+        />
+
+        {!currentAccessIsValid && (
+          <section className="mt-8" aria-labelledby="plans-heading">
+            <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-primary-fg/65">Current plan</p>
-                <h2 id="current-plan-heading" className="mt-2 text-3xl font-extrabold">{currentPlan.name}</h2>
-                <p className="mt-2 max-w-lg text-sm leading-6 text-primary-fg/75">{currentPlan.summary}</p>
+                <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Premium plans</p>
+                <h2 id="plans-heading" className="mt-2 text-2xl font-extrabold">Choose the plan that fits your business.</h2>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-ink-muted">Every option includes the complete Premium workspace. Pay monthly or save with a longer plan.</p>
               </div>
-              {status && <span className="rounded-pill bg-primary-fg/15 px-3 py-1.5 text-xs font-extrabold text-primary-fg">{subscriptionStatusLabel(status)}</span>}
+              {!annualAutoRenewalAllowed && <span className="rounded-pill bg-warning/15 px-3 py-1.5 text-xs font-extrabold text-ink">Longer plans are currently unavailable</span>}
             </div>
-            <div className="mt-7 grid gap-3 border-t border-primary-fg/15 pt-5 sm:grid-cols-3">
-              <BillingMetric label="Branches" value={`${activeBranches} active`} detail={`${branches.length} total`} />
-              <BillingMetric label="Price" value={`${monthlyPriceLabel}/month`} detail="One plan for every branch" />
-              <BillingMetric label="Next review" value={subscriptionFieldsAvailable ? formatBillingDate(organization?.subscription_current_period_end) : "After setup"} detail={subscriptionFieldsAvailable ? "Current period" : "Migration required"} />
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {offeredVariants.length === 0 ? <div className="rounded-card border border-line bg-surface p-5 text-sm text-ink-muted sm:col-span-2 xl:col-span-4">Plans are not available right now. Please contact support.</div> : offeredVariants.map((variant) => <PlanOptionCard key={variant.id ?? `${variant.intervalUnit}-${variant.intervalCount}`} catalog={catalog} variant={variant} />)}
             </div>
-          </div>
+          </section>
+        )}
 
-          <aside className="rounded-card border border-line bg-surface p-6 shadow-[var(--shadow-card)] sm:p-7" aria-labelledby="billing-status-heading">
-            <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Subscription status</p>
-            <h2 id="billing-status-heading" className="mt-2 text-xl font-extrabold">{status ? subscriptionStatusLabel(status) : "Not connected"}</h2>
-            <p className="mt-2 text-sm leading-6 text-ink-muted">{status === "active" ? "Your workspace is on an active Premium subscription." : status === "trialing" ? "Your 14-day Premium trial is active while billing is being connected." : "Billing updates will appear here once the payment connection is enabled."}</p>
-            {status && <span className={`mt-5 inline-flex rounded-pill px-3 py-1.5 text-xs font-extrabold ${subscriptionTone(status)}`}>{subscriptionStatusLabel(status)}</span>}
-            <p className="mt-5 border-t border-line pt-4 text-xs leading-5 text-ink-muted">Last recorded update: {subscriptionFieldsAvailable ? formatBillingDate(organization?.subscription_updated_at) : "Not available"}</p>
-          </aside>
-        </section>
-
-        <section className="mt-8" aria-labelledby="plans-heading">
-          <div className="flex flex-wrap items-end justify-between gap-3">
+        {!currentAccessIsValid && (
+          <section className="mt-8 rounded-card border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="checkout-heading">
             <div>
-              <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Premium plan</p>
-              <h2 id="plans-heading" className="mt-2 text-2xl font-extrabold">The complete workspace from {monthlyPriceLabel}/month.</h2>
+              <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Secure payment</p>
+              <h2 id="checkout-heading" className="mt-2 text-2xl font-extrabold">Start your Premium plan.</h2>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-ink-muted">Choose a plan above, then complete your payment securely. Your Premium access will cover every branch and staff account.</p>
             </div>
-            <span className="text-xs font-semibold text-ink-muted">Monthly + annual options · checkout follows policy review</span>
-          </div>
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            {offeredVariants.length === 0 ? <div className="rounded-card border border-line bg-surface p-5 text-sm text-ink-muted">No billing options are currently offered. The platform owner can enable one from Platform Operations.</div> : offeredVariants.map((variant) => {
-              const isMonthly = variant.intervalUnit === "month" && variant.intervalCount === 1;
-              return (
-                <article key={variant.id ?? `${variant.intervalUnit}-${variant.intervalCount}`} className={`rounded-card border bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6 ${isMonthly ? "border-primary/40 ring-1 ring-primary/15" : "border-line"}`}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-lg font-extrabold">Premium · {variant.label}</h3>
-                      <p className="mt-1 text-sm leading-5 text-ink-muted">{isMonthly ? currentPlan.summary : `Prepay ${variant.intervalCount} ${variant.intervalUnit}${variant.intervalCount === 1 ? "" : "s"} with a ${variant.discountPercent}% discount.`}</p>
-                    </div>
-                    {isMonthly && <span className="rounded-pill bg-primary-soft px-2.5 py-1 text-[10px] font-extrabold text-primary">Base price</span>}
-                  </div>
-                  <p className="mt-5 text-3xl font-extrabold tracking-[-0.04em]">{billingVariantPriceLabel(catalog, variant)}<span className="ml-1 text-sm font-semibold text-ink-muted">{isMonthly ? "/ month" : ` / ${variant.intervalCount} ${variant.intervalUnit}${variant.intervalCount === 1 ? "" : "s"}`}</span></p>
-                  {isMonthly && <ul className="mt-5 grid gap-2.5 border-t border-line pt-5">{currentPlan.features.map((feature) => <li key={feature} className="flex gap-2 text-sm text-ink-muted"><AdminIcon name="check" size={15} /><span>{feature}</span></li>)}</ul>}
-                  <div className="mt-6 border-t border-line pt-4"><span className="text-xs font-extrabold uppercase tracking-[0.12em] text-ink-subtle">{isMonthly ? "Configured base price" : "Available after checkout is connected"}</span></div>
-                </article>
-              );
-            })}
-          </div>
-        </section>
+            {providerReady ? (
+              <SubscriptionCheckout variants={checkoutVariants} policyGateOpen={policyGateOpen} providerReady={providerReady} providerDetail={providerDetail} publicKey={paymongo.publicKey} apiBaseUrl={paymongo.apiBaseUrl} ownerEmail={user.email ?? ""} />
+            ) : (
+              <TemporaryQrPhCheckout variants={checkoutVariants} policyGateOpen={policyGateOpen} providerReady={temporaryQrPhReady} providerDetail={temporaryQrPhDetail} />
+            )}
+          </section>
+        )}
 
-        <section className="mt-8 rounded-card border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="checkout-heading">
-          <div>
-            <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Secure checkout</p>
-            <h2 id="checkout-heading" className="mt-2 text-2xl font-extrabold">Connect billing to keep your workspace active.</h2>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-ink-muted">Use temporary QR Ph prepayment now, then switch to automatic recurring billing when PayMongo enables Maya or cards for this account.</p>
-            {!annualAutoRenewalAllowed && <p className="mt-3 max-w-2xl rounded-btn bg-warning/10 px-3 py-2.5 text-xs font-semibold leading-5 text-ink">Annual options are hidden because the published billing policy requires manual review instead of automatic annual renewal.</p>}
-          </div>
-          {providerReady ? (
-            <SubscriptionCheckout variants={checkoutVariants} policyGateOpen={policyGateOpen} providerReady={providerReady} providerDetail={providerDetail} publicKey={paymongo.publicKey} apiBaseUrl={paymongo.apiBaseUrl} ownerEmail={user.email ?? ""} />
-          ) : (
-            <TemporaryQrPhCheckout variants={checkoutVariants} policyGateOpen={policyGateOpen} providerReady={temporaryQrPhReady} providerDetail={temporaryQrPhDetail} currentAccessCandidate={currentTemporaryAccess} currentPeriodEnd={organization?.subscription_current_period_end ?? null} />
-          )}
-        </section>
-
-        <section className="mt-8 rounded-card border border-line bg-surface-raised p-5 sm:p-6" aria-labelledby="billing-next-heading"><div className="flex gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary"><AdminIcon name="alert" size={17} /></span><div><h2 id="billing-next-heading" className="text-base font-extrabold">What happens next</h2><p className="mt-1 text-sm leading-6 text-ink-muted">{policyGateOpen && providerReady ? "Checkout is available. PayMongo will send signed subscription and payment events to keep this status current." : policyGateOpen && temporaryQrPhReady ? "QR Ph checkout is available for prepaid access. PayMongo's signed checkout payment webhook activates the selected period; it does not auto-renew." : "Pricing is managed from Platform Operations. Checkout remains locked until both policies are published and the required PayMongo keys and payment capability are configured."}</p></div></div></section>
+        {!currentAccessIsValid && <BillingSteps trial={status === "trialing"} />}
       </div>
     </main>
   );
 }
 
-function BillingMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return <div><p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-primary-fg/60">{label}</p><strong className="mt-1 block text-sm">{value}</strong><span className="mt-0.5 block text-xs text-primary-fg/65">{detail}</span></div>;
+function CurrentPlanCard({
+  status,
+  accessIsCurrent,
+  plan,
+  variant,
+  catalog,
+  currentPeriodEnd,
+  billingMode,
+  activeBranches,
+  totalBranches,
+  monthlyPriceLabel,
+}: {
+  status: SubscriptionStatus | null;
+  accessIsCurrent: boolean;
+  plan: BillingPlan;
+  variant: BillingVariant | null;
+  catalog: BillingCatalog;
+  currentPeriodEnd: string | null;
+  billingMode: "recurring" | "temporary_qrph";
+  activeBranches: number;
+  totalBranches: number;
+  monthlyPriceLabel: string;
+}) {
+  const isTrial = status === null || status === "trialing";
+  const isActive = status === "active" && accessIsCurrent;
+  const accessEnded = status === "active" && !accessIsCurrent;
+  const isRecurring = billingMode !== "temporary_qrph";
+  const statusLabel = isActive ? "Active" : isTrial ? "Trial active" : accessEnded ? "Access ended" : status ? subscriptionStatusLabel(status) : "Not connected";
+  const title = isTrial ? "Premium trial" : "Premium";
+  const summary = isActive
+    ? "Your Premium plan is active across every branch and staff account."
+    : isTrial
+      ? "Your 14-day trial includes the complete Premium workspace."
+      : accessEnded
+        ? "Your Premium access has ended. Choose a plan below to continue using every feature."
+        : "Review your billing details and choose a plan when you are ready.";
+  const totalPriceLabel = variant ? billingVariantPriceLabel(catalog, variant) : monthlyPriceLabel;
+  const monthlyEquivalentLabel = variant ? formatPeso(billingVariantMonthlyEquivalent(catalog, variant)) : monthlyPriceLabel;
+  const variantLabel = variant?.label ?? "Monthly";
+  const planCadence = variant?.intervalUnit === "year" ? `Paid for ${variant.intervalCount} ${variant.intervalCount === 1 ? "year" : "years"}` : "Billed monthly";
+  const timingLabel = isTrial ? "Trial ends" : isRecurring ? "Next billing" : "Access through";
+  const timingValue = currentPeriodEnd ? formatBillingDate(currentPeriodEnd) : isTrial ? "14 days included" : "Not scheduled";
+  const cardTone = isActive
+    ? "border-primary/20 bg-primary text-primary-fg shadow-[var(--shadow-pop)]"
+    : isTrial
+      ? "border-accent/30 bg-secondary text-ink shadow-[var(--shadow-card)]"
+      : "border-line bg-surface text-ink shadow-[var(--shadow-card)]";
+  const panelTone = isActive ? "border-primary-fg/15 bg-primary-fg/10" : "border-primary/10 bg-primary/5";
+  const mutedTone = isActive ? "text-primary-fg/72" : "text-ink-muted";
+
+  return (
+    <section className={`relative mt-7 overflow-hidden rounded-card border ${cardTone}`} aria-labelledby="current-plan-heading">
+      <div className="grid gap-7 p-6 sm:p-8 lg:grid-cols-[minmax(0,1.12fr)_minmax(260px,0.88fr)]">
+        <div>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl ${isActive ? "bg-accent text-accent-fg" : "bg-primary text-primary-fg"}`}><AdminIcon name="wallet" size={23} /></span>
+              <div>
+                <p className={`text-xs font-extrabold uppercase tracking-[0.16em] ${isActive ? "text-primary-fg/65" : "text-accent"}`}>Current plan</p>
+                <h2 id="current-plan-heading" className="mt-1 text-3xl font-extrabold tracking-[-0.04em]">{title}</h2>
+              </div>
+            </div>
+            <span className={`rounded-pill px-3 py-1.5 text-xs font-extrabold ${isActive ? "bg-primary-fg/15 text-primary-fg" : isTrial ? "bg-primary/10 text-primary" : "bg-warning/15 text-ink"}`}>{statusLabel}</span>
+          </div>
+
+          <p className={`mt-5 max-w-xl text-sm leading-6 ${mutedTone}`}>{summary}</p>
+
+          <div className={`mt-7 grid gap-3 border-t pt-5 sm:grid-cols-3 ${isActive ? "border-primary-fg/15" : "border-line"}`}>
+            <PlanMetric inverse={isActive} label={isTrial ? "Trial access" : "Plan"} value={isTrial ? "14 days" : variantLabel} detail={isTrial ? "Full Premium access" : planCadence} />
+            <PlanMetric inverse={isActive} label={isTrial ? "Starting price" : "Monthly equivalent"} value={isTrial ? monthlyPriceLabel : monthlyEquivalentLabel} detail={isTrial ? "Monthly billing" : variant?.discountPercent ? `${variant.discountPercent}% plan savings` : "Premium rate"} />
+            <PlanMetric inverse={isActive} label={timingLabel} value={timingValue} detail={isTrial ? "All features included" : isRecurring ? "Automatic renewal" : "Renew before this date"} />
+          </div>
+
+          {isActive && <p className={`mt-5 text-xs leading-5 ${mutedTone}`}>Current total: <strong className={isActive ? "text-primary-fg" : "text-ink"}>{totalPriceLabel}</strong>{variant?.intervalUnit === "year" ? ` for ${variant.intervalCount} ${variant.intervalCount === 1 ? "year" : "years"}` : " per month"} · {activeBranches} of {totalBranches} branches active.</p>}
+        </div>
+
+        <aside className={`rounded-card border p-5 ${panelTone}`} aria-label="Premium plan features">
+          <div className="flex items-center justify-between gap-3">
+            <p className={`text-xs font-extrabold uppercase tracking-[0.14em] ${isActive ? "text-primary-fg/65" : "text-accent"}`}>Included with Premium</p>
+            <AdminIcon name="star" size={17} />
+          </div>
+          <ul className={`mt-4 grid gap-3 text-sm leading-5 ${mutedTone}`}>
+            {plan.features.map((feature) => <li key={feature} className="flex gap-2.5"><AdminIcon name="check" size={16} /><span>{feature}</span></li>)}
+          </ul>
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function PlanOptionCard({ catalog, variant }: { catalog: BillingCatalog; variant: BillingVariant }) {
+  const isMonthly = variant.intervalUnit === "month" && variant.intervalCount === 1;
+  const totalPriceLabel = billingVariantPriceLabel(catalog, variant);
+  const monthlyEquivalentLabel = formatPeso(billingVariantMonthlyEquivalent(catalog, variant));
+  const duration = variant.intervalUnit === "month" ? "month" : `${variant.intervalCount} ${variant.intervalCount === 1 ? "year" : "years"}`;
+
+  return (
+    <article className={`rounded-card border bg-surface p-5 shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] sm:p-6 ${isMonthly ? "border-primary/40 ring-1 ring-primary/15" : "border-line"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-extrabold uppercase tracking-[0.13em] text-accent">{isMonthly ? "Flexible" : "Save more"}</p>
+          <h3 className="mt-2 text-xl font-extrabold">Premium · {variant.label}</h3>
+        </div>
+        <span className="rounded-pill bg-primary-soft px-2.5 py-1 text-[10px] font-extrabold text-primary">{variant.discountPercent > 0 ? `Save ${variant.discountPercent}%` : "Popular"}</span>
+      </div>
+      <p className="mt-3 text-sm leading-5 text-ink-muted">{isMonthly ? "Pay month to month with full flexibility." : `Pay once for ${duration} and lock in your savings.`}</p>
+      <div className="mt-6">
+        <strong className="text-3xl font-extrabold tracking-[-0.04em]">{totalPriceLabel}</strong>
+        <span className="ml-1 text-sm font-semibold text-ink-muted">{isMonthly ? "/ month" : `for ${duration}`}</span>
+      </div>
+      <div className="mt-5 rounded-btn bg-primary-soft/70 px-3.5 py-3">
+        <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-primary">Monthly equivalent</p>
+        <p className="mt-1 text-lg font-extrabold text-primary">{monthlyEquivalentLabel}<span className="ml-1 text-xs font-semibold">/ month</span></p>
+      </div>
+      <p className="mt-4 flex items-center gap-2 text-xs font-semibold text-ink-muted"><AdminIcon name="check" size={14} /> All Premium features included</p>
+    </article>
+  );
+}
+
+function BillingSteps({ trial }: { trial: boolean }) {
+  return (
+    <section className="mt-8 rounded-card border border-line bg-surface-raised p-5 sm:p-6" aria-labelledby="billing-steps-heading">
+      <div className="flex items-start gap-3">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary"><AdminIcon name="check" size={17} /></span>
+        <div>
+          <h2 id="billing-steps-heading" className="text-base font-extrabold">{trial ? "Your trial is ready when you are." : "Continue with Premium."}</h2>
+          <p className="mt-1 text-sm leading-6 text-ink-muted">Choose a plan, complete your payment, and keep your complete POS workspace available for every branch and staff member.</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PlanMetric({ label, value, detail, inverse }: { label: string; value: string; detail: string; inverse: boolean }) {
+  return <div><p className={`text-[10px] font-extrabold uppercase tracking-[0.12em] ${inverse ? "text-primary-fg/60" : "text-ink-subtle"}`}>{label}</p><strong className="mt-1 block text-sm">{value}</strong><span className={`mt-0.5 block text-xs ${inverse ? "text-primary-fg/65" : "text-ink-muted"}`}>{detail}</span></div>;
+}
+
+function findCurrentBillingVariant(variants: BillingVariant[], organization: OrganizationRecord | null) {
+  const storedVariant = organization?.subscription_billing_variant_id
+    ? variants.find((variant) => variant.id === organization.subscription_billing_variant_id)
+    : null;
+  if (storedVariant) return storedVariant;
+
+  const providerVariant = organization?.subscription_provider_plan_id
+    ? variants.find((variant) => variant.paymongoPlanId === organization.subscription_provider_plan_id)
+    : null;
+  if (providerVariant) return providerVariant;
+
+  return variants.find((variant) => variant.intervalUnit === "month" && variant.intervalCount === 1) ?? variants[0] ?? null;
 }
 
 function BillingMessage({ title, detail }: { title: string; detail: string }) {

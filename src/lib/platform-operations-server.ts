@@ -47,7 +47,11 @@ export async function readPlatformBillingCatalog(admin: PlatformAdminClient): Pr
   return {
     currency: "PHP",
     monthlyPriceCentavos,
-    variants: variants.length > 0 ? variants : DEFAULT_BILLING_VARIANTS,
+    // The platform catalog is authoritative whenever its tables are
+    // available. Keep defaults only for the unavailable-schema fallback used
+    // by public/platform pages during migrations; customer billing must not
+    // invent offers that are absent from Subscription catalog.
+    variants: schemaAvailable ? variants : DEFAULT_BILLING_VARIANTS,
     schemaAvailable,
   };
 }

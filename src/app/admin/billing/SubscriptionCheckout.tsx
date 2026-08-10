@@ -7,6 +7,7 @@ type CheckoutVariant = {
   label: string;
   priceLabel: string;
   cadenceLabel: string;
+  monthlyEquivalentLabel: string;
   discountPercent: number;
 };
 
@@ -48,7 +49,7 @@ export default function SubscriptionCheckout({ variants, policyGateOpen, provide
       if (cancelled) return;
       setPending(true);
       setMessageKind("success");
-      setMessage("Verifying your payment with PayMongo…");
+      setMessage("Verifying your payment…");
 
       try {
         const response = await fetch(`/api/billing/payment-intent?payment_intent_id=${encodeURIComponent(paymentIntentId)}`, {
@@ -63,7 +64,7 @@ export default function SubscriptionCheckout({ variants, policyGateOpen, provide
           setMessage("Payment is still processing. Refresh your billing status in a moment.");
         } else {
           setMessageKind("error");
-          setMessage("PayMongo is waiting for a new payment method. Check the card details and try checkout again.");
+          setMessage("Your payment method needs attention. Check the card details and try again.");
         }
       } catch (error) {
         if (!cancelled) {
@@ -89,8 +90,8 @@ export default function SubscriptionCheckout({ variants, policyGateOpen, provide
     event.preventDefault();
     setMessage(null);
 
-    if (!selectedVariant) return setCheckoutError("Choose a subscription option first.");
-    if (!publicKey) return setCheckoutError("PayMongo public key is not configured yet.");
+    if (!selectedVariant) return setCheckoutError("Choose a plan first.");
+    if (!publicKey) return setCheckoutError("Online payment is not ready. Please contact support.");
 
     const normalizedCardNumber = cardNumber.replace(/\D/g, "");
     const month = Number(expiryMonth);
@@ -105,12 +106,12 @@ export default function SubscriptionCheckout({ variants, policyGateOpen, provide
     setPending(true);
     try {
       const intent = await startSubscription(selectedVariant.id);
-      if (!intent.paymentIntentId) throw new Error(intent.message || "PayMongo did not return a payment intent.");
+      if (!intent.paymentIntentId) throw new Error(intent.message || "We could not start the payment. Please try again.");
       if (intent.paymentIntentStatus === "succeeded") {
-        setCheckoutSuccess("Payment confirmed. Your subscription status will update after the signed PayMongo webhook is received.");
+        setCheckoutSuccess("Payment confirmed. Your Premium plan is now active.");
         return;
       }
-      if (!intent.clientKey) throw new Error("PayMongo did not return a client key for the first payment.");
+      if (!intent.clientKey) throw new Error("We could not securely prepare the payment. Please try again.");
 
       const paymentMethodId = await createPaymentMethod({
         publicKey,
@@ -135,12 +136,12 @@ export default function SubscriptionCheckout({ variants, policyGateOpen, provide
 
       if (status === "awaiting_next_action" && redirectUrl) {
         const target = new URL(redirectUrl);
-        if (target.protocol !== "https:") throw new Error("PayMongo returned an invalid authentication URL.");
+        if (target.protocol !== "https:") throw new Error("The secure verification link is invalid.");
         window.location.assign(target.toString());
         return;
       }
       if (status === "succeeded") {
-        setCheckoutSuccess("Payment confirmed. Your subscription status will update after the signed PayMongo webhook is received.");
+        setCheckoutSuccess("Payment confirmed. Your Premium plan is now active.");
         return;
       }
       if (status === "processing") {
@@ -149,7 +150,7 @@ export default function SubscriptionCheckout({ variants, policyGateOpen, provide
       }
 
       const providerError = readNestedString(attachedAttributes, ["last_payment_error", "detail"]);
-      throw new Error(providerError || "PayMongo could not complete the first payment. Check the card details and try again.");
+      throw new Error(providerError || "Your payment could not be completed. Check the card details and try again.");
     } catch (error) {
       setCheckoutError(error instanceof Error ? error.message : "Checkout could not be completed. Try again.");
     } finally {
@@ -158,35 +159,35 @@ export default function SubscriptionCheckout({ variants, policyGateOpen, provide
   }
 
   if (!policyGateOpen) {
-    return <CheckoutNotice title="Checkout is locked by policy" detail="The platform owner must publish both the billing policy and support policy before an organization can start a paid subscription." tone="warning" />;
+    return <CheckoutNotice title="Online payment is unavailable" detail="Please try again later or contact support if you need help starting your plan." tone="warning" />;
   }
   if (!providerReady) {
-    return <CheckoutNotice title="PayMongo checkout is being prepared" detail={providerDetail} tone="neutral" />;
+    return <CheckoutNotice title="Online payment is unavailable" detail={providerDetail} tone="neutral" />;
   }
   if (variants.length === 0) {
-    return <CheckoutNotice title="No subscription options are available" detail="Ask the platform owner to enable at least one billing option in Platform Operations." tone="neutral" />;
+    return <CheckoutNotice title="No plans are available" detail="Please contact support to continue." tone="neutral" />;
   }
 
   return (
     <div className="mt-6 border-t border-line pt-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-accent">Start subscription</p>
+          <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-accent">Payment options</p>
           <h3 className="mt-1 text-xl font-extrabold">Choose how you want to pay</h3>
-          <p className="mt-1 max-w-xl text-sm leading-5 text-ink-muted">Your first payment starts the selected recurring schedule. PayMongo may ask for 3D Secure verification.</p>
+          <p className="mt-1 max-w-xl text-sm leading-5 text-ink-muted">Your first payment starts your Premium plan. Future payments are handled automatically, and secure verification may be requested.</p>
         </div>
-        <span className="rounded-pill bg-success/10 px-3 py-1.5 text-xs font-extrabold text-success">Policy gate open</span>
+        <span className="rounded-pill bg-success/10 px-3 py-1.5 text-xs font-extrabold text-success">Secure checkout</span>
       </div>
 
       <form className="mt-5 space-y-5" onSubmit={submit}>
         <fieldset>
-          <legend className="text-xs font-extrabold uppercase tracking-[0.12em] text-ink-muted">Subscription option</legend>
+          <legend className="text-xs font-extrabold uppercase tracking-[0.12em] text-ink-muted">Choose a plan</legend>
           <div className="mt-2 grid gap-3 sm:grid-cols-2">
             {variants.map((variant) => (
               <label key={variant.id} className={`cursor-pointer rounded-card border p-4 transition ${selectedId === variant.id ? "border-primary bg-primary-soft ring-1 ring-primary/20" : "border-line bg-raised hover:border-line-strong"}`}>
                 <span className="flex items-start gap-3">
                   <input type="radio" name="subscription_variant" value={variant.id} checked={selectedId === variant.id} onChange={() => setSelectedId(variant.id)} className="mt-1 accent-primary" />
-                  <span className="min-w-0"><strong className="block text-sm font-extrabold text-ink">{variant.label}</strong><span className="mt-1 block text-xs leading-5 text-ink-muted">{variant.priceLabel} {variant.cadenceLabel}{variant.discountPercent > 0 ? ` · ${variant.discountPercent}% discount` : ""}</span></span>
+                  <span className="min-w-0"><strong className="block text-sm font-extrabold text-ink">{variant.label}</strong><span className="mt-1 block text-xs leading-5 text-ink-muted">{variant.priceLabel} {variant.cadenceLabel}{variant.discountPercent > 0 ? ` · Save ${variant.discountPercent}%` : ""}</span>{variant.cadenceLabel !== "per month" && <span className="mt-1 block text-xs font-semibold text-primary">About {variant.monthlyEquivalentLabel}/month</span>}</span>
                 </span>
               </label>
             ))}
@@ -196,15 +197,14 @@ export default function SubscriptionCheckout({ variants, policyGateOpen, provide
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block text-sm font-semibold text-ink sm:col-span-2" htmlFor="checkout-cardholder">Cardholder name<input id="checkout-cardholder" value={cardholderName} onChange={(event) => setCardholderName(event.target.value)} autoComplete="cc-name" className="mt-1 w-full rounded-btn border border-line-strong bg-raised px-4 py-3 text-ink outline-none transition focus:border-primary" placeholder="Juan Dela Cruz" /></label>
          <label className="block text-sm font-semibold text-ink sm:col-span-2" htmlFor="checkout-card-number">Card number<input id="checkout-card-number" value={cardNumber} onChange={(event) => setCardNumber(event.target.value)} inputMode="numeric" autoComplete="cc-number" className="mt-1 w-full rounded-btn border border-line-strong bg-raised px-4 py-3 text-ink outline-none transition focus:border-primary" placeholder="4120 0000 0000 0007" /></label>
-          {publicKey?.startsWith("pk_test_") && <p className="-mt-2 text-xs leading-5 text-ink-muted sm:col-span-2">PayMongo test card: 4120 0000 0000 0007. Choose Authorize if the test prompt appears.</p>}
           <label className="block text-sm font-semibold text-ink" htmlFor="checkout-expiry-month">Expiry month<input id="checkout-expiry-month" value={expiryMonth} onChange={(event) => setExpiryMonth(event.target.value.replace(/\D/g, "").slice(0, 2))} inputMode="numeric" autoComplete="cc-exp-month" className="mt-1 w-full rounded-btn border border-line-strong bg-raised px-4 py-3 text-ink outline-none transition focus:border-primary" placeholder="12" /></label>
           <label className="block text-sm font-semibold text-ink" htmlFor="checkout-expiry-year">Expiry year<input id="checkout-expiry-year" value={expiryYear} onChange={(event) => setExpiryYear(event.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" autoComplete="cc-exp-year" className="mt-1 w-full rounded-btn border border-line-strong bg-raised px-4 py-3 text-ink outline-none transition focus:border-primary" placeholder="2030" /></label>
           <label className="block text-sm font-semibold text-ink" htmlFor="checkout-cvc">Security code<input id="checkout-cvc" value={cvc} onChange={(event) => setCvc(event.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" autoComplete="cc-csc" className="mt-1 w-full rounded-btn border border-line-strong bg-raised px-4 py-3 text-ink outline-none transition focus:border-primary" placeholder="123" /></label>
         </div>
 
         {message && <p role="status" aria-live="polite" className={`rounded-btn border px-4 py-3 text-sm font-semibold leading-5 ${messageKind === "success" ? "border-success/25 bg-success/10 text-success" : "border-danger/25 bg-danger-soft text-danger"}`}>{message}</p>}
-        <button type="submit" disabled={pending} className="w-full rounded-btn bg-accent px-5 py-3.5 text-sm font-extrabold uppercase tracking-wide text-accent-fg transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50">{pending ? "Connecting to PayMongo…" : `Start ${selectedVariant?.label ?? "subscription"}`}</button>
-        <p className="text-xs leading-5 text-ink-muted">Card details are sent directly from this browser to PayMongo for tokenization. Dumala POS receives only the tokenized payment method and signed payment status.</p>
+        <button type="submit" disabled={pending} className="w-full rounded-btn bg-accent px-5 py-3.5 text-sm font-extrabold uppercase tracking-wide text-accent-fg transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50">{pending ? "Processing payment…" : `Start Premium${selectedVariant ? ` · ${selectedVariant.label}` : ""}`}</button>
+        <p className="text-xs leading-5 text-ink-muted">Your card details are sent securely to our payment partner. Dumala POS does not store your card number.</p>
       </form>
     </div>
   );
@@ -258,9 +258,9 @@ async function createPaymentMethod(input: { publicKey: string; apiBaseUrl: strin
     }),
   });
   const payload = await response.json() as Record<string, unknown>;
-  if (!response.ok) throw new Error(providerError(payload) || "PayMongo could not tokenize the card.");
+  if (!response.ok) throw new Error(providerError(payload) || "We could not securely process the card details.");
   const id = readNestedString(payload, ["data", "id"]);
-  if (!id) throw new Error("PayMongo did not return a payment method token.");
+  if (!id) throw new Error("We could not securely process the card details.");
   return id;
 }
 
@@ -277,7 +277,7 @@ async function attachPaymentMethod(input: { publicKey: string; apiBaseUrl: strin
     body: JSON.stringify({ data: { attributes: { payment_method: input.paymentMethodId, client_key: input.clientKey, return_url: returnUrl.toString() } } }),
   });
   const payload = await response.json() as Record<string, unknown>;
-  if (!response.ok) throw new Error(providerError(payload) || "PayMongo could not attach the payment method.");
+  if (!response.ok) throw new Error(providerError(payload) || "We could not complete the payment. Please try again.");
   return payload;
 }
 
