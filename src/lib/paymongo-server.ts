@@ -43,6 +43,18 @@ type CustomerInput = {
   idempotencyKey: string;
 };
 
+type HostedCheckoutInput = {
+  amountCentavos: number;
+  itemName: string;
+  description: string;
+  successUrl: string;
+  cancelUrl: string;
+  referenceNumber: string;
+  email: string | null;
+  metadata: Record<string, string>;
+  idempotencyKey: string;
+};
+
 export function payMongoPublicKey() {
   return process.env.NEXT_PUBLIC_PAYMONGO_PUBLIC_KEY?.trim() || null;
 }
@@ -167,6 +179,49 @@ export async function createPayMongoCustomer(input: CustomerInput) {
   const id = resourceId(response);
   if (!id) throw new Error("PayMongo did not return a customer id.");
   return { id, created: true };
+}
+
+export async function createPayMongoQrPhCheckoutSession(input: HostedCheckoutInput) {
+  const response = await payMongoRequest(
+    "/v2/checkout_sessions",
+    {
+      method: "POST",
+      idempotencyKey: input.idempotencyKey,
+      body: {
+        data: {
+          attributes: {
+            line_items: [
+              {
+                name: input.itemName,
+                amount: input.amountCentavos,
+                currency: "PHP",
+                quantity: 1,
+              },
+            ],
+            payment_method_types: ["qrph"],
+            description: input.description,
+            success_url: input.successUrl,
+            cancel_url: input.cancelUrl,
+            reference_number: input.referenceNumber,
+            send_email_receipt: Boolean(input.email),
+            show_description: true,
+            show_line_items: true,
+            metadata: input.metadata,
+            ...(input.email ? { billing: { email: input.email } } : {}),
+          },
+        },
+      },
+    },
+  );
+  const id = resourceId(response);
+  const checkoutUrl = readPayMongoString(resourceAttributes(response), "checkout_url");
+  if (!id || !checkoutUrl) throw new Error("PayMongo did not return a QR Ph checkout URL.");
+  return { id, checkoutUrl, response, attributes: resourceAttributes(response) };
+}
+
+export async function getPayMongoCheckoutSession(checkoutSessionId: string) {
+  const response = await payMongoRequest(`/v1/checkout_sessions/${encodeURIComponent(checkoutSessionId)}`);
+  return { response, attributes: resourceAttributes(response) };
 }
 
 export async function createPayMongoSubscription(planId: string, customerId: string, idempotencyKey: string) {

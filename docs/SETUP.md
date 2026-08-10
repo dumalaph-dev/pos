@@ -31,6 +31,7 @@ Fill `.env.local` from Supabase → **Settings → API**:
 | `PAYMONGO_WEBHOOK_SECRET` | PayMongo webhook signing secret | **server only** |
 | `PAYMONGO_API_BASE_URL` | PayMongo API origin (defaults to `https://api.paymongo.com`) | server |
 | `PAYMONGO_SUBSCRIPTIONS_ENABLED` | explicit server-side activation flag (`false` until tested) | server |
+| `PAYMONGO_QRPH_CHECKOUT_ENABLED` | temporary one-time QR Ph checkout flag (defaults to `true`) | server |
 | `SUPABASE_SERVICE_ROLE_KEY` | service_role key | **server only — never ship to client** |
 
 `.env.local` is gitignored. Set the same vars in Vercel (Project → Settings → Environment Variables) for preview + production.
@@ -38,6 +39,8 @@ Fill `.env.local` from Supabase → **Settings → API**:
 For a local PayMongo test, use matching `pk_test_...` and `sk_test_...` keys. Create a separate enabled test-mode webhook endpoint, copy its signing secret into `.env.local` as `PAYMONGO_WEBHOOK_SECRET`, then run `npm run paymongo:preflight`. The preflight prints only safe mode and status information; it never prints keys, webhook secrets, or API response bodies.
 
 PayMongo Subscriptions require separate account activation and a subscription-capable payment method. If the preflight reports HTTP 403 for the Subscriptions plan API or no supported methods, ask PayMongo to enable Subscriptions for the organization and enable Visa/Mastercard card subscriptions or Maya subscriptions. QR Ph alone cannot start a recurring subscription.
+
+When the account only has QR Ph enabled, the billing page uses the temporary hosted checkout automatically. It creates a one-time prepaid access period through PayMongo Hosted Checkout, then activates the organization after PayMongo confirms payment through the signed `checkout_session.payment.paid` webhook or a server-side checkout-status check. It does not auto-renew; set `PAYMONGO_QRPH_CHECKOUT_ENABLED=false` after recurring Maya/card billing is ready. Apply `0036_temporary_qrph_checkout.sql` before using this path.
 
 For a successful subscription activation in PayMongo test mode, use `4120000000000007`, any future expiry, and a three-digit CVC; choose **Authorize** if the test prompt appears. Use `5234000000000106` and choose **Fail** to exercise failed activation, or `5123000000000001` to exercise a successful first payment followed by a recurring-payment failure.
 
@@ -54,13 +57,13 @@ Set it to `true` only for the controlled checkout test after the preflight
 passes. The app never sends raw card details to its
 server. Configure the PayMongo webhook URL as
 `<your-site-origin>/api/paymongo/webhook` and subscribe to these events:
-`payment.paid`, `payment.failed`, `subscription.activated`,
+`checkout_session.payment.paid`, `payment.paid`, `payment.failed`, `subscription.activated`,
 `subscription.past_due`, `subscription.unpaid`, `subscription.updated`,
 `subscription.invoice.paid`, and `subscription.invoice.payment_failed`.
 
 ## 4. Database migrations
 SQL lives in `supabase/migrations/` (run in order):
-The latest migrations add store staff access keys, subscription tracking, the single Premium billing plan, append-only privilege hardening, the policy-first platform operations catalog, and the initial annual billing offers: `0023_store_access_and_subscriptions.sql`, `0024_shifts_and_z_readings.sql`, `0025_premium_billing_plan.sql`, `0026_authenticated_append_only_hardening.sql`, `0027_platform_operations.sql`, `0028_support_cases.sql`, `0029_support_cases_privileges.sql`, `0030_suspended_account_rls.sql`, and `0031_enable_annual_billing_offers.sql`.
+The latest migrations add store staff access keys, subscription tracking, the single Premium billing plan, append-only privilege hardening, the policy-first platform operations catalog, the initial annual billing offers, POS approval hardening, and temporary QR Ph access: `0023_store_access_and_subscriptions.sql`, `0024_shifts_and_z_readings.sql`, `0025_premium_billing_plan.sql`, `0026_authenticated_append_only_hardening.sql`, `0027_platform_operations.sql`, `0028_support_cases.sql`, `0029_support_cases_privileges.sql`, `0030_suspended_account_rls.sql`, `0031_enable_annual_billing_offers.sql`, `0032_admin_pin_discount_policy.sql`, `0033_human_staff_login_slugs.sql`, `0034_pos_void_manager_approval.sql`, `0035_fix_shift_sequence_rls.sql`, and `0036_temporary_qrph_checkout.sql`.
 1. `0001_schema.sql` — tables, enums, indexes
 2. `0002_rls.sql` — grants, helper functions, RLS policies, append-only triggers
 3. `0003_functions.sql` — `clone_menu` (multi-branch)
@@ -91,8 +94,13 @@ The latest migrations add store staff access keys, subscription tracking, the si
 27. `0027_platform_operations.sql` - editable monthly/annual pricing options, platform billing/support policies, account suspension fields, and provider event idempotency storage
 28. `0028_support_cases.sql` - service-role-only support cases, SLA due-time indexes, and platform support workflow storage
 29. `0029_support_cases_privileges.sql` - remove inherited tenant grants from the service-role-only support-case table
-30. `0030_suspended_account_rls.sql` - make active organization/store helper contexts unavailable to suspended users while preserving their own organization status row
-31. `0031_enable_annual_billing_offers.sql` - make the default 1-, 2-, and 3-year pricing options visible to customers; the platform owner can still edit or disable them
+30. `0030_suspended_account_rls.sql` — make active organization/store helper contexts unavailable to suspended users while preserving their own organization status row
+31. `0031_enable_annual_billing_offers.sql` — make the default 1-, 2-, and 3-year pricing options visible to customers; the platform owner can still edit or disable them
+32. `0032_admin_pin_discount_policy.sql` — enforce Admin PIN approval for above-threshold custom discounts
+33. `0033_human_staff_login_slugs.sql` — add human-readable staff login routes
+34. `0034_pos_void_manager_approval.sql` — add manager-approved POS void reversals
+35. `0035_fix_shift_sequence_rls.sql` — fix shift sequence access for the authenticated POS path
+36. `0036_temporary_qrph_checkout.sql` — record one-time QR Ph access periods and pending hosted checkout sessions
 
 **Apply them** either way:
 - **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push`

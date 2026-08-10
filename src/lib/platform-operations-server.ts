@@ -104,6 +104,7 @@ export function payMongoConfiguration() {
     publicKey,
     webhookSecretConfigured: Boolean(process.env.PAYMONGO_WEBHOOK_SECRET?.trim()),
     subscriptionsEnabled: process.env.PAYMONGO_SUBSCRIPTIONS_ENABLED === "true",
+    temporaryQrPhEnabled: process.env.PAYMONGO_QRPH_CHECKOUT_ENABLED !== "false",
     apiBaseUrl: process.env.PAYMONGO_API_BASE_URL?.trim() || "https://api.paymongo.com",
   };
 }

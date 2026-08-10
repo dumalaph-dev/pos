@@ -3,20 +3,19 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/employee-auth";
 import { normalizeSubscriptionStatus } from "@/lib/billing";
 import { readPayMongoString, resourceAttributes } from "@/lib/paymongo-server";
+import { activateTemporaryQrPhCheckout, readCheckoutPaymentStatus, readTemporaryQrPhCheckoutMetadata } from "@/lib/temporary-qrph";
 
-type ProviderEvent = {
-  data: {
-    id: string;
-    attributes: {
-      type: string;
-      livemode?: boolean;
-      data?: {
-        id?: string;
-        type?: string;
-        attributes?: unknown;
-      };
-    };
-  };
+type ProviderResource = {
+  id?: string;
+  type?: string;
+  attributes?: unknown;
+};
+
+type NormalizedProviderEvent = {
+  id: string;
+  type: string;
+  livemode: boolean;
+  resource: ProviderResource | null;
 };
 
 type OrganizationBillingRecord = {
@@ -34,15 +33,16 @@ export async function POST(request: NextRequest) {
 
   const signature = request.headers.get("Paymongo-Signature");
   const payload = parseJson(rawBody);
-  if (!signature || !isProviderEvent(payload) || !verifySignature(signature, secret, rawBody, payload.data.attributes.livemode === true)) {
+  const event = readProviderEvent(payload);
+  if (!signature || !event || !verifySignature(signature, secret, rawBody, event.livemode)) {
     return webhookError("Invalid webhook signature.", 400);
   }
 
   const admin = createAdminClient();
   if (!admin) return webhookError("The billing database client is not configured.", 503);
 
-  const eventId = payload.data.id;
-  const eventType = payload.data.attributes.type;
+  const eventId = event.id;
+  const eventType = event.type;
   const existing = await admin
     .from("billing_provider_events")
     .select("id, processed_at")
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await applyProviderEvent(admin, eventType, payload.data.attributes.data);
+    await applyProviderEvent(admin, eventType, event.resource);
     const completed = await admin
       .from("billing_provider_events")
       .update({ processed_at: new Date().toISOString() })
@@ -79,7 +79,12 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function applyProviderEvent(admin: NonNullable<ReturnType<typeof createAdminClient>>, eventType: string, resource: ProviderEvent["data"]["attributes"]["data"]) {
+async function applyProviderEvent(admin: NonNullable<ReturnType<typeof createAdminClient>>, eventType: string, resource: ProviderResource | null) {
+  if (eventType === "checkout_session.payment.paid") {
+    await applyTemporaryQrPhEvent(admin, resource);
+    return;
+  }
+
   const resourceId = resource?.id ?? null;
   const attributes = resourceAttributes({ data: { attributes: resource?.attributes } });
   const customerId = readPayMongoString(attributes, "customer_id");
@@ -110,6 +115,23 @@ async function applyProviderEvent(admin: NonNullable<ReturnType<typeof createAdm
 
   const result = await admin.from("organizations").update(update).eq("id", organization.id);
   if (result.error) throw new Error("Organization billing status could not be updated.");
+}
+
+async function applyTemporaryQrPhEvent(admin: NonNullable<ReturnType<typeof createAdminClient>>, resource: ProviderResource | null) {
+  if (!resource?.id) return;
+  const attributes = resourceAttributes({ data: { attributes: resource.attributes } });
+  const metadata = readTemporaryQrPhCheckoutMetadata(attributes);
+  if (!metadata) return;
+
+  const payment = readCheckoutPaymentStatus(attributes);
+  if (payment.status !== "paid") return;
+
+  await activateTemporaryQrPhCheckout(admin, {
+    checkoutSessionId: resource.id,
+    paymentIntentId: payment.paymentIntentId,
+    paidAmountCentavos: payment.paidAmountCentavos,
+    metadata,
+  });
 }
 
 async function findOrganization(admin: NonNullable<ReturnType<typeof createAdminClient>>, subscriptionId: string | null, customerId: string | null, paymentIntentId: string | null) {
@@ -201,9 +223,37 @@ function parseJson(value: string): unknown {
   }
 }
 
-function isProviderEvent(value: unknown): value is ProviderEvent {
-  if (!isRecord(value) || !isRecord(value.data) || typeof value.data.id !== "string" || !isRecord(value.data.attributes)) return false;
-  return typeof value.data.attributes.type === "string";
+function readProviderEvent(value: unknown): NormalizedProviderEvent | null {
+  if (!isRecord(value) || !isRecord(value.data)) return null;
+  const envelope = value.data;
+  const legacyAttributes = isRecord(envelope.attributes) ? envelope.attributes : null;
+  if (legacyAttributes && typeof legacyAttributes.type === "string" && typeof envelope.id === "string") {
+    return {
+      id: envelope.id,
+      type: legacyAttributes.type,
+      livemode: legacyAttributes.livemode === true,
+      resource: isRecord(legacyAttributes.data) ? legacyAttributes.data as ProviderResource : null,
+    };
+  }
+
+  if (typeof envelope.type === "string") {
+    const resource = isRecord(envelope.data) ? envelope.data as ProviderResource : null;
+    const id = typeof envelope.id === "string"
+      ? envelope.id
+      : typeof value.id === "string"
+        ? value.id
+        : resource && typeof resource.id === "string"
+          ? `${envelope.type}:${resource.id}`
+          : null;
+    if (!id) return null;
+    return {
+      id,
+      type: envelope.type,
+      livemode: envelope.livemode === true,
+      resource,
+    };
+  }
+  return null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

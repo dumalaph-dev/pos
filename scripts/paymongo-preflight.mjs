@@ -11,19 +11,24 @@ const webhookSecret = value("PAYMONGO_WEBHOOK_SECRET");
 const expectedMode = value("PAYMONGO_EXPECTED_MODE") || "test";
 const apiBaseUrl = (value("PAYMONGO_API_BASE_URL") || "https://api.paymongo.com").replace(/\/+$/, "");
 const siteUrl = value("NEXT_PUBLIC_SITE_URL");
+const subscriptionsEnabled = value("PAYMONGO_SUBSCRIPTIONS_ENABLED") === "true";
+const temporaryQrPhEnabled = value("PAYMONGO_QRPH_CHECKOUT_ENABLED") !== "false";
 const expectedWebhookUrl = siteUrl.replace(/\/+$/, "") + "/api/paymongo/webhook";
 const supabaseUrl = (value("NEXT_PUBLIC_SUPABASE_URL") || "").replace(/\/+$/, "");
 const supabaseServiceRoleKey = value("SUPABASE_SERVICE_ROLE_KEY");
-const requiredEvents = [
-  "payment.paid",
-  "payment.failed",
-  "subscription.activated",
-  "subscription.past_due",
-  "subscription.unpaid",
-  "subscription.updated",
-  "subscription.invoice.paid",
-  "subscription.invoice.payment_failed",
-];
+const requiredEvents = ["checkout_session.payment.paid"];
+if (subscriptionsEnabled) {
+  requiredEvents.push(
+    "payment.paid",
+    "payment.failed",
+    "subscription.activated",
+    "subscription.past_due",
+    "subscription.unpaid",
+    "subscription.updated",
+    "subscription.invoice.paid",
+    "subscription.invoice.payment_failed",
+  );
+}
 const issues = [];
 
 console.log("PayMongo checkout preflight");
@@ -31,22 +36,25 @@ console.log("Safe mode: key values, webhook secrets, and API response bodies are
 console.log("- public key: " + keySummary(publicKey, "pk"));
 console.log("- secret key: " + keySummary(secretKey, "sk"));
 console.log("- webhook secret: " + (webhookSecret ? "present" : "missing"));
-console.log("- subscription flag: " + (value("PAYMONGO_SUBSCRIPTIONS_ENABLED") === "true" ? "enabled" : "disabled"));
+console.log("- temporary QR Ph checkout: " + (temporaryQrPhEnabled ? "enabled" : "disabled"));
+console.log("- subscription flag: " + (subscriptionsEnabled ? "enabled" : "disabled"));
 console.log("- public site URL: " + (siteUrl ? "configured" : "missing"));
 console.log("- Supabase project URL: " + (supabaseUrl ? "configured" : "missing"));
 console.log("- Supabase admin key: " + (supabaseServiceRoleKey ? "present" : "missing"));
 
 const publicMode = keyMode(publicKey, "pk");
 const secretMode = keyMode(secretKey, "sk");
-if (!publicKey) issues.push("Set NEXT_PUBLIC_PAYMONGO_PUBLIC_KEY to the PayMongo " + expectedMode + "-mode public key.");
 if (!secretKey) issues.push("Set PAYMONGO_SECRET_KEY to the PayMongo " + expectedMode + "-mode secret key.");
-if (publicKey && !publicMode) issues.push("Use a recognized PayMongo public key prefix: pk_test_ or pk_live_.");
+if (subscriptionsEnabled) {
+  if (!publicKey) issues.push("Set NEXT_PUBLIC_PAYMONGO_PUBLIC_KEY to the PayMongo " + expectedMode + "-mode public key.");
+  if (publicKey && !publicMode) issues.push("Use a recognized PayMongo public key prefix: pk_test_ or pk_live_.");
+  if (publicMode && secretMode && publicMode !== secretMode) issues.push("Use public and secret keys from the same PayMongo mode.");
+  if (publicMode && publicMode !== expectedMode) issues.push("Use " + expectedMode + "-mode PayMongo keys for this test preflight.");
+}
 if (secretKey && !secretMode) issues.push("Use a recognized PayMongo secret key prefix: sk_test_ or sk_live_.");
-if (publicMode && secretMode && publicMode !== secretMode) issues.push("Use public and secret keys from the same PayMongo mode.");
-if (publicMode && publicMode !== expectedMode) issues.push("Use " + expectedMode + "-mode PayMongo keys for this test preflight.");
 if (secretMode && secretMode !== expectedMode) issues.push("Use " + expectedMode + "-mode PayMongo keys for this test preflight.");
 if (!webhookSecret) issues.push("Set PAYMONGO_WEBHOOK_SECRET to the signing secret from the PayMongo test webhook endpoint.");
-if (value("PAYMONGO_SUBSCRIPTIONS_ENABLED") !== "true") issues.push("Set PAYMONGO_SUBSCRIPTIONS_ENABLED=true only after PayMongo Subscriptions access is enabled for this account.");
+if (subscriptionsEnabled === false) console.log("- subscription plan API: skipped while PAYMONGO_SUBSCRIPTIONS_ENABLED is disabled");
 if (!siteUrl) issues.push("Set NEXT_PUBLIC_SITE_URL to the public HTTPS origin that PayMongo can reach; the webhook URL is <origin>/api/paymongo/webhook.");
 if (siteUrl) {
   try {
@@ -98,12 +106,14 @@ if (supabaseUrl && supabaseServiceRoleKey) {
 }
 
 if (secretKey && secretMode === expectedMode) {
-  const plans = await getPayMongo("/v1/subscriptions/plans?limit=1", secretKey);
-  if (plans.error) {
-    issues.push("The PayMongo plan API could not be reached: " + plans.error + ".");
-  } else {
-    console.log("- subscription plan API: HTTP " + plans.status);
-    if (!plans.ok) issues.push(planApiAction(plans.status));
+  if (subscriptionsEnabled) {
+    const plans = await getPayMongo("/v1/subscriptions/plans?limit=1", secretKey);
+    if (plans.error) {
+      issues.push("The PayMongo plan API could not be reached: " + plans.error + ".");
+    } else {
+      console.log("- subscription plan API: HTTP " + plans.status);
+      if (!plans.ok) issues.push(planApiAction(plans.status));
+    }
   }
 
   const capabilities = await getPayMongo("/v1/merchants/capabilities/payment_methods", secretKey);
@@ -115,7 +125,10 @@ if (secretKey && secretMode === expectedMode) {
     const methods = paymentMethodIds(capabilities.payload);
     const subscriptionMethods = methods.filter(isSubscriptionPaymentMethod);
     console.log("- configured payment methods: " + (methods.length > 0 ? methods.join(", ") : "none"));
-    if (subscriptionMethods.length === 0) {
+    if (temporaryQrPhEnabled && !methods.some((method) => String(method).toLowerCase() === "qrph")) {
+      issues.push("QR Ph is not configured for this PayMongo organization; activate the account or contact PayMongo support before using the temporary checkout.");
+    }
+    if (subscriptionsEnabled && subscriptionMethods.length === 0) {
       issues.push("Enable Visa/Mastercard cards or Maya for this PayMongo organization, then request Subscriptions activation for that payment method.");
     }
   }

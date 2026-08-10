@@ -27,6 +27,8 @@ type OrganizationRecord = {
   subscription_provider_subscription_id: string | null;
   subscription_provider_payment_intent_id: string | null;
   subscription_updated_at: string | null;
+  subscription_current_period_end: string | null;
+  subscription_billing_mode: "recurring" | "temporary_qrph" | null;
 };
 
 type CheckoutPaymentIntent = {
@@ -64,12 +66,23 @@ export async function POST(request: NextRequest) {
 
     const organizationResult = await admin
       .from("organizations")
-      .select("id, account_status, subscription_status, subscription_plan, subscription_provider_customer_id, subscription_provider_plan_id, subscription_provider_subscription_id, subscription_provider_payment_intent_id, subscription_updated_at")
+      .select("id, account_status, subscription_status, subscription_plan, subscription_provider_customer_id, subscription_provider_plan_id, subscription_provider_subscription_id, subscription_provider_payment_intent_id, subscription_updated_at, subscription_current_period_end, subscription_billing_mode")
       .eq("id", profile.org_id)
       .maybeSingle();
-    if (organizationResult.error) return errorResponse("Apply Supabase migrations 0025 and 0027 before enabling checkout.", 503);
+    let organizationData = organizationResult.data;
+    if (organizationResult.error) {
+      // Keep the recurring checkout compatible while migration 0036 is still
+      // rolling out; the temporary-mode fields are optional for this path.
+      const fallback = await admin
+        .from("organizations")
+        .select("id, account_status, subscription_status, subscription_plan, subscription_provider_customer_id, subscription_provider_plan_id, subscription_provider_subscription_id, subscription_provider_payment_intent_id, subscription_updated_at, subscription_current_period_end")
+        .eq("id", profile.org_id)
+        .maybeSingle();
+      if (fallback.error) return errorResponse("Apply Supabase migrations 0025 and 0027 before enabling checkout.", 503);
+      organizationData = fallback.data as unknown as typeof organizationResult.data;
+    }
 
-    const organization = organizationResult.data as OrganizationRecord | null;
+    const organization = organizationData as OrganizationRecord | null;
     if (!organization) return errorResponse("Your POS organization could not be found.", 404);
     if (organization.account_status === "suspended") return errorResponse("This organization is suspended. Contact support before starting billing.", 423);
 
@@ -82,8 +95,16 @@ export async function POST(request: NextRequest) {
     }
 
     const status = normalizeSubscriptionStatus(organization.subscription_status);
+    const temporaryAccessExpired = organization.subscription_billing_mode === "temporary_qrph"
+      && organization.subscription_current_period_end
+      && !Number.isNaN(new Date(organization.subscription_current_period_end).getTime())
+      && new Date(organization.subscription_current_period_end).getTime() <= Date.now();
     if (status === "active" || status === "past_due" || status === "paused") {
+      if (status === "active" && temporaryAccessExpired) {
+        // A completed prepaid QR Ph period can transition to recurring billing.
+      } else {
       return errorResponse("This organization already has a billing connection. Use the existing subscription instead of starting another one.", 409);
+      }
     }
 
     const amountCentavos = calculateBillingVariantPrice(
@@ -144,6 +165,16 @@ export async function POST(request: NextRequest) {
       ...(periodEnd ? { subscription_current_period_end: periodEnd } : {}),
     });
     if (!saved) throw new Error("The subscription was created but the organization billing record could not be saved.");
+
+    // Migration 0036 adds the temporary QR Ph mode. Keep this update
+    // best-effort so a rolling deploy remains compatible before that
+    // migration is applied, while a later Maya/card checkout restores the
+    // organization to the recurring billing mode.
+    const modeReset = await admin
+      .from("organizations")
+      .update({ subscription_billing_mode: "recurring", subscription_provider_checkout_session_id: null })
+      .eq("id", organization.id);
+    if (modeReset.error) console.warn("[billing/subscribe] Temporary QR Ph mode could not be reset", modeReset.error.message);
 
     return NextResponse.json({
       ok: true,
