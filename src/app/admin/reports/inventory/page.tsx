@@ -3,7 +3,7 @@ import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
 import { getAdminProfile } from "@/lib/admin/profile";
-import { isLechonHouseBusinessForCatalog } from "@/lib/admin/business";
+import { isLechonHouseBusiness } from "@/lib/admin/business";
 import { readAdminInventorySettings } from "@/lib/admin/inventory-settings";
 import { formatPeso } from "@/lib/money";
 import {
@@ -117,7 +117,7 @@ export default async function InventoryReportsPage({
   const attentionRows = report.inventoryRows.filter((row) => row.status !== "ok");
   const activeProducts = report.products.filter((product) => product.is_active);
   const activeSuppliers = report.suppliers.filter((supplier) => supplier.is_active);
-  const isLechonHouseBusiness = isLechonHouseBusinessForCatalog(profile.organizations?.settings, report.categories, report.products);
+  const isLechonHouseBusinessSelected = isLechonHouseBusiness(profile.organizations?.settings);
 
   return (
     <main className="admin-page text-ink">
@@ -173,7 +173,7 @@ export default async function InventoryReportsPage({
           </section>
         </div>
 
-        {isLechonHouseBusiness && <section className="admin-panel mt-4 p-5" aria-labelledby="yield-report-heading">
+        {isLechonHouseBusinessSelected && <section className="admin-panel mt-4 p-5" aria-labelledby="yield-report-heading">
           <ReportSectionHeader eyebrow="Preparation report" title="Whole-lechon yield and waste" subtitle="Total output is shown before waste is removed; usable output is the remaining quantity." href={movementExport} action="Export movements" />
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><ReportMiniMetric label="Yield entries" value={String(report.yieldSummary.entryCount)} detail="Recorded output events" /><ReportMiniMetric label="Source used" value={formatQuantityTotals(report.yieldSummary.sourceUsage)} detail="Whole-lechon stock out" /><ReportMiniMetric label="Total yield" value={formatQuantityTotals(report.yieldSummary.totalYield)} detail="Before waste" /><ReportMiniMetric label="Usable output" value={formatQuantityTotals(report.yieldSummary.usableYield)} detail={`Waste: ${formatQuantityTotals(report.yieldSummary.waste)}`} /></div>
           <div className="mt-4 rounded-btn border border-primary/15 bg-primary-soft px-4 py-3 text-xs leading-5 text-ink-muted"><strong className="font-extrabold text-primary">How to read this:</strong> yield output is recorded when preparation produces saleable stock. Waste is recorded separately, so the inventory ledger can explain the difference between total yield and usable output.</div>
