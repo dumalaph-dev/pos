@@ -1,6 +1,8 @@
 import { cache } from "react";
+import { createAdminClient } from "@/lib/employee-auth";
 import { createClient } from "@/lib/supabase/server";
 import { createTtlCache } from "@/lib/ttl-cache";
+import { transitionExpiredTrial } from "@/lib/trial-server";
 
 export type AdminProfile = {
   full_name: string | null;
@@ -8,7 +10,20 @@ export type AdminProfile = {
   org_id: string;
   store_id: string | null;
   password_change_required: boolean;
-  organizations: { name?: string; settings?: unknown; account_status?: "active" | "suspended" | null; suspension_reason?: string | null; suspended_at?: string | null } | null;
+  organizations: {
+    name?: string;
+    settings?: unknown;
+    account_status?: "active" | "suspended" | null;
+    suspension_reason?: string | null;
+    suspended_at?: string | null;
+    subscription_status?: string | null;
+    subscription_trial_started_at?: string | null;
+    subscription_trial_ends_at?: string | null;
+    subscription_current_period_end?: string | null;
+    subscription_billing_mode?: string | null;
+    subscription_provider_subscription_id?: string | null;
+    subscription_provider_payment_intent_id?: string | null;
+  } | null;
   stores: { name?: string } | null;
 };
 
@@ -38,7 +53,7 @@ export const getAdminProfile = cache(async (userId: string): Promise<AdminProfil
       const supabase = await createClient();
       const { data, error } = await supabase
         .from("profiles")
-        .select("full_name, role, org_id, store_id, password_change_required, organizations!profiles_org_id_fkey(name, settings, account_status, suspension_reason, suspended_at), stores(name)")
+        .select("full_name, role, org_id, store_id, password_change_required, organizations!profiles_org_id_fkey(name, settings, account_status, suspension_reason, suspended_at, subscription_status, subscription_trial_started_at, subscription_trial_ends_at, subscription_current_period_end, subscription_billing_mode, subscription_provider_subscription_id, subscription_provider_payment_intent_id), stores(name)")
         .eq("id", userId)
         .maybeSingle();
 
@@ -55,7 +70,28 @@ export const getAdminProfile = cache(async (userId: string): Promise<AdminProfil
       // Throw rather than return null so a transient failure is not cached as
       // "this user has no profile" for the rest of the TTL.
       if (error) throw error;
-      return (data as AdminProfile) ?? null;
+
+      const profile = (data as AdminProfile) ?? null;
+      if (!profile || profile.organizations?.account_status !== "active") return profile;
+
+      const transition = await transitionExpiredTrial(profile.org_id, {
+        status: profile.organizations.subscription_status,
+        trialStartedAt: profile.organizations.subscription_trial_started_at,
+        trialEndsAt: profile.organizations.subscription_trial_ends_at,
+        currentPeriodEnd: profile.organizations.subscription_current_period_end,
+      });
+      if (transition.transitioned && profile.organizations) {
+        profile.organizations = {
+          ...profile.organizations,
+          subscription_status: transition.status,
+        };
+      } else if (transition.status !== profile.organizations.subscription_status && profile.organizations) {
+        profile.organizations = {
+          ...profile.organizations,
+          subscription_status: transition.status,
+        };
+      }
+      return profile;
     });
   } catch {
     return null;
@@ -64,7 +100,18 @@ export const getAdminProfile = cache(async (userId: string): Promise<AdminProfil
 
 function isMissingAccountLifecycleSchema(message: string | null | undefined) {
   const normalized = (message ?? "").toLowerCase();
-  return (normalized.includes("account_status") || normalized.includes("suspension_reason") || normalized.includes("suspended_at")) && (normalized.includes("column") || normalized.includes("schema cache") || normalized.includes("does not exist"));
+  return (
+    normalized.includes("account_status")
+    || normalized.includes("suspension_reason")
+    || normalized.includes("suspended_at")
+    || normalized.includes("subscription_status")
+    || normalized.includes("subscription_trial_started_at")
+    || normalized.includes("subscription_trial_ends_at")
+    || normalized.includes("subscription_current_period_end")
+    || normalized.includes("subscription_billing_mode")
+    || normalized.includes("subscription_provider_subscription_id")
+    || normalized.includes("subscription_provider_payment_intent_id")
+  ) && (normalized.includes("column") || normalized.includes("schema cache") || normalized.includes("does not exist"));
 }
 
 /**
@@ -74,4 +121,19 @@ function isMissingAccountLifecycleSchema(message: string | null | undefined) {
  */
 export function invalidateAdminProfile(userId: string) {
   profiles.invalidate(userId);
+}
+
+/**
+ * Provider webhooks do not have a browser user id, but a successful payment
+ * must invalidate every cached tenant profile before the next POS navigation.
+ */
+export async function invalidateAdminProfilesForOrganization(organizationId: string) {
+  const admin = createAdminClient();
+  if (!admin) return;
+
+  const result = await admin.from("profiles").select("id").eq("org_id", organizationId);
+  if (result.error) return;
+  for (const profile of result.data ?? []) {
+    if (typeof profile.id === "string") profiles.invalidate(profile.id);
+  }
 }

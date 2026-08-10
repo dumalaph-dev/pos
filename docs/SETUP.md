@@ -107,9 +107,31 @@ The latest migrations add store staff access keys, subscription tracking, the si
 39. `0039_trial_feedback_workflow.sql` — add platform follow-up controls for trial feedback
 40. `0040_platform_promotions.sql` — store global promotion codes and paid redemption history for checkout performance reporting
 
+41. `0041_trial_expiry_access.sql` - persist expired trials as `paused`, remove expired tenant RLS context, and keep owner Billing/feedback access available
+
 **Apply them** either way:
 - **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push`
 - **Dashboard:** SQL Editor → paste each file in order → Run
+
+### Trial expiry verification
+
+Run the deterministic boundary checks without a database:
+
+```bash
+npm run test:trial
+```
+
+After linking a project and applying migration `0041`, run the rollback-scoped
+database smoke fixture:
+
+```bash
+npm run trial:validate
+```
+
+The checks cover the exact trial-end timestamp, persisted `paused` state,
+tenant access denial, owner Billing access, and immediate access restoration
+after a successful PayMongo activation. The SQL fixture inserts no lasting
+rows.
 
 Store owners can register from `/signup`. The flow uses Supabase Auth and the
 `0022_owner_signup.sql` trigger to create a private organization, first branch,

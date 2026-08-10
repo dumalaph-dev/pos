@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getAdminProfile } from "@/lib/admin/profile";
+import { getAdminProfile, invalidateAdminProfile } from "@/lib/admin/profile";
 import { createAdminClient } from "@/lib/employee-auth";
 import { getPayMongoCheckoutSession, PayMongoApiError } from "@/lib/paymongo-server";
 import { activateTemporaryQrPhCheckout, readCheckoutPaymentStatus, readTemporaryQrPhCheckoutMetadata } from "@/lib/temporary-qrph";
@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
         paidAmountCentavos: payment.paidAmountCentavos,
         metadata,
       });
+      invalidateAdminProfile(user.id);
       return NextResponse.json({
         ok: true,
         status: "paid",

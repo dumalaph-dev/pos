@@ -138,7 +138,33 @@ Fixture: **2 orgs**, each with **2 branches**, each branch with an admin + a cas
 - Migration `0034` is applied remotely. `verify_void_pin`, `record_pos_order_void`, and `set_profile_pin` are executable by `authenticated`; `order_action_approvals` has no direct `SELECT`/`INSERT`/`UPDATE`/`DELETE` privileges for `authenticated`.
 - The SQL smoke fixture rolls back all setup and test rows. Local Docker was unavailable during this run, so the linked hosted check is the recorded integration result; the application typecheck, lint, and production build also passed.
 
-## 12. Non-functional
+## 12. Trial expiry and billing entitlement
+
+| # | Test | Type | Pass |
+|---|---|---|---|
+| 12.1 | Trial access one millisecond before `subscription_trial_ends_at` | U | active |
+| 12.2 | Trial access exactly at `subscription_trial_ends_at` | U/I | denied |
+| 12.3 | Expired `trialing` organization is persisted as `paused` | I | transition succeeds |
+| 12.4 | Expired organization opens Billing but POS/admin tenant reads and writes are denied | I/E | Billing available; protected operations blocked |
+| 12.5 | Successful PayMongo payment changes the organization to `active` and restores access immediately | I/E | no stale-profile wait |
+| 12.6 | Temporary QR Ph access expires exactly at its prepaid period boundary | U/I | denied at boundary |
+
+The focused application checks run with:
+
+```bash
+npm run test:trial
+```
+
+The linked rollback-scoped database checks run with:
+
+```bash
+npm run trial:validate
+```
+
+The SQL fixture covers the RLS helper function and atomic transition; it rolls
+back its organization fixture before exiting.
+
+## 13. Non-functional
 
 - **Performance 🔴:** median 3-line sale tap→printed ≤ 20s (M, timed on the actual tablet).
 - **Accessibility:** tap targets ≥ 48px, tiles ≥ 96px; `prefers-reduced-motion` honored; contrast AA on `--text`/`--bg`.

@@ -31,6 +31,7 @@ type OrganizationRecord = {
   subscription_billing_variant_id?: string | null;
   subscription_provider_plan_id?: string | null;
   subscription_provider_subscription_id?: string | null;
+  subscription_provider_payment_intent_id?: string | null;
 };
 
 type BranchRecord = { id: string; is_active: boolean };
@@ -48,7 +49,7 @@ export default async function BillingPage() {
   const supabase = await createClient();
   const richResult = await supabase
     .from("organizations")
-    .select("id, name, currency, created_at, subscription_status, subscription_plan, subscription_trial_started_at, subscription_trial_ends_at, subscription_current_period_end, subscription_updated_at, subscription_billing_mode, subscription_provider_plan_id, subscription_provider_subscription_id")
+    .select("id, name, currency, created_at, subscription_status, subscription_plan, subscription_trial_started_at, subscription_trial_ends_at, subscription_current_period_end, subscription_updated_at, subscription_billing_mode, subscription_provider_plan_id, subscription_provider_subscription_id, subscription_provider_payment_intent_id")
     .eq("id", profile.org_id)
     .maybeSingle();
 
@@ -127,6 +128,8 @@ export default async function BillingPage() {
     trialStartedAt: organization?.subscription_trial_started_at,
     trialEndsAt: organization?.subscription_trial_ends_at,
     currentPeriodEnd: status === "trialing" ? currentPeriodEnd : null,
+    providerSubscriptionId: organization?.subscription_provider_subscription_id,
+    providerPaymentIntentId: organization?.subscription_provider_payment_intent_id,
     trialDays,
   });
   const trialAccessIsCurrent = status === "trialing" && trial.known && trial.isActive;
@@ -225,8 +228,8 @@ function CurrentPlanCard({
   totalBranches: number;
   monthlyPriceLabel: string;
 }) {
-  const isTrialing = status === null || status === "trialing";
-  const trialExpired = status === "trialing" && trial.isExpired;
+  const trialExpired = status === "paused" && trial.isExpired;
+  const isTrialing = status === null || status === "trialing" || trialExpired;
   const isTrial = isTrialing && !trialExpired;
   const isActive = status === "active" && accessIsCurrent;
   const accessEnded = status === "active" && !accessIsCurrent;
@@ -246,7 +249,7 @@ function CurrentPlanCard({
   const monthlyEquivalentLabel = variant ? formatPeso(billingVariantMonthlyEquivalent(catalog, variant)) : monthlyPriceLabel;
   const variantLabel = variant?.label ?? "Monthly";
   const planCadence = variant?.intervalUnit === "year" ? `Paid for ${variant.intervalCount} ${variant.intervalCount === 1 ? "year" : "years"}` : "Billed monthly";
-  const timingLabel = isTrialing ? "Trial ends" : isRecurring ? "Next billing" : "Access through";
+  const timingLabel = trialExpired ? "Trial ended" : isTrialing ? "Trial ends" : isRecurring ? "Next billing" : "Access through";
   const timingValue = isTrialing
     ? trial.endsAt ? formatBillingDate(trial.endsAt) : "14 days included"
     : currentPeriodEnd ? formatBillingDate(currentPeriodEnd) : "Not scheduled";

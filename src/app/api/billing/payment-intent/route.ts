@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getAdminProfile } from "@/lib/admin/profile";
+import { getAdminProfile, invalidateAdminProfile } from "@/lib/admin/profile";
 import { createAdminClient } from "@/lib/employee-auth";
 import { markLatestPromotionRedemptionConverted, markPromotionRedemptionConverted } from "@/lib/platform-promotions-server";
 import { getPayMongoPaymentIntent, PayMongoApiError, readPayMongoString } from "@/lib/paymongo-server";
@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
           .eq("subscription_provider_payment_intent_id", paymentIntentId);
         if (update.error) throw new Error("The payment was confirmed but the organization billing record could not be updated.");
       }
+      invalidateAdminProfile(user.id);
       if (organization.subscription_provider_subscription_id) {
         await markPromotionRedemptionConverted(admin, organization.subscription_provider_subscription_id, paymentIntentId);
       } else {

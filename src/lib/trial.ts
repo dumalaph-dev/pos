@@ -1,5 +1,11 @@
 export const DEFAULT_TRIAL_DAYS = 14;
 export const TRIAL_DAY_MS = 24 * 60 * 60 * 1000;
+/**
+ * An expired trial has no provider subscription to cancel. `paused` is the
+ * existing non-active state that lets the owner reach Billing and start a new
+ * checkout while the tenant RLS context stays unavailable.
+ */
+export const TRIAL_EXPIRED_SUBSCRIPTION_STATUS = "paused" as const;
 
 export type TrialReminderKind = "five_days" | "three_days" | "last_day";
 
@@ -31,13 +37,22 @@ export type TrialLifecycleInput = {
   trialEndsAt?: string | null;
   currentPeriodEnd?: string | null;
   trialDays?: number;
+  billingMode?: string | null;
+  providerSubscriptionId?: string | null;
+  providerPaymentIntentId?: string | null;
 };
 
 export function readTrialLifecycle(input: TrialLifecycleInput, now = Date.now()): TrialLifecycle {
-  if (input.status !== "trialing") return emptyTrialLifecycle();
-
   const startedAt = validDateString(input.trialStartedAt) ?? validDateString(input.createdAt);
+  const explicitTrialEndsAt = validDateString(input.trialEndsAt);
   const explicitEndsAt = validDateString(input.trialEndsAt) ?? validDateString(input.currentPeriodEnd);
+  const canReadHistoricalExpiredTrial = input.status === TRIAL_EXPIRED_SUBSCRIPTION_STATUS
+    && explicitTrialEndsAt !== null
+    && !input.providerSubscriptionId
+    && !input.providerPaymentIntentId
+    && Date.parse(explicitTrialEndsAt) <= now;
+  if (input.status !== "trialing" && !canReadHistoricalExpiredTrial) return emptyTrialLifecycle();
+
   const trialDays = normalizeTrialDays(input.trialDays);
   const endsAt = explicitEndsAt ?? (startedAt ? new Date(Date.parse(startedAt) + trialDays * TRIAL_DAY_MS).toISOString() : null);
   const endsAtMs = endsAt ? Date.parse(endsAt) : NaN;
@@ -82,6 +97,45 @@ export function readTrialLifecycle(input: TrialLifecycleInput, now = Date.now())
     isLastDay,
     reminder,
   };
+}
+
+export type SubscriptionAccessInput = {
+  status: string | null | undefined;
+  trialStartedAt?: string | null;
+  trialEndsAt?: string | null;
+  currentPeriodEnd?: string | null;
+  trialDays?: number;
+  billingMode?: string | null;
+};
+
+/**
+ * Returns whether tenant-scoped POS/backoffice access is current.
+ *
+ * `null` means the subscription schema is unavailable, so rolling deployments
+ * retain the historical behavior until the lifecycle columns are present.
+ * Known non-active states fail closed. Trial expiry is strict: an end timestamp
+ * equal to `now` is already expired.
+ */
+export function isSubscriptionAccessCurrent(input: SubscriptionAccessInput, now = Date.now()): boolean | null {
+  if (input.status === null || input.status === undefined) return null;
+
+  switch (input.status) {
+    case "trialing":
+      return readTrialLifecycle(input, now).isActive;
+    case "active":
+    case "past_due":
+      if (input.billingMode === "temporary_qrph") {
+        const periodEnd = validDateString(input.currentPeriodEnd);
+        return periodEnd !== null && Date.parse(periodEnd) > now;
+      }
+      return true;
+    case "paused":
+    case "canceled":
+    case "incomplete":
+      return false;
+    default:
+      return false;
+  }
 }
 
 export function normalizeTrialDays(value: unknown) {

@@ -40,7 +40,7 @@ export async function submitTrialFeedback(_previousState: TrialFeedbackState, fo
   const supabase = await createClient();
   const organizationResult = await supabase
     .from("organizations")
-    .select("created_at, subscription_status, subscription_trial_started_at, subscription_trial_ends_at, subscription_current_period_end")
+    .select("created_at, subscription_status, subscription_trial_started_at, subscription_trial_ends_at, subscription_current_period_end, subscription_provider_subscription_id, subscription_provider_payment_intent_id")
     .eq("id", profile.org_id)
     .maybeSingle();
   let organization = organizationResult.data as {
@@ -49,6 +49,8 @@ export async function submitTrialFeedback(_previousState: TrialFeedbackState, fo
     subscription_trial_started_at?: string | null;
     subscription_trial_ends_at?: string | null;
     subscription_current_period_end?: string | null;
+    subscription_provider_subscription_id?: string | null;
+    subscription_provider_payment_intent_id?: string | null;
   } | null;
 
   if (organizationResult.error) {
@@ -67,6 +69,8 @@ export async function submitTrialFeedback(_previousState: TrialFeedbackState, fo
     trialStartedAt: organization?.subscription_trial_started_at,
     trialEndsAt: organization?.subscription_trial_ends_at,
     currentPeriodEnd: organization?.subscription_current_period_end,
+    providerSubscriptionId: organization?.subscription_provider_subscription_id,
+    providerPaymentIntentId: organization?.subscription_provider_payment_intent_id,
   });
   if (!trial.isLastDay && !trial.isExpired) return { ok: false, message: "This check-in opens during the final day of your trial." };
 

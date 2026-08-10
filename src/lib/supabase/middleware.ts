@@ -1,6 +1,6 @@
 import { createServerClient, type CookieMethodsServer } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { VERIFIED_USER_EMAIL_HEADER, VERIFIED_USER_ID_HEADER } from "@/lib/auth/identity-headers";
+import { REQUEST_PATH_HEADER, VERIFIED_USER_EMAIL_HEADER, VERIFIED_USER_ID_HEADER } from "@/lib/auth/identity-headers";
 import { createTtlCache } from "@/lib/ttl-cache";
 
 type VerifiedUser = { id: string; email: string | null };
@@ -39,6 +39,8 @@ function forwardHeaders(request: NextRequest, user: VerifiedUser | null) {
   const headers = new Headers(request.headers);
   headers.delete(VERIFIED_USER_ID_HEADER);
   headers.delete(VERIFIED_USER_EMAIL_HEADER);
+  headers.delete(REQUEST_PATH_HEADER);
+  headers.set(REQUEST_PATH_HEADER, request.nextUrl.pathname);
 
   if (user) {
     headers.set(VERIFIED_USER_ID_HEADER, user.id);

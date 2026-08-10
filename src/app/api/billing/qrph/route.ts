@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
 
     const organizationResult = await admin
       .from("organizations")
-      .select("id, account_status, subscription_status, subscription_current_period_end, subscription_billing_mode")
+      .select("id, account_status, subscription_status, subscription_current_period_end, subscription_billing_mode, subscription_provider_subscription_id, subscription_provider_payment_intent_id")
       .eq("id", profile.org_id)
       .maybeSingle();
     if (organizationResult.error) return errorResponse("Apply migration 0036_temporary_qrph_checkout.sql before enabling temporary QR Ph checkout.", 503);
@@ -60,6 +60,8 @@ export async function POST(request: NextRequest) {
       subscription_status: string | null;
       subscription_current_period_end: string | null;
       subscription_billing_mode: "recurring" | "temporary_qrph" | null;
+      subscription_provider_subscription_id: string | null;
+      subscription_provider_payment_intent_id: string | null;
     } | null;
     if (!organization) return errorResponse("Your POS organization could not be found.", 404);
     if (organization.account_status === "suspended") return errorResponse("This organization is suspended. Contact support before starting billing.", 423);
@@ -74,7 +76,10 @@ export async function POST(request: NextRequest) {
     const periodEnd = organization.subscription_current_period_end ? new Date(organization.subscription_current_period_end) : null;
     const temporaryAccessCurrent = organization.subscription_billing_mode === "temporary_qrph" && periodEnd && !Number.isNaN(periodEnd.getTime()) && periodEnd.getTime() > Date.now();
     const temporaryAccessExpired = organization.subscription_billing_mode === "temporary_qrph" && periodEnd && !Number.isNaN(periodEnd.getTime()) && periodEnd.getTime() <= Date.now();
-    if (status === "active" || status === "past_due" || status === "paused") {
+    const expiredTrialCanStartBilling = status === "paused"
+      && !organization.subscription_provider_subscription_id
+      && !organization.subscription_provider_payment_intent_id;
+    if (status === "active" || status === "past_due" || (status === "paused" && !expiredTrialCanStartBilling)) {
       if (temporaryAccessExpired && status === "active") {
         // A completed temporary period can be renewed with another one-time QR Ph checkout.
       } else if (temporaryAccessCurrent) {

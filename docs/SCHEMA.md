@@ -366,6 +366,18 @@ Migration 0030 also makes the active organization/store helper functions return
 no tenant context for suspended users, so the suspension boundary applies to
 RLS and security-definer business functions as well as the route UI.
 
+Migration 0041 applies the same defense-in-depth pattern to subscription
+entitlement. A `trialing` organization is current only while its stored trial
+end is strictly later than `now()`; at the boundary, the server-side profile
+guard atomically transitions it to the existing `paused` status. The RLS helper
+functions independently remove the organization/store/role context for an
+expired trial, so direct POS and admin table/RPC calls fail even if no page has
+yet performed the transition. The owner can still read the organization row,
+open `/admin/billing`, and submit trial feedback through the billing-specific
+policy. A successful PayMongo activation writes `active`, and the provider
+webhook plus payment-status paths invalidate cached profiles so access returns
+immediately.
+
 ---
 
 ## 9. Open schema questions

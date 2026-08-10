@@ -13,3 +13,4 @@
  */
 export const VERIFIED_USER_ID_HEADER = "x-verified-user-id";
 export const VERIFIED_USER_EMAIL_HEADER = "x-verified-user-email";
+export const REQUEST_PATH_HEADER = "x-pos-request-path";

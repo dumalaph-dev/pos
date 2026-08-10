@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
+import { invalidateAdminProfilesForOrganization } from "@/lib/admin/profile";
 import { createAdminClient } from "@/lib/employee-auth";
 import { normalizeSubscriptionStatus } from "@/lib/billing";
 import { markPromotionRedemptionConverted } from "@/lib/platform-promotions-server";
@@ -119,6 +120,7 @@ async function applyProviderEvent(admin: NonNullable<ReturnType<typeof createAdm
   if (result.error) throw new Error("Organization billing status could not be updated.");
   if (status === "active") {
     await markPromotionRedemptionConverted(admin, organization.subscription_provider_subscription_id ?? subscriptionId ?? paymentIntentId, paymentIntentId);
+    await invalidateAdminProfilesForOrganization(organization.id);
   }
 }
 
@@ -137,6 +139,7 @@ async function applyTemporaryQrPhEvent(admin: NonNullable<ReturnType<typeof crea
     paidAmountCentavos: payment.paidAmountCentavos,
     metadata,
   });
+  await invalidateAdminProfilesForOrganization(metadata.organizationId);
 }
 
 async function findOrganization(admin: NonNullable<ReturnType<typeof createAdminClient>>, subscriptionId: string | null, customerId: string | null, paymentIntentId: string | null) {

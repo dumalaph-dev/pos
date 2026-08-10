@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getAdminProfile } from "@/lib/admin/profile";
+import { getAdminProfile, invalidateAdminProfile } from "@/lib/admin/profile";
 import { normalizeSubscriptionStatus } from "@/lib/billing";
 import { createAdminClient } from "@/lib/employee-auth";
 import { isPolicyGateOpen, calculateBillingVariantPrice, type BillingVariant } from "@/lib/platform-operations";
@@ -101,7 +101,10 @@ export async function POST(request: NextRequest) {
       && organization.subscription_current_period_end
       && !Number.isNaN(new Date(organization.subscription_current_period_end).getTime())
       && new Date(organization.subscription_current_period_end).getTime() <= Date.now();
-    if (status === "active" || status === "past_due" || status === "paused") {
+    const expiredTrialCanStartBilling = status === "paused"
+      && !organization.subscription_provider_subscription_id
+      && !organization.subscription_provider_payment_intent_id;
+    if (status === "active" || status === "past_due" || (status === "paused" && !expiredTrialCanStartBilling)) {
       if (status === "active" && temporaryAccessExpired) {
         // A completed prepaid QR Ph period can transition to recurring billing.
       } else {
@@ -206,6 +209,11 @@ export async function POST(request: NextRequest) {
       .update({ subscription_billing_mode: "recurring", subscription_provider_checkout_session_id: null })
       .eq("id", organization.id);
     if (modeReset.error) console.warn("[billing/subscribe] Temporary QR Ph mode could not be reset", modeReset.error.message);
+
+    // The profile cache may contain the paused trial snapshot that allowed the
+    // owner to reach checkout. Drop it before the post-payment navigation so a
+    // successful first payment restores protected access immediately.
+    invalidateAdminProfile(user.id);
 
     return NextResponse.json({
       ok: true,

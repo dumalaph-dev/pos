@@ -1,10 +1,13 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import type { ReactNode } from "react";
 import { AdminShell } from "./AdminShell";
+import { REQUEST_PATH_HEADER } from "@/lib/auth/identity-headers";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
 import { readAdminBranding } from "@/lib/admin/branding";
+import { isSubscriptionAccessCurrent } from "@/lib/trial";
 
 type AdminRole = "admin" | "manager" | "cashier";
 type ShellProfile = {
@@ -13,7 +16,15 @@ type ShellProfile = {
   store_id: string | null;
   password_change_required: boolean;
   stores: { name?: string } | null;
-  organizations: { settings?: unknown; account_status?: "active" | "suspended" | null } | null;
+  organizations: {
+    settings?: unknown;
+    account_status?: "active" | "suspended" | null;
+    subscription_status?: string | null;
+    subscription_trial_started_at?: string | null;
+    subscription_trial_ends_at?: string | null;
+    subscription_current_period_end?: string | null;
+    subscription_billing_mode?: string | null;
+  } | null;
 };
 
 const DEFAULT_STORE_NAME = "Your Store";
@@ -71,6 +82,20 @@ export default async function AdminRouteLayout({ children }: { children: ReactNo
 
   if (profile?.organizations?.account_status === "suspended") redirect("/account/suspended");
   if (profile?.password_change_required) redirect("/account/password?required=1");
+  const requestPath = (await headers()).get(REQUEST_PATH_HEADER);
+  const isBillingRoute = requestPath === "/admin/billing" || !requestPath;
+  const subscriptionAccess = profile?.organizations
+    ? isSubscriptionAccessCurrent({
+      status: profile.organizations.subscription_status,
+      trialStartedAt: profile.organizations.subscription_trial_started_at,
+      trialEndsAt: profile.organizations.subscription_trial_ends_at,
+      currentPeriodEnd: profile.organizations.subscription_current_period_end,
+      billingMode: profile.organizations.subscription_billing_mode,
+    })
+    : null;
+  if (subscriptionAccess === false && !isBillingRoute) {
+    redirect(profile?.role === "admin" ? "/admin/billing" : "/account/billing-required");
+  }
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile) return children;
 

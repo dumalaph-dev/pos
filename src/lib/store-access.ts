@@ -1,4 +1,6 @@
 import { createAdminClient } from "@/lib/employee-auth";
+import { isSubscriptionAccessCurrent } from "@/lib/trial";
+import { transitionExpiredTrial } from "@/lib/trial-server";
 
 export type StoreAccessRecord = {
   id: string;
@@ -62,9 +64,32 @@ export async function getStoreByStaffKey(value: string): Promise<StoreAccessReco
   const lookup = isLegacyKey
     ? await admin.from("stores").select("id, org_id, name, is_active, staff_login_key").eq(lookupColumn, accessValue).eq("is_active", true).maybeSingle()
     : await admin.from("stores").select("id, org_id, name, is_active, staff_login_key, staff_login_slug").eq(lookupColumn, accessValue).eq("is_active", true).maybeSingle();
-  const data = lookup.data as { staff_login_key?: unknown; staff_login_slug?: unknown } | null;
+  const data = lookup.data as { org_id?: unknown; staff_login_key?: unknown; staff_login_slug?: unknown } | null;
 
   if (lookup.error || !data || typeof data.staff_login_key !== "string") return null;
   if (!isLegacyKey && typeof data.staff_login_slug !== "string") return null;
+  if (typeof data.org_id !== "string") return null;
+
+  // Staff links use the service role because the login page is public, so the
+  // organization entitlement must be checked explicitly before a cashier can
+  // establish a session that would otherwise reach the POS route.
+  const lifecycle = await admin
+    .from("organizations")
+    .select("subscription_status, subscription_trial_started_at, subscription_trial_ends_at, subscription_current_period_end, subscription_billing_mode")
+    .eq("id", data.org_id)
+    .maybeSingle();
+  if (!lifecycle.error && lifecycle.data) {
+    const lifecycleInput = {
+      status: lifecycle.data.subscription_status,
+      trialStartedAt: lifecycle.data.subscription_trial_started_at,
+      trialEndsAt: lifecycle.data.subscription_trial_ends_at,
+      currentPeriodEnd: lifecycle.data.subscription_current_period_end,
+      billingMode: lifecycle.data.subscription_billing_mode,
+    };
+    const transition = await transitionExpiredTrial(data.org_id, lifecycleInput);
+    const access = isSubscriptionAccessCurrent({ ...lifecycleInput, status: transition.status });
+    if (access === false) return null;
+  }
+
   return { ...data, staff_login_slug: typeof data.staff_login_slug === "string" ? data.staff_login_slug : "" } as StoreAccessRecord;
 }
