@@ -1,0 +1,572 @@
+.display {
+  --display-bg: #f8f3eb;
+  --display-surface: rgba(255, 253, 248, 0.88);
+  --display-ink: #102d21;
+  --display-muted: #667269;
+  --display-primary: #173a2b;
+  --display-accent: #bc9657;
+  --display-success: #4e7f57;
+  position: relative;
+  display: grid;
+  min-height: 100svh;
+  overflow: hidden;
+  place-items: center;
+  padding: clamp(1.25rem, 4vw, 4.5rem);
+  color: var(--display-ink);
+  background:
+    radial-gradient(circle at 12% 10%, rgba(188, 150, 87, 0.16), transparent 28%),
+    radial-gradient(circle at 90% 86%, rgba(23, 58, 43, 0.1), transparent 30%),
+    var(--display-bg);
+  font-variant-numeric: tabular-nums;
+}
+
+.display::before,
+.display::after {
+  position: absolute;
+  width: min(28rem, 42vw);
+  height: min(28rem, 42vw);
+  border: 1px solid rgba(23, 58, 43, 0.08);
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
+}
+
+.display::before {
+  top: -16rem;
+  left: -12rem;
+}
+
+.display::after {
+  right: -16rem;
+  bottom: -18rem;
+  border-color: rgba(188, 150, 87, 0.14);
+}
+
+.shell {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: min(110rem, 100%);
+  min-height: min(48rem, calc(100svh - 2.5rem));
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(1.5rem, 4vw, 3.75rem);
+}
+
+.brandBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 3rem;
+}
+
+.brand {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.brandMark {
+  display: grid;
+  width: clamp(2.8rem, 5vw, 4.5rem);
+  aspect-ratio: 1;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(23, 58, 43, 0.14);
+  border-radius: 1.25rem;
+  color: var(--display-primary);
+  background: var(--display-surface);
+  box-shadow: 0 0.9rem 2.5rem rgba(23, 58, 43, 0.08);
+}
+
+.brandCopy {
+  min-width: 0;
+}
+
+.brandCopy strong,
+.brandCopy span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brandCopy strong {
+  color: var(--display-primary);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.15rem, 2.6vw, 2rem);
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+.brandCopy span {
+  margin-top: 0.28rem;
+  color: var(--display-muted);
+  font-size: clamp(0.62rem, 1.1vw, 0.8rem);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.status {
+  color: var(--display-muted);
+  font-size: clamp(0.62rem, 1vw, 0.78rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: right;
+}
+
+.status[data-status="disconnected"],
+.status[data-status="connecting"] {
+  color: var(--display-accent);
+}
+
+.idle {
+  display: grid;
+  justify-items: center;
+  gap: clamp(1.2rem, 3vw, 2.2rem);
+  padding: clamp(1.5rem, 5vw, 5rem) 1rem;
+  text-align: center;
+}
+
+.idleMark {
+  display: grid;
+  width: clamp(7rem, 18vw, 13rem);
+  aspect-ratio: 1;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(23, 58, 43, 0.12);
+  border-radius: 2.7rem;
+  color: var(--display-primary);
+  background: var(--display-surface);
+  box-shadow: 0 1.7rem 4rem rgba(23, 58, 43, 0.1);
+}
+
+.idleTitle {
+  max-width: 16ch;
+  color: var(--display-primary);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.7rem, 8vw, 7.2rem);
+  font-weight: 700;
+  letter-spacing: -0.055em;
+  line-height: 0.94;
+}
+
+.idleSubtitle {
+  max-width: 36rem;
+  color: var(--display-muted);
+  font-size: clamp(0.9rem, 1.8vw, 1.25rem);
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.idleLayout {
+  display: grid;
+  align-items: center;
+  gap: clamp(1rem, 3vw, 2.25rem);
+  grid-template-columns: minmax(0, 1.05fr) minmax(20rem, 0.95fr);
+}
+
+.promoCard {
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(23, 58, 43, 0.13);
+  border-radius: clamp(1.25rem, 2.5vw, 2rem);
+  background: rgba(255, 253, 248, 0.9);
+  box-shadow: 0 1.25rem 3.5rem rgba(23, 58, 43, 0.1);
+  grid-template-columns: minmax(8rem, 0.85fr) minmax(0, 1.15fr);
+}
+
+.promoImage {
+  position: relative;
+  min-height: 15rem;
+  overflow: hidden;
+  background: #eadfce;
+}
+
+.promoImageAsset {
+  object-fit: cover;
+  transition: transform 700ms ease;
+}
+
+.promoCard:hover .promoImageAsset {
+  transform: scale(1.04);
+}
+
+.promoBody {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(1rem, 2.5vw, 2rem);
+}
+
+.promoEyebrow {
+  color: var(--display-accent);
+  font-size: clamp(0.62rem, 1vw, 0.78rem);
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.promoTitle {
+  max-width: 14ch;
+  margin: 0.6rem 0 0;
+  color: var(--display-primary);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.45rem, 3vw, 2.8rem);
+  letter-spacing: -0.045em;
+  line-height: 0.98;
+}
+
+.promoDetail {
+  max-width: 30ch;
+  margin: 0.8rem 0 0;
+  color: var(--display-muted);
+  font-size: clamp(0.8rem, 1.35vw, 1rem);
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.promoTag {
+  display: inline-flex;
+  margin-top: 1rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 999px;
+  color: var(--display-primary);
+  background: rgba(188, 150, 87, 0.17);
+  font-size: clamp(0.66rem, 1vw, 0.8rem);
+  font-weight: 800;
+}
+
+.promoCardCompact {
+  grid-template-columns: 7rem minmax(0, 1fr);
+}
+
+.promoCardCompact .promoImage {
+  min-height: 9rem;
+}
+
+.promoCardCompact .promoBody {
+  padding: 1rem 1.1rem;
+}
+
+.promoCardCompact .promoTitle {
+  margin-top: 0.35rem;
+  font-size: clamp(1.1rem, 1.8vw, 1.55rem);
+}
+
+.promoCardCompact .promoDetail {
+  display: none;
+}
+
+.promoCardCompact .promoTag {
+  margin-top: 0.65rem;
+  padding: 0.32rem 0.55rem;
+  font-size: 0.64rem;
+}
+
+.activeLayout {
+  display: grid;
+  align-items: stretch;
+  gap: clamp(1rem, 3vw, 2rem);
+  grid-template-columns: minmax(0, 1.4fr) minmax(18rem, 0.75fr);
+}
+
+.totalStack {
+  display: grid;
+  gap: clamp(0.8rem, 2vw, 1.25rem);
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.orderCard,
+.totalCard {
+  border: 1px solid rgba(23, 58, 43, 0.12);
+  border-radius: clamp(1.25rem, 2.5vw, 2rem);
+  background: var(--display-surface);
+  box-shadow: 0 1.25rem 3.5rem rgba(23, 58, 43, 0.08);
+}
+
+.orderCard {
+  min-width: 0;
+  padding: clamp(1rem, 3vw, 2.25rem);
+}
+
+.orderHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(23, 58, 43, 0.1);
+}
+
+.orderHeading h1 {
+  margin: 0;
+  color: var(--display-primary);
+  font-size: clamp(1.25rem, 2.5vw, 2.25rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.orderHeading span {
+  color: var(--display-muted);
+  font-size: clamp(0.75rem, 1.2vw, 1rem);
+  font-weight: 700;
+}
+
+.lines {
+  display: grid;
+  gap: 0.7rem;
+  max-height: min(30rem, 47svh);
+  margin: 0;
+  padding: clamp(1rem, 2.5vw, 2rem) 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.line {
+  display: grid;
+  align-items: center;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  padding: 0.35rem 0;
+}
+
+.lineName {
+  min-width: 0;
+  color: var(--display-ink);
+  font-size: clamp(1rem, 2.2vw, 1.7rem);
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.lineQuantity {
+  color: var(--display-muted);
+  font-size: clamp(0.82rem, 1.45vw, 1.1rem);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.lineTotal {
+  color: var(--display-primary);
+  font-size: clamp(1rem, 2vw, 1.5rem);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.summary {
+  display: grid;
+  gap: 0.35rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(23, 58, 43, 0.1);
+  color: var(--display-muted);
+  font-size: clamp(0.8rem, 1.25vw, 1rem);
+  font-weight: 700;
+}
+
+.summaryRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.summaryDiscount {
+  color: var(--display-accent);
+}
+
+.totalCard {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(1.25rem, 4vw, 3.5rem);
+  text-align: center;
+  background: var(--display-primary);
+}
+
+.totalLabel,
+.paymentLabel {
+  color: rgba(255, 250, 241, 0.7);
+  font-size: clamp(0.75rem, 1.5vw, 1.1rem);
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.totalValue {
+  margin-top: 0.65rem;
+  color: #fffaf1;
+  font-size: clamp(3.5rem, 9vw, 8rem);
+  font-weight: 800;
+  letter-spacing: -0.075em;
+  line-height: 0.9;
+}
+
+.totalHint {
+  margin-top: 1.25rem;
+  color: rgba(255, 250, 241, 0.74);
+  font-size: clamp(0.8rem, 1.5vw, 1.1rem);
+  font-weight: 600;
+}
+
+.payment {
+  display: grid;
+  justify-items: center;
+  gap: clamp(1rem, 3vw, 2rem);
+  padding: clamp(1rem, 5vw, 4rem);
+  border-radius: clamp(1.25rem, 3vw, 2.5rem);
+  text-align: center;
+  background: var(--display-primary);
+  box-shadow: 0 1.8rem 5rem rgba(23, 58, 43, 0.17);
+}
+
+.paymentTotal {
+  color: #fffaf1;
+  font-size: clamp(3.25rem, 9vw, 8rem);
+  font-weight: 800;
+  letter-spacing: -0.075em;
+  line-height: 0.88;
+}
+
+.paymentChangeLabel {
+  color: rgba(255, 250, 241, 0.76);
+  font-size: clamp(0.85rem, 1.7vw, 1.2rem);
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.paymentChange {
+  color: #dbeed8;
+  font-size: clamp(3.5rem, 10vw, 9rem);
+  font-weight: 800;
+  letter-spacing: -0.08em;
+  line-height: 0.9;
+}
+
+.paymentHint {
+  color: rgba(255, 250, 241, 0.76);
+  font-size: clamp(0.82rem, 1.5vw, 1.1rem);
+  font-weight: 600;
+}
+
+.thankyou {
+  display: grid;
+  justify-items: center;
+  gap: 1rem;
+  padding: clamp(2rem, 8vw, 6rem) 1rem;
+  text-align: center;
+}
+
+.thankyouMark {
+  display: grid;
+  width: clamp(4.75rem, 10vw, 7.5rem);
+  aspect-ratio: 1;
+  place-items: center;
+  border-radius: 50%;
+  color: #fffaf1;
+  background: var(--display-success);
+  font-size: clamp(2rem, 5vw, 4rem);
+  font-weight: 800;
+  box-shadow: 0 1.2rem 3.5rem rgba(78, 127, 87, 0.22);
+}
+
+.thankyou h1 {
+  margin: 0;
+  color: var(--display-primary);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(3rem, 9vw, 8rem);
+  letter-spacing: -0.06em;
+  line-height: 0.92;
+}
+
+.thankyou p {
+  margin: 0;
+  color: var(--display-muted);
+  font-size: clamp(0.9rem, 1.8vw, 1.35rem);
+  font-weight: 700;
+}
+
+.pairing {
+  width: min(38rem, 100%);
+  padding: clamp(1.5rem, 5vw, 3.5rem);
+  border: 1px solid rgba(23, 58, 43, 0.12);
+  border-radius: 2rem;
+  text-align: center;
+  background: var(--display-surface);
+  box-shadow: 0 1.25rem 3.5rem rgba(23, 58, 43, 0.08);
+}
+
+.pairing h1 {
+  margin: 1.25rem 0 0;
+  color: var(--display-primary);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2rem, 5vw, 3.8rem);
+  letter-spacing: -0.055em;
+}
+
+.pairing p {
+  margin: 0.9rem auto 0;
+  max-width: 30rem;
+  color: var(--display-muted);
+  font-size: clamp(0.9rem, 1.5vw, 1.1rem);
+  line-height: 1.6;
+}
+
+.pairingMark {
+  display: grid;
+  width: 5rem;
+  aspect-ratio: 1;
+  margin: 0 auto;
+  place-items: center;
+  border-radius: 1.5rem;
+  color: #fffaf1;
+  background: var(--display-primary);
+}
+
+@media (max-width: 760px) {
+  .shell {
+    min-height: calc(100svh - 2.5rem);
+  }
+
+  .brandBar {
+    align-items: flex-start;
+  }
+
+  .activeLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .idleLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .promoCard {
+    grid-template-columns: minmax(8rem, 0.8fr) minmax(0, 1.2fr);
+  }
+
+  .totalCard {
+    min-height: 13rem;
+  }
+
+  .totalStack {
+    grid-template-rows: auto auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .display * {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

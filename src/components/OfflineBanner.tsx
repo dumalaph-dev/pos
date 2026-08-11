@@ -22,6 +22,7 @@ export default function OfflineBanner() {
     };
   }, []);
 
+  if (typeof window !== "undefined" && window.location.pathname === "/display") return null;
   if (!frameworkOffline && !browserOffline) return null;
 
   return (

@@ -8,6 +8,7 @@ import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/br
 import { readBusinessPresetId } from "@/lib/admin/business";
 import { isProductImageUrl } from "@/lib/product-images";
 import { normalizePaperWidth, toPaperWidthValue } from "@/lib/paper-width";
+import { normalizeDisplayPromotionRecord, normalizeDisplaySettings, type DisplayPromotionRecord } from "@/lib/display-config";
 import PosSettingsScreen, {
   type AdminPosCategory,
   type AdminPosDevice,
@@ -71,7 +72,7 @@ function readEnum<T extends readonly string[]>(value: unknown, values: T, fallba
 }
 
 function readTab(value: unknown) {
-  return value === "receipts" || value === "hardware" || value === "settings" || value === "payments" ? value : "preview";
+  return value === "receipts" || value === "hardware" || value === "settings" || value === "payments" || value === "display" ? value : "preview";
 }
 
 function readPosConfig(store: StoreRecord): PosConfig {
@@ -162,13 +163,14 @@ export default async function AdminPosPage({ searchParams }: { searchParams: Pro
 
   let devicesQuery = supabase.from("devices").select("id, store_id, name, device_prefix, printer_transport, printer_config, is_active, last_seen_at").eq("org_id", profile.org_id).order("name");
   if (deviceScopeId) devicesQuery = devicesQuery.eq("store_id", deviceScopeId);
-  const [categoriesResult, productsResult, devicesResult] = storeId
+  const [categoriesResult, productsResult, devicesResult, displayPromotionsResult] = storeId
     ? await Promise.all([
         supabase.from("categories").select("id, name, icon").eq("store_id", storeId).eq("is_active", true).order("sort_order"),
         supabase.from("products").select("id, name, pricing_mode, price, unit, category_id, image_url, track_stock, min_stock").eq("store_id", storeId).eq("is_active", true).order("sort_order"),
         devicesQuery,
+        supabase.from("display_promotions").select("id, store_id, eyebrow, title, detail, tagline, image_url, is_active, sort_order, starts_at, ends_at").eq("store_id", storeId).order("sort_order").order("created_at"),
       ])
-    : [{ data: [], error: null }, { data: [], error: null }, await devicesQuery];
+    : [{ data: [], error: null }, { data: [], error: null }, await devicesQuery, { data: [], error: null }];
 
   const stockResult = storeId
     ? await supabase.rpc("current_stock", { p_org_id: profile.org_id })
@@ -187,12 +189,15 @@ export default async function AdminPosPage({ searchParams }: { searchParams: Pro
     stock_quantity: stockByProductId.get(product.id) ?? null,
   })) as AdminPosProduct[];
   const devices = (devicesResult.data ?? []) as AdminPosDevice[];
+  const displayPromotions = (displayPromotionsResult.data ?? [])
+    .map(normalizeDisplayPromotionRecord)
+    .filter((promotion): promotion is DisplayPromotionRecord => Boolean(promotion));
   const queryWarning = Boolean(!store || organizationResult.error || storesResult.error || categoriesResult.error || productsResult.error || devicesResult.error || stockResult.error);
   const organizationName = organizationResult.data?.name || profile.organizations?.name || DEFAULT_ORGANIZATION_NAME;
   const logoUrl = readAdminBranding(profile.organizations?.settings).logoUrl;
   const branchName = store?.name || profile.stores?.name || DEFAULT_STORE_NAME;
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
-  const savedMessage = saved === "settings" ? "POS settings saved." : saved === "branch" ? "Receipt and tax details saved." : saved === "device" ? "Terminal settings saved." : "";
+  const savedMessage = saved === "settings" ? "POS settings saved." : saved === "branch" ? "Receipt and tax details saved." : saved === "device" ? "Terminal settings saved." : saved === "display" ? "Customer display settings saved." : "";
   const deviceBranchOptions = selectedBranchId
     ? store ? [{ id: store.id, name: store.name }] : []
     : branchOptions;
@@ -217,6 +222,9 @@ export default async function AdminPosPage({ searchParams }: { searchParams: Pro
       products={products}
       categories={categories}
       devices={devices}
+      displayPromotions={displayPromotions}
+      displayPromotionsUnavailable={Boolean(displayPromotionsResult.error)}
+      initialDisplaySettings={normalizeDisplaySettings(store?.settings?.customer_display)}
       initialSettings={store ? readPosConfig(store) : readPosConfig({ id: "", name: DEFAULT_STORE_NAME, address: null, tin: null, vat_registered: true, vat_rate: 0.12, settings: {} })}
       initialBusinessPresetId={readBusinessPresetId(profile.organizations?.settings)}
     />

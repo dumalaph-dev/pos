@@ -7,6 +7,7 @@ import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
 import { MultiProductModal } from "@/components/admin/MultiProductModal";
+import DisplayPromotionsPanel from "@/components/admin/DisplayPromotionsPanel";
 import { CATALOG_PRESETS, getCatalogPreset, type CatalogPreset } from "@/lib/catalog-presets";
 import { createDeviceSettings, savePosSettings, updateDeviceSettings } from "@/app/admin/pos/actions";
 import { buildReceipt } from "@/lib/receipt";
@@ -15,6 +16,8 @@ import { getPosTheme, POS_THEME_OPTIONS, type PosThemeId } from "@/lib/pos-theme
 import { getPosPalette, POS_PALETTE_OPTIONS, type PosPaletteId } from "@/lib/pos-palette";
 import { isProductImageUrl } from "@/lib/product-images";
 import { normalizePaperWidth, PAPER_WIDTH_OPTIONS, toPaperWidthValue, type PaperWidthValue } from "@/lib/paper-width";
+import type { DisplaySettings } from "@/lib/display";
+import type { DisplayPromotionRecord } from "@/lib/display-config";
 
 export type AdminPosProduct = {
   id: string;
@@ -67,7 +70,7 @@ export type PosConfig = {
   paperWidth: PaperWidthValue;
 };
 
-export type PosTabId = "preview" | "settings" | "payments" | "receipts" | "hardware";
+export type PosTabId = "preview" | "settings" | "payments" | "receipts" | "hardware" | "display";
 type TabId = PosTabId;
 type PreviewDevice = "desktop" | "tablet";
 type UtilityPanel = "notifications" | "help" | "profile" | "";
@@ -101,6 +104,7 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: "payments", label: "Payment Methods" },
   { id: "receipts", label: "Receipt Settings" },
   { id: "hardware", label: "Hardware" },
+  { id: "display", label: "Customer Display" },
 ];
 
 const ORDER_TYPE_OPTIONS = ["Dine In", "Takeout", "Delivery"] as const;
@@ -322,6 +326,9 @@ export default function PosSettingsScreen({
   products,
   categories,
   devices,
+  displayPromotions,
+  displayPromotionsUnavailable,
+  initialDisplaySettings,
   initialSettings,
   initialBusinessPresetId,
 }: {
@@ -343,6 +350,9 @@ export default function PosSettingsScreen({
   products: AdminPosProduct[];
   categories: AdminPosCategory[];
   devices: AdminPosDevice[];
+  displayPromotions: DisplayPromotionRecord[];
+  displayPromotionsUnavailable: boolean;
+  initialDisplaySettings: DisplaySettings;
   initialSettings: PosConfig;
   initialBusinessPresetId: string | null;
 }) {
@@ -693,6 +703,7 @@ export default function PosSettingsScreen({
             {activeTab === "payments" ? <PaymentMethodsPanel config={config} updateConfig={updateConfig} /> : null}
             {activeTab === "receipts" ? <ReceiptSettingsPanel config={config} updateConfig={updateConfig} branchDetails={branchDetails} updateBranchDetails={updateBranchDetails} /> : null}
             {activeTab === "hardware" ? <HardwarePanel devices={devices} deviceBranches={deviceBranchOptions} currentStoreId={storeId} canWrite={canWrite} deviceTest={deviceTest} onTestDevice={testDevice} /> : null}
+            {activeTab === "display" ? <DisplayPromotionsPanel storeId={storeId} branchName={currentBranchName} canWrite={canWrite} initialPromotions={displayPromotions} initialSettings={initialDisplaySettings} promotionsUnavailable={displayPromotionsUnavailable} /> : null}
           </section>
 
           <div className="pos-settings-sidebar">

@@ -9,6 +9,7 @@ import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/br
 import { invalidateAdminProfile } from "@/lib/admin/profile";
 import { saveOrganizationBusinessPreset } from "@/lib/admin/business-server";
 import { getCatalogPreset } from "@/lib/catalog-presets";
+import { normalizeDisplaySettings } from "@/lib/display-config";
 import { normalizePaperWidth, parsePaperWidth, toPaperWidthValue } from "@/lib/paper-width";
 
 type JsonRecord = Record<string, unknown>;
@@ -54,11 +55,13 @@ function readSettings(value: string): JsonRecord | null {
   }
 }
 
-function posRedirect(message: string, tab: "preview" | "receipts" | "hardware" = "preview"): never {
+type PosActionTab = "preview" | "settings" | "payments" | "receipts" | "hardware" | "display";
+
+function posRedirect(message: string, tab: PosActionTab = "preview"): never {
   redirect(`/admin/pos?tab=${tab}&error=${encodeURIComponent(message)}`);
 }
 
-function posSaved(value: "settings" | "branch" | "device", tab: "preview" | "receipts" | "hardware" = "preview"): never {
+function posSaved(value: "settings" | "branch" | "device" | "display", tab: PosActionTab = "preview"): never {
   redirect(`/admin/pos?tab=${tab}&saved=${value}`);
 }
 
@@ -200,6 +203,152 @@ export async function savePosSettings(formData: FormData) {
   return { ok: true, message: "POS settings saved." };
 }
 
+function readDisplayPromotionFields(formData: FormData) {
+  const storeId = readText(formData, "store_id");
+  const eyebrow = readText(formData, "eyebrow");
+  const title = readText(formData, "title");
+  const detail = readText(formData, "detail");
+  const tagline = readText(formData, "tagline");
+  const imageUrl = readText(formData, "image_url");
+  const sortOrderValue = Number(readText(formData, "sort_order") || "0");
+
+  if (!storeId) posRedirect("Choose a branch for this promotion.", "display");
+  if (!title || title.length > 120) posRedirect("Promotion title is required and must be at most 120 characters.", "display");
+  if (eyebrow.length > 80 || detail.length > 240 || tagline.length > 120) {
+    posRedirect("Promotion copy is longer than the allowed limit.", "display");
+  }
+  if (imageUrl && !/^\/[A-Za-z0-9_./-]+$/.test(imageUrl)) {
+    posRedirect("Choose an image from the available shop assets.", "display");
+  }
+  if (!Number.isInteger(sortOrderValue) || sortOrderValue < -1000 || sortOrderValue > 1000) {
+    posRedirect("Promotion order must be a whole number between -1000 and 1000.", "display");
+  }
+
+  return {
+    storeId,
+    eyebrow,
+    title,
+    detail,
+    tagline,
+    imageUrl: imageUrl || null,
+    sortOrder: sortOrderValue,
+    isActive: readFormBoolean(formData, "is_active"),
+  };
+}
+
+async function writeDisplayPromotionAudit(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orgId: string,
+  userId: string,
+  storeId: string,
+  promotionId: string,
+  action: "display_promotion.created" | "display_promotion.updated",
+  before: unknown,
+  after: unknown,
+) {
+  await supabase.from("audit_logs").insert({
+    org_id: orgId,
+    store_id: storeId,
+    actor_id: userId,
+    action,
+    entity: "display_promotions",
+    entity_id: promotionId,
+    before,
+    after,
+  });
+}
+
+export async function saveDisplaySettings(formData: FormData) {
+  const storeId = readText(formData, "store_id");
+  const serialized = readText(formData, "settings");
+  if (!storeId || !serialized) posRedirect("Customer display settings are missing.", "display");
+
+  const incoming = readSettings(serialized);
+  if (!incoming) posRedirect("Customer display settings could not be read.", "display");
+
+  const { supabase, store, orgId } = await requireAdminStore(storeId);
+  const currentSettings = isRecord(store.settings) ? store.settings : {};
+  const nextSettings = {
+    ...currentSettings,
+    customer_display: normalizeDisplaySettings(incoming),
+  };
+  const { error } = await supabase
+    .from("stores")
+    .update({ settings: nextSettings })
+    .eq("id", storeId)
+    .eq("org_id", orgId)
+    .eq("is_active", true);
+  if (error) posRedirect(error.message || "Customer display settings could not be saved.", "display");
+
+  revalidatePath("/admin/pos");
+  revalidatePath("/pos");
+  posSaved("display", "display");
+}
+
+export async function createDisplayPromotion(formData: FormData) {
+  const { supabase, orgId, userId, selectedBranchId } = await requireAdmin();
+  const fields = readDisplayPromotionFields(formData);
+  await validDeviceStore(supabase, orgId, fields.storeId, selectedBranchId, "display");
+
+  const { data: promotion, error } = await supabase.from("display_promotions").insert({
+    org_id: orgId,
+    store_id: fields.storeId,
+    eyebrow: fields.eyebrow,
+    title: fields.title,
+    detail: fields.detail,
+    tagline: fields.tagline,
+    image_url: fields.imageUrl,
+    sort_order: fields.sortOrder,
+    is_active: fields.isActive,
+    created_by: userId,
+  }).select("id").maybeSingle();
+  if (error) posRedirect(error.message || "The promotion could not be created.", "display");
+  if (promotion) {
+    await writeDisplayPromotionAudit(supabase, orgId, userId, fields.storeId, promotion.id, "display_promotion.created", null, fields);
+  }
+
+  refreshPos();
+  posSaved("display", "display");
+}
+
+export async function updateDisplayPromotion(formData: FormData) {
+  const { supabase, orgId, userId, selectedBranchId } = await requireAdmin();
+  const promotionId = readText(formData, "promotion_id");
+  const fields = readDisplayPromotionFields(formData);
+  await validDeviceStore(supabase, orgId, fields.storeId, selectedBranchId, "display");
+  if (!promotionId) posRedirect("The promotion identifier is missing.", "display");
+
+  const { data: existing } = await supabase
+    .from("display_promotions")
+    .select("id, org_id, store_id, eyebrow, title, detail, tagline, image_url, is_active, sort_order, starts_at, ends_at")
+    .eq("id", promotionId)
+    .eq("org_id", orgId)
+    .eq("store_id", fields.storeId)
+    .maybeSingle();
+  if (!existing) posRedirect("That promotion is not available in the selected branch.", "display");
+
+  const { error } = await supabase
+    .from("display_promotions")
+    .update({
+      eyebrow: fields.eyebrow,
+      title: fields.title,
+      detail: fields.detail,
+      tagline: fields.tagline,
+      image_url: fields.imageUrl,
+      sort_order: fields.sortOrder,
+      is_active: fields.isActive,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", promotionId)
+    .eq("org_id", orgId)
+    .eq("store_id", fields.storeId);
+  if (error) posRedirect(error.message || "The promotion could not be saved.", "display");
+  await writeDisplayPromotionAudit(supabase, orgId, userId, fields.storeId, promotionId, "display_promotion.updated", existing, fields);
+
+  refreshPos();
+  posSaved("display", "display");
+}
+
 function readTransport(value: string): PrinterTransport | null {
   return value === "network" || value === "bluetooth" || value === "usb" ? value : null;
 }
@@ -262,8 +411,8 @@ async function validStore(supabase: Awaited<ReturnType<typeof createClient>>, or
   return Boolean(data && (!selectedBranchId || selectedBranchId === storeId));
 }
 
-async function validDeviceStore(supabase: Awaited<ReturnType<typeof createClient>>, orgId: string, storeId: string, selectedBranchId: string | null) {
-  if (!(await validStore(supabase, orgId, storeId, selectedBranchId))) posRedirect("Choose the active branch selected in the workspace.", "hardware");
+async function validDeviceStore(supabase: Awaited<ReturnType<typeof createClient>>, orgId: string, storeId: string, selectedBranchId: string | null, tab: PosActionTab = "hardware") {
+  if (!(await validStore(supabase, orgId, storeId, selectedBranchId))) posRedirect("Choose the active branch selected in the workspace.", tab);
 }
 
 function refreshPos() {

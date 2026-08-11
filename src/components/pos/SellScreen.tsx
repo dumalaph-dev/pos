@@ -20,6 +20,7 @@ import { SignOutButton } from "@/components/SignOutButton";
 import OfflinePinSetup from "@/components/OfflinePinSetup";
 import OfflinePinUnlock from "@/components/OfflinePinUnlock";
 import PrinterSettingsModal from "@/components/pos/PrinterSettings";
+import CustomerDisplaySettings from "@/components/pos/CustomerDisplaySettings";
 import OrderHistory from "@/components/pos/OrderHistory";
 import ShiftPanel, { useActiveShift } from "@/components/pos/ShiftPanel";
 import {
@@ -50,6 +51,17 @@ import { buildReceipt } from "@/lib/receipt";
 import { normalizePaperWidth, type PaperWidth } from "@/lib/paper-width";
 import { getPosTheme, isPosThemeId, type PosThemeId } from "@/lib/pos-theme";
 import { getPosPalette, isPosPaletteId, type PosPaletteId } from "@/lib/pos-palette";
+import {
+  createDisplayLink,
+  loadDisplayPairingToken,
+  normalizeDisplayPairingToken,
+  saveDisplayPairingToken,
+  type DisplayLink,
+  type DisplayPromotion,
+  type DisplaySettings,
+  type DisplayState,
+} from "@/lib/display";
+import { DEFAULT_DISPLAY_SETTINGS, normalizeDisplayPromotionRows, normalizeDisplaySettings } from "@/lib/display-config";
 
 type Product = {
   id: string;
@@ -116,6 +128,12 @@ type PosRuntimeConfig = {
 
 type ProfileData = Omit<OfflineProfileSnapshot, "pos_config"> & {
   pos_config?: PosRuntimeConfig;
+};
+
+type PaymentPreview = {
+  method: RuntimePaymentMethod;
+  tendered: number | null;
+  changeDue: number | null;
 };
 
 const DEFAULT_POS_RUNTIME_CONFIG: PosRuntimeConfig = {
@@ -193,7 +211,7 @@ function normalizePosRuntimeConfig(value: unknown, vatRateFallback = DEFAULT_POS
   };
 }
 
-function readStorePosConfig(value: unknown): { name: string | null; address: string | null; tin: string | null; posConfig: PosRuntimeConfig } {
+function readStorePosConfig(value: unknown): { name: string | null; address: string | null; tin: string | null; posConfig: PosRuntimeConfig; displaySettings: DisplaySettings } {
   const store = isRecord(value) ? value : {};
   const settings = isRecord(store.settings) ? store.settings : {};
   const storeVatRate = readNumber(store.vat_rate, DEFAULT_POS_RUNTIME_CONFIG.vatRate, 0, 1);
@@ -202,6 +220,7 @@ function readStorePosConfig(value: unknown): { name: string | null; address: str
     address: typeof store.address === "string" ? store.address : null,
     tin: typeof store.tin === "string" ? store.tin : null,
     posConfig: normalizePosRuntimeConfig(settings.pos_config, storeVatRate, Boolean(store.vat_registered)),
+    displaySettings: normalizeDisplaySettings(settings.customer_display),
   };
 }
 
@@ -275,6 +294,7 @@ type IconName =
   | "heart"
   | "close"
   | "printer"
+  | "display"
   | "cash"
   | "settings";
 
@@ -304,6 +324,7 @@ function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
     heart: <path d="M20.8 8.6c0 4.8-8.8 10.3-8.8 10.3S3.2 13.4 3.2 8.6A4.5 4.5 0 0 1 12 6.5a4.5 4.5 0 0 1 8.8 2.1Z" />,
     close: <><path d="m7 7 10 10M17 7 7 17" /></>,
     printer: <><path d="M6 9V4h12v5M6 17H4V9h16v8h-2" /><path d="M7 14h10v6H7z" /><path d="M17 11h.1" /></>,
+    display: <><rect x="3.5" y="4.5" width="17" height="12" rx="1.5" /><path d="M8 20h8M12 16.5V20" /></>,
     cash: <><rect x="3" y="6.5" width="18" height="11" rx="1.5" /><circle cx="12" cy="12" r="2.6" /><path d="M6.5 10v4M17.5 10v4" /></>,
     settings: <><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" /><circle cx="12" cy="12" r="3.5" /></>,
   };
@@ -348,9 +369,11 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
 
   const [keypad, setKeypad] = useState<{ product: Product; lineKey?: string } | null>(null);
   const [payOpen, setPayOpen] = useState(false);
+  const [paymentPreview, setPaymentPreview] = useState<PaymentPreview | null>(null);
   const [parked, setParked] = useState<ParkedOrder[]>([]);
   const [trayOpen, setTrayOpen] = useState(false);
   const [success, setSuccess] = useState<{ orderNo: string; change: number | null } | null>(null);
+  const [displayOverride, setDisplayOverride] = useState<DisplayState | null>(null);
   const [toast, setToast] = useState<{ msg: string; retry?: boolean } | null>(null);
   const [offline, setOffline] = useState(false);
   const [requiresOfflineUnlock, setRequiresOfflineUnlock] = useState(false);
@@ -362,6 +385,8 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     loadPrinterSettings(),
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [displaySettingsOpen, setDisplaySettingsOpen] = useState(false);
+  const [displayPairingToken, setDisplayPairingToken] = useState<string | null>(() => loadDisplayPairingToken());
   const [shiftOpen, setShiftOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [categoryRailOpen, setCategoryRailOpen] = useState(false);
@@ -371,6 +396,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
   const collapseNavRef = useRef<HTMLButtonElement>(null);
   const navWasOpen = useRef(false);
   const lastReceipt = useRef<Uint8Array | null>(null);
+  const displayLinkRef = useRef<DisplayLink | null>(null);
   const [hasReceipt, setHasReceipt] = useState(false);
   const orderTypeScope = useRef<string | null>(null);
   const offlineProfile = initialOfflineProfile ?? unlockedOfflineProfile;
@@ -399,9 +425,14 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
       role: nextProfile.role,
       discount_threshold: normalizeAdminDiscountThreshold(nextProfile.discount_threshold),
       device_id: nextProfile.device_id ?? null,
+      display_pairing_token: normalizeDisplayPairingToken(nextProfile.display_pairing_token) ?? loadDisplayPairingToken(),
+      display_promotions: Array.isArray(nextProfile.display_promotions) ? nextProfile.display_promotions : nextProfile.display_promotions,
+      display_settings: nextProfile.display_settings ? normalizeDisplaySettings(nextProfile.display_settings) : undefined,
       pos_config: nextConfig,
     };
     setProfile(normalizedProfile);
+    setDisplayPairingToken(normalizedProfile.display_pairing_token ?? null);
+    if (normalizedProfile.display_pairing_token) saveDisplayPairingToken(normalizedProfile.display_pairing_token);
     setPosConfig(nextConfig);
     const scope = nextProfile.store_id ?? nextProfile.org_id;
     setOrderType((current) => {
@@ -481,6 +512,8 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     let sessionUserId: string | null = null;
     let databasePrinterSettings: PrinterSettings | undefined;
     let databaseDeviceId: string | null = null;
+    let databaseDisplayPairingToken: string | null = null;
+    let databaseDisplayPromotions: DisplayPromotion[] | undefined;
 
     try {
       const {
@@ -500,7 +533,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
           if (binding) {
             const { data: boundDevice } = await supabase
               .from("devices")
-              .select("id, store_id, printer_transport, printer_config, stores(name, address, tin, vat_registered, vat_rate, settings)")
+              .select("id, store_id, paired_display_id, printer_transport, printer_config, stores(name, address, tin, vat_registered, vat_rate, settings)")
               .eq("id", binding.deviceId)
               .eq("org_id", prof.org_id)
               .eq("is_active", true)
@@ -510,6 +543,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
               effectiveStore = boundDevice.stores;
               databaseDeviceId = boundDevice.id;
               databasePrinterSettings = readDevicePrinterSettings(boundDevice) ?? undefined;
+              databaseDisplayPairingToken = normalizeDisplayPairingToken(boundDevice.paired_display_id);
             } else {
               localStorage.removeItem(POS_DEVICE_BINDING_KEY);
             }
@@ -518,10 +552,10 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
           const organizationRelation = Array.isArray(prof.organizations) ? prof.organizations[0] : prof.organizations;
           const branding = readAdminBranding(isRecord(organizationRelation) ? organizationRelation.settings : undefined);
           const discountSettings = readAdminDiscountSettings(isRecord(organizationRelation) ? organizationRelation.settings : undefined);
-          if (effectiveStoreId && !databasePrinterSettings) {
+          if (effectiveStoreId && (!databasePrinterSettings || !databaseDisplayPairingToken)) {
             const { data: terminal } = await supabase
               .from("devices")
-              .select("id, printer_transport, printer_config")
+              .select("id, paired_display_id, printer_transport, printer_config")
               .eq("store_id", effectiveStoreId)
               .eq("is_active", true)
               .order("last_seen_at", { ascending: false })
@@ -529,6 +563,18 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
               .limit(1)
               .maybeSingle();
             databasePrinterSettings = readDevicePrinterSettings(terminal) ?? undefined;
+            databaseDeviceId = terminal?.id ?? databaseDeviceId;
+            databaseDisplayPairingToken = normalizeDisplayPairingToken(terminal?.paired_display_id);
+          }
+          if (effectiveStoreId) {
+            const { data: displayPromotionRows } = await supabase
+              .from("display_promotions")
+              .select("id, store_id, eyebrow, title, detail, tagline, image_url, is_active, sort_order, starts_at, ends_at")
+              .eq("store_id", effectiveStoreId)
+              .eq("is_active", true)
+              .order("sort_order")
+              .order("created_at");
+            databaseDisplayPromotions = normalizeDisplayPromotionRows(displayPromotionRows ?? []);
           }
           profileData = {
             id: prof.id,
@@ -542,6 +588,9 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
             role: (prof.role as ProfileData["role"]) ?? null,
             discount_threshold: discountSettings.adminPinThresholdPercent,
             device_id: databaseDeviceId,
+            display_pairing_token: databaseDisplayPairingToken,
+            display_promotions: databaseDisplayPromotions?.length ? databaseDisplayPromotions : undefined,
+            display_settings: store.displaySettings,
             pos_config: store.posConfig,
           };
         }
@@ -658,6 +707,21 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     void refreshCatalog();
   }, [refreshCatalog]);
 
+  // P5: the customer display is a passive side effect. It keeps the latest
+  // snapshot internally and never participates in the sale's critical path.
+  useEffect(() => {
+    const token = normalizeDisplayPairingToken(displayPairingToken);
+    displayLinkRef.current = null;
+    if (!token) return;
+
+    const link = createDisplayLink({ token, role: "publisher", supabase });
+    displayLinkRef.current = link;
+    return () => {
+      if (displayLinkRef.current === link) displayLinkRef.current = null;
+      void link.disconnect();
+    };
+  }, [displayPairingToken, supabase]);
+
   // ── Offline sync: pending counter, retry with backoff (P2) ───────────
   useEffect(() => {
     if (!syncUserId || !syncOrgId) {
@@ -773,6 +837,56 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     ? round((total * posConfig.vatRate) / (1 + posConfig.vatRate))
     : 0;
   const availablePaymentMethods = (['cash', 'gcash', 'maya', 'card'] as RuntimePaymentMethod[]).filter((method) => posConfig.paymentMethods[method]);
+  const displayBranding = useMemo(() => ({
+    storeName,
+    logoUrl: profile?.brand_logo_url ?? null,
+  }), [profile?.brand_logo_url, storeName]);
+  const displaySettings = profile?.display_settings ?? DEFAULT_DISPLAY_SETTINGS;
+  const displayPresentation = useMemo(() => ({
+    settings: displaySettings,
+    ...(profile?.display_promotions === undefined ? {} : { promotions: profile.display_promotions }),
+  }), [displaySettings, profile]);
+
+  useEffect(() => {
+    const link = displayLinkRef.current;
+    if (!link || !profile) return;
+    if (displayOverride) {
+      link.push(displayOverride);
+      return;
+    }
+    if (payOpen) {
+      const preview = paymentPreview ?? { method: "cash" as RuntimePaymentMethod, tendered: null, changeDue: null };
+      link.push({
+        kind: "payment",
+        branding: displayBranding,
+        ...displayPresentation,
+        total,
+        tendered: preview.tendered,
+        changeDue: preview.changeDue,
+        paymentMethod: preview.method,
+      });
+      return;
+    }
+    if (cart.length === 0) {
+      link.push({ kind: "idle", branding: displayBranding, ...displayPresentation });
+      return;
+    }
+    link.push({
+      kind: "active",
+      branding: displayBranding,
+      ...displayPresentation,
+      lines: cart.map((line) => ({
+        id: line.key,
+        name: line.product.name,
+        qty: line.qty,
+        weightKg: line.weightKg,
+        lineTotal: line.lineTotal,
+      })),
+      subtotal,
+      discount: discountAmount,
+      total,
+    });
+  }, [cart, discountAmount, displayBranding, displayOverride, displayPresentation, payOpen, paymentPreview, profile, subtotal, total]);
 
   const visibleProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -885,6 +999,19 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     const vatExempt = isScPwd;
     const orderVatAmount = vatExempt ? 0 : vatAmount;
     const vatableSale = vatExempt ? 0 : total - orderVatAmount;
+    const changeDue = method === "cash" && tendered !== null && tendered - total >= 0
+      ? tendered - total
+      : null;
+
+    displayLinkRef.current?.push({
+      kind: "payment",
+      branding: displayBranding,
+      ...displayPresentation,
+      total,
+      tendered: method === "cash" ? tendered : null,
+      changeDue,
+      paymentMethod: method,
+    });
 
     const p_items = cart.map((l) => ({
       product_id: l.product.id,
@@ -964,13 +1091,12 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
       return next;
     });
     setPayOpen(false);
+    setPaymentPreview(null);
     setSuccess({
       orderNo,
-      change:
-        method === "cash" && tendered !== null && tendered - total >= 0
-          ? tendered - total
-          : null,
+      change: changeDue,
     });
+    setDisplayOverride({ kind: "thankyou", branding: displayBranding, ...displayPresentation, orderNo, changeDue });
     setCart([]);
     setNote("");
     setDiscount(NO_DISCOUNT);
@@ -1033,6 +1159,27 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     [printerSettings],
   );
 
+  const saveDisplayPairing = async (value: string | null) => {
+    const token = normalizeDisplayPairingToken(value);
+    if (!token) throw new Error("Create a valid customer display pairing token first.");
+
+    if (profile?.device_id && profile.store_id) {
+      const { error } = await supabase
+        .from("devices")
+        .update({ paired_display_id: token, last_seen_at: new Date().toISOString() })
+        .eq("id", profile.device_id)
+        .eq("org_id", profile.org_id)
+        .eq("store_id", profile.store_id);
+      if (error) throw error;
+    } else {
+      setToast({ msg: "Pairing is saved on this browser. Finish tablet setup to persist it to the terminal." });
+    }
+
+    saveDisplayPairingToken(token);
+    setDisplayPairingToken(token);
+    setProfile((current) => current ? { ...current, display_pairing_token: token } : current);
+  };
+
   const savePrinter = async (s: PrinterSettings) => {
     savePrinterSettings(s);
     setPrinterSettings(s);
@@ -1066,7 +1213,10 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
 
   useEffect(() => {
     if (!success) return;
-    const t = setTimeout(() => setSuccess(null), 3000);
+    const t = setTimeout(() => {
+      setSuccess(null);
+      setDisplayOverride(null);
+    }, 3000);
     return () => clearTimeout(t);
   }, [success]);
 
@@ -1262,6 +1412,10 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                 >
                   <Icon name="cash" size={24} />
                   <span>{shiftButtonLabel}</span>
+                </button>
+                <button type="button" className={"pos-tool" + (displayPairingToken ? " is-active" : "")} onClick={() => setDisplaySettingsOpen(true)} aria-label="Customer display settings" title="Customer display settings">
+                  <Icon name="display" size={24} />
+                  <span>Display</span>
                 </button>
                 <button type="button" className="pos-tool" onClick={() => setSettingsOpen(true)} aria-label="More POS options" title="More POS options">
                   <Icon name="more" size={24} />
@@ -1534,7 +1688,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
 
               <div className="order-actions">
                 <button type="button" className="button button--save" onClick={holdOrder} disabled={cart.length === 0 || parked.length >= MAX_PARKED}>SAVE</button>
-                <button type="button" className="button button--charge" onClick={() => setPayOpen(true)} disabled={cart.length === 0 || total <= 0}>CHARGE</button>
+                <button type="button" className="button button--charge" onClick={() => { setPaymentPreview({ method: availablePaymentMethods[0] ?? "cash", tendered: null, changeDue: null }); setPayOpen(true); }} disabled={cart.length === 0 || total <= 0}>CHARGE</button>
               </div>
             </div>
           </aside>
@@ -1593,7 +1747,8 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
             total={total}
             availablePaymentMethods={availablePaymentMethods}
             onConfirm={placeOrder}
-            onClose={() => setPayOpen(false)}
+            onPaymentState={setPaymentPreview}
+            onClose={() => { setPayOpen(false); setPaymentPreview(null); }}
           />
         )}
 
@@ -1603,6 +1758,15 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
             storeName={storeName}
             onSave={savePrinter}
             onClose={() => setSettingsOpen(false)}
+            onToast={(msg) => setToast({ msg })}
+          />
+        )}
+
+        {displaySettingsOpen && (
+          <CustomerDisplaySettings
+            initialToken={displayPairingToken}
+            onSave={saveDisplayPairing}
+            onClose={() => setDisplaySettingsOpen(false)}
             onToast={(msg) => setToast({ msg })}
           />
         )}
@@ -2273,11 +2437,13 @@ function ChargeModal({
   total,
   availablePaymentMethods,
   onConfirm,
+  onPaymentState,
   onClose,
 }: {
   total: number;
   availablePaymentMethods: RuntimePaymentMethod[];
   onConfirm: (method: string, tendered: number | null, payRef: string) => void;
+  onPaymentState?: (preview: PaymentPreview) => void;
   onClose: () => void;
 }) {
   const methods = availablePaymentMethods.length ? availablePaymentMethods : ["cash" as const];
@@ -2291,6 +2457,14 @@ function ChargeModal({
   const cashOk = method !== "cash" || (tenderedCents >= total && tenderedPesos > 0);
   const refOk = method === "cash" || (method === "card" ? /^\d{4}$/.test(ref) : ref.trim().length >= 4);
   const canConfirm = cashOk && refOk;
+
+  useEffect(() => {
+    onPaymentState?.({
+      method,
+      tendered: method === "cash" ? tenderedCents : null,
+      changeDue: method === "cash" && change >= 0 ? change : null,
+    });
+  }, [change, method, onPaymentState, tenderedCents]);
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink/40 p-4" onClick={onClose}>

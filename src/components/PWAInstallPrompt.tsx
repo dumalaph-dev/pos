@@ -62,6 +62,7 @@ export default function PWAInstallPrompt() {
     };
   }, []);
 
+  if (typeof window !== "undefined" && window.location.pathname === "/display") return null;
   if (installed || (!deferredPrompt && !ios)) return null;
 
   async function install() {

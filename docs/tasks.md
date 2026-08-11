@@ -7,7 +7,7 @@
 
 ## Current project status
 
-**Last updated:** 2026-08-09
+**Last updated:** 2026-08-11
 
 This section is the current source of truth for delivered work and the next gate. Keep it updated in the same change as every feature, migration, QA pass, commit, or deployment.
 
@@ -18,16 +18,32 @@ This section is the current source of truth for delivered work and the next gate
 | Offline layer | Complete | Full 15-sale pilot drill |
 | Printing | In progress (6/7) | Physical LAN printer slip validation |
 | Multi-branch | Complete | Production second-branch sign-off |
-| Customer display | Not started | Build `/display` pairing and live cart mirror |
+| Customer display | Owner-managed content implemented; local migration/RLS and authenticated owner API QA passed; visual click-through blocked by the browser connector; hosted apply/live QA pending | Reconnect the browser runtime, then run two-screen pairing and physical display QA |
 | Admin backoffice | Complete (9/9 checklist items; hosted Employee ID login and forced-password-change QA passed 2026-08-09) | Maintain regression coverage |
 | Inventory workflow | Complete | Maintain regression coverage |
 | Inventory reporting and exports | Authenticated admin and manager QA passed | Reconciliation against broader live data |
-| Shifts, till, and Z-readings | Implemented; hosted authenticated RPC and manual open/close QA passed; shift-label collision fixed and verified 2026-08-09 | Reconcile reports against a real hosted sales day |
+| Shifts, till, and Z-readings | Implemented; hosted authenticated RPC and manual open/close QA passed; shift-label collision fixed and verified 2026-08-09 | Confirm the 2026-08-11 totals in the authenticated reports UI |
 | Store-owner onboarding and guidance | Implemented | Verify first-run and mobile behavior on the deployed app |
 | Admin workspace themes | Live main deployment previews verified 2026-08-09 | Maintain regression coverage |
 | Production pilot | Not started | Production Supabase, device setup, pilot week, and branch #2 |
 
 ### Recent delivery log
+
+- **2026-08-11 - Authenticated visual QA attempt:** The local admin fixture successfully created an active Alpha Branch 1 promotion through the authenticated Supabase path and branch isolation returned zero cross-branch rows. The temporary card was deleted after the check. The in-app browser connector failed before page interaction (`failed to write kernel assets`), so the owner UI and cart -> payment -> thank-you visual states remain unverified; no visual pass is claimed.
+
+- **2026-08-11 — Local display migration and owner-flow QA:** Started the local Supabase stack, reset the empty local fixture database, applied `0042_display_promotions.sql`, and verified the table columns, RLS, admin/branch policies, and authenticated grants. The existing RLS fixture passed 18/18 assertions. A local admin promotion create/read/update/archive/cleanup round-trip passed, including branch isolation; the protected `/admin/pos?tab=display` route rendered with the Customer Display editor and no migration warning. Hosted Supabase remains unchanged at migration `0040`.
+
+- **2026-08-11 — Owner-managed customer display content (working tree):** Added branch-scoped `display_promotions` persistence with RLS, an Admin → POS → Customer Display editor for promotion copy/image asset/order/active state, and branch display preferences for promotion visibility, rotation speed, quantities, subtotal, discounts, and order number. The POS now loads the active branch configuration and publishes it through the existing passive display link; offline profile caches retain the configuration when available. Migration `0042_display_promotions.sql` is added locally and still needs to be applied to the target Supabase project. `npm run typecheck`, `npm run lint`, `npm run build`, and `git diff --check` pass.
+
+- **2026-08-11 — Customer display promotions (working tree):** Added a passive rotating in-store promotion rail to the customer display. It uses existing Dumala food imagery, shows a large featured card while idle, and a compact cross-sell card beside an active order without appearing during payment or thank-you states. The local production route is live at `http://127.0.0.1:3000/display?pair=localDemoAd2026` for review.
+
+- **2026-08-11 — P5 hosted Realtime transport smoke:** Two independent Supabase clients connected to the same temporary display pairing channel with BroadcastChannel disabled; a payment snapshot including ₱405.00 change was received by the display link. No hosted rows were written. Physical second-screen/WebRTC validation remains pending.
+
+- **2026-08-11 — Hosted P8 ledger reconciliation preflight:** Read-only Main Branch inspection for Singapore business date `2026-08-11` found 2 completed sale candidates, 0 reversal rows, 0 linked reversals, 7 item lines, raw gross sales `₱1,070.00`, raw net sales `₱1,070.00`, and order-item line totals `₱1,070.00`. The raw ledger is balanced; authenticated `/admin/reports` UI confirmation remains the final P8 check.
+
+- **2026-08-11 — P5 local transport QA:** The production `/display` route returned HTTP 200 for both unpaired and valid pairing URLs. The Node BroadcastChannel smoke passed token/state validation, late-join snapshot delivery, and a safe publisher push after the display disconnected. The in-app browser runtime was unavailable in this session, so hosted Realtime/WebRTC and physical second-screen validation remain pending.
+
+- **2026-08-11 — P5 customer display first slice (working tree):** Added the public `/display` billboard route with idle, active-cart, payment/change, thank-you, and pairing states; a serializable `DisplayState` contract; fire-and-forget `BroadcastChannel`, Supabase Realtime, and LAN WebRTC transports; POS pairing-link settings backed by `devices.paired_display_id`; and passive cart/payment/thank-you snapshots from the sell screen. `npm run typecheck`, `npm run lint`, `npm run build`, and `git diff --check` pass. Live two-screen pairing and hardware/offline-disconnect QA remain pending.
 
 - **2026-08-09 — Hosted shift-label collision fixed:** Added `supabase/migrations/0035_fix_shift_sequence_rls.sql`. `open_shift` now keeps the caller restricted to their assigned branch while allocating the label as a security-definer, advisory-locked branch-wide sequence using the highest existing suffix. The linked migration ledger reports `0035` applied. `scripts/shift-sequence-smoke.sql` passed with two cashier identities receiving `SH-260809-001` and `SH-260809-002`, cross-branch opening rejected, and all smoke data rolled back; the existing hosted QA collision remains historical, and the next Main Branch label evaluates to `SH-260809-003`. `npm run typecheck`, `npm run lint`, and `npm run build` pass. Local Docker was unavailable, so the SQL smoke test ran against the hosted project.
 
@@ -53,9 +69,11 @@ This section is the current source of truth for delivered work and the next gate
 
 ### Immediate next task
 
-1. Use an actual hosted sales day, then reconcile `/admin/reports` against the raw order ledger and sign off the report totals. The linked project currently contains only rollback/QA data, so this gate is not complete yet.
-2. Keep the separate P3 hardware gate moving: put the real LAN printer on the same network, confirm its reachable IP, and observe a physical receipt including the X/Z reading slips.
-3. After the current cashier session is signed out, deactivate the disposable `EMP-0003` QA employee and confirm the hosted Employees directory returns to its pre-test active count.
+1. Apply `supabase/migrations/0042_display_promotions.sql` to the target local/hosted Supabase project, verify the table, grants, and RLS policies, then use the authenticated Admin → POS → Customer Display editor to create one real card.
+- Then run the P5 live two-screen pass: pair `/display` from POS, verify the saved promotion/preferences plus add/remove/weight/discount/payment/change/thank-you transitions, then disconnect the display and confirm the sale still completes normally.
+2. Open the authenticated `/admin/reports` view for 2026-08-11 and confirm the balanced totals against the read-only ledger preflight: 2 orders and ₱1,070.00 gross/net sales.
+3. Keep the separate P3 hardware gate moving: put the real LAN printer on the same network, confirm its reachable IP, and observe a physical receipt including the X/Z reading slips.
+4. After the current cashier session is signed out, deactivate the disposable `EMP-0003` QA employee and confirm the hosted Employees directory returns to its pre-test active count.
 
 ---
 
@@ -68,7 +86,7 @@ This section is the current source of truth for delivered work and the next gate
 | **P2** | Offline layer | ✅ Done | 7 / 7 | — |
 | **P3** | Printing | 🟡 In progress | 6 / 7 | **Physical LAN printer validation pending (PRD §6.4)** |
 | **P4** | Multi-branch | ✅ Done | 8 / 8 | Schema from P0 |
-| **P5** | Customer display | ⬜ Not started | 0 / 6 | Needs P1 cart events |
+| **P5** | Customer display | 🟡 In progress | 6 / 6 | Live two-screen and physical display QA |
 | **P6** | Backoffice | ✅ Done | 9 / 9; hosted Employee ID login, forced password change, cashier landing, and audit verification passed 2026-08-09 | Maintain regression coverage |
 | **P7** | Inventory | ✅ Done | 6 / 6 | Maintain regression coverage |
 | **P8** | Shifts & reports | 🟡 In progress | Shifts, X/Z readings, sales reports, inventory reporting, and hosted RPC till QA implemented | Reconcile against a real hosted day's data |
@@ -155,12 +173,12 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 ## P5 — Customer-Facing Display
 *Goal: passive second screen mirrors the live order; never blocks the sale.*
 
-- [ ] `/display` route: idle (branding) · active (order) · payment (change due, big type) · thank-you states.
-- [ ] `DisplayLink` interface; implement **LAN/WebRTC** (offline-capable) as primary transport.
-- [ ] Realtime fallback (online) + same-origin `BroadcastChannel` (single-device monitor) paths.
-- [ ] Pairing: display ↔ a POS tablet (store in `devices.paired_display_id`).
-- [ ] Push cart events from POS (add/remove line, total, tendered, change, complete) fire-and-forget.
-- [ ] Per-branch branding on idle screen; verify sale is unaffected when display is off/disconnected.
+- [x] `/display` route: idle (branding) · active (order) · payment (change due, big type) · thank-you states. *(Implemented in `src/app/display/page.tsx` and `src/components/display/CustomerDisplayScreen.tsx`; live screen QA pending.)*
+- [x] `DisplayLink` interface; implement **LAN/WebRTC** (offline-capable) as primary transport. *(Implemented in `src/lib/display.ts` with host-candidate WebRTC signaling over the fallback channel.)*
+- [x] Realtime fallback (online) + same-origin `BroadcastChannel` (single-device monitor) paths. *(Implemented in `src/lib/display.ts`.)*
+- [x] Pairing: display ↔ a POS tablet (store in `devices.paired_display_id`). *(POS Display settings generates, saves, copies, and opens the pairing link.)*
+- [x] Push cart events from POS (add/remove line, total, tendered, change, complete) fire-and-forget. *(Integrated in `src/components/pos/SellScreen.tsx`; display updates never await the sale path.)*
+- [x] Per-branch branding on idle screen; verify sale is unaffected when display is off/disconnected. *(Branding is implemented; local route/transport smoke confirmed passive publisher pushes remain safe after display disconnects. Live device QA remains.)*
 
 ## P6 — Admin Backoffice
 *Goal: enough tooling to run the business from a phone.*
