@@ -1,11 +1,29 @@
 .display {
   --display-bg: #f8f3eb;
   --display-surface: rgba(255, 253, 248, 0.88);
+  --display-surface-panel: #f2eadf;
+  --display-surface-raised: #fffdf8;
   --display-ink: #102d21;
+  --display-heading: #173a2b;
   --display-muted: #667269;
+  --display-subtle: #8d9890;
   --display-primary: #173a2b;
+  --display-topbar-text: #fffaf1;
   --display-accent: #bc9657;
+  --display-accent-soft: rgba(188, 150, 87, 0.17);
+  --display-border: rgba(23, 58, 43, 0.13);
+  --display-border-strong: rgba(23, 58, 43, 0.25);
   --display-success: #4e7f57;
+  --display-radius: 1.5rem;
+  --display-shadow: 0 1.25rem 3.5rem rgba(23, 58, 43, 0.1);
+  --display-shadow-pop: 0 1.8rem 5rem rgba(23, 58, 43, 0.17);
+  --display-font: Inter, ui-sans-serif, system-ui, sans-serif;
+  --display-weight: 650;
+  --display-letter-spacing: 0;
+  --display-pattern: radial-gradient(circle at 12% 10%, rgba(188, 150, 87, 0.16), transparent 28%), radial-gradient(circle at 90% 86%, rgba(23, 58, 43, 0.1), transparent 30%);
+  --display-panel-gradient: linear-gradient(145deg, rgba(255, 253, 248, 0.98), rgba(242, 234, 223, 0.96));
+  --display-card-gradient: linear-gradient(180deg, #fffdf8 0%, #f7f0e7 100%);
+  --display-control-gradient: linear-gradient(180deg, #fffdf8 0%, #f0e5d7 100%);
   position: relative;
   display: grid;
   min-height: 100svh;
@@ -14,10 +32,34 @@
   padding: clamp(1.25rem, 4vw, 4.5rem);
   color: var(--display-ink);
   background:
-    radial-gradient(circle at 12% 10%, rgba(188, 150, 87, 0.16), transparent 28%),
-    radial-gradient(circle at 90% 86%, rgba(23, 58, 43, 0.1), transparent 30%),
+    var(--display-pattern),
+    repeating-radial-gradient(circle at 14% 18%, rgba(255, 255, 255, 0.14) 0 0.7px, transparent 0.7px 4px),
+    repeating-linear-gradient(116deg, rgba(0, 0, 0, 0.025) 0 1px, transparent 1px 8px),
     var(--display-bg);
+  font-family: var(--display-font);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-letter-spacing);
   font-variant-numeric: tabular-nums;
+}
+
+/* Sunset, Bold, Dark, and Ledger keep their backgrounds intentionally quiet; their
+   repeated tile patterns compete with product imagery and the standby message. */
+.display[data-display-theme="sunset"],
+.display[data-display-theme="bold"],
+.display[data-display-theme="dark"],
+.display[data-display-theme="ledger"] {
+  background: var(--display-bg);
+}
+
+.display[data-display-theme="sunset"]::before,
+.display[data-display-theme="sunset"]::after,
+.display[data-display-theme="bold"]::before,
+.display[data-display-theme="bold"]::after,
+.display[data-display-theme="dark"]::before,
+.display[data-display-theme="dark"]::after,
+.display[data-display-theme="ledger"]::before,
+.display[data-display-theme="ledger"]::after {
+  display: none;
 }
 
 .display::before,
@@ -25,10 +67,11 @@
   position: absolute;
   width: min(28rem, 42vw);
   height: min(28rem, 42vw);
-  border: 1px solid rgba(23, 58, 43, 0.08);
+  border: 1px solid var(--display-border);
   border-radius: 50%;
   content: "";
   pointer-events: none;
+  opacity: 0.45;
 }
 
 .display::before {
@@ -39,7 +82,8 @@
 .display::after {
   right: -16rem;
   bottom: -18rem;
-  border-color: rgba(188, 150, 87, 0.14);
+  border-color: var(--display-accent);
+  opacity: 0.35;
 }
 
 .shell {
@@ -75,19 +119,18 @@
   flex: 0 0 auto;
   place-items: center;
   overflow: hidden;
-  border: 1px solid rgba(23, 58, 43, 0.14);
-  border-radius: 1.25rem;
+  border: 1px solid var(--display-border);
+  border-radius: var(--display-radius);
   color: var(--display-primary);
-  background: var(--display-surface);
-  box-shadow: 0 0.9rem 2.5rem rgba(23, 58, 43, 0.08);
+  background: var(--display-surface-raised);
+  box-shadow: var(--display-shadow);
 }
 
 .brandCopy {
   min-width: 0;
 }
 
-.brandCopy strong,
-.brandCopy span {
+.brandCopy strong {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -95,34 +138,59 @@
 }
 
 .brandCopy strong {
-  color: var(--display-primary);
-  font-family: Georgia, "Times New Roman", serif;
+  color: var(--display-heading);
+  font-family: var(--display-font);
   font-size: clamp(1.15rem, 2.6vw, 2rem);
   letter-spacing: -0.03em;
   line-height: 1.05;
 }
 
-.brandCopy span {
-  margin-top: 0.28rem;
-  color: var(--display-muted);
-  font-size: clamp(0.62rem, 1.1vw, 0.8rem);
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+.productMarquee {
+  position: relative;
+  min-width: 0;
+  max-width: 58rem;
+  margin-left: auto;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
 }
 
-.status {
-  color: var(--display-muted);
-  font-size: clamp(0.62rem, 1vw, 0.78rem);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  text-align: right;
+.productMarqueeTrack {
+  display: flex;
+  width: max-content;
+  align-items: center;
+  gap: clamp(1rem, 2.4vw, 2rem);
+  padding: 0.2rem 1.5rem;
+  animation: productMarquee 34s linear infinite;
 }
 
-.status[data-status="disconnected"],
-.status[data-status="connecting"] {
-  color: var(--display-accent);
+.productMarqueeItem {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--display-muted);
+  font-size: clamp(0.58rem, 0.8vw, 0.72rem);
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.productMarqueeImage {
+  position: relative;
+  display: block;
+  width: clamp(2rem, 3vw, 2.35rem);
+  flex: 0 0 auto;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid var(--display-border);
+  border-radius: 50%;
+  background: var(--display-surface-panel);
+  box-shadow: var(--display-shadow);
+}
+
+.productMarqueeImageAsset {
+  object-fit: cover;
 }
 
 .idle {
@@ -139,17 +207,17 @@
   aspect-ratio: 1;
   place-items: center;
   overflow: hidden;
-  border: 1px solid rgba(23, 58, 43, 0.12);
-  border-radius: 2.7rem;
+  border: 1px solid var(--display-border);
+  border-radius: calc(var(--display-radius) * 1.4);
   color: var(--display-primary);
-  background: var(--display-surface);
-  box-shadow: 0 1.7rem 4rem rgba(23, 58, 43, 0.1);
+  background: var(--display-surface-raised);
+  box-shadow: var(--display-shadow-pop);
 }
 
 .idleTitle {
   max-width: 16ch;
-  color: var(--display-primary);
-  font-family: Georgia, "Times New Roman", serif;
+  color: var(--display-heading);
+  font-family: var(--display-font);
   font-size: clamp(2.7rem, 8vw, 7.2rem);
   font-weight: 700;
   letter-spacing: -0.055em;
@@ -176,10 +244,10 @@
   display: grid;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid rgba(23, 58, 43, 0.13);
-  border-radius: clamp(1.25rem, 2.5vw, 2rem);
-  background: rgba(255, 253, 248, 0.9);
-  box-shadow: 0 1.25rem 3.5rem rgba(23, 58, 43, 0.1);
+  border: 1px solid var(--display-border);
+  border-radius: var(--display-radius);
+  background: var(--display-card-gradient);
+  box-shadow: var(--display-shadow);
   grid-template-columns: minmax(8rem, 0.85fr) minmax(0, 1.15fr);
 }
 
@@ -187,7 +255,7 @@
   position: relative;
   min-height: 15rem;
   overflow: hidden;
-  background: #eadfce;
+  background: var(--display-surface-panel);
 }
 
 .promoImageAsset {
@@ -219,8 +287,8 @@
 .promoTitle {
   max-width: 14ch;
   margin: 0.6rem 0 0;
-  color: var(--display-primary);
-  font-family: Georgia, "Times New Roman", serif;
+  color: var(--display-heading);
+  font-family: var(--display-font);
   font-size: clamp(1.45rem, 3vw, 2.8rem);
   letter-spacing: -0.045em;
   line-height: 0.98;
@@ -240,37 +308,68 @@
   margin-top: 1rem;
   padding: 0.45rem 0.7rem;
   border-radius: 999px;
-  color: var(--display-primary);
-  background: rgba(188, 150, 87, 0.17);
+  color: var(--display-heading);
+  background: var(--display-accent-soft);
+  border-radius: var(--display-radius);
   font-size: clamp(0.66rem, 1vw, 0.8rem);
   font-weight: 800;
 }
 
+.promoGrid {
+  display: grid;
+  min-width: 0;
+  gap: clamp(0.65rem, 1.4vw, 1rem);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .promoCardCompact {
-  grid-template-columns: 7rem minmax(0, 1fr);
+  display: flex;
+  min-height: clamp(13rem, 17vw, 16rem);
+  flex-direction: column;
+  border-radius: clamp(1rem, 1.8vw, 1.5rem);
 }
 
 .promoCardCompact .promoImage {
-  min-height: 9rem;
+  height: clamp(7rem, 10vw, 9.5rem);
+  min-height: 0;
+  flex: 0 0 auto;
+}
+
+.promoCardCompact .promoImageAsset {
+  object-position: center 45%;
 }
 
 .promoCardCompact .promoBody {
-  padding: 1rem 1.1rem;
+  flex: 1 1 auto;
+  justify-content: flex-start;
+  padding: clamp(0.75rem, 1.3vw, 1rem) clamp(0.8rem, 1.5vw, 1.15rem) 0.95rem;
 }
 
 .promoCardCompact .promoTitle {
+  display: -webkit-box;
+  max-width: 20ch;
   margin-top: 0.35rem;
-  font-size: clamp(1.1rem, 1.8vw, 1.55rem);
+  overflow: hidden;
+  font-size: clamp(1rem, 1.45vw, 1.45rem);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .promoCardCompact .promoDetail {
-  display: none;
+  display: -webkit-box;
+  max-width: 42ch;
+  margin-top: 0.45rem;
+  overflow: hidden;
+  font-size: clamp(0.68rem, 0.85vw, 0.8rem);
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .promoCardCompact .promoTag {
   margin-top: 0.65rem;
-  padding: 0.32rem 0.55rem;
-  font-size: 0.64rem;
+  padding: 0.28rem 0.45rem;
+  font-size: 0.58rem;
 }
 
 .activeLayout {
@@ -288,10 +387,40 @@
 
 .orderCard,
 .totalCard {
-  border: 1px solid rgba(23, 58, 43, 0.12);
-  border-radius: clamp(1.25rem, 2.5vw, 2rem);
-  background: var(--display-surface);
-  box-shadow: 0 1.25rem 3.5rem rgba(23, 58, 43, 0.08);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid var(--display-border);
+  border-radius: var(--display-radius);
+  background: var(--display-card-gradient);
+  box-shadow: var(--display-shadow);
+}
+
+.orderCard::before,
+.totalCard::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  background-image:
+    repeating-radial-gradient(circle at 12% 22%, rgba(255, 255, 255, 0.18) 0 0.8px, transparent 0.8px 4px),
+    repeating-linear-gradient(112deg, rgba(0, 0, 0, 0.035) 0 1px, transparent 1px 7px);
+  opacity: 0.12;
+  mix-blend-mode: soft-light;
+}
+
+.totalCard::before {
+  background-image:
+    repeating-radial-gradient(circle at 18% 24%, rgba(255, 250, 235, 0.2) 0 0.8px, transparent 0.8px 4px),
+    repeating-linear-gradient(108deg, rgba(255, 255, 255, 0.07) 0 1px, transparent 1px 7px);
+  opacity: 0.22;
+}
+
+.orderCard > *,
+.totalCard > * {
+  position: relative;
+  z-index: 1;
 }
 
 .orderCard {
@@ -305,12 +434,12 @@
   justify-content: space-between;
   gap: 1rem;
   padding-bottom: 1rem;
-  border-bottom: 1px solid rgba(23, 58, 43, 0.1);
+  border-bottom: 1px solid var(--display-border);
 }
 
 .orderHeading h1 {
   margin: 0;
-  color: var(--display-primary);
+  color: var(--display-heading);
   font-size: clamp(1.25rem, 2.5vw, 2.25rem);
   font-weight: 800;
   letter-spacing: -0.04em;
@@ -356,7 +485,7 @@
 }
 
 .lineTotal {
-  color: var(--display-primary);
+  color: var(--display-heading);
   font-size: clamp(1rem, 2vw, 1.5rem);
   font-weight: 800;
   white-space: nowrap;
@@ -366,7 +495,7 @@
   display: grid;
   gap: 0.35rem;
   padding-top: 1rem;
-  border-top: 1px solid rgba(23, 58, 43, 0.1);
+  border-top: 1px solid var(--display-border);
   color: var(--display-muted);
   font-size: clamp(0.8rem, 1.25vw, 1rem);
   font-weight: 700;
@@ -390,11 +519,13 @@
   padding: clamp(1.25rem, 4vw, 3.5rem);
   text-align: center;
   background: var(--display-primary);
+  border-color: var(--display-border-strong);
 }
 
 .totalLabel,
 .paymentLabel {
-  color: rgba(255, 250, 241, 0.7);
+  color: var(--display-topbar-text);
+  opacity: 0.72;
   font-size: clamp(0.75rem, 1.5vw, 1.1rem);
   font-weight: 800;
   letter-spacing: 0.16em;
@@ -403,7 +534,7 @@
 
 .totalValue {
   margin-top: 0.65rem;
-  color: #fffaf1;
+  color: var(--display-topbar-text);
   font-size: clamp(3.5rem, 9vw, 8rem);
   font-weight: 800;
   letter-spacing: -0.075em;
@@ -412,24 +543,69 @@
 
 .totalHint {
   margin-top: 1.25rem;
-  color: rgba(255, 250, 241, 0.74);
+  color: var(--display-topbar-text);
+  opacity: 0.78;
   font-size: clamp(0.8rem, 1.5vw, 1.1rem);
   font-weight: 600;
 }
 
 .payment {
+  position: relative;
   display: grid;
-  justify-items: center;
-  gap: clamp(1rem, 3vw, 2rem);
-  padding: clamp(1rem, 5vw, 4rem);
-  border-radius: clamp(1.25rem, 3vw, 2.5rem);
-  text-align: center;
-  background: var(--display-primary);
-  box-shadow: 0 1.8rem 5rem rgba(23, 58, 43, 0.17);
+  width: min(78rem, 100%);
+  margin: 0 auto;
+  isolation: isolate;
+  align-items: center;
+  column-gap: clamp(1.5rem, 4vw, 4rem);
+  row-gap: clamp(0.75rem, 1.5vw, 1.15rem);
+  grid-template-areas:
+    "label change-label"
+    "total change"
+    "hint hint";
+  grid-template-columns: minmax(0, 1.18fr) minmax(15rem, 0.82fr);
+  padding: clamp(1.35rem, 4vw, 3rem);
+  overflow: hidden;
+  border: 1px solid var(--display-border);
+  border-radius: var(--display-radius);
+  text-align: left;
+  background: var(--display-panel-gradient);
+  box-shadow: var(--display-shadow-pop);
+}
+
+.payment::before {
+  display: none;
+}
+
+.payment::after {
+  position: absolute;
+  z-index: 0;
+  top: 1rem;
+  right: 1rem;
+  bottom: 1rem;
+  left: 58%;
+  content: "";
+  border-radius: var(--display-radius);
+  background: linear-gradient(145deg, var(--display-primary), color-mix(in srgb, var(--display-primary) 86%, var(--display-accent)));
+  box-shadow: inset 4px 0 0 var(--display-accent), inset 0 0 0 1px var(--display-border-strong);
+  opacity: 0.98;
+}
+
+.payment > * {
+  position: relative;
+  z-index: 1;
+}
+
+.paymentLabel {
+  grid-area: label;
+  justify-self: start;
+  color: var(--display-accent);
+  opacity: 1;
 }
 
 .paymentTotal {
-  color: #fffaf1;
+  grid-area: total;
+  justify-self: start;
+  color: var(--display-heading);
   font-size: clamp(3.25rem, 9vw, 8rem);
   font-weight: 800;
   letter-spacing: -0.075em;
@@ -437,7 +613,10 @@
 }
 
 .paymentChangeLabel {
-  color: rgba(255, 250, 241, 0.76);
+  grid-area: change-label;
+  justify-self: center;
+  color: var(--display-topbar-text);
+  opacity: 0.78;
   font-size: clamp(0.85rem, 1.7vw, 1.2rem);
   font-weight: 800;
   letter-spacing: 0.16em;
@@ -445,7 +624,9 @@
 }
 
 .paymentChange {
-  color: #dbeed8;
+  grid-area: change;
+  justify-self: center;
+  color: var(--display-topbar-text);
   font-size: clamp(3.5rem, 10vw, 9rem);
   font-weight: 800;
   letter-spacing: -0.08em;
@@ -453,7 +634,10 @@
 }
 
 .paymentHint {
-  color: rgba(255, 250, 241, 0.76);
+  grid-area: hint;
+  justify-self: start;
+  color: var(--display-muted);
+  opacity: 1;
   font-size: clamp(0.82rem, 1.5vw, 1.1rem);
   font-weight: 600;
 }
@@ -472,17 +656,17 @@
   aspect-ratio: 1;
   place-items: center;
   border-radius: 50%;
-  color: #fffaf1;
-  background: var(--display-success);
+  color: var(--display-topbar-text);
+  background: var(--display-accent);
   font-size: clamp(2rem, 5vw, 4rem);
   font-weight: 800;
-  box-shadow: 0 1.2rem 3.5rem rgba(78, 127, 87, 0.22);
+  box-shadow: var(--display-shadow-pop);
 }
 
 .thankyou h1 {
   margin: 0;
-  color: var(--display-primary);
-  font-family: Georgia, "Times New Roman", serif;
+  color: var(--display-heading);
+  font-family: var(--display-font);
   font-size: clamp(3rem, 9vw, 8rem);
   letter-spacing: -0.06em;
   line-height: 0.92;
@@ -495,20 +679,28 @@
   font-weight: 700;
 }
 
+.thankyou > p:not(.thankyouMessage) {
+  display: none;
+}
+
+.thankyouMessage {
+  max-width: 42ch;
+}
+
 .pairing {
   width: min(38rem, 100%);
   padding: clamp(1.5rem, 5vw, 3.5rem);
-  border: 1px solid rgba(23, 58, 43, 0.12);
-  border-radius: 2rem;
+  border: 1px solid var(--display-border);
+  border-radius: var(--display-radius);
   text-align: center;
-  background: var(--display-surface);
-  box-shadow: 0 1.25rem 3.5rem rgba(23, 58, 43, 0.08);
+  background: var(--display-panel-gradient);
+  box-shadow: var(--display-shadow);
 }
 
 .pairing h1 {
   margin: 1.25rem 0 0;
-  color: var(--display-primary);
-  font-family: Georgia, "Times New Roman", serif;
+  color: var(--display-heading);
+  font-family: var(--display-font);
   font-size: clamp(2rem, 5vw, 3.8rem);
   letter-spacing: -0.055em;
 }
@@ -527,8 +719,8 @@
   aspect-ratio: 1;
   margin: 0 auto;
   place-items: center;
-  border-radius: 1.5rem;
-  color: #fffaf1;
+  border-radius: var(--display-radius);
+  color: var(--display-topbar-text);
   background: var(--display-primary);
 }
 
@@ -539,6 +731,13 @@
 
   .brandBar {
     align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .productMarquee {
+    flex: 1 1 100%;
+    max-width: none;
+    margin: 0;
   }
 
   .activeLayout {
@@ -559,6 +758,54 @@
 
   .totalStack {
     grid-template-rows: auto auto;
+  }
+
+  .payment {
+    column-gap: 0;
+    grid-template-areas:
+      "label"
+      "total"
+      "change-label"
+      "change"
+      "hint";
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+
+  .payment::after {
+    top: 52%;
+    right: 1rem;
+    bottom: 1rem;
+    left: 1rem;
+  }
+
+  .paymentLabel,
+  .paymentTotal,
+  .paymentChangeLabel,
+  .paymentChange,
+  .paymentHint {
+    justify-self: center;
+  }
+
+  .paymentHint {
+    color: var(--display-topbar-text);
+    opacity: 0.78;
+  }
+}
+
+@media (max-width: 540px) {
+  .promoGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@keyframes productMarquee {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
   }
 }
 

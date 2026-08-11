@@ -8,6 +8,7 @@ import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/br
 import { readBusinessPresetId } from "@/lib/admin/business";
 import { isProductImageUrl } from "@/lib/product-images";
 import { normalizePaperWidth, toPaperWidthValue } from "@/lib/paper-width";
+import { normalizeDisplayPairingToken } from "@/lib/display";
 import { normalizeDisplayPromotionRecord, normalizeDisplaySettings, type DisplayPromotionRecord } from "@/lib/display-config";
 import PosSettingsScreen, {
   type AdminPosCategory,
@@ -161,7 +162,7 @@ export default async function AdminPosPage({ searchParams }: { searchParams: Pro
   const storeId = store?.id ?? "";
   const deviceScopeId = selectedBranchId ?? (requestedStore ? requestedStore.id : null);
 
-  let devicesQuery = supabase.from("devices").select("id, store_id, name, device_prefix, printer_transport, printer_config, is_active, last_seen_at").eq("org_id", profile.org_id).order("name");
+  let devicesQuery = supabase.from("devices").select("id, store_id, name, device_prefix, printer_transport, printer_config, paired_display_id, is_active, last_seen_at").eq("org_id", profile.org_id).order("name");
   if (deviceScopeId) devicesQuery = devicesQuery.eq("store_id", deviceScopeId);
   const [categoriesResult, productsResult, devicesResult, displayPromotionsResult] = storeId
     ? await Promise.all([
@@ -189,6 +190,10 @@ export default async function AdminPosPage({ searchParams }: { searchParams: Pro
     stock_quantity: stockByProductId.get(product.id) ?? null,
   })) as AdminPosProduct[];
   const devices = (devicesResult.data ?? []) as AdminPosDevice[];
+  const displayPairingToken = normalizeDisplayPairingToken(
+    devices.find((device) => device.store_id === storeId && device.is_active)?.paired_display_id ??
+      devices.find((device) => device.store_id === storeId)?.paired_display_id,
+  );
   const displayPromotions = (displayPromotionsResult.data ?? [])
     .map(normalizeDisplayPromotionRecord)
     .filter((promotion): promotion is DisplayPromotionRecord => Boolean(promotion));
@@ -222,6 +227,7 @@ export default async function AdminPosPage({ searchParams }: { searchParams: Pro
       products={products}
       categories={categories}
       devices={devices}
+      displayPairingToken={displayPairingToken}
       displayPromotions={displayPromotions}
       displayPromotionsUnavailable={Boolean(displayPromotionsResult.error)}
       initialDisplaySettings={normalizeDisplaySettings(store?.settings?.customer_display)}

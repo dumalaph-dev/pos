@@ -1,25 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Image from "next/image";
 import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { createClient } from "@/lib/supabase/client";
+import { getPosTheme, type PosThemeId } from "@/lib/pos-theme";
 import {
   createDisplayLink,
   isDisplayState,
   normalizeDisplayPairingToken,
   type DisplayCartLine,
-  type DisplayConnectionStatus,
-  type DisplayLinkTransport,
   type DisplaySettings,
   type DisplayState,
 } from "@/lib/display";
-import { DEFAULT_DISPLAY_SETTINGS } from "@/lib/display-config";
+import { DEFAULT_DISPLAY_SETTINGS, resolveDisplayCopy } from "@/lib/display-config";
 import { formatPeso } from "@/lib/money";
 import styles from "./CustomerDisplay.module.css";
 
 const DEFAULT_BRANDING = { storeName: "Dumala", logoUrl: "/logo.png" };
-const DEFAULT_STATE: DisplayState = { kind: "idle", branding: DEFAULT_BRANDING };
+const DEFAULT_STATE: DisplayState = { kind: "idle", branding: DEFAULT_BRANDING, theme: "modern" };
 
 type DisplayPromotion = {
   id: string;
@@ -57,6 +56,15 @@ const DISPLAY_PROMOTIONS = [
   },
 ] satisfies DisplayPromotion[];
 
+const PRODUCT_MARQUEE_PRODUCTS = [
+  { id: "marquee-cafe-latte", title: "Cafe latte", imageUrl: "/food/cafe-latte.png" },
+  { id: "marquee-croissant", title: "Butter croissant", imageUrl: "/food/bakery-croissant.png" },
+  { id: "marquee-lechon-belly", title: "Lechon belly", imageUrl: "/food/lechon-belly-one.png" },
+  { id: "marquee-matcha", title: "Matcha latte", imageUrl: "/food/cafe-matcha-latte.png" },
+  { id: "marquee-lechon-kawali", title: "Lechon kawali", imageUrl: "/food/lechon-kawali.png" },
+  { id: "marquee-blueberry-muffin", title: "Blueberry muffin", imageUrl: "/food/cafe-blueberry-muffin.png" },
+] as const;
+
 function displayPeso(value: number) {
   return formatPeso(Math.max(0, Math.round(value))).replace(/\.00$/, "");
 }
@@ -66,19 +74,70 @@ function lineQuantity(line: DisplayCartLine) {
   return `× ${line.qty}`;
 }
 
-function BrandBar({ state, status, transport }: { state: DisplayState; status: DisplayConnectionStatus; transport: DisplayLinkTransport }) {
+function displayThemeStyle(themeId: PosThemeId) {
+  const theme = getPosTheme(themeId).variables;
+  return {
+    "--display-bg": theme["--pos-theme-bg"],
+    "--display-surface": theme["--pos-theme-surface"],
+    "--display-surface-panel": theme["--pos-theme-surface-panel"],
+    "--display-surface-raised": theme["--pos-theme-surface-raised"],
+    "--display-ink": theme["--pos-theme-text"],
+    "--display-heading": themeId === "dark" ? theme["--pos-theme-text"] : theme["--pos-theme-topbar"],
+    "--display-muted": theme["--pos-theme-text-muted"],
+    "--display-subtle": theme["--pos-theme-text-subtle"],
+    "--display-primary": theme["--pos-theme-topbar"],
+    "--display-topbar-text": theme["--pos-theme-topbar-text"],
+    "--display-accent": theme["--pos-theme-highlight"],
+    "--display-accent-soft": theme["--pos-theme-highlight-soft"],
+    "--display-border": theme["--pos-theme-border"],
+    "--display-border-strong": theme["--pos-theme-border-strong"],
+    "--display-radius": theme["--pos-theme-radius-card"],
+    "--display-shadow": theme["--pos-theme-shadow-card"],
+    "--display-shadow-pop": theme["--pos-theme-shadow-pop"],
+    "--display-font": theme["--pos-theme-font"],
+    "--display-weight": theme["--pos-theme-weight"],
+    "--display-letter-spacing": theme["--pos-theme-letter-spacing"],
+    "--display-pattern": theme["--pos-theme-app-pattern"],
+    "--display-panel-gradient": theme["--pos-theme-panel-gradient"],
+    "--display-card-gradient": theme["--pos-theme-card-gradient"],
+    "--display-control-gradient": theme["--pos-theme-control-gradient"],
+  } as CSSProperties;
+}
+
+function ProductMarquee({ promotions }: { promotions: DisplayPromotion[] }) {
+  const promotionItems = promotions.map(({ id, title, imageUrl }) => ({ id, title, imageUrl }));
+  const marqueeItems = [
+    ...promotionItems,
+    ...PRODUCT_MARQUEE_PRODUCTS.filter((product) => !promotionItems.some((promotion) => promotion.imageUrl === product.imageUrl)),
+  ];
+  const loopItems = [...marqueeItems, ...marqueeItems];
+
+  return (
+    <div className={styles.productMarquee} aria-hidden="true">
+      <div className={styles.productMarqueeTrack}>
+        {loopItems.map((product, index) => (
+          <span key={`${product.id}-${index}`} className={styles.productMarqueeItem}>
+            <span className={styles.productMarqueeImage}>
+              <Image src={product.imageUrl ?? "/food/whole-lechon-small.png"} alt="" fill sizes="2.35rem" className={styles.productMarqueeImageAsset} />
+            </span>
+            <span>{product.title}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BrandBar({ state, promotions }: { state: DisplayState; promotions: DisplayPromotion[] }) {
   return (
     <header className={styles.brandBar}>
       <div className={styles.brand}>
         <AdminBrandLogo logoUrl={state.branding.logoUrl} className={styles.brandMark} iconSize={30} label={`${state.branding.storeName} logo`} />
         <div className={styles.brandCopy}>
           <strong>{state.branding.storeName}</strong>
-          <span>Customer display</span>
         </div>
       </div>
-      <span className={styles.status} data-status={status}>
-        {status === "disconnected" ? "Waiting for POS" : status === "connecting" ? "Connecting" : transport === "webrtc" ? "LAN display" : "Display ready"}
-      </span>
+      <ProductMarquee promotions={promotions} />
     </header>
   );
 }
@@ -87,7 +146,7 @@ function PromotionCard({ promotion, storeName, compact = false }: { promotion: D
   return (
     <aside className={`${styles.promoCard}${compact ? ` ${styles.promoCardCompact}` : ""}`} data-promotion-id={promotion.id} aria-label={`${storeName} featured offer`}>
       <div className={styles.promoImage}>
-        <Image src={promotion.imageUrl ?? "/food/whole-lechon-small.png"} alt="" fill sizes={compact ? "(max-width: 760px) 100vw, 30vw" : "(max-width: 760px) 100vw, 42vw"} className={styles.promoImageAsset} />
+        <Image src={promotion.imageUrl ?? "/food/whole-lechon-small.png"} alt="" fill sizes={compact ? "(max-width: 540px) 100vw, (max-width: 760px) 44vw, 17vw" : "(max-width: 760px) 100vw, 42vw"} className={styles.promoImageAsset} />
       </div>
       <div className={styles.promoBody}>
         <span className={styles.promoEyebrow}>{promotion.eyebrow}</span>
@@ -104,15 +163,15 @@ function IdleState({ state, promotion }: { state: Extract<DisplayState, { kind: 
     <section className={styles.idleLayout} aria-labelledby="display-idle-title">
       <div className={styles.idle}>
         <AdminBrandLogo logoUrl={state.branding.logoUrl} className={styles.idleMark} iconSize={64} label={`${state.branding.storeName} logo`} />
-        <h1 id="display-idle-title" className={styles.idleTitle}>Freshly made for you.</h1>
-        <p className={styles.idleSubtitle}>Salamat for supporting {state.branding.storeName}</p>
+        <h1 id="display-idle-title" className={styles.idleTitle}>{resolveDisplayCopy(state.settings?.idleTitle ?? DEFAULT_DISPLAY_SETTINGS.idleTitle, state.branding.storeName)}</h1>
+        <p className={styles.idleSubtitle}>{resolveDisplayCopy(state.settings?.idleSubtitle ?? DEFAULT_DISPLAY_SETTINGS.idleSubtitle, state.branding.storeName)}</p>
       </div>
       {promotion ? <PromotionCard promotion={promotion} storeName={state.branding.storeName} /> : null}
     </section>
   );
 }
 
-function ActiveState({ state, promotion, settings }: { state: Extract<DisplayState, { kind: "active" }>; promotion: DisplayPromotion | null; settings: DisplaySettings }) {
+function ActiveState({ state, promotions, settings }: { state: Extract<DisplayState, { kind: "active" }>; promotions: DisplayPromotion[]; settings: DisplaySettings }) {
   return (
     <section className={styles.activeLayout} aria-labelledby="display-order-title">
       <div className={styles.orderCard}>
@@ -140,7 +199,11 @@ function ActiveState({ state, promotion, settings }: { state: Extract<DisplaySta
           <strong className={styles.totalValue}>{displayPeso(state.total)}</strong>
           <span className={styles.totalHint}>Please review your order before paying.</span>
         </div>
-        {promotion ? <PromotionCard promotion={promotion} storeName={state.branding.storeName} compact /> : null}
+        {promotions.length > 0 ? (
+          <div className={styles.promoGrid} aria-label="Featured promotions">
+            {promotions.map((promotion) => <PromotionCard key={promotion.id} promotion={promotion} storeName={state.branding.storeName} compact />)}
+          </div>
+        ) : null}
       </div>
     </section>
   );
@@ -163,7 +226,8 @@ function ThankYouState({ state, settings }: { state: Extract<DisplayState, { kin
   return (
     <section className={styles.thankyou} aria-labelledby="display-thankyou-title">
       <span className={styles.thankyouMark} aria-hidden="true">✓</span>
-      <h1 id="display-thankyou-title">Salamat po!</h1>
+      <h1 id="display-thankyou-title">{resolveDisplayCopy(settings.completedOrderTitle, state.branding.storeName)}</h1>
+      <p className={styles.thankyouMessage}>{settings.showOrderNumber ? `Order ${state.orderNo} / ` : ""}{resolveDisplayCopy(settings.completedOrderMessage, state.branding.storeName)}</p>
       <p>{settings.showOrderNumber ? `Order ${state.orderNo} · ` : ""}Your order is being prepared.</p>
     </section>
   );
@@ -183,14 +247,22 @@ export default function CustomerDisplayScreen({ pairingToken }: { pairingToken: 
   const supabase = useMemo(() => createClient(), []);
   const token = normalizeDisplayPairingToken(pairingToken);
   const [state, setState] = useState<DisplayState>(DEFAULT_STATE);
-  const [status, setStatus] = useState<DisplayConnectionStatus>(token ? "connecting" : "disconnected");
-  const [transport, setTransport] = useState<DisplayLinkTransport>("broadcast");
   const [promotionIndex, setPromotionIndex] = useState(0);
   const settings = state.settings ?? DEFAULT_DISPLAY_SETTINGS;
-  const promotions = state.promotions ?? DISPLAY_PROMOTIONS;
-  const promotion = settings.showPromotions && promotions.length > 0
-    ? promotions[promotionIndex % promotions.length]
-    : null;
+  const promotions = state.promotions?.length ? state.promotions : DISPLAY_PROMOTIONS;
+  const promotionPool = useMemo(() => {
+    if (promotions.length >= 2) return promotions;
+    return [
+      ...promotions,
+      ...DISPLAY_PROMOTIONS.filter((fallback) => !promotions.some((promotion) => promotion.id === fallback.id)),
+    ];
+  }, [promotions]);
+  const displayPromotions = settings.showPromotions && promotionPool.length > 0
+    ? Array.from({ length: Math.min(2, promotionPool.length) }, (_, offset) => promotionPool[(promotionIndex + offset) % promotionPool.length])
+    : [];
+  const promotion = displayPromotions[0] ?? null;
+  const themeId = state.theme ?? "modern";
+  const themeStyle = useMemo(() => displayThemeStyle(themeId), [themeId]);
 
   useEffect(() => {
     if (!token) return;
@@ -198,41 +270,36 @@ export default function CustomerDisplayScreen({ pairingToken }: { pairingToken: 
     const unsubscribeState = link.subscribe((nextState) => {
       if (isDisplayState(nextState)) setState(nextState);
     });
-    const unsubscribeStatus = link.onStatus((nextStatus) => {
-      setStatus(nextStatus);
-      setTransport(link.transport);
-    });
     return () => {
       unsubscribeState();
-      unsubscribeStatus();
       void link.disconnect();
     };
   }, [supabase, token]);
 
   useEffect(() => {
-    if (!settings.showPromotions || promotions.length < 2 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (!settings.showPromotions || promotionPool.length < 2 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const timer = window.setInterval(() => {
-      setPromotionIndex((current) => (current + 1) % promotions.length);
+      setPromotionIndex((current) => (current + 1) % promotionPool.length);
     }, settings.rotationSeconds * 1000);
     return () => window.clearInterval(timer);
-  }, [promotions.length, settings.rotationSeconds, settings.showPromotions]);
+  }, [promotionPool.length, settings.rotationSeconds, settings.showPromotions]);
 
   useEffect(() => {
     if (state.kind !== "thankyou") return;
-    const timer = window.setTimeout(() => setState((current) => current.kind === "thankyou" ? { kind: "idle", branding: current.branding, promotions: current.promotions, settings: current.settings } : current), 5000);
+    const timer = window.setTimeout(() => setState((current) => current.kind === "thankyou" ? { kind: "idle", branding: current.branding, promotions: current.promotions, settings: current.settings, theme: current.theme } : current), 5000);
     return () => window.clearTimeout(timer);
   }, [state]);
 
   if (!token) {
-    return <main className={styles.display}><div className={styles.shell}><PairingState /></div></main>;
+    return <main className={styles.display} data-display-theme="modern" style={displayThemeStyle("modern")}><div className={styles.shell}><PairingState /></div></main>;
   }
 
   return (
-    <main className={styles.display} data-display-state={state.kind}>
+    <main className={styles.display} data-display-state={state.kind} data-display-theme={themeId} style={themeStyle}>
       <div className={styles.shell}>
-        <BrandBar state={state} status={status} transport={transport} />
+        <BrandBar state={state} promotions={promotions} />
         {state.kind === "idle" && <IdleState state={state} promotion={promotion} />}
-        {state.kind === "active" && <ActiveState state={state} promotion={promotion} settings={settings} />}
+        {state.kind === "active" && <ActiveState state={state} promotions={displayPromotions} settings={settings} />}
         {state.kind === "payment" && <PaymentState state={state} />}
         {state.kind === "thankyou" && <ThankYouState state={state} settings={settings} />}
       </div>
