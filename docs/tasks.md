@@ -18,7 +18,7 @@ This section is the current source of truth for delivered work and the next gate
 | Offline layer | Complete | Full 15-sale pilot drill |
 | Printing | In progress (6/7) | Physical LAN printer slip validation |
 | Multi-branch | Complete | Production second-branch sign-off |
-| Customer display | Owner-managed content implemented; local migration/RLS and authenticated owner API QA passed; visual click-through blocked by the browser connector; hosted apply/live QA pending | Reconnect the browser runtime, then run two-screen pairing and physical display QA |
+| Customer display | Hosted migration `0042` applied; RLS/grants verified; one real Main Branch promotion is active; paired browser two-screen QA passed for cart, weight, discount, payment/change, thank-you, rotation, and disconnect | Keep the separate physical display/LAN and offline pilot gate moving |
 | Admin backoffice | Complete (9/9 checklist items; hosted Employee ID login and forced-password-change QA passed 2026-08-09) | Maintain regression coverage |
 | Inventory workflow | Complete | Maintain regression coverage |
 | Inventory reporting and exports | Authenticated admin and manager QA passed | Reconciliation against broader live data |
@@ -29,11 +29,13 @@ This section is the current source of truth for delivered work and the next gate
 
 ### Recent delivery log
 
+- **2026-08-11 - Hosted customer-display migration and paired QA:** Applied `0041` and `0042` to the target Supabase project; the linked migration ledger now matches local through `0042`. `public.display_promotions` exists with RLS enabled. `display_promotions_admin_all` is `ALL` and org-scoped through `auth_is_admin()`/`auth_org_id()`; `display_promotions_branch_read` is branch-scoped through `auth_store_id()`. Effective table privileges match the migration: `authenticated` has SELECT/INSERT/UPDATE/DELETE, `service_role` has all four, and `anon` has none. In authenticated Admin -> POS -> Customer Display, created the real active Main Branch card `Complete your lechon feast` using the lechon meal combo image; the temporary second card used for rotation was archived afterward. Paired POS and customer-display browser tabs showed the same live cart, 1.35 kg weight line, 5% discount, payment/change, and thank-you state. At the configured 7-second rotation, `Complete your lechon feast` changed to `Make it a little sweeter`. The first completed cash sale was order `MB-DC3992CC8-260811-0001`: subtotal PHP 1,297.50, discount PHP 64.88, total PHP 1,232.62, PHP 1,500 tendered, PHP 267.38 change; the display showed the order number and returned to idle promotions after thank-you. After navigating the display to its unpaired screen, the POS completed exact-cash Espresso order `MB-DC3992CC8-260811-0002` for PHP 120.00 without blocking. Both orders are `completed` in the hosted ledger. The temporary per-kg product `QA Weight Item 20260811` was archived/hidden from POS after the weight pass.
+
 - **2026-08-11 - Authenticated visual QA attempt:** The local admin fixture successfully created an active Alpha Branch 1 promotion through the authenticated Supabase path and branch isolation returned zero cross-branch rows. The temporary card was deleted after the check. The in-app browser connector failed before page interaction (`failed to write kernel assets`), so the owner UI and cart -> payment -> thank-you visual states remain unverified; no visual pass is claimed.
 
-- **2026-08-11 — Local display migration and owner-flow QA:** Started the local Supabase stack, reset the empty local fixture database, applied `0042_display_promotions.sql`, and verified the table columns, RLS, admin/branch policies, and authenticated grants. The existing RLS fixture passed 18/18 assertions. A local admin promotion create/read/update/archive/cleanup round-trip passed, including branch isolation; the protected `/admin/pos?tab=display` route rendered with the Customer Display editor and no migration warning. Hosted Supabase remains unchanged at migration `0040`.
+- **2026-08-11 — Local display migration and owner-flow QA:** Started the local Supabase stack, reset the empty local fixture database, applied `0042_display_promotions.sql`, and verified the table columns, RLS, admin/branch policies, and authenticated grants. The existing RLS fixture passed 18/18 assertions. A local admin promotion create/read/update/archive/cleanup round-trip passed, including branch isolation; the protected `/admin/pos?tab=display` route rendered with the Customer Display editor and no migration warning. At the time of this local-only check, hosted Supabase was still at migration `0040`; the hosted apply is recorded in the newer entry above.
 
-- **2026-08-11 — Owner-managed customer display content (working tree):** Added branch-scoped `display_promotions` persistence with RLS, an Admin → POS → Customer Display editor for promotion copy/image asset/order/active state, and branch display preferences for promotion visibility, rotation speed, quantities, subtotal, discounts, and order number. The POS now loads the active branch configuration and publishes it through the existing passive display link; offline profile caches retain the configuration when available. Migration `0042_display_promotions.sql` is added locally and still needs to be applied to the target Supabase project. `npm run typecheck`, `npm run lint`, `npm run build`, and `git diff --check` pass.
+- **2026-08-11 — Owner-managed customer display content (working tree):** Added branch-scoped `display_promotions` persistence with RLS, an Admin → POS → Customer Display editor for promotion copy/image asset/order/active state, and branch display preferences for promotion visibility, rotation speed, quantities, subtotal, discounts, and order number. The POS now loads the active branch configuration and publishes it through the existing passive display link; offline profile caches retain the configuration when available. At that point migration `0042_display_promotions.sql` was local-only; the hosted apply is recorded in the newer entry above. `npm run typecheck`, `npm run lint`, `npm run build`, and `git diff --check` pass.
 
 - **2026-08-11 — Customer display promotions (working tree):** Added a passive rotating in-store promotion rail to the customer display. It uses existing Dumala food imagery, shows a large featured card while idle, and a compact cross-sell card beside an active order without appearing during payment or thank-you states. The local production route is live at `http://127.0.0.1:3000/display?pair=localDemoAd2026` for review.
 
@@ -69,11 +71,9 @@ This section is the current source of truth for delivered work and the next gate
 
 ### Immediate next task
 
-1. Apply `supabase/migrations/0042_display_promotions.sql` to the target local/hosted Supabase project, verify the table, grants, and RLS policies, then use the authenticated Admin → POS → Customer Display editor to create one real card.
-- Then run the P5 live two-screen pass: pair `/display` from POS, verify the saved promotion/preferences plus add/remove/weight/discount/payment/change/thank-you transitions, then disconnect the display and confirm the sale still completes normally.
-2. Open the authenticated `/admin/reports` view for 2026-08-11 and confirm the balanced totals against the read-only ledger preflight: 2 orders and ₱1,070.00 gross/net sales.
-3. Keep the separate P3 hardware gate moving: put the real LAN printer on the same network, confirm its reachable IP, and observe a physical receipt including the X/Z reading slips.
-4. After the current cashier session is signed out, deactivate the disposable `EMP-0003` QA employee and confirm the hosted Employees directory returns to its pre-test active count.
+1. Open the authenticated `/admin/reports` view for 2026-08-11 and refresh the reconciliation. The earlier preflight covered 2 orders and PHP 1,070.00 before this P5 QA; the two completed QA orders above are now part of the business-date scope.
+2. Keep the separate P3 hardware gate moving: put the real LAN printer on the same network, confirm its reachable IP, and observe a physical receipt including the X/Z reading slips.
+3. After the current cashier session is signed out, deactivate the disposable `EMP-0003` QA employee and confirm the hosted Employees directory returns to its pre-test active count.
 
 ---
 
@@ -86,7 +86,7 @@ This section is the current source of truth for delivered work and the next gate
 | **P2** | Offline layer | ✅ Done | 7 / 7 | — |
 | **P3** | Printing | 🟡 In progress | 6 / 7 | **Physical LAN printer validation pending (PRD §6.4)** |
 | **P4** | Multi-branch | ✅ Done | 8 / 8 | Schema from P0 |
-| **P5** | Customer display | 🟡 In progress | 6 / 6 | Live two-screen and physical display QA |
+| **P5** | Customer display | ✅ Done | 6 / 6 | Physical display/LAN and offline pilot QA remain separate |
 | **P6** | Backoffice | ✅ Done | 9 / 9; hosted Employee ID login, forced password change, cashier landing, and audit verification passed 2026-08-09 | Maintain regression coverage |
 | **P7** | Inventory | ✅ Done | 6 / 6 | Maintain regression coverage |
 | **P8** | Shifts & reports | 🟡 In progress | Shifts, X/Z readings, sales reports, inventory reporting, and hosted RPC till QA implemented | Reconcile against a real hosted day's data |
@@ -173,12 +173,21 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 ## P5 — Customer-Facing Display
 *Goal: passive second screen mirrors the live order; never blocks the sale.*
 
-- [x] `/display` route: idle (branding) · active (order) · payment (change due, big type) · thank-you states. *(Implemented in `src/app/display/page.tsx` and `src/components/display/CustomerDisplayScreen.tsx`; live screen QA pending.)*
+- [x] `/display` route: idle (branding) · active (order) · payment (change due, big type) · thank-you states. *(Implemented in `src/app/display/page.tsx` and `src/components/display/CustomerDisplayScreen.tsx`; paired hosted browser QA passed 2026-08-11.)*
 - [x] `DisplayLink` interface; implement **LAN/WebRTC** (offline-capable) as primary transport. *(Implemented in `src/lib/display.ts` with host-candidate WebRTC signaling over the fallback channel.)*
 - [x] Realtime fallback (online) + same-origin `BroadcastChannel` (single-device monitor) paths. *(Implemented in `src/lib/display.ts`.)*
 - [x] Pairing: display ↔ a POS tablet (store in `devices.paired_display_id`). *(POS Display settings generates, saves, copies, and opens the pairing link.)*
 - [x] Push cart events from POS (add/remove line, total, tendered, change, complete) fire-and-forget. *(Integrated in `src/components/pos/SellScreen.tsx`; display updates never await the sale path.)*
-- [x] Per-branch branding on idle screen; verify sale is unaffected when display is off/disconnected. *(Branding is implemented; local route/transport smoke confirmed passive publisher pushes remain safe after display disconnects. Live device QA remains.)*
+- [x] Per-branch branding on idle screen; verify sale is unaffected when display is off/disconnected. *(Branding is implemented; hosted paired browser QA confirmed the POS sale completes and resets after the display is navigated to its unpaired state.)*
+
+### P5 validation record — 2026-08-11
+
+- Hosted target: `https://dumala.store`, Main Branch. Migration ledger: local and remote `0001` through `0042` match. The authenticated Admin -> POS -> Customer Display editor created one real active promotion, `Complete your lechon feast`; a second temporary card was used only to prove rotation and was archived afterward.
+- Paired browser two-screen pass: POS-generated pairing link opened on the customer-display tab; both screens showed `Main Branch` and `Display ready`. The promotion rail was visible while idle and during the active cart. With the temporary `QA Weight Item 20260811`, entering `1.35` kg at PHP 850/kg produced PHP 1,147.50. Adding Butter Croissant produced a PHP 1,297.50 subtotal; removing it mirrored correctly on both screens. Applying a custom 5% discount produced PHP 64.88 discount and PHP 1,232.62 total, mirrored on both screens.
+- Payment/change pass: cash payment with PHP 1,500 tendered showed PHP 267.38 change on POS and the display, then completed order `MB-DC3992CC8-260811-0001`. POS reset to a new sale; the display showed `Salamat po!` with the order number and returned to idle promotion view after the thank-you timeout.
+- Promotion rotation pass: with the configured 7-second interval, the visible headline changed from `Complete your lechon feast` to `Make it a little sweeter` while the display remained ready.
+- Disconnect pass: the customer display was navigated to its unpaired screen. POS then completed exact-cash Espresso order `MB-DC3992CC8-260811-0002` for PHP 120.00, reset for a new sale, and did not wait on or block for the disconnected display. The hosted ledger confirms both orders as `completed` with the expected payment/change values.
+- Cleanup: the rotation-only promotion is inactive; `QA Weight Item 20260811` (`QA-WEIGHT-20260811`, `per_kg`, PHP 850/kg, not tracked) is inactive/hidden from POS. The optional offline-PIN prompt remained non-blocking throughout the sale flow.
 
 ## P6 — Admin Backoffice
 *Goal: enough tooling to run the business from a phone.*
