@@ -10,6 +10,10 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   showSubtotal: true,
   showOrderNumber: true,
   rotationSeconds: 7,
+  idleTitle: "Freshly made for you.",
+  idleSubtitle: "Salamat for supporting {branch}.",
+  completedOrderTitle: "Salamat po!",
+  completedOrderMessage: "Your order is being prepared.",
 };
 
 export const DISPLAY_IMAGE_OPTIONS = [
@@ -72,6 +76,11 @@ function readString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function readDisplayCopy(value: unknown, fallback: string, maxLength: number) {
+  const copy = readString(value);
+  return (copy || fallback).slice(0, maxLength);
+}
+
 function safeImageUrl(value: unknown) {
   const imageUrl = readString(value);
   return /^\/[a-z0-9_./-]+$/i.test(imageUrl) ? imageUrl : null;
@@ -86,7 +95,15 @@ export function normalizeDisplaySettings(value: unknown): DisplaySettings {
     showSubtotal: readBoolean(source.showSubtotal, DEFAULT_DISPLAY_SETTINGS.showSubtotal),
     showOrderNumber: readBoolean(source.showOrderNumber, DEFAULT_DISPLAY_SETTINGS.showOrderNumber),
     rotationSeconds: Math.round(readNumber(source.rotationSeconds, DEFAULT_DISPLAY_SETTINGS.rotationSeconds, 3, 60)),
+    idleTitle: readDisplayCopy(source.idleTitle, DEFAULT_DISPLAY_SETTINGS.idleTitle, 100),
+    idleSubtitle: readDisplayCopy(source.idleSubtitle, DEFAULT_DISPLAY_SETTINGS.idleSubtitle, 180),
+    completedOrderTitle: readDisplayCopy(source.completedOrderTitle, DEFAULT_DISPLAY_SETTINGS.completedOrderTitle, 100),
+    completedOrderMessage: readDisplayCopy(source.completedOrderMessage, DEFAULT_DISPLAY_SETTINGS.completedOrderMessage, 180),
   };
+}
+
+export function resolveDisplayCopy(value: string, branchName: string) {
+  return value.replace(/\{branch\}/gi, branchName.trim() || "your branch");
 }
 
 export function normalizeDisplayPromotionRecord(value: unknown): DisplayPromotionRecord | null {

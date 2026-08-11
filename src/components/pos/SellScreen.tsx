@@ -844,8 +844,9 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
   const displaySettings = profile?.display_settings ?? DEFAULT_DISPLAY_SETTINGS;
   const displayPresentation = useMemo(() => ({
     settings: displaySettings,
+    theme: posConfig.uiStyle,
     ...(profile?.display_promotions === undefined ? {} : { promotions: profile.display_promotions }),
-  }), [displaySettings, profile]);
+  }), [displaySettings, posConfig.uiStyle, profile]);
 
   useEffect(() => {
     const link = displayLinkRef.current;

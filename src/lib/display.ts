@@ -1,5 +1,6 @@
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { createClient } from "@/lib/supabase/client";
+import { isPosThemeId, type PosThemeId } from "@/lib/pos-theme";
 
 type BrowserSupabaseClient = ReturnType<typeof createClient>;
 
@@ -29,6 +30,10 @@ export type DisplaySettings = {
   showSubtotal: boolean;
   showOrderNumber: boolean;
   rotationSeconds: number;
+  idleTitle: string;
+  idleSubtitle: string;
+  completedOrderTitle: string;
+  completedOrderMessage: string;
 };
 
 export type DisplayCartLine = {
@@ -45,6 +50,7 @@ export type DisplayState =
       branding: DisplayBranding;
       promotions?: DisplayPromotion[];
       settings?: DisplaySettings;
+      theme?: PosThemeId;
     }
   | {
       kind: "active";
@@ -55,6 +61,7 @@ export type DisplayState =
       total: number;
       promotions?: DisplayPromotion[];
       settings?: DisplaySettings;
+      theme?: PosThemeId;
     }
   | {
       kind: "payment";
@@ -65,6 +72,7 @@ export type DisplayState =
       paymentMethod: string;
       promotions?: DisplayPromotion[];
       settings?: DisplaySettings;
+      theme?: PosThemeId;
     }
   | {
       kind: "thankyou";
@@ -73,6 +81,7 @@ export type DisplayState =
       changeDue: number | null;
       promotions?: DisplayPromotion[];
       settings?: DisplaySettings;
+      theme?: PosThemeId;
     };
 
 type DisplayStateMessage = {
@@ -148,7 +157,11 @@ export function isDisplaySettings(value: unknown): value is DisplaySettings {
     typeof value.showOrderNumber === "boolean" &&
     isFiniteNumber(value.rotationSeconds) &&
     value.rotationSeconds >= 3 &&
-    value.rotationSeconds <= 60;
+    value.rotationSeconds <= 60 &&
+    typeof value.idleTitle === "string" &&
+    typeof value.idleSubtitle === "string" &&
+    typeof value.completedOrderTitle === "string" &&
+    typeof value.completedOrderMessage === "string";
 }
 
 function isDisplayBranding(value: unknown): value is DisplayBranding {
@@ -168,7 +181,8 @@ function isDisplayCartLine(value: unknown): value is DisplayCartLine {
 
 function isDisplayPresentation(value: Record<string, unknown>) {
   return (value.promotions === undefined || (Array.isArray(value.promotions) && value.promotions.every(isDisplayPromotion))) &&
-    (value.settings === undefined || isDisplaySettings(value.settings));
+    (value.settings === undefined || isDisplaySettings(value.settings)) &&
+    (value.theme === undefined || isPosThemeId(value.theme));
 }
 
 export function isDisplayState(value: unknown): value is DisplayState {

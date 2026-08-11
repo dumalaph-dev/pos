@@ -45,6 +45,7 @@ export type AdminPosDevice = {
   device_prefix: string;
   printer_transport: "bluetooth" | "network" | "usb" | null;
   printer_config: Record<string, unknown>;
+  paired_display_id: string | null;
   is_active: boolean;
   last_seen_at: string | null;
 };
@@ -326,6 +327,7 @@ export default function PosSettingsScreen({
   products,
   categories,
   devices,
+  displayPairingToken,
   displayPromotions,
   displayPromotionsUnavailable,
   initialDisplaySettings,
@@ -350,6 +352,7 @@ export default function PosSettingsScreen({
   products: AdminPosProduct[];
   categories: AdminPosCategory[];
   devices: AdminPosDevice[];
+  displayPairingToken: string | null;
   displayPromotions: DisplayPromotionRecord[];
   displayPromotionsUnavailable: boolean;
   initialDisplaySettings: DisplaySettings;
@@ -631,10 +634,10 @@ export default function PosSettingsScreen({
          {savedMessage ? <div className="pos-settings-status pos-settings-status--success" role="status"><MiniIcon name="check" size={16} /> {savedMessage}</div> : null}
          {errorMessage ? <div className="pos-settings-status pos-settings-status--error" role="alert"><MiniIcon name="info" size={16} /> {errorMessage}</div> : null}
          {queryWarning ? <div className="pos-settings-warning" role="status"><MiniIcon name="info" size={16} /> Some branch data could not be loaded. The preview is showing safe local fallback items; refresh after reconnecting to see the full catalog.</div> : null}
-        <div className="pos-settings-layout">
+        <div className={`pos-settings-layout${activeTab === "display" ? " pos-settings-layout--display" : ""}`}>
           <section className="pos-editor-card" aria-label="POS configuration workspace">
             <nav className="pos-settings-tabs" aria-label="POS settings sections">
-              {TABS.map((tab) => <button type="button" key={tab.id} className={activeTab === tab.id ? "is-active" : ""} onClick={() => setActiveTab(tab.id)}>{tab.label}</button>)}
+              {TABS.map((tab) => <button type="button" role="tab" aria-selected={activeTab === tab.id} key={tab.id} className={activeTab === tab.id ? "is-active" : ""} onClick={() => setActiveTab(tab.id)}>{tab.label}</button>)}
             </nav>
 
             {activeTab === "preview" ? (
@@ -703,10 +706,10 @@ export default function PosSettingsScreen({
             {activeTab === "payments" ? <PaymentMethodsPanel config={config} updateConfig={updateConfig} /> : null}
             {activeTab === "receipts" ? <ReceiptSettingsPanel config={config} updateConfig={updateConfig} branchDetails={branchDetails} updateBranchDetails={updateBranchDetails} /> : null}
             {activeTab === "hardware" ? <HardwarePanel devices={devices} deviceBranches={deviceBranchOptions} currentStoreId={storeId} canWrite={canWrite} deviceTest={deviceTest} onTestDevice={testDevice} /> : null}
-            {activeTab === "display" ? <DisplayPromotionsPanel storeId={storeId} branchName={currentBranchName} canWrite={canWrite} initialPromotions={displayPromotions} initialSettings={initialDisplaySettings} promotionsUnavailable={displayPromotionsUnavailable} /> : null}
+            {activeTab === "display" ? <DisplayPromotionsPanel storeId={storeId} branchName={currentBranchName} themeLabel={getPosTheme(config.uiStyle).label} displayPairingToken={displayPairingToken} canWrite={canWrite} initialPromotions={displayPromotions} initialSettings={initialDisplaySettings} promotionsUnavailable={displayPromotionsUnavailable} /> : null}
           </section>
 
-          <div className="pos-settings-sidebar">
+          {activeTab !== "display" ? <div className="pos-settings-sidebar">
             <AppearancePanel
               config={config}
               choosePalette={choosePalette}
@@ -714,10 +717,10 @@ export default function PosSettingsScreen({
               customPaletteOpen={customPaletteOpen}
               setCustomPaletteOpen={setCustomPaletteOpen}
             />
-          </div>
+          </div> : null}
         </div>
 
-        <div className="pos-category-section">
+        {activeTab === "preview" ? <div className="pos-category-section">
           <CategoryPresetPanel
             organizationName={organizationName}
             branchName={branchName}
@@ -728,7 +731,7 @@ export default function PosSettingsScreen({
             initialPresetId={businessPresetId}
             onPreviewSelectionChange={handleStarterPreviewSelection}
           />
-        </div>
+        </div> : null}
       </div>
 
       {toast ? <div className="pos-settings-toast" role="status"><MiniIcon name="check" size={15} /> {toast}</div> : null}
