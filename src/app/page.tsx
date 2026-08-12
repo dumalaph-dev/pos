@@ -1,9 +1,11 @@
+import "@/components/admin/PosSettingsScreen.css";
 import "./LandingPage.css";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import LandingHeader from "@/components/landing/LandingHeader";
 import LandingPricing from "@/components/landing/LandingPricing";
+import LandingPosPlayground from "@/components/landing/LandingPosPlayground";
 import ScrollReveal from "@/components/landing/ScrollReveal";
 import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
@@ -13,10 +15,10 @@ import { readPlatformBillingCatalog } from "@/lib/platform-operations-server";
 export const metadata: Metadata = {
   title: "Dumala POS | POS for Cafes, Restaurants & Food Businesses",
   description:
-    "A practical POS and business workspace for Philippine cafes, restaurants, coffee shops, bakeshops, and other food businesses: faster counter checkout, clear owner records, offline selling, and one view across branches. Try the full product free for 14 days.",
+    "An offline-first POS and business workspace for Philippine cafes, restaurants, coffee shops, bakeshops, and other food businesses. Personalize your POS theme, install it easily, sync to the cloud when online, and set up your business in about 3-5 minutes.",
 };
 
-type FeatureIconName = "bag" | "chart" | "people" | "bolt";
+type FeatureIconName = "bag" | "chart" | "spark" | "bolt";
 
 const featureCards: Array<{
   icon: FeatureIconName;
@@ -26,27 +28,27 @@ const featureCards: Array<{
 }> = [
   {
     icon: "bag",
-    title: "Make the counter easier",
-    description: "Give cashiers one focused screen for products, discounts, payments, and order slips.",
-    points: ["Fixed-price and by-weight items", "Senior and PWD discounts", "Cash, GCash, Maya, and card"],
+    title: "Fast checkout at the counter",
+    description: "Give cashiers one focused place for products, payments, discounts, and order slips.",
+    points: ["Fixed-price and by-weight items", "Discounts without the clutter", "Cash, GCash, Maya, and card"],
+  },
+  {
+    icon: "spark",
+    title: "Make the POS feel like yours",
+    description: "Start with a ready-made interface, then shape the colors, type, and controls around your brand.",
+    points: ["16 interface themes to choose from", "Your own accent color", "Personalize before the team signs in"],
   },
   {
     icon: "chart",
-    title: "Know what needs attention",
-    description: "See sales, orders, stock, expenses, and shifts without stitching reports together.",
-    points: ["Daily and period reports", "Best sellers and slow movers", "CSV export for your records"],
-  },
-  {
-    icon: "people",
-    title: "Set clear responsibility",
-    description: "Give owners, managers, and cashiers the access that matches the work they do.",
-    points: ["Role-based access", "Branch-scoped records", "Audited changes"],
+    title: "One workspace for the owner",
+    description: "See the numbers behind the sale without stitching reports, stock, expenses, and shifts together.",
+    points: ["Daily and period reports", "Branch activity in one view", "CSV export for your records"],
   },
   {
     icon: "bolt",
-    title: "Keep selling through weak signal",
-    description: "The counter stays usable when the connection is slow or gone, then syncs when it returns.",
-    points: ["Local-first orders", "Background sync", "Tablet and desktop install"],
+    title: "Offline-first, cloud-ready",
+    description: "The counter keeps working without internet, then syncs to the cloud whenever a connection is available.",
+    points: ["Sale saves on the device first", "Background cloud sync", "Install on tablet or desktop"],
   },
 ];
 
@@ -223,12 +225,17 @@ function buildFaqs(premiumPrice: string, annualVariants: BillingVariant[]): Arra
   {
     question: "What do I need to get started?",
     answer:
-      "An owner account and your first branch. You can add products, set your prices, and start ringing up sales before anyone else joins. Your team gets their own logins through a branch access link later.",
+      "An owner account and your first branch. Most businesses can create the account, add their first location, and start setting up the menu in about 3-5 minutes. Your team gets their own logins through a branch access link later.",
   },
   {
     question: "Do I have to install anything?",
     answer:
-      "No. Dumala runs in the browser and installs to a tablet or desktop home screen as an app when you want the full-screen experience. There is no app store review to wait on.",
+      "No app-store installation is required. Dumala runs in the browser, and you can add it to a tablet or desktop home screen in a few taps for a full-screen app-like experience.",
+  },
+  {
+    question: "Can I personalize how the POS looks?",
+    answer:
+      "Yes. Choose from the current interface themes, then adjust the accent color, font, corner shapes, and other POS settings to match your brand and the way your team works. Changes can be previewed before you save them for the branch.",
   },
   ];
 }
@@ -238,9 +245,11 @@ function formatDiscount(value: number) {
 }
 
 const marqueeItems = [
-  "A practical POS",
-  "For cafes, restaurants & bakeshops",
-  "Workspace for owners",
+  "16 POS themes",
+  "Offline-first by default",
+  "Cloud sync when online",
+  "3-5 minute setup",
+  "Easy tablet install",
   "14-day free trial",
   "Multi-branch ready",
   "Role-based access",
@@ -295,7 +304,7 @@ function FeatureIcon({ name }: { name: FeatureIconName }) {
   const paths: Record<FeatureIconName, React.ReactNode> = {
     bag: <><path d="M4.2 6.2h7.6l.7 7.3H3.5l.7-7.3Z" /><path d="M5.7 6.1V4.9a2.3 2.3 0 0 1 4.6 0v1.2" /></>,
     chart: <><path d="M3.5 13.5V8.9M8 13.5V5.7m4.5 7.8V2.5" /><path d="M2.5 13.5h11" /></>,
-    people: <><circle cx="6" cy="5.2" r="2.1" /><circle cx="11.4" cy="6.4" r="1.6" /><path d="M2.7 13.5c.2-2.3 1.3-3.6 3.3-3.6s3.1 1.3 3.3 3.6M9.1 10.4c1.9-.7 3.6.4 4.2 2.8" /></>,
+    spark: <><path d="m8 2.2.9 3.1L12 6.2 8.9 7.1 8 10.2 7.1 7.1 4 6.2l3.1-.9z" /><path d="m12.8 11.1.6 2 2 .6-2 .6-.6 2-.6-2-2-.6 2-.6z" /></>,
     bolt: <path d="m9.2 2.3-5 6.4h3.5l-.9 5 5-6.5H8.3l.9-4.9Z" />,
   };
 
@@ -435,7 +444,7 @@ function HeroVisual() {
       data-lp-reveal="scale"
       style={{ "--lp-delay": "260ms" } as React.CSSProperties}
     >
-      <div className="origin-[35%_50%] lg:scale-[1.05] xl:scale-[1.2]">
+      <div className="origin-[35%_50%] scale-[1.1]">
         <div className="lp-stage relative overflow-hidden rounded-[36px] border border-[#e6dfcd] bg-[linear-gradient(155deg,#fdfbf6_0%,#f6efe0_52%,#efe6d2_100%)] px-5 pb-6 pt-9 shadow-[0_26px_60px_rgba(23,58,43,0.13)] sm:px-9 sm:pb-8 sm:pt-11">
         <div className="lp-dots pointer-events-none absolute inset-0 text-[#173a2b] opacity-[0.07]" />
         <div className="lp-spin-slow pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full border border-dashed border-[#c39756]/45" />
@@ -461,7 +470,7 @@ function HeroVisual() {
             width={1387}
             height={751}
             priority
-            sizes="(min-width: 1024px) 720px, 92vw"
+            sizes="(min-width: 1280px) 860px, (min-width: 1024px) 730px, 92vw"
             className="h-auto w-full drop-shadow-[0_28px_44px_rgba(18,43,32,0.26)]"
           />
         </div>
@@ -547,7 +556,7 @@ export default async function LandingPage() {
               style={{ "--lp-delay": "60ms" } as React.CSSProperties}
             >
               <span className="lp-dot-pulse h-1.5 w-1.5 rounded-full bg-[#d1a05b]" />
-              For Philippine cafes, restaurants &amp; food businesses
+              Offline-first POS for Philippine food businesses
             </p>
 
             <h1
@@ -557,7 +566,7 @@ export default async function LandingPage() {
               Modernize your business.
               <br />
               <span className="relative inline-block text-[#b18448]">
-                Faster checkout.
+                Make it yours.
                 <svg
                   aria-hidden="true"
                   viewBox="0 0 300 14"
@@ -575,9 +584,11 @@ export default async function LandingPage() {
               className="lp-in mt-7 max-w-[490px] text-base leading-7 text-[#526157] sm:text-lg sm:leading-8"
               style={{ "--lp-delay": "260ms" } as React.CSSProperties}
             >
-              Built for owners of cafes, restaurants, coffee shops, bakeshops, and other counter-service businesses, Dumala
-              gives your cashiers a focused POS and gives you a practical workspace for everything behind each sale. Records
-              save on the device first, branch activity stays together, and your team sees only what they need.
+              Built for owners of cafes, restaurants, coffee shops, bakeshops, and other counter-service businesses, Dumala gives
+              cashiers one focused place to sell and gives you one practical workspace for everything behind each sale. Choose a
+              theme, adjust the colors and controls, and make the POS feel like your brand. It is offline-first: sales save on the
+              device first, then sync to the cloud whenever internet is available. Install it on a tablet or desktop and set up
+              your business in about 3-5 minutes.
             </p>
 
             <div className="lp-in mt-8 flex flex-wrap items-center gap-5" style={{ "--lp-delay": "340ms" } as React.CSSProperties}>
@@ -600,8 +611,8 @@ export default async function LandingPage() {
               style={{ "--lp-delay": "420ms" } as React.CSSProperties}
             >
               <span className="inline-flex items-center gap-2"><CheckIcon /> 14 days free · no card</span>
-              <span className="inline-flex items-center gap-2"><CheckIcon /> {annualVariants.length > 0 ? `Monthly from ${premiumPrice} · annual savings shown below` : `${premiumPrice}/month after the trial`}</span>
-              <span className="inline-flex items-center gap-2"><CheckIcon /> Keeps selling through interruptions</span>
+              <span className="inline-flex items-center gap-2"><CheckIcon /> Cloud sync when online</span>
+              <span className="inline-flex items-center gap-2"><CheckIcon /> Themes, colors &amp; controls you can personalize</span>
             </div>
           </div>
 
@@ -672,6 +683,26 @@ export default async function LandingPage() {
         </div>
       </section>
 
+      {/* Try the POS and personalize it ------------------------------------- */}
+      <section id="playground" className="lp-sec--playground scroll-mt-24 border-y border-[#e1d9ca] py-14 sm:py-20">
+        <div className="mx-auto max-w-[1380px] px-6 sm:px-10 lg:px-16">
+          <div className="mx-auto max-w-3xl text-center" data-lp-reveal>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">Try the POS before you commit</p>
+            <h2 className="mt-3 text-3xl font-black tracking-[-0.05em] text-[#173a2b] sm:text-[2.6rem] sm:leading-[1.05]">
+              See the POS. Make it yours.
+            </h2>
+            <p className="mt-4 text-sm leading-6 text-[#657168] sm:text-base">
+              Explore a tablet-style POS that mirrors the cashier workspace. Add a sample order, then open Customize theme to compare
+              all 16 styles and choose your accent without taking the counter screen apart.
+            </p>
+          </div>
+
+          <div className="mt-10" data-lp-reveal="scale">
+            <LandingPosPlayground />
+          </div>
+        </div>
+      </section>
+
       {/* Two interfaces — warm sand ----------------------------------------- */}
       <section id="interfaces" className="lp-sec--interfaces scroll-mt-24 border-y border-[#e6dfd0] py-14 sm:py-20">
         <div className="mx-auto max-w-[1280px] px-6 sm:px-10 lg:px-16">
@@ -681,8 +712,8 @@ export default async function LandingPage() {
               One business. Two focused workspaces.
             </h2>
             <p className="mt-4 text-sm leading-6 text-[#657168] sm:text-base">
-              For cafes, restaurants, coffee shops, bakeshops, and other counter-service businesses, cashiers get a clear sell
-              screen while owners get the context behind each sale. Both use the same records and are included in every plan.
+              Cashiers get a clear sell screen while owners get the context behind each sale. Both work from the same records, so the
+              counter and the backoffice stay connected without forcing the cashier into a backoffice.
             </p>
           </div>
 
@@ -906,8 +937,8 @@ export default async function LandingPage() {
               </h2>
             </div>
             <p className="max-w-sm text-sm leading-6 text-[#657168]">
-              From one location to multiple branches, sales, stock, expenses, shifts, and access share the same branch context.
-              Your counter, stockroom, and owner workspace stay on the same record.
+              Sales, stock, expenses, shifts, and access share the same branch context. Your counter, stockroom, and owner workspace
+              stay on the same record whether you run one location or several.
             </p>
           </div>
 
@@ -933,13 +964,13 @@ export default async function LandingPage() {
 
         <div className="relative mx-auto grid max-w-[1280px] gap-12 lg:grid-cols-[0.82fr_1.18fr] lg:items-center lg:gap-20">
           <div data-lp-reveal="left">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#d1a05b]">Start with the business you already run</p>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#d1a05b]">Easy to install - easy to set up</p>
             <h2 className="mt-4 max-w-lg text-4xl font-black leading-[1.02] tracking-[-0.05em] sm:text-5xl">
-              Modernize without a disruptive rollout.
+              From sign-up to first sale in 3-5 minutes.
             </h2>
             <p className="mt-5 max-w-md text-sm leading-7 text-[#cad6ca] sm:text-base">
-              Start with one cafe, restaurant, coffee shop, or bakeshop branch. Add staff, inventory, and more locations as the
-              team settles in. You do not have to change everything on day one.
+              Create the business account, add your first branch, and make the POS yours without a disruptive rollout. Start in a
+              browser, install it to your tablet or desktop home screen when you are ready, and add the rest of the team as you grow.
             </p>
             <Link
               href="/signup"
@@ -951,9 +982,9 @@ export default async function LandingPage() {
 
           <div className="grid gap-3 sm:grid-cols-3">
               {[
-                { number: "01", title: "Set up your business workspace", text: "Create your business account and first branch in a few focused steps." },
-              { number: "02", title: "Give your team access", text: "Share a unique branch link with managers and cashiers, each with their own login." },
-              { number: "03", title: "Run the day", text: "Sell, watch the numbers, and make decisions with less manual work." },
+                { number: "01", title: "Create the account", text: "Set up your business and first branch in about 3-5 minutes." },
+              { number: "02", title: "Personalize the counter", text: "Choose a theme, set your accent, and configure the workflow your team needs." },
+              { number: "03", title: "Invite the team and sell", text: "Install the app-like experience, share access, and start ringing up orders." },
             ].map((step, index) => (
               <div key={step.number} data-lp-reveal="right" style={{ "--lp-delay": `${index * 110}ms` } as React.CSSProperties}>
                 <article className="lp-step h-full rounded-2xl border border-[#55705d] bg-[#1a422f] p-5">
@@ -1067,10 +1098,10 @@ export default async function LandingPage() {
               <div className="max-w-2xl">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b18448]">Ready when you are</p>
                 <h2 className="mt-3 text-3xl font-black tracking-[-0.045em] text-[#173a2b] sm:text-4xl">
-                  Give your food business a calmer way to run.
+                  Give your food business a POS that fits.
                 </h2>
                 <p className="mt-3 max-w-xl text-sm leading-6 text-[#657168] sm:text-base">
-                  Take the full product for 14 days, free and without a card. After that, {annualVariants.length > 0 ? "choose monthly or an available annual term" : "continue with monthly billing"} for the same complete counter POS and owner workspace.
+                  Start free for 14 days, set up your business in about 3-5 minutes, and personalize the POS before your first rush. After that, {annualVariants.length > 0 ? "choose monthly or an available annual term" : "continue with monthly billing"} for the same complete counter POS and owner workspace.
                 </p>
               </div>
               <div className="shrink-0">
@@ -1107,6 +1138,7 @@ export default async function LandingPage() {
                 <p className="font-black uppercase tracking-[0.16em] text-[#173a2b]">Product</p>
                 <ul className="mt-3 grid gap-2 text-[#708076]">
                   <li><a href="#features" className="lp-navlink hover:text-[#b18448]">Features</a></li>
+                  <li><a href="#playground" className="lp-navlink hover:text-[#b18448]">Try the POS</a></li>
                   <li><a href="#interfaces" className="lp-navlink hover:text-[#b18448]">Counter POS &amp; dashboard</a></li>
                   <li><a href="#offline" className="lp-navlink hover:text-[#b18448]">Offline first</a></li>
                   <li><a href="#details" className="lp-navlink hover:text-[#b18448]">In detail</a></li>
