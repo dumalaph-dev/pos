@@ -9655,6 +9655,11 @@ body.products-modal-open {
   background: #efe7d6;
 }
 
+.sync-pill.is-warning {
+  color: var(--danger, #9b3f2f);
+  background: color-mix(in srgb, var(--warning, #c78a28) 18%, transparent);
+}
+
 .sync-pill__dot {
   width: 6px;
   height: 6px;
@@ -9664,6 +9669,10 @@ body.products-modal-open {
 
 .sync-pill.is-offline .sync-pill__dot {
   background: var(--warning);
+}
+
+.sync-pill.is-warning .sync-pill__dot {
+  background: var(--danger, #9b3f2f);
 }
 
 .sync-pill__action {

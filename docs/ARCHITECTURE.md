@@ -151,7 +151,7 @@ The order is **immutable truth**. Server stock is decremented from synced orders
 
 - Migrations are versioned SQL (Supabase CLI), applied to dev → prod. RLS verified in prod with the fixture.
 - PWA installed on the actual tablet ("Add to Home Screen"); confirm SW update flow.
-- Backups: Supabase PITR on for prod; document restore. Monitoring: error logging (Sentry), sync-failure alerting.
+- Backups: Supabase PITR should be enabled for prod and the restore procedure is documented in [PRODUCTION_BACKUP_AND_RESTORE.md](PRODUCTION_BACKUP_AND_RESTORE.md); the 2026-08-12 hosted check found PITR disabled. Monitoring: Vercel structured request-error logs, app/browser diagnostics, and POS sync-failure alerting are implemented; configure Vercel log access and notifications before the pilot.
 
 ---
 
