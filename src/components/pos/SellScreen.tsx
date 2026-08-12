@@ -1,5 +1,7 @@
 "use client";
 
+import "./SellScreen.css";
+
 /**
  * POS Sell Screen (P1+P2). Catalog grid + cart + weight keypad + discounts +
  * charge flow + park/hold tray. Money is integer centavos (money.ts).
@@ -52,6 +54,8 @@ import { buildReceipt } from "@/lib/receipt";
 import { normalizePaperWidth, type PaperWidth } from "@/lib/paper-width";
 import { getPosTheme, isPosThemeId, type PosThemeId } from "@/lib/pos-theme";
 import { getPosPalette, isPosPaletteId, type PosPaletteId } from "@/lib/pos-palette";
+import { getPosFont, isPosFontId, readPosFontColorWithFallback, type PosFontId } from "@/lib/pos-font";
+import { readPosRadiusWithFallback, resolvePosRadius } from "@/lib/pos-shape";
 import {
   createDisplayLink,
   loadDisplayPairingToken,
@@ -127,6 +131,10 @@ type PosRuntimeConfig = {
   palette: PosPaletteId;
   customColor: string;
   uiStyle: PosThemeId;
+  fontFamily: PosFontId;
+  fontColor: string | null;
+  cardRadius: number | null;
+  buttonRadius: number | null;
   defaultOrderType: string;
   orderTypes: string[];
   paymentMethods: Record<RuntimePaymentMethod, boolean>;
@@ -154,6 +162,10 @@ const DEFAULT_POS_RUNTIME_CONFIG: PosRuntimeConfig = {
   palette: "green",
   customColor: "#173a2b",
   uiStyle: "modern",
+  fontFamily: "theme",
+  fontColor: null,
+  cardRadius: null,
+  buttonRadius: null,
   defaultOrderType: "Dine In",
   orderTypes: ["Dine In", "Takeout"],
   paymentMethods: { cash: true, gcash: true, maya: false, card: true },
@@ -199,6 +211,10 @@ function normalizePosRuntimeConfig(value: unknown, vatRateFallback = DEFAULT_POS
     : DEFAULT_POS_RUNTIME_CONFIG.defaultOrderType;
   const palette = isPosPaletteId(source.palette) ? source.palette : "green";
   const uiStyle = isPosThemeId(source.uiStyle) ? source.uiStyle : "modern";
+  const fontFamily = isPosFontId(source.fontFamily) ? source.fontFamily : "theme";
+  const fontColor = readPosFontColorWithFallback(source.fontColor, DEFAULT_POS_RUNTIME_CONFIG.fontColor);
+  const cardRadius = readPosRadiusWithFallback(source.cardRadius, DEFAULT_POS_RUNTIME_CONFIG.cardRadius);
+  const buttonRadius = readPosRadiusWithFallback(source.buttonRadius, DEFAULT_POS_RUNTIME_CONFIG.buttonRadius);
   const paymentMethods = {
     cash: readBoolean(paymentSource.cash, DEFAULT_POS_RUNTIME_CONFIG.paymentMethods.cash),
     gcash: readBoolean(paymentSource.gcash, DEFAULT_POS_RUNTIME_CONFIG.paymentMethods.gcash),
@@ -211,6 +227,10 @@ function normalizePosRuntimeConfig(value: unknown, vatRateFallback = DEFAULT_POS
     palette,
     customColor: typeof source.customColor === "string" && /^#[0-9a-f]{6}$/i.test(source.customColor) ? source.customColor : DEFAULT_POS_RUNTIME_CONFIG.customColor,
     uiStyle,
+    fontFamily,
+    fontColor,
+    cardRadius,
+    buttonRadius,
     defaultOrderType: enabledOrderTypes.includes(configuredDefault) ? configuredDefault : enabledOrderTypes[0],
     orderTypes: enabledOrderTypes,
     paymentMethods,
@@ -298,7 +318,8 @@ type IconName =
   | "printer"
   | "display"
   | "cash"
-  | "settings";
+  | "settings"
+  | "empty-order";
 
 function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
   const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
@@ -306,6 +327,7 @@ function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
     search: <><circle cx="11" cy="11" r="6.8" /><path d="m16 16 4.3 4.3" /></>,
     hold: <><path d="M7 4v16M17 4v16" /><path d="M9 7h6M9 17h6" /></>,
     receipt: <><path d="M6 3.5h12v17l-2.5-1.6-2.5 1.6-2.5-1.6L8 20.5 6 19z" /><path d="M9 8h6M9 12h6M9 16h3" /></>,
+    "empty-order": <><path d="M5 8.5h14l-1.4 11H6.4L5 8.5Z" /><path d="M8.5 8.5V7a3.5 3.5 0 0 1 7 0v1.5" /><path d="M9 12.5h6M12 11v3" /></>,
     more: <><circle cx="5" cy="12" r="1.2" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1.2" fill="currentColor" stroke="none" /></>,
     chevron: <path d="m7 9 5 5 5-5" />,
     grid: <><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></>,
@@ -1354,8 +1376,17 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     const primary = palette.primary;
     const theme = getPosTheme(posConfig.uiStyle);
     const themeVars = theme.variables;
+    const font = getPosFont(posConfig.fontFamily, themeVars["--pos-theme-font"]);
+    const fontColor = posConfig.fontColor ?? themeVars["--pos-theme-text"];
+    const cardRadius = resolvePosRadius(posConfig.cardRadius, themeVars["--pos-theme-radius-card"], 12);
+    const buttonRadius = resolvePosRadius(posConfig.buttonRadius, themeVars["--pos-theme-radius-btn"], 10);
     const posAppStyle = {
       ...themeVars,
+      "--pos-theme-font": font.family,
+      "--pos-theme-text": fontColor,
+      "--text": fontColor,
+      "--pos-theme-radius-card": cardRadius,
+      "--pos-theme-radius-btn": buttonRadius,
       "--bg": themeVars["--pos-theme-bg"],
       "--surface": themeVars["--pos-theme-surface"],
       "--surface-panel": themeVars["--pos-theme-surface-panel"],
@@ -1363,7 +1394,6 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
       "--sidebar": themeVars["--pos-theme-sidebar"],
       "--border": themeVars["--pos-theme-border"],
       "--border-strong": themeVars["--pos-theme-border-strong"],
-      "--text": themeVars["--pos-theme-text"],
       "--text-muted": themeVars["--pos-theme-text-muted"],
       "--text-subtle": themeVars["--pos-theme-text-subtle"],
       "--primary": primary,
@@ -1385,8 +1415,8 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
       "--pos-theme-primary-soft": palette.soft,
       "--secondary-btn": themeVars["--pos-theme-secondary"],
       "--secondary-btn-hover": themeVars["--pos-theme-secondary-hover"],
-      "--radius-card": themeVars["--pos-theme-radius-card"],
-      "--radius-btn": themeVars["--pos-theme-radius-btn"],
+      "--radius-card": cardRadius,
+      "--radius-btn": buttonRadius,
       "--shadow-card": themeVars["--pos-theme-shadow-card"],
       "--shadow-pop": themeVars["--pos-theme-shadow-pop"],
     } as CSSProperties;
@@ -1722,7 +1752,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
               <div className="order-items">
                 {cart.length === 0 ? (
                   <div className="order-empty">
-                    <div className="order-empty__mark"><Icon name="pig" size={30} /></div>
+                    <div className="order-empty__mark"><Icon name="empty-order" size={30} /></div>
                     <strong>Your order is waiting</strong>
                     <span>Tap a menu item to add it here.</span>
                   </div>

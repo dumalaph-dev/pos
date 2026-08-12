@@ -1,3 +1,4 @@
+import "./AdminRouteLayout.css";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import type { ReactNode } from "react";

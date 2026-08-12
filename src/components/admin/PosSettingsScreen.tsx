@@ -1,5 +1,6 @@
 "use client";
 
+import "./PosSettingsScreen.css";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition, type CSSProperties, type SVGProps } from "react";
@@ -14,6 +15,8 @@ import { buildReceipt } from "@/lib/receipt";
 import { getPrinter, type PrinterSettings } from "@/lib/printer";
 import { getPosTheme, POS_THEME_OPTIONS, type PosThemeId } from "@/lib/pos-theme";
 import { getPosPalette, POS_PALETTE_OPTIONS, type PosPaletteId } from "@/lib/pos-palette";
+import { getPosFont, isPosFontId, POS_FONT_OPTIONS, readPosFontColor, type PosFontId } from "@/lib/pos-font";
+import { parseThemeRadius, POS_RADIUS_MAX, resolvePosRadius } from "@/lib/pos-shape";
 import { isProductImageUrl } from "@/lib/product-images";
 import { normalizePaperWidth, PAPER_WIDTH_OPTIONS, toPaperWidthValue, type PaperWidthValue } from "@/lib/paper-width";
 import type { DisplaySettings } from "@/lib/display";
@@ -59,6 +62,10 @@ export type PosConfig = {
   palette: PaletteId;
   customColor?: string;
   uiStyle: UiStyleId;
+  fontFamily: PosFontId;
+  fontColor: string | null;
+  cardRadius: number | null;
+  buttonRadius: number | null;
   defaultOrderType: string;
   orderTypes: string[];
   paymentMethods: Record<PaymentMethodId, boolean>;
@@ -268,6 +275,7 @@ function iconPath(name: string) {
     case "info": return <><circle cx="12" cy="12" r="9" /><path d="M12 10v6M12 7h.01" /></>;
     case "maximize": return <><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M21 16v5h-5" /><path d="m3 8 5-5M21 8l-5-5M3 16l5 5M21 16l-5 5" /></>;
     case "receipt": return <><path d="M6 3.5h12v17l-2.5-1.6-2.5 1.6-2.5-1.6L8 20.5 6 19z" /><path d="M9 8h6M9 12h6M9 16h3" /></>;
+    case "empty-order": return <><path d="M5 8.5h14l-1.4 11H6.4L5 8.5Z" /><path d="M8.5 8.5V7a3.5 3.5 0 0 1 7 0v1.5" /><path d="M9 12.5h6M12 11v3" /></>;
     case "printer": return <><path d="M6 9V4h12v5M6 17H4V9h16v8h-2" /><path d="M7 14h10v6H7z" /></>;
     case "settings": return <><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" /><circle cx="12" cy="12" r="4" /></>;
     case "note": return <><path d="M5 4h14v16H5z" /><path d="M8 8h8M8 12h8M8 16h5" /></>;
@@ -443,8 +451,18 @@ export default function PosSettingsScreen({
   const availablePaymentMethods = (Object.keys(config.paymentMethods) as PaymentMethodId[]).filter((method) => config.paymentMethods[method]);
   const selectedPaymentMethod = config.paymentMethods[paymentMethod] ? paymentMethod : availablePaymentMethods[0] ?? "cash";
   const palette = getPosPalette(config.palette, config.customColor);
+  const theme = getPosTheme(config.uiStyle);
+  const font = getPosFont(config.fontFamily, theme.variables["--pos-theme-font"]);
+  const fontColor = config.fontColor ?? theme.variables["--pos-theme-text"];
+  const cardRadius = resolvePosRadius(config.cardRadius, theme.variables["--pos-theme-radius-card"], 12);
+  const buttonRadius = resolvePosRadius(config.buttonRadius, theme.variables["--pos-theme-radius-btn"], 10);
   const previewStyle = {
-    ...getPosTheme(config.uiStyle).variables,
+    ...theme.variables,
+    "--pos-theme-font": font.family,
+    "--pos-theme-text": fontColor,
+    "--text": fontColor,
+    "--pos-theme-radius-card": cardRadius,
+    "--pos-theme-radius-btn": buttonRadius,
     "--pos-theme-highlight": palette.primary,
     "--pos-theme-highlight-soft": palette.tint,
     "--pos-theme-primary-soft": palette.soft,
@@ -645,7 +663,7 @@ export default function PosSettingsScreen({
          {savedMessage ? <div className="pos-settings-status pos-settings-status--success" role="status"><MiniIcon name="check" size={16} /> {savedMessage}</div> : null}
          {errorMessage ? <div className="pos-settings-status pos-settings-status--error" role="alert"><MiniIcon name="info" size={16} /> {errorMessage}</div> : null}
          {queryWarning ? <div className="pos-settings-warning" role="status"><MiniIcon name="info" size={16} /> Some branch data could not be loaded. The preview is showing safe local fallback items; refresh after reconnecting to see the full catalog.</div> : null}
-        <div className={`pos-settings-layout${activeTab === "display" ? " pos-settings-layout--display" : ""}`}>
+        <div className={`pos-settings-layout${activeTab === "display" ? " pos-settings-layout--display" : activeTab !== "preview" ? " pos-settings-layout--single" : ""}`}>
           <section className="pos-editor-card" aria-label="POS configuration workspace">
             <nav className="pos-settings-tabs" aria-label="POS settings sections">
               {TABS.map((tab) => <button type="button" role="tab" aria-selected={activeTab === tab.id} key={tab.id} className={activeTab === tab.id ? "is-active" : ""} onClick={() => setActiveTab(tab.id)}>{tab.label}</button>)}
@@ -720,28 +738,29 @@ export default function PosSettingsScreen({
             {activeTab === "display" ? <DisplayPromotionsPanel storeId={storeId} branchName={currentBranchName} themeLabel={getPosTheme(config.uiStyle).label} displayPairingToken={displayPairingToken} canWrite={canWrite} initialPromotions={displayPromotions} initialGalleryItems={displayGalleryItems} initialMenuItems={displayMenuItems} settings={displaySettings} onSettingsChange={(nextSettings) => { setDisplaySettings(nextSettings); setDisplaySettingsDirty(true); }} promotionsUnavailable={displayPromotionsUnavailable} galleryUnavailable={displayGalleryUnavailable} /> : null}
           </section>
 
-          {activeTab !== "display" ? <div className="pos-settings-sidebar">
+          {activeTab === "preview" ? <div className="pos-settings-sidebar pos-settings-sidebar--category">
+            <CategoryPresetPanel
+              organizationName={organizationName}
+              branchName={currentBranchName}
+              storeId={storeId}
+              canWrite={canWrite}
+              branchOptions={branchOptions}
+              categories={categories}
+              initialPresetId={businessPresetId}
+              onPreviewSelectionChange={handleStarterPreviewSelection}
+            />
+          </div> : null}
+        </div>
+
+        {activeTab !== "display" ? <div className="pos-settings-appearance">
             <AppearancePanel
               config={config}
               choosePalette={choosePalette}
               updateConfig={updateConfig}
               customPaletteOpen={customPaletteOpen}
               setCustomPaletteOpen={setCustomPaletteOpen}
+              expanded
             />
-          </div> : null}
-        </div>
-
-        {activeTab === "preview" ? <div className="pos-category-section">
-          <CategoryPresetPanel
-            organizationName={organizationName}
-            branchName={branchName}
-            storeId={storeId}
-            canWrite={canWrite}
-            branchOptions={branchOptions}
-            categories={categories}
-            initialPresetId={businessPresetId}
-            onPreviewSelectionChange={handleStarterPreviewSelection}
-          />
         </div> : null}
       </div>
 
@@ -887,7 +906,7 @@ function PreviewWindow({
               <div className="pos-preview-line-copy"><strong>{line.product.name}</strong><span>{line.product.pricing_mode === "per_kg" ? `${line.qty} kg` : `x ${line.qty}`}</span></div>
               <div className="pos-preview-line-controls"><button type="button" aria-label={`Decrease ${line.product.name}`} onClick={() => adjustQty(line.product.id, -1)}>−</button><span>{line.qty}</span><button type="button" aria-label={`Increase ${line.product.name}`} onClick={() => adjustQty(line.product.id, 1)}>+</button></div>
               <strong className="pos-preview-line-total">{formatPeso(line.product.price * line.qty)}</strong><button type="button" className="pos-preview-line-remove" aria-label={`Remove ${line.product.name}`} onClick={() => adjustQty(line.product.id, -line.qty)}><MiniIcon name="trash" size={12} /></button>
-            </div>) : <div className="pos-preview-order-empty"><MiniIcon name="receipt" size={22} /><strong>Your order is empty</strong><span>Select an item to preview the checkout.</span></div>}
+            </div>) : <div className="pos-preview-order-empty"><MiniIcon name="empty-order" size={22} /><strong>Your order is empty</strong><span>Select an item to preview the checkout.</span></div>}
           </div>
           {config.enableOrderNotes ? <div className="pos-preview-note-area">{noteOpen ? <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add note or instructions..." autoFocus /> : <button type="button" onClick={() => setNoteOpen(true)}><MiniIcon name="plus" size={14} /> {note ? "Edit Note" : "Add Note or Instructions"}</button>}</div> : null}
           <div className="pos-preview-summary">
@@ -1001,12 +1020,19 @@ function CategoryPresetPanel({
   );
 }
 
-function AppearancePanel({ config, choosePalette, updateConfig, customPaletteOpen, setCustomPaletteOpen }: { config: PosConfig; choosePalette: (palette: PaletteId) => void; updateConfig: (patch: Partial<PosConfig>) => void; customPaletteOpen: boolean; setCustomPaletteOpen: (value: boolean) => void }) {
+function AppearancePanel({ config, choosePalette, updateConfig, customPaletteOpen, setCustomPaletteOpen, expanded = false }: { config: PosConfig; choosePalette: (palette: PaletteId) => void; updateConfig: (patch: Partial<PosConfig>) => void; customPaletteOpen: boolean; setCustomPaletteOpen: (value: boolean) => void; expanded?: boolean }) {
   const activeTheme = getPosTheme(config.uiStyle);
   const activePalette = getPosPalette(config.palette, config.customColor);
+  const activeFont = getPosFont(config.fontFamily, activeTheme.variables["--pos-theme-font"]);
+  const activeFontColor = config.fontColor ?? activeTheme.variables["--pos-theme-text"];
+  const themeCardRadius = parseThemeRadius(activeTheme.variables["--pos-theme-radius-card"], 12);
+  const themeButtonRadius = parseThemeRadius(activeTheme.variables["--pos-theme-radius-btn"], 10);
+  const cardRadius = config.cardRadius ?? themeCardRadius;
+  const buttonRadius = config.buttonRadius ?? themeButtonRadius;
+  const shapeUsesThemeDefaults = config.cardRadius === null && config.buttonRadius === null;
 
   return (
-    <aside className="pos-appearance-card">
+    <aside className={`pos-appearance-card${expanded ? " pos-appearance-card--expanded" : ""}`}>
       <div className="pos-appearance-card__heading"><h2>POS Appearance</h2><p>Customize the look and feel of your POS.</p></div>
       <div className="pos-appearance-section pos-palette-section">
         <div className="pos-palette-section-heading">
@@ -1024,6 +1050,53 @@ function AppearancePanel({ config, choosePalette, updateConfig, customPaletteOpe
           })}
         </div>
         {customPaletteOpen ? <label className="pos-custom-color"><span>Custom accent</span><input type="color" value={config.customColor || "#173a2b"} onChange={(event) => updateConfig({ customColor: event.target.value })} /><button type="button" onClick={() => setCustomPaletteOpen(false)}>Done</button></label> : null}
+      </div>
+      <div className="pos-appearance-section pos-font-section">
+        <div className="pos-font-section-heading">
+          <div><h3>Font family &amp; color</h3><p>Choose a readable type style and text color for the cashier workspace.</p></div>
+          <span className="pos-font-active-pill" style={{ color: activeFontColor, fontFamily: activeFont.family }}>Aa</span>
+        </div>
+        <div className="pos-font-controls">
+          <label className="pos-font-picker">
+            <span>Font family</span>
+            <select value={config.fontFamily} onChange={(event) => { if (isPosFontId(event.target.value)) updateConfig({ fontFamily: event.target.value }); }}>
+              {POS_FONT_OPTIONS.map((fontOption) => <option key={fontOption.id} value={fontOption.id}>{fontOption.label}</option>)}
+            </select>
+          </label>
+          <div className="pos-font-color-picker">
+            <label htmlFor="pos-font-color">Font color</label>
+            <div className="pos-font-color-control">
+              <input id="pos-font-color" type="color" value={activeFontColor} onChange={(event) => { const value = readPosFontColor(event.target.value); if (value) updateConfig({ fontColor: value }); }} aria-label="POS font color" />
+              <output>{config.fontColor === null ? `Theme default · ${activeFontColor.toUpperCase()}` : activeFontColor.toUpperCase()}</output>
+              {config.fontColor !== null ? <button type="button" onClick={() => updateConfig({ fontColor: null })}>Reset</button> : null}
+            </div>
+          </div>
+        </div>
+        <div className="pos-font-preview" style={{ "--pos-font-preview-color": activeFontColor, fontFamily: activeFont.family, color: activeFontColor } as CSSProperties}>
+          <strong>Aa</strong>
+          <span><b>{activeFont.label}</b><small>{activeFont.description}</small></span>
+        </div>
+      </div>
+      <div className="pos-appearance-section pos-shape-section">
+        <div className="pos-shape-section-heading">
+          <div><h3>Shape &amp; depth</h3><p>Adjust how soft or structured the cashier workspace feels.</p></div>
+          <button type="button" className="pos-shape-reset" disabled={shapeUsesThemeDefaults} onClick={() => updateConfig({ cardRadius: null, buttonRadius: null })}>Reset</button>
+        </div>
+        <div className="pos-shape-controls">
+          <label className="pos-shape-control">
+            <span><b>Card corners</b><output>{config.cardRadius === null ? `${themeCardRadius}px theme` : `${cardRadius}px`}</output></span>
+            <input type="range" min={0} max={POS_RADIUS_MAX} step={1} value={Math.min(POS_RADIUS_MAX, cardRadius)} onChange={(event) => updateConfig({ cardRadius: Number(event.target.value) })} aria-label="Card corner radius" />
+          </label>
+          <label className="pos-shape-control">
+            <span><b>Controls &amp; buttons</b><output>{config.buttonRadius === null && themeButtonRadius > POS_RADIUS_MAX ? "Pill theme" : config.buttonRadius === null ? `${themeButtonRadius}px theme` : `${buttonRadius}px`}</output></span>
+            <input type="range" min={0} max={POS_RADIUS_MAX} step={1} value={Math.min(POS_RADIUS_MAX, buttonRadius)} onChange={(event) => updateConfig({ buttonRadius: Number(event.target.value) })} aria-label="Button corner radius" />
+          </label>
+        </div>
+        <div className="pos-shape-demo" style={{ "--shape-card-radius": `${cardRadius}px`, "--shape-control-radius": `${buttonRadius}px` } as CSSProperties}>
+          <div className="pos-shape-demo__card"><small>PRODUCT TILE</small><strong>Iced Latte</strong><b>₱190</b></div>
+          <div className="pos-shape-demo__actions"><span>Preview</span><span>Charge</span></div>
+        </div>
+        <p className="pos-shape-note">Theme defaults stay in sync with the selected interface theme until you adjust a slider.</p>
       </div>
       <div className="pos-appearance-section pos-theme-section">
         <div className="pos-theme-section-heading">
