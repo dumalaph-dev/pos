@@ -18,6 +18,7 @@ import { isProductImageUrl } from "@/lib/product-images";
 import { normalizePaperWidth, PAPER_WIDTH_OPTIONS, toPaperWidthValue, type PaperWidthValue } from "@/lib/paper-width";
 import type { DisplaySettings } from "@/lib/display";
 import type { DisplayPromotionRecord } from "@/lib/display-config";
+import type { DisplayGalleryRecord, DisplayMenuItem } from "@/lib/display-gallery";
 
 export type AdminPosProduct = {
   id: string;
@@ -330,6 +331,9 @@ export default function PosSettingsScreen({
   displayPairingToken,
   displayPromotions,
   displayPromotionsUnavailable,
+  displayGalleryItems,
+  displayMenuItems,
+  displayGalleryUnavailable,
   initialDisplaySettings,
   initialSettings,
   initialBusinessPresetId,
@@ -355,6 +359,9 @@ export default function PosSettingsScreen({
   displayPairingToken: string | null;
   displayPromotions: DisplayPromotionRecord[];
   displayPromotionsUnavailable: boolean;
+  displayGalleryItems: DisplayGalleryRecord[];
+  displayMenuItems: DisplayMenuItem[];
+  displayGalleryUnavailable: boolean;
   initialDisplaySettings: DisplaySettings;
   initialSettings: PosConfig;
   initialBusinessPresetId: string | null;
@@ -367,6 +374,8 @@ export default function PosSettingsScreen({
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
   const [previewDevice, setPreviewDevice] = useState<PreviewDevice>("desktop");
   const [config, setConfig] = useState<PosConfig>(initialSettings);
+  const [displaySettings, setDisplaySettings] = useState<DisplaySettings>(initialDisplaySettings);
+  const [displaySettingsDirty, setDisplaySettingsDirty] = useState(false);
   const [branchDetails, setBranchDetails] = useState({ name: branchName, address, tin });
   const [activeCategory, setActiveCategory] = useState("all");
   const [search, setSearch] = useState("");
@@ -545,6 +554,7 @@ export default function PosSettingsScreen({
     const formData = new FormData();
     formData.set("store_id", storeId);
     formData.set("settings", JSON.stringify(config));
+    if (displaySettingsDirty) formData.set("customer_display", JSON.stringify(displaySettings));
     if (businessPresetId) formData.set("business_preset_id", businessPresetId);
     formData.set("branch_name", branchDetails.name);
     formData.set("address", branchDetails.address);
@@ -552,6 +562,7 @@ export default function PosSettingsScreen({
     startSaving(async () => {
       try {
         const result = await savePosSettings(formData);
+        if (result.ok && displaySettingsDirty) setDisplaySettingsDirty(false);
         setToast(result.ok ? "POS settings saved." : result.message);
       } catch {
         setToast("POS settings could not be saved. Check your connection and try again.");
@@ -706,7 +717,7 @@ export default function PosSettingsScreen({
             {activeTab === "payments" ? <PaymentMethodsPanel config={config} updateConfig={updateConfig} /> : null}
             {activeTab === "receipts" ? <ReceiptSettingsPanel config={config} updateConfig={updateConfig} branchDetails={branchDetails} updateBranchDetails={updateBranchDetails} /> : null}
             {activeTab === "hardware" ? <HardwarePanel devices={devices} deviceBranches={deviceBranchOptions} currentStoreId={storeId} canWrite={canWrite} deviceTest={deviceTest} onTestDevice={testDevice} /> : null}
-            {activeTab === "display" ? <DisplayPromotionsPanel storeId={storeId} branchName={currentBranchName} themeLabel={getPosTheme(config.uiStyle).label} displayPairingToken={displayPairingToken} canWrite={canWrite} initialPromotions={displayPromotions} initialSettings={initialDisplaySettings} promotionsUnavailable={displayPromotionsUnavailable} /> : null}
+            {activeTab === "display" ? <DisplayPromotionsPanel storeId={storeId} branchName={currentBranchName} themeLabel={getPosTheme(config.uiStyle).label} displayPairingToken={displayPairingToken} canWrite={canWrite} initialPromotions={displayPromotions} initialGalleryItems={displayGalleryItems} initialMenuItems={displayMenuItems} settings={displaySettings} onSettingsChange={(nextSettings) => { setDisplaySettings(nextSettings); setDisplaySettingsDirty(true); }} promotionsUnavailable={displayPromotionsUnavailable} galleryUnavailable={displayGalleryUnavailable} /> : null}
           </section>
 
           {activeTab !== "display" ? <div className="pos-settings-sidebar">

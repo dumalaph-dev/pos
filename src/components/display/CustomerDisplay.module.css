@@ -240,6 +240,169 @@
   grid-template-columns: minmax(0, 1.05fr) minmax(20rem, 0.95fr);
 }
 
+.displayGallery {
+  padding: 0;
+  place-items: stretch;
+}
+
+.galleryState {
+  position: relative;
+  display: flex;
+  min-height: 100svh;
+  overflow: hidden;
+  isolation: isolate;
+  align-items: flex-end;
+  background: #15231d;
+}
+
+.galleryImage {
+  z-index: 0;
+  object-fit: cover;
+}
+
+.galleryImageOutgoing,
+.galleryImageCurrent {
+  will-change: opacity;
+}
+
+.galleryImageOutgoing {
+  z-index: 0;
+  animation: galleryImageFadeOut 1800ms ease-in-out both;
+}
+
+.galleryImageCurrent {
+  z-index: 1;
+  animation: galleryImageFadeIn 1800ms ease-in-out both;
+}
+
+.galleryScrim {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(8, 15, 12, 0.62) 0%, rgba(8, 15, 12, 0.04) 28%, rgba(8, 15, 12, 0.08) 48%, rgba(8, 15, 12, 0.88) 100%),
+    linear-gradient(90deg, rgba(8, 15, 12, 0.24), transparent 52%, rgba(8, 15, 12, 0.18));
+}
+
+.galleryBrand {
+  position: absolute;
+  z-index: 2;
+  top: clamp(1.1rem, 3vw, 2.25rem);
+  right: clamp(1.1rem, 4vw, 4rem);
+  left: clamp(1.1rem, 4vw, 4rem);
+}
+
+.galleryBrand .brandCopy strong {
+  color: #fffaf1;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.28);
+}
+
+.galleryBrand .productMarqueeItem {
+  color: rgba(255, 250, 241, 0.78);
+}
+
+.galleryBrand .productMarqueeImage {
+  border-color: rgba(255, 250, 241, 0.28);
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.18);
+}
+
+.galleryOverlay {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  max-width: min(58rem, 70vw);
+  gap: clamp(0.55rem, 1.2vw, 1rem);
+  margin: clamp(1.25rem, 5vw, 5rem);
+  color: #fffaf1;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.32);
+}
+
+.galleryOverlayRight {
+  margin-right: clamp(1.25rem, 5vw, 5rem);
+  margin-left: auto;
+  text-align: right;
+  justify-items: end;
+}
+
+.galleryOverlayEnter > span,
+.galleryOverlayEnter h1 {
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+.galleryOverlayEnter > span {
+  animation-name: galleryLabelEnter;
+  animation-duration: 1200ms;
+  animation-delay: 260ms;
+}
+
+.galleryOverlayEnter h1 {
+  animation-name: galleryTitleEnter;
+  animation-duration: 1400ms;
+  animation-delay: 360ms;
+}
+
+.galleryOverlay > span {
+  color: var(--display-accent);
+  font-size: clamp(0.65rem, 1.1vw, 0.88rem);
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.galleryOverlay h1 {
+  max-width: 15ch;
+  color: #fffaf1;
+  font-family: var(--display-font);
+  font-size: clamp(2.5rem, 8vw, 8rem);
+  font-weight: 800;
+  letter-spacing: -0.065em;
+  line-height: 0.88;
+}
+
+@keyframes galleryImageFadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes galleryImageFadeOut {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes galleryLabelEnter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 0.35rem, 0);
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes galleryTitleEnter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 0.55rem, 0);
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
 .promoCard {
   display: grid;
   min-width: 0;

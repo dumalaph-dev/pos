@@ -2,9 +2,19 @@ import {
   type DisplayPromotion,
   type DisplaySettings,
 } from "@/lib/display";
+import {
+  isDisplayGalleryImageUrl,
+  isDisplayGalleryKind,
+  isDisplayGalleryOverlayPosition,
+  type DisplayGalleryItem,
+  type DisplayGalleryRecord,
+} from "@/lib/display-gallery";
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   showPromotions: true,
+  showGallery: true,
+  showMarketingGallery: true,
+  showMenuGallery: true,
   showQuantity: true,
   showDiscount: true,
   showSubtotal: true,
@@ -59,6 +69,8 @@ export type DisplayPromotionRecord = DisplayPromotion & {
   endsAt: string | null;
 };
 
+export type { DisplayGalleryRecord } from "@/lib/display-gallery";
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -88,8 +100,14 @@ function safeImageUrl(value: unknown) {
 
 export function normalizeDisplaySettings(value: unknown): DisplaySettings {
   const source = isRecord(value) ? value : {};
+  const legacyGalleryEnabled = readBoolean(source.showGallery, DEFAULT_DISPLAY_SETTINGS.showGallery);
+  const showMarketingGallery = readBoolean(source.showMarketingGallery, legacyGalleryEnabled);
+  const showMenuGallery = readBoolean(source.showMenuGallery, legacyGalleryEnabled);
   return {
     showPromotions: readBoolean(source.showPromotions, DEFAULT_DISPLAY_SETTINGS.showPromotions),
+    showGallery: showMarketingGallery || showMenuGallery,
+    showMarketingGallery,
+    showMenuGallery,
     showQuantity: readBoolean(source.showQuantity, DEFAULT_DISPLAY_SETTINGS.showQuantity),
     showDiscount: readBoolean(source.showDiscount, DEFAULT_DISPLAY_SETTINGS.showDiscount),
     showSubtotal: readBoolean(source.showSubtotal, DEFAULT_DISPLAY_SETTINGS.showSubtotal),
@@ -100,6 +118,36 @@ export function normalizeDisplaySettings(value: unknown): DisplaySettings {
     completedOrderTitle: readDisplayCopy(source.completedOrderTitle, DEFAULT_DISPLAY_SETTINGS.completedOrderTitle, 100),
     completedOrderMessage: readDisplayCopy(source.completedOrderMessage, DEFAULT_DISPLAY_SETTINGS.completedOrderMessage, 180),
   };
+}
+
+export function normalizeDisplayGalleryRecord(value: unknown): DisplayGalleryRecord | null {
+  if (!isRecord(value)) return null;
+  const id = readString(value.id);
+  const title = readString(value.title);
+  const imageUrl = readString(value.image_url ?? value.imageUrl);
+  const kind = value.kind ?? value.gallery_kind ?? value.itemType;
+  const overlayPosition = value.overlay_position ?? value.overlayPosition;
+  if (!id || !title || !isDisplayGalleryKind(kind) || !isDisplayGalleryImageUrl(imageUrl) || !isDisplayGalleryOverlayPosition(overlayPosition)) return null;
+  return {
+    id,
+    storeId: readString(value.store_id) || readString(value.storeId),
+    kind,
+    title: title.slice(0, 120),
+    imageUrl,
+    imagePath: typeof value.image_path === "string" ? value.image_path : typeof value.imagePath === "string" ? value.imagePath : null,
+    overlayPosition,
+    isActive: value.is_active === undefined ? true : value.is_active === true,
+    sortOrder: Math.round(readNumber(value.sort_order ?? value.sortOrder, 0, -1000, 1000)),
+  };
+}
+
+export function normalizeDisplayGalleryRows(rows: unknown[]): DisplayGalleryItem[] {
+  return rows
+    .map(normalizeDisplayGalleryRecord)
+    .filter((item): item is DisplayGalleryRecord => Boolean(item))
+    .filter((item) => item.isActive)
+    .sort((left, right) => left.sortOrder - right.sortOrder)
+    .map(({ id, kind, title, imageUrl, overlayPosition }) => ({ id, kind, title, imageUrl, overlayPosition }));
 }
 
 export function resolveDisplayCopy(value: string, branchName: string) {

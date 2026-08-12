@@ -10,6 +10,18 @@ import { invalidateAdminProfile } from "@/lib/admin/profile";
 import { saveOrganizationBusinessPreset } from "@/lib/admin/business-server";
 import { getCatalogPreset } from "@/lib/catalog-presets";
 import { normalizeDisplaySettings } from "@/lib/display-config";
+import {
+  DISPLAY_GALLERY_MAX_BYTES,
+  isDisplayGalleryKind,
+  isDisplayGalleryOverlayPosition,
+  type DisplayGalleryKind,
+  type DisplayGalleryOverlayPosition,
+} from "@/lib/display-gallery";
+import {
+  readDisplayGalleryImageFile,
+  removeDisplayGalleryImage,
+  uploadDisplayGalleryImage,
+} from "@/lib/admin/display-gallery-storage";
 import { normalizePaperWidth, parsePaperWidth, toPaperWidthValue } from "@/lib/paper-width";
 
 type JsonRecord = Record<string, unknown>;
@@ -159,6 +171,9 @@ export async function savePosSettings(formData: FormData) {
 
   const currentSettings = isRecord(store.settings) ? store.settings : {};
   const currentPosSettings = isRecord(currentSettings.pos_config) ? currentSettings.pos_config : {};
+  const displaySerialized = readText(formData, "customer_display");
+  const incomingDisplaySettings = displaySerialized ? readSettings(displaySerialized) : null;
+  if (displaySerialized && !incomingDisplaySettings) return { ok: false, message: "Customer display settings could not be read." };
   const branchVatRate = Number(store.vat_rate);
   const nextPosSettings = normalizePosSettings(
     incoming,
@@ -172,6 +187,7 @@ export async function savePosSettings(formData: FormData) {
     receipt_header: nextPosSettings.receiptHeader || null,
     receipt_footer: nextPosSettings.receiptFooter || null,
     paper_width: nextPosSettings.paperWidth,
+    ...(incomingDisplaySettings ? { customer_display: normalizeDisplaySettings(incomingDisplaySettings) } : {}),
   };
 
   const { error } = await supabase
@@ -258,6 +274,58 @@ async function writeDisplayPromotionAudit(
   });
 }
 
+function readDisplayGalleryFields(formData: FormData, requireImage: boolean) {
+  const storeId = readText(formData, "store_id");
+  const kindValue = readText(formData, "kind");
+  const title = readText(formData, "title");
+  const overlayValue = readText(formData, "overlay_position");
+  const sortOrderValue = Number(readText(formData, "sort_order") || "0");
+  const imageFile = readDisplayGalleryImageFile(formData, "image_file");
+
+  if (!storeId) posRedirect("Choose a branch for this gallery image.", "display");
+  if (!isDisplayGalleryKind(kindValue)) posRedirect("Choose a valid gallery type.", "display");
+  if (kindValue !== "marketing") posRedirect("Menu Showcase is synced from the active POS products; upload marketing posters here.", "display");
+  if (!title || title.length > 120) posRedirect("Gallery title is required and must be at most 120 characters.", "display");
+  if (!isDisplayGalleryOverlayPosition(overlayValue)) posRedirect("Choose where the gallery title should appear.", "display");
+  if (!Number.isInteger(sortOrderValue) || sortOrderValue < -1000 || sortOrderValue > 1000) {
+    posRedirect("Gallery order must be a whole number between -1000 and 1000.", "display");
+  }
+  if (imageFile === undefined) posRedirect(`Choose a JPG, PNG, or WebP image under ${Math.round(DISPLAY_GALLERY_MAX_BYTES / 1000)} KB.`, "display");
+  if (requireImage && !imageFile) posRedirect("Upload a photo before saving this gallery item.", "display");
+
+  return {
+    storeId,
+    kind: kindValue as DisplayGalleryKind,
+    title,
+    overlayPosition: overlayValue as DisplayGalleryOverlayPosition,
+    sortOrder: sortOrderValue,
+    isActive: readFormBoolean(formData, "is_active"),
+    imageFile,
+  };
+}
+
+async function writeDisplayGalleryAudit(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orgId: string,
+  userId: string,
+  storeId: string,
+  itemId: string,
+  action: "display_gallery.created" | "display_gallery.updated" | "display_gallery.deleted",
+  before: unknown,
+  after: unknown,
+) {
+  await supabase.from("audit_logs").insert({
+    org_id: orgId,
+    store_id: storeId,
+    actor_id: userId,
+    action,
+    entity: "display_gallery_items",
+    entity_id: itemId,
+    before,
+    after,
+  });
+}
+
 export async function saveDisplaySettings(formData: FormData) {
   const storeId = readText(formData, "store_id");
   const serialized = readText(formData, "settings");
@@ -286,7 +354,7 @@ export async function saveDisplaySettings(formData: FormData) {
 }
 
 export async function createDisplayPromotion(formData: FormData) {
-  const { supabase, orgId, userId, selectedBranchId } = await requireAdmin();
+  const { supabase, orgId, userId, selectedBranchId } = await requireAdmin("display");
   const fields = readDisplayPromotionFields(formData);
   await validDeviceStore(supabase, orgId, fields.storeId, selectedBranchId, "display");
 
@@ -312,7 +380,7 @@ export async function createDisplayPromotion(formData: FormData) {
 }
 
 export async function updateDisplayPromotion(formData: FormData) {
-  const { supabase, orgId, userId, selectedBranchId } = await requireAdmin();
+  const { supabase, orgId, userId, selectedBranchId } = await requireAdmin("display");
   const promotionId = readText(formData, "promotion_id");
   const fields = readDisplayPromotionFields(formData);
   await validDeviceStore(supabase, orgId, fields.storeId, selectedBranchId, "display");
@@ -344,6 +412,135 @@ export async function updateDisplayPromotion(formData: FormData) {
     .eq("store_id", fields.storeId);
   if (error) posRedirect(error.message || "The promotion could not be saved.", "display");
   await writeDisplayPromotionAudit(supabase, orgId, userId, fields.storeId, promotionId, "display_promotion.updated", existing, fields);
+
+  refreshPos();
+  posSaved("display", "display");
+}
+
+export async function createDisplayGalleryItem(formData: FormData) {
+  const { supabase, orgId, userId, selectedBranchId } = await requireAdmin("display");
+  const fields = readDisplayGalleryFields(formData, true);
+  await validDeviceStore(supabase, orgId, fields.storeId, selectedBranchId, "display");
+  if (!fields.imageFile) posRedirect("Upload a photo before saving this gallery item.", "display");
+
+  const upload = await uploadDisplayGalleryImage(supabase, orgId, "display-gallery", fields.imageFile);
+  if (upload.error || !upload.url) posRedirect(upload.error || "The gallery image could not be uploaded.", "display");
+
+  const { data: item, error } = await supabase.from("display_gallery_items").insert({
+    org_id: orgId,
+    store_id: fields.storeId,
+    kind: fields.kind,
+    title: fields.title,
+    image_url: upload.url,
+    image_path: upload.path,
+    overlay_position: fields.overlayPosition,
+    sort_order: fields.sortOrder,
+    is_active: fields.isActive,
+    created_by: userId,
+  }).select("id").maybeSingle();
+  if (error) {
+    await removeDisplayGalleryImage(supabase, upload.path);
+    posRedirect(error.message || "The gallery image could not be saved.", "display");
+  }
+  if (item) {
+    await writeDisplayGalleryAudit(supabase, orgId, userId, fields.storeId, item.id, "display_gallery.created", null, {
+      kind: fields.kind,
+      title: fields.title,
+      overlayPosition: fields.overlayPosition,
+      sortOrder: fields.sortOrder,
+      isActive: fields.isActive,
+    });
+  }
+
+  refreshPos();
+  posSaved("display", "display");
+}
+
+export async function updateDisplayGalleryItem(formData: FormData) {
+  const { supabase, orgId, userId, selectedBranchId } = await requireAdmin("display");
+  const itemId = readText(formData, "item_id");
+  const fields = readDisplayGalleryFields(formData, false);
+  await validDeviceStore(supabase, orgId, fields.storeId, selectedBranchId, "display");
+  if (!itemId) posRedirect("The gallery item identifier is missing.", "display");
+
+  const { data: existing } = await supabase
+    .from("display_gallery_items")
+    .select("id, org_id, store_id, kind, title, image_url, image_path, overlay_position, sort_order, is_active")
+    .eq("id", itemId)
+    .eq("org_id", orgId)
+    .eq("store_id", fields.storeId)
+    .maybeSingle();
+  if (!existing) posRedirect("That gallery item is not available in the selected branch.", "display");
+
+  let imageUrl = existing.image_url as string;
+  let imagePath = (existing.image_path as string | null) ?? null;
+  let uploadedPath: string | null = null;
+  if (fields.imageFile) {
+    const upload = await uploadDisplayGalleryImage(supabase, orgId, "display-gallery", fields.imageFile);
+    if (upload.error || !upload.url) posRedirect(upload.error || "The gallery image could not be uploaded.", "display");
+    imageUrl = upload.url;
+    imagePath = upload.path;
+    uploadedPath = upload.path;
+  }
+
+  const { error } = await supabase
+    .from("display_gallery_items")
+    .update({
+      kind: fields.kind,
+      title: fields.title,
+      image_url: imageUrl,
+      image_path: imagePath,
+      overlay_position: fields.overlayPosition,
+      sort_order: fields.sortOrder,
+      is_active: fields.isActive,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", itemId)
+    .eq("org_id", orgId)
+    .eq("store_id", fields.storeId);
+  if (error) {
+    if (uploadedPath) await removeDisplayGalleryImage(supabase, uploadedPath);
+    posRedirect(error.message || "The gallery image could not be saved.", "display");
+  }
+  if (uploadedPath && existing.image_path) await removeDisplayGalleryImage(supabase, existing.image_path as string);
+  await writeDisplayGalleryAudit(supabase, orgId, userId, fields.storeId, itemId, "display_gallery.updated", existing, {
+    kind: fields.kind,
+    title: fields.title,
+    imageUrl,
+    overlayPosition: fields.overlayPosition,
+    sortOrder: fields.sortOrder,
+    isActive: fields.isActive,
+  });
+
+  refreshPos();
+  posSaved("display", "display");
+}
+
+export async function deleteDisplayGalleryItem(formData: FormData) {
+  const { supabase, orgId, userId, selectedBranchId } = await requireAdmin("display");
+  const itemId = readText(formData, "item_id");
+  const storeId = readText(formData, "store_id");
+  await validDeviceStore(supabase, orgId, storeId, selectedBranchId, "display");
+  if (!itemId) posRedirect("The gallery item identifier is missing.", "display");
+
+  const { data: existing } = await supabase
+    .from("display_gallery_items")
+    .select("id, store_id, image_path, title, kind")
+    .eq("id", itemId)
+    .eq("org_id", orgId)
+    .eq("store_id", storeId)
+    .maybeSingle();
+  if (!existing) posRedirect("That gallery item is not available in the selected branch.", "display");
+
+  const { error } = await supabase
+    .from("display_gallery_items")
+    .delete()
+    .eq("id", itemId)
+    .eq("org_id", orgId)
+    .eq("store_id", storeId);
+  if (error) posRedirect(error.message || "The gallery item could not be removed.", "display");
+  await removeDisplayGalleryImage(supabase, (existing.image_path as string | null) ?? null);
+  await writeDisplayGalleryAudit(supabase, orgId, userId, storeId, itemId, "display_gallery.deleted", existing, null);
 
   refreshPos();
   posSaved("display", "display");
@@ -383,7 +580,7 @@ function readDeviceFields(formData: FormData) {
   return { storeId, name, devicePrefix, transport, paperWidth, port, ip, bridgeHost, bridgePort };
 }
 
-async function requireAdmin() {
+async function requireAdmin(tab: PosActionTab = "hardware") {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -395,13 +592,13 @@ async function requireAdmin() {
     .eq("id", user.id)
     .single();
 
-  if (!profile || profile.role !== "admin") posRedirect("Only organization admins can manage terminals.", "hardware");
+  if (!profile || profile.role !== "admin") posRedirect("Only organization admins can manage POS settings.", tab);
   const { data: branches, error: branchesError } = await supabase
     .from("stores")
     .select("id, name, is_active")
     .eq("org_id", profile.org_id)
     .eq("is_active", true);
-  if (branchesError) posRedirect("We could not verify the selected branch. Try again.", "hardware");
+  if (branchesError) posRedirect("We could not verify the selected branch. Try again.", tab);
   const selectedBranchId = await getSelectedAdminBranchId((branches ?? []) as AdminBranchOption[], profile.store_id);
   return { supabase, orgId: profile.org_id, userId: user.id, selectedBranchId };
 }

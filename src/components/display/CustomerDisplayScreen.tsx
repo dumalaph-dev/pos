@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Image from "next/image";
 import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { createClient } from "@/lib/supabase/client";
@@ -10,6 +10,7 @@ import {
   isDisplayState,
   normalizeDisplayPairingToken,
   type DisplayCartLine,
+  type DisplayGalleryItem,
   type DisplaySettings,
   type DisplayState,
 } from "@/lib/display";
@@ -64,6 +65,9 @@ const PRODUCT_MARQUEE_PRODUCTS = [
   { id: "marquee-lechon-kawali", title: "Lechon kawali", imageUrl: "/food/lechon-kawali.png" },
   { id: "marquee-blueberry-muffin", title: "Blueberry muffin", imageUrl: "/food/cafe-blueberry-muffin.png" },
 ] as const;
+
+const EMPTY_GALLERY: DisplayGalleryItem[] = [];
+const GALLERY_TRANSITION_MS = 1800;
 
 function displayPeso(value: number) {
   return formatPeso(Math.max(0, Math.round(value))).replace(/\.00$/, "");
@@ -128,7 +132,7 @@ function ProductMarquee({ promotions }: { promotions: DisplayPromotion[] }) {
   );
 }
 
-function BrandBar({ state, promotions }: { state: DisplayState; promotions: DisplayPromotion[] }) {
+function BrandBar({ state, promotions, showMarquee = true }: { state: DisplayState; promotions: DisplayPromotion[]; showMarquee?: boolean }) {
   return (
     <header className={styles.brandBar}>
       <div className={styles.brand}>
@@ -137,8 +141,51 @@ function BrandBar({ state, promotions }: { state: DisplayState; promotions: Disp
           <strong>{state.branding.storeName}</strong>
         </div>
       </div>
-      <ProductMarquee promotions={promotions} />
+      {showMarquee ? <ProductMarquee promotions={promotions} /> : null}
     </header>
+  );
+}
+
+function GalleryState({ state, item, promotions }: { state: Extract<DisplayState, { kind: "idle" }>; item: DisplayGalleryItem; promotions: DisplayPromotion[] }) {
+  const displayItemRef = useRef(item);
+  const [displayItem, setDisplayItem] = useState(item);
+  const [outgoingItem, setOutgoingItem] = useState<DisplayGalleryItem | null>(null);
+
+  useEffect(() => {
+    const previousItem = displayItemRef.current;
+    if (item.id === previousItem.id && item.imageUrl === previousItem.imageUrl && item.title === previousItem.title) return;
+
+    displayItemRef.current = item;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let outgoingTimer: number | undefined;
+    const updateTimer = window.setTimeout(() => {
+      if (reduceMotion) {
+        setOutgoingItem(null);
+        setDisplayItem(item);
+        return;
+      }
+      setOutgoingItem(previousItem);
+      setDisplayItem(item);
+      outgoingTimer = window.setTimeout(() => setOutgoingItem(null), GALLERY_TRANSITION_MS);
+    }, 0);
+    return () => {
+      window.clearTimeout(updateTimer);
+      if (outgoingTimer !== undefined) window.clearTimeout(outgoingTimer);
+    };
+  }, [item]);
+
+  const isRight = displayItem.overlayPosition === "right";
+  return (
+    <section className={styles.galleryState} aria-labelledby="display-gallery-title">
+      {outgoingItem ? <Image src={outgoingItem.imageUrl} alt="" fill sizes="100vw" className={`${styles.galleryImage} ${styles.galleryImageOutgoing}`} aria-hidden="true" /> : null}
+      <Image key={`${displayItem.id}-${displayItem.imageUrl}-${displayItem.title}`} src={displayItem.imageUrl} alt={displayItem.title} fill sizes="100vw" priority className={`${styles.galleryImage} ${styles.galleryImageCurrent}`} />
+      <div className={styles.galleryScrim} aria-hidden="true" />
+      <div className={styles.galleryBrand}><BrandBar state={state} promotions={promotions} showMarquee={displayItem.kind !== "menu"} /></div>
+      <div key={`${displayItem.id}-${displayItem.title}`} className={`${styles.galleryOverlay} ${styles.galleryOverlayEnter}${isRight ? ` ${styles.galleryOverlayRight}` : ""}`}>
+        <span>{displayItem.kind === "menu" ? "Menu showcase" : "Featured today"}</span>
+        <h1 id="display-gallery-title">{displayItem.title}</h1>
+      </div>
+    </section>
   );
 }
 
@@ -248,8 +295,12 @@ export default function CustomerDisplayScreen({ pairingToken }: { pairingToken: 
   const token = normalizeDisplayPairingToken(pairingToken);
   const [state, setState] = useState<DisplayState>(DEFAULT_STATE);
   const [promotionIndex, setPromotionIndex] = useState(0);
+  const [galleryIndex, setGalleryIndex] = useState(0);
   const settings = state.settings ?? DEFAULT_DISPLAY_SETTINGS;
   const promotions = state.promotions?.length ? state.promotions : DISPLAY_PROMOTIONS;
+  const galleryItems = settings.showGallery && state.gallery?.length
+    ? state.gallery.filter((item) => item.kind === "marketing" ? settings.showMarketingGallery : settings.showMenuGallery)
+    : EMPTY_GALLERY;
   const promotionPool = useMemo(() => {
     if (promotions.length >= 2) return promotions;
     return [
@@ -261,6 +312,10 @@ export default function CustomerDisplayScreen({ pairingToken }: { pairingToken: 
     ? Array.from({ length: Math.min(2, promotionPool.length) }, (_, offset) => promotionPool[(promotionIndex + offset) % promotionPool.length])
     : [];
   const promotion = displayPromotions[0] ?? null;
+  const safeGalleryIndex = galleryItems.length ? galleryIndex % galleryItems.length : 0;
+  const galleryItem = state.kind === "idle" && galleryItems.length > 0
+    ? galleryItems[safeGalleryIndex]
+    : null;
   const themeId = state.theme ?? "modern";
   const themeStyle = useMemo(() => displayThemeStyle(themeId), [themeId]);
 
@@ -285,8 +340,16 @@ export default function CustomerDisplayScreen({ pairingToken }: { pairingToken: 
   }, [promotionPool.length, settings.rotationSeconds, settings.showPromotions]);
 
   useEffect(() => {
+    if (!galleryItem || galleryItems.length < 2 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setInterval(() => {
+      setGalleryIndex((current) => (current + 1) % galleryItems.length);
+    }, settings.rotationSeconds * 1000);
+    return () => window.clearInterval(timer);
+  }, [galleryItem, galleryItems.length, settings.rotationSeconds]);
+
+  useEffect(() => {
     if (state.kind !== "thankyou") return;
-    const timer = window.setTimeout(() => setState((current) => current.kind === "thankyou" ? { kind: "idle", branding: current.branding, promotions: current.promotions, settings: current.settings, theme: current.theme } : current), 5000);
+    const timer = window.setTimeout(() => setState((current) => current.kind === "thankyou" ? { kind: "idle", branding: current.branding, promotions: current.promotions, gallery: current.gallery, settings: current.settings, theme: current.theme } : current), 5000);
     return () => window.clearTimeout(timer);
   }, [state]);
 
@@ -295,14 +358,16 @@ export default function CustomerDisplayScreen({ pairingToken }: { pairingToken: 
   }
 
   return (
-    <main className={styles.display} data-display-state={state.kind} data-display-theme={themeId} style={themeStyle}>
-      <div className={styles.shell}>
-        <BrandBar state={state} promotions={promotions} />
-        {state.kind === "idle" && <IdleState state={state} promotion={promotion} />}
-        {state.kind === "active" && <ActiveState state={state} promotions={displayPromotions} settings={settings} />}
-        {state.kind === "payment" && <PaymentState state={state} />}
-        {state.kind === "thankyou" && <ThankYouState state={state} settings={settings} />}
-      </div>
+    <main className={`${styles.display}${galleryItem ? ` ${styles.displayGallery}` : ""}`} data-display-state={state.kind} data-display-mode={galleryItem ? "gallery" : state.kind} data-display-theme={themeId} style={themeStyle}>
+      {galleryItem && state.kind === "idle" ? <GalleryState state={state} item={galleryItem} promotions={promotions} /> : (
+        <div className={styles.shell}>
+          <BrandBar state={state} promotions={promotions} />
+          {state.kind === "idle" && <IdleState state={state} promotion={promotion} />}
+          {state.kind === "active" && <ActiveState state={state} promotions={displayPromotions} settings={settings} />}
+          {state.kind === "payment" && <PaymentState state={state} />}
+          {state.kind === "thankyou" && <ThankYouState state={state} settings={settings} />}
+        </div>
+      )}
     </main>
   );
 }

@@ -9,7 +9,7 @@
  */
 import Dexie, { liveQuery, type Table } from "dexie";
 
-import { isDisplayPromotion, isDisplaySettings, type DisplayPromotion, type DisplaySettings } from "@/lib/display";
+import { isDisplayGalleryItem, isDisplayPromotion, isDisplaySettings, type DisplayGalleryItem, type DisplayPromotion, type DisplaySettings } from "@/lib/display";
 
 export type PendingOrder = {
   id?: number;
@@ -48,6 +48,7 @@ export type OfflineProfileSnapshot = {
   device_id?: string | null;
   display_pairing_token?: string | null;
   display_promotions?: DisplayPromotion[];
+  display_gallery?: DisplayGalleryItem[];
   display_settings?: DisplaySettings;
   pos_config?: unknown;
 };
@@ -106,6 +107,7 @@ function isOfflineProfileSnapshot(value: unknown): value is OfflineProfileSnapsh
     (value.discount_threshold === undefined || (typeof value.discount_threshold === "number" && Number.isFinite(value.discount_threshold) && value.discount_threshold >= 0 && value.discount_threshold <= 100)) &&
     (value.display_pairing_token === undefined || isNullableString(value.display_pairing_token)) &&
     (value.display_promotions === undefined || (Array.isArray(value.display_promotions) && value.display_promotions.every(isDisplayPromotion))) &&
+    (value.display_gallery === undefined || (Array.isArray(value.display_gallery) && value.display_gallery.every(isDisplayGalleryItem))) &&
     (value.display_settings === undefined || isDisplaySettings(value.display_settings))
   );
 }
