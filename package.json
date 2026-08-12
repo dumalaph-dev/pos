@@ -12,6 +12,7 @@
     "trial:validate": "npx supabase db query --linked --file scripts/trial-lifecycle-smoke.sql --output json",
     "pos:void:validate": "npx supabase db query --linked --file scripts/pos-void-smoke.sql --output json",
     "paymongo:preflight": "node scripts/paymongo-preflight.mjs",
+    "production:preflight": "node scripts/production-preflight.mjs --remote",
     "pwa:icons": "node scripts/generate-pwa-icons.mjs",
     "printer:validate": "node --experimental-strip-types scripts/validate-printer.mjs",
     "printer:validate:mock": "node --experimental-strip-types scripts/validate-printer.mjs --mock"

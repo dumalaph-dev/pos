@@ -10,6 +10,7 @@
 import Dexie, { liveQuery, type Table } from "dexie";
 
 import { isDisplayGalleryItem, isDisplayPromotion, isDisplaySettings, type DisplayGalleryItem, type DisplayPromotion, type DisplaySettings } from "@/lib/display";
+import { reportError, reportSyncFailure } from "@/lib/monitoring";
 
 export type PendingOrder = {
   id?: number;
@@ -31,6 +32,12 @@ export type OfflineSyncScope = {
   userId: string;
   orgId: string;
   storeId: string | null;
+};
+
+export type SyncBatchResult = {
+  synced: number;
+  failed: number;
+  lastError: string | null;
 };
 
 export type OfflineProfileSnapshot = {
@@ -171,6 +178,12 @@ function matchesAuditScope(payload: Record<string, unknown>, scope: OfflineSyncS
   );
 }
 
+function syncErrorMessage(reason: unknown): string {
+  if (reason instanceof Error && reason.message) return reason.message.slice(0, 240);
+  if (isRecord(reason) && typeof reason.message === "string") return reason.message.slice(0, 240);
+  return "Unknown sync error";
+}
+
 type PosDB = Dexie & {
   outbox: Table<PendingOrder, number>;
   auditOutbox: Table<PendingAuditLog, number>;
@@ -268,8 +281,15 @@ export async function enqueueOrder(
 }
 
 export async function pendingCount(scope: OfflineSyncScope): Promise<number> {
-  const pending = await getDb().outbox.toArray();
-  return pending.filter((item) => matchesOrderScope(item.p_order, scope)).length;
+  const db = getDb();
+  const [pendingOrders, pendingAudits] = await Promise.all([
+    db.outbox.toArray(),
+    db.auditOutbox.toArray(),
+  ]);
+  return (
+    pendingOrders.filter((item) => matchesOrderScope(item.p_order, scope)).length +
+    pendingAudits.filter((item) => matchesAuditScope(item.payload, scope)).length
+  );
 }
 
 /**
@@ -533,11 +553,13 @@ type AuditSyncClient = {
 };
 
 /** Replay locally queued audit events without blocking the sale or print path. */
-export async function flushAuditOutbox(client: AuditSyncClient, scope: OfflineSyncScope): Promise<number> {
+export async function flushAuditOutbox(client: AuditSyncClient, scope: OfflineSyncScope): Promise<SyncBatchResult> {
   const db = getDb();
   const pending = (await db.auditOutbox.orderBy("created_at").toArray())
     .filter((item) => matchesAuditScope(item.payload, scope));
   let synced = 0;
+  let failed = 0;
+  let lastError: string | null = null;
   for (const item of pending) {
     let error: unknown = null;
     try {
@@ -547,13 +569,21 @@ export async function flushAuditOutbox(client: AuditSyncClient, scope: OfflineSy
       error = cause;
     }
     if (error) {
-      await db.auditOutbox.update(item.id!, { attempts: item.attempts + 1 });
+      failed++;
+      lastError = syncErrorMessage(error);
+      const attempts = item.attempts + 1;
+      await db.auditOutbox.update(item.id!, { attempts });
+      reportSyncFailure(error, {
+        queue: "audit",
+        attempts,
+        pending_items: pending.length,
+      });
       continue;
     }
     await db.auditOutbox.delete(item.id!);
     synced++;
   }
-  return synced;
+  return { synced, failed, lastError };
 }
 
 async function linkPendingAudits(localUuid: string, entityId: unknown, scope: OfflineSyncScope): Promise<void> {
@@ -574,11 +604,18 @@ async function linkPendingAudits(localUuid: string, entityId: unknown, scope: Of
 /** Subscribe to outbox size changes; returns an unsubscribe fn. */
 export function watchPending(cb: (n: number) => void, scope: OfflineSyncScope): () => void {
   const subscription = liveQuery(async () => {
-    const pending = await getDb().outbox.toArray();
-    return pending.filter((item) => matchesOrderScope(item.p_order, scope)).length;
+    const db = getDb();
+    const [pendingOrders, pendingAudits] = await Promise.all([
+      db.outbox.toArray(),
+      db.auditOutbox.toArray(),
+    ]);
+    return (
+      pendingOrders.filter((item) => matchesOrderScope(item.p_order, scope)).length +
+      pendingAudits.filter((item) => matchesAuditScope(item.payload, scope)).length
+    );
   }).subscribe({
     next: cb,
-    error: () => {},
+    error: (error) => reportError(error, { area: "offline-sync", queue: "watch" }),
   });
   return () => subscription.unsubscribe();
 }
@@ -587,11 +624,13 @@ export function watchPending(cb: (n: number) => void, scope: OfflineSyncScope): 
  * Replay every queued order through `place_order`. The RPC is idempotent on
  * local_uuid, so replays are safe. Returns how many orders were confirmed.
  */
-export async function flushOutbox(client: OrderSyncClient, scope: OfflineSyncScope): Promise<number> {
+export async function flushOutbox(client: OrderSyncClient, scope: OfflineSyncScope): Promise<SyncBatchResult> {
   const db = getDb();
   const pending = (await db.outbox.orderBy("created_at").toArray())
     .filter((item) => matchesOrderScope(item.p_order, scope));
   let synced = 0;
+  let failed = 0;
+  let lastError: string | null = null;
   for (const item of pending) {
     let error: unknown = null;
     try {
@@ -605,13 +644,21 @@ export async function flushOutbox(client: OrderSyncClient, scope: OfflineSyncSco
       error = e; // network failure — keep queued, retry later
     }
     if (error) {
-      await db.outbox.update(item.id!, { attempts: item.attempts + 1 });
+      failed++;
+      lastError = syncErrorMessage(error);
+      const attempts = item.attempts + 1;
+      await db.outbox.update(item.id!, { attempts });
+      reportSyncFailure(error, {
+        queue: "orders",
+        attempts,
+        pending_items: pending.length,
+      });
       continue;
     }
     await db.outbox.delete(item.id!);
     synced++;
   }
-  return synced;
+  return { synced, failed, lastError };
 }
 
 /* ── Catalog cache ───────────────────────────────────────────────────── */

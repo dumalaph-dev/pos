@@ -7,7 +7,7 @@
 
 ## Current project status
 
-**Last updated:** 2026-08-11
+**Last updated:** 2026-08-12
 
 This section is the current source of truth for delivered work and the next gate. Keep it updated in the same change as every feature, migration, QA pass, commit, or deployment.
 
@@ -22,14 +22,26 @@ This section is the current source of truth for delivered work and the next gate
 | Admin backoffice | Complete (9/9 checklist items; hosted Employee ID login and forced-password-change QA passed 2026-08-09) | Maintain regression coverage |
 | Inventory workflow | Complete | Maintain regression coverage |
 | Inventory reporting and exports | Authenticated admin and manager QA passed | Reconciliation against broader live data |
-| Shifts, till, and Z-readings | Implemented; hosted authenticated RPC and manual open/close QA passed; shift-label collision fixed and verified 2026-08-09 | Confirm the 2026-08-11 totals in the authenticated reports UI |
+| Shifts, till, and Z-readings | Complete; hosted authenticated RPC, manual open/close QA, and real-day report reconciliation passed 2026-08-12; shift-label collision fixed and verified 2026-08-09 | Keep regression coverage green |
 | Store-owner onboarding and guidance | Implemented | Verify first-run and mobile behavior on the deployed app |
 | Admin workspace themes | Live main deployment previews verified 2026-08-09 | Maintain regression coverage |
-| Production pilot | Not started | Production Supabase, device setup, pilot week, and branch #2 |
+| Production pilot | Not started; production and PWA foundations are live at `dumala.store` | Physical device setup, PWA install verification, PITR/restore confirmation, Vercel log/alert setup, real data intake, pilot week, and branch #2 |
 
 ### Recent delivery log
 
 - **2026-08-11 - Hosted customer-display migration and paired QA:** Applied `0041` and `0042` to the target Supabase project; the linked migration ledger now matches local through `0042`. `public.display_promotions` exists with RLS enabled. `display_promotions_admin_all` is `ALL` and org-scoped through `auth_is_admin()`/`auth_org_id()`; `display_promotions_branch_read` is branch-scoped through `auth_store_id()`. Effective table privileges match the migration: `authenticated` has SELECT/INSERT/UPDATE/DELETE, `service_role` has all four, and `anon` has none. In authenticated Admin -> POS -> Customer Display, created the real active Main Branch card `Complete your lechon feast` using the lechon meal combo image; the temporary second card used for rotation was archived afterward. Paired POS and customer-display browser tabs showed the same live cart, 1.35 kg weight line, 5% discount, payment/change, and thank-you state. At the configured 7-second rotation, `Complete your lechon feast` changed to `Make it a little sweeter`. The first completed cash sale was order `MB-DC3992CC8-260811-0001`: subtotal PHP 1,297.50, discount PHP 64.88, total PHP 1,232.62, PHP 1,500 tendered, PHP 267.38 change; the display showed the order number and returned to idle promotions after thank-you. After navigating the display to its unpaired screen, the POS completed exact-cash Espresso order `MB-DC3992CC8-260811-0002` for PHP 120.00 without blocking. Both orders are `completed` in the hosted ledger. The temporary per-kg product `QA Weight Item 20260811` was archived/hidden from POS after the weight pass.
+
+- **2026-08-12 - Hosted P8 report reconciliation and QA cleanup:** Authenticated Main Branch `/admin/reports` filtered to `2026-08-11` shows `Balanced`: 8 raw sale rows, 8 net orders, 0 raw reversals, raw net sales PHP 4,492.97, and summary net sales PHP 4,492.97. The two customer-display QA orders are present in hosted Orders as `MB-DC3992CC8-260811-0001` (PHP 1,232.62) and `MB-DC3992CC8-260811-0002` (PHP 120.00), both completed cash sales. After verification, disposable `EMP-0003` was deactivated; Employees now shows 2 active and 2 inactive records out of 4. The remaining P3 gate is physical LAN-printer validation; the hosted terminal configuration is still loopback `127.0.0.1:9100`, so no physical pass is claimed.
+
+- **2026-08-12 - Production deployment baseline tracked:** `dumala.store` is live on the Vercel production deployment, the repository remote is GitHub `dumalaph-dev/pos`, and the live app is connected to the hosted Supabase project `uzavkjftwcuixidxyopr`. The hosted migration ledger is current through `0043`, with hosted RLS/privilege and authenticated QA checks recorded above. P9 is therefore no longer a deployment-creation phase; the remaining gates are PWA/device readiness, final store data, backups/monitoring, the pilot week, and branch #2.
+
+- **2026-08-12 - PWA install UX refinement:** Confirmed the PWA foundation is implemented: `app/manifest.ts` provides standalone install metadata, `public/sw.js` provides the production app shell and update flow, and the root layout registers both the service worker and install control. Reworked the install control into a compact bottom-left `INSTALL DUMALA POS` pill with an accessible X close button, 30-day dismissal memory, install acceptance memory, standalone-mode detection, and a small on-demand iOS instruction popover. It no longer shows on the customer display route or after installation; physical-tablet installation verification remains a P9 gate.
+
+- **2026-08-12 - Production resilience packet and monitoring scaffold:** Confirmed the linked production project `uzavkjftwcuixidxyopr` is `ACTIVE_HEALTHY` in `ap-southeast-2`, Postgres `17.6.1.155`, with migrations synchronized through `0043`. The read-only backup API reports `walg_enabled=true`, `pitr_enabled=false`, and no listed backup entries, so PITR/restore-point confirmation remains an owner Dashboard action; the restore runbook is [PRODUCTION_BACKUP_AND_RESTORE.md](PRODUCTION_BACKUP_AND_RESTORE.md). Added Next/Vercel structured request-error logs, global/admin error-boundary and browser diagnostics, deduplicated offline order/audit sync-failure reporting, and a visible POS sync-issue state. The no-paid-service monitoring runbook is [PRODUCTION_MONITORING.md](PRODUCTION_MONITORING.md); Vercel log access and alert recipients still need to be configured. Prepared the [production onboarding/device checklist](PRODUCTION_ONBOARDING_CHECKLIST.md) and secure [real-data intake packet](PRODUCTION_DATA_INTAKE.md); QA catalog/staff records remain untouched until approved real data is supplied.
+
+- **2026-08-12 - Production preflight added:** Added `npm run production:preflight` to validate the expected hosted Supabase project, `dumala.store` origin, and the deployed PWA root/manifest/service-worker endpoints without printing secrets. The gate has no paid third-party monitoring dependency; Vercel log access and notifications remain an operational setup task.
+
+- **2026-08-12 - Monitoring cost decision:** Removed the optional Sentry dependency and configuration at the owner’s request. Production monitoring now uses Next/Vercel structured request-error logs, app/browser diagnostics, and visible/deduplicated POS sync-failure alerts.
 
 - **2026-08-11 - Authenticated visual QA attempt:** The local admin fixture successfully created an active Alpha Branch 1 promotion through the authenticated Supabase path and branch isolation returned zero cross-branch rows. The temporary card was deleted after the check. The in-app browser connector failed before page interaction (`failed to write kernel assets`), so the owner UI and cart -> payment -> thank-you visual states remain unverified; no visual pass is claimed.
 
@@ -71,9 +83,8 @@ This section is the current source of truth for delivered work and the next gate
 
 ### Immediate next task
 
-1. Open the authenticated `/admin/reports` view for 2026-08-11 and refresh the reconciliation. The earlier preflight covered 2 orders and PHP 1,070.00 before this P5 QA; the two completed QA orders above are now part of the business-date scope.
-2. Keep the separate P3 hardware gate moving: put the real LAN printer on the same network, confirm its reachable IP, and observe a physical receipt including the X/Z reading slips.
-3. After the current cashier session is signed out, deactivate the disposable `EMP-0003` QA employee and confirm the hosted Employees directory returns to its pre-test active count.
+1. Keep the separate P3 hardware gate moving: put a real LAN printer on the same network, configure its reachable IP instead of loopback `127.0.0.1`, and observe a physical receipt including the X/Z reading slips.
+2. Verify the PWA on the actual tablet (Add to Home Screen, standalone launch, and install control hidden), then run the P9 on-device pilot checklist: offline drill, customer display, backups, and monitoring.
 
 ---
 
@@ -81,7 +92,7 @@ This section is the current source of truth for delivered work and the next gate
 
 | Phase | Name | Status | Progress | Gate |
 |---|---|:--:|:--:|---|
-| **P0** | Foundation & infra | ✅ Done | 9 / 9 | Device binding and CI are implemented; deployment verification remains in P9 |
+| **P0** | Foundation & infra | ✅ Done | 9 / 9 | Device binding and CI are implemented; production domain is live; device/pilot verification remains in P9 |
 | **P1** | POS core (online) | ✅ Done | 8 / 8 | — |
 | **P2** | Offline layer | ✅ Done | 7 / 7 | — |
 | **P3** | Printing | 🟡 In progress | 6 / 7 | **Physical LAN printer validation pending (PRD §6.4)** |
@@ -89,8 +100,8 @@ This section is the current source of truth for delivered work and the next gate
 | **P5** | Customer display | ✅ Done | 6 / 6 | Physical display/LAN and offline pilot QA remain separate |
 | **P6** | Backoffice | ✅ Done | 9 / 9; hosted Employee ID login, forced password change, cashier landing, and audit verification passed 2026-08-09 | Maintain regression coverage |
 | **P7** | Inventory | ✅ Done | 6 / 6 | Maintain regression coverage |
-| **P8** | Shifts & reports | 🟡 In progress | Shifts, X/Z readings, sales reports, inventory reporting, and hosted RPC till QA implemented | Reconcile against a real hosted day's data |
-| **P9** | Pilot & production deploy | ⬜ Not started | 0 / 8 | Everything above |
+| **P8** | Shifts & reports | ✅ Done | Shifts, X/Z readings, sales reports, inventory reporting, hosted RPC till QA, and real-day reconciliation passed 2026-08-12 | Maintain regression coverage |
+| **P9** | Pilot & production readiness | 🟡 In progress | 4 / 11 | Production/PWA foundations and the onboarding/data-intake packet are ready; finish physical-device verification, PITR/restore confirmation, monitoring configuration, real-data import, pilot week, and branch #2 |
 
 **Status legend:** ⬜ Not started · 🟡 In progress · ✅ Done · 🔴 Blocked
 **First shippable slice:** P0 → P3 (sell + print offline, one branch). **Full MVP:** P0 → P9.
@@ -103,7 +114,7 @@ This section is the current source of truth for delivered work and the next gate
 *Goal: an empty app that logs in, knows roles/branches, and has a locked-down schema.*
 
 - [x] Scaffold Next.js 16 (App Router) + TypeScript + Tailwind v4. *(shadcn/ui deferred to P1 when first components land.)*
-- [x] Create Supabase project; set up local `.env` and Vercel project (link repo, set env vars). *(env template + clients ready; needs your accounts — see SETUP.md.)* *(✅ hosted project `uzavkjftwcuixidxyopr` connected + seeded (org Dumala / Main Branch); Vercel deploy pending P9.)*
+- [x] Create Supabase project; set up local `.env` and Vercel project (link repo, set env vars). *(env template + clients ready; needs your accounts — see SETUP.md.)* *(✅ hosted project `uzavkjftwcuixidxyopr` connected + seeded (org Dumala / Main Branch); production domain `dumala.store` is live on Vercel.)*
 - [x] Write the schema (`organizations`, `stores`, `devices`, `profiles`, `categories`, `products`, `stock_movements`, `orders`, `order_items`, `shifts`, `audit_logs`) as SQL migrations. → `supabase/migrations/0001_schema.sql` *(✅ applied + verified on local stack 2026-07-31)*
 - [x] Enable **RLS on every table**; policies (admins by `org_id`, cashiers by `store_id`; append-only audit/stock + triggers). → `0002_rls.sql`. *(Two-branch test fixture still TODO — TEST_PLAN §1.)* *(✅ applied + verified on local stack 2026-07-31: 11 tables RLS-on, 29 policies, 4 triggers)*
 - [x] Supabase Auth: email+password login page at root; `profiles` row created on invite. *(Client/server helpers ready; login UI pending.)* *(✅ first login verified on hosted 2026-07-31 — admin lands on /admin.)*
@@ -112,7 +123,7 @@ This section is the current source of truth for delivered work and the next gate
 - [x] Design tokens wired to Tailwind v4 from `ui.png` (globals.css `@theme` + IBM Plex Sans + `money.ts`). Smoke page verifies render; `npm run build` green.
 - [x] CI: lint + typecheck on PR; Vercel preview deploys per branch. *(`.github/workflows/ci.yml` now runs typecheck, lint, and build on pull requests and `main`; Vercel preview behavior still needs live verification after the next push.)*
 
-P0 implementation is complete in source (9/9). Production preview deployment verification remains part of P9.
+P0 implementation is complete in source (9/9). The production domain is live; PWA installation and on-device pilot verification remain part of P9.
 
 ## P1 — POS Core (Online)
 *Goal: ring up a real sale online and write it to the DB.*
@@ -182,7 +193,7 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 
 ### P5 validation record — 2026-08-11
 
-- Hosted target: `https://dumala.store`, Main Branch. Migration ledger: local and remote `0001` through `0042` match. The authenticated Admin -> POS -> Customer Display editor created one real active promotion, `Complete your lechon feast`; a second temporary card was used only to prove rotation and was archived afterward.
+- Hosted target: `https://dumala.store`, Main Branch. Migration ledger: local and remote `0001` through `0043` match. The authenticated Admin -> POS -> Customer Display editor created one real active promotion, `Complete your lechon feast`; a second temporary card was used only to prove rotation and was archived afterward.
 - Paired browser two-screen pass: POS-generated pairing link opened on the customer-display tab; both screens showed `Main Branch` and `Display ready`. The promotion rail was visible while idle and during the active cart. With the temporary `QA Weight Item 20260811`, entering `1.35` kg at PHP 850/kg produced PHP 1,147.50. Adding Butter Croissant produced a PHP 1,297.50 subtotal; removing it mirrored correctly on both screens. Applying a custom 5% discount produced PHP 64.88 discount and PHP 1,232.62 total, mirrored on both screens.
 - Payment/change pass: cash payment with PHP 1,500 tendered showed PHP 267.38 change on POS and the display, then completed order `MB-DC3992CC8-260811-0001`. POS reset to a new sale; the display showed `Salamat po!` with the order number and returned to idle promotion view after the thank-you timeout.
 - Promotion rotation pass: with the configured 7-second interval, the visible headline changed from `Complete your lechon feast` to `Make it a little sweeter` while the display remained ready.
@@ -284,7 +295,7 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 - `npm run typecheck`, `npm run lint`, `npm run build`, `npm run printer:validate:mock`, and `git diff --check` pass. The build exposes `/admin/shifts`.
 - **Hosted migration applied 2026-08-07.** `npx supabase db push --linked` applied `0024`; `migration list --linked` now reports local `0024` = remote `0024`. The push printed a `Warning: failed to cache migrations catalog: error exporting pg-delta catalog ... timeout exceeded when trying to connect`, followed by edge-runtime `event loop error` / `main worker has been destroyed` lines. That is the CLI's optional post-apply schema-snapshot step (pg-delta, used for declarative-schema diffing) failing inside its sandbox, not the migration — the CLI reported it as a warning, then `Finished supabase db push`, and only records the ledger row after a successful apply.
 - Hosted verification passed by probing the project API with the public anon key: `z_readings` returned `42501 permission denied for table z_readings`, which proves both that the table exists and that the `revoke ... from anon` in `0024` took effect. All five new RPCs resolve through PostgREST with no `PGRST202`, so the schema cache picked them up: `shift_reading`, `shift_reading_list`, `open_shift`, `close_shift`, and `record_z_reading` — the last reaching its guard and raising `P0001 only organization admins can generate a Z-reading`. `place_order` is in the same single-transaction migration file as those objects, so it was replaced with them; the first hosted sale carrying a non-null `shift_id` is the direct confirmation.
-- Authenticated browser QA of the till flow is still pending.
+- Authenticated browser QA of the till flow passed: hosted open/close, X-reading, and Z-reading checks were completed; the remaining P8 gate was the real-day report reconciliation recorded above.
 
 ### Authenticated append-only table hardening — 2026-08-07
 
@@ -299,17 +310,22 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 - [x] Reports: sales by day/week/month, item, category, cashier; hourly heatmap. *(`src/lib/admin/sales-reports.ts` is the single reversal-aware aggregation; `/admin/reports` renders it with day/week/month grouping plus cashier and payment filters.)*
 - [x] Discount report; branch-vs-branch comparison. *(Discounts grouped by `discount_type`; branch table shows orders, net sales, discounts, average order, and share.)*
 - [x] CSV export. *(`/admin/reports/export?kind=` for summary, periods, items, categories, cashiers, branches, discounts, and hourly. Amounts stay in centavos and the route refuses to emit a truncated file.)*
-- [ ] Reconcile reports against raw orders on a real day's data. *(The report now shows a scoped raw-ledger reconciliation control and blocks sign-off on truncation/query failure; completion still needs real hosted sales volume.)*
+- [x] Reconcile reports against raw orders on a real day's data. *(Authenticated Main Branch QA on 2026-08-12, scoped to 2026-08-11: 8 raw sale rows, 8 net orders, 0 reversals, and PHP 4,492.97 in both raw and summary net sales; status `Balanced`.)*
 
-## P9 — Pilot & Production Deployment
+## P9 — Pilot & Production Readiness
 *Goal: live in a real store, then a second branch as the true multi-branch test.*
 
-- [ ] Production Supabase (separate project from dev); run migrations; verify RLS in prod.
-- [ ] Vercel production domain + PWA install verified on the actual tablet(s); "Add to Home Screen".
+**Current state (2026-08-12):** Production deployment and the PWA foundation are already live. `dumala.store` is the Vercel production domain, GitHub `dumalaph-dev/pos` is the connected repository, and the live app uses hosted Supabase project `uzavkjftwcuixidxyopr`. The linked migration ledger is synchronized through `0043`. The onboarding/device checklist and secure real-data intake packet are ready; the remaining P9 work is physical-device verification and production-use configuration.
+
+- [x] Production Supabase (separate project from dev); run migrations; verify RLS in prod. *(Hosted project is connected; local and hosted migration ledgers match through `0043`; hosted RLS, privileges, and authenticated QA are recorded above.)*
+- [x] Vercel production deployment + custom domain. *(`https://dumala.store` is live and serving the connected GitHub deployment.)*
+- [x] PWA foundation and install UX. *(Manifest, standalone display mode, production service worker, offline shell, update prompt, and compact dismissible install control are implemented.)*
+- [ ] PWA install verified on the actual tablet(s); "Add to Home Screen" and confirm the installed app does not show the install control.
 - [ ] Seed the real org, first branch, real menu/prices, staff accounts + PINs.
+- [x] Prepare the production onboarding/device checklist and secure real-data intake packet. *(See `docs/PRODUCTION_ONBOARDING_CHECKLIST.md` and `docs/PRODUCTION_DATA_INTAKE.md`; the actual owner data is still required.)*
 - [ ] On-device checklist: printer paired, customer display paired, offline drill passed, receipt looks right.
-- [ ] Backups: confirm Supabase PITR/backups on; document restore steps.
-- [ ] Basic monitoring: error logging (e.g. Sentry), Vercel analytics, sync-failure alerting.
+- [ ] Backups: confirm Supabase PITR/backups on; document restore steps. *(Runbook is ready; current hosted check reports PITR disabled and no listed backup entries.)*
+- [ ] Basic monitoring: Vercel runtime error logging and sync-failure alerting. *(Structured server logs and POS sync UI/alerts are ready; configure Vercel log access/notifications before the pilot.)*
 - [ ] **Pilot week:** run one branch alongside the notebook; log every issue; fix fast.
 - [ ] **Add branch #2** from the account as the real multi-branch validation; sign off against MVP success bars.
 

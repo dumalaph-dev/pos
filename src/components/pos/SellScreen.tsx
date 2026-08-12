@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
+import { reportError } from "@/lib/monitoring";
 import { formatPeso, weightLineTotal } from "@/lib/money";
 import { formatStockQuantity, stockMovementDelta, stockStatus } from "@/lib/inventory";
 import { resolveProductImage } from "@/lib/product-images";
@@ -381,6 +382,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
   const [offlineCredential, setOfflineCredential] = useState<OfflineCredential | null>(null);
   const [offlineCatalogReady, setOfflineCatalogReady] = useState(false);
   const [pending, setPending] = useState(0);
+  const [syncFailure, setSyncFailure] = useState<string | null>(null);
   const [printerSettings, setPrinterSettings] = useState<PrinterSettings>(() =>
     loadPrinterSettings(),
   );
@@ -805,17 +807,32 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
       // matching authenticated user is available again.
       if (sessionUserId !== syncUserId) return;
     }
-    const synced = await flushOutbox(supabase, scope);
-    const auditSynced = await flushAuditOutbox(supabase, scope);
-    if (synced > 0 || auditSynced > 0) {
+    try {
+      const orderResult = await flushOutbox(supabase, scope);
+      const auditResult = await flushAuditOutbox(supabase, scope);
+      const synced = orderResult.synced + auditResult.synced;
+      const failed = orderResult.failed + auditResult.failed;
+
+      if (failed > 0) {
+        const outstanding = await pendingCount(scope);
+        setSyncFailure(`Sync issue — ${outstanding} item${outstanding === 1 ? "" : "s"} waiting. Retrying automatically.`);
+        retryMs.current = Math.min(60000, retryMs.current * 2);
+        return;
+      }
+
       // A normal session can refresh its catalog. Offline PIN sessions keep
       // serving their device-local catalog until the cashier re-authenticates.
       retryMs.current = 2000;
-      if (!offlineProfile) setOffline(false);
-      if (!offlineProfile) void refreshCatalog();
-    } else {
-      retryMs.current =
-        (await pendingCount(scope)) === 0 ? 2000 : Math.min(60000, retryMs.current * 2);
+      setSyncFailure(null);
+      if (synced > 0 && !offlineProfile) setOffline(false);
+      if (synced > 0 && !offlineProfile) void refreshCatalog();
+      if (synced === 0 && (await pendingCount(scope)) > 0) {
+        retryMs.current = Math.min(60000, retryMs.current * 2);
+      }
+    } catch (error) {
+      reportError(error, { area: "offline-sync", queue: "flush" });
+      setSyncFailure("Sync could not run — queued work is safe and will retry automatically.");
+      retryMs.current = Math.min(60000, retryMs.current * 2);
     }
   }, [offlineProfile, requiresOfflineUnlock, supabase, refreshCatalog, syncOrgId, syncStoreId, syncUserId]);
 
@@ -836,6 +853,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     tick();
     const onOnline = () => {
       retryMs.current = 2000;
+      setSyncFailure(null);
       if (!offlineProfile) {
         setOffline(false);
         void refreshCatalog();
@@ -1396,8 +1414,8 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                 </span>
               </span>
               <span className="pos-topbar__collapsed-state">
-                <span className={"pos-topbar__collapsed-dot" + (offline ? " is-offline" : "")} />
-                {offline ? "Offline" : "Ready to sell"}
+                <span className={"pos-topbar__collapsed-dot" + (offline || syncFailure ? " is-offline" : "")} />
+                {syncFailure ? "Sync issue" : offline ? "Offline" : "Ready to sell"}
                 {pending > 0 && <span> · {pending} pending</span>}
               </span>
               <span className="pos-topbar__collapsed-action">
@@ -1514,10 +1532,10 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                 <Icon name="chevron" size={16} />
               </button>
 
-              {(offline || pending > 0) && (
-                <div className={"sync-pill" + (offline ? " is-offline" : "")}>
+              {(offline || pending > 0 || syncFailure) && (
+                <div className={"sync-pill" + (offline ? " is-offline" : "") + (syncFailure ? " is-warning" : "")} role={syncFailure ? "status" : undefined}>
                   <span className="sync-pill__dot" />
-                  {offline ? "Offline" : "Online"}{pending > 0 ? " · " + pending + " pending" : ""}
+                  {syncFailure ? "Sync issue" : offline ? "Offline" : "Online"}{pending > 0 ? " · " + pending + " pending" : ""}
                   {pending > 0 && (
                     <button type="button" onClick={() => void flush()} className="sync-pill__action">Sync</button>
                   )}
