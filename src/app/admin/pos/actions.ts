@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { POS_PALETTE_IDS } from "@/lib/pos-palette";
 import { POS_THEME_IDS } from "@/lib/pos-theme";
+import { POS_FONT_IDS, readPosFontColorWithFallback } from "@/lib/pos-font";
+import { readPosRadiusWithFallback } from "@/lib/pos-shape";
 import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
 import { invalidateAdminProfile } from "@/lib/admin/profile";
 import { saveOrganizationBusinessPreset } from "@/lib/admin/business-server";
@@ -137,6 +139,10 @@ function normalizePosSettings(value: JsonRecord, fallback: JsonRecord, fallbackV
     palette: readEnum(value.palette, PALETTES, readEnum(fallback.palette, PALETTES, "green")),
     customColor: typeof value.customColor === "string" && /^#[0-9a-f]{6}$/i.test(value.customColor) ? value.customColor : typeof fallback.customColor === "string" && /^#[0-9a-f]{6}$/i.test(fallback.customColor) ? fallback.customColor : "#173a2b",
     uiStyle: readEnum(value.uiStyle, UI_STYLES, readEnum(fallback.uiStyle, UI_STYLES, "modern")),
+    fontFamily: readEnum(value.fontFamily, POS_FONT_IDS, readEnum(fallback.fontFamily, POS_FONT_IDS, "theme")),
+    fontColor: readPosFontColorWithFallback(value.fontColor, fallback.fontColor),
+    cardRadius: readPosRadiusWithFallback(value.cardRadius, fallback.cardRadius),
+    buttonRadius: readPosRadiusWithFallback(value.buttonRadius, fallback.buttonRadius),
     defaultOrderType: enabledOrderTypes.includes(configuredDefault) ? configuredDefault : enabledOrderTypes[0],
     orderTypes: enabledOrderTypes,
     paymentMethods,

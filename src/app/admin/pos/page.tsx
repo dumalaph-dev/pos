@@ -4,6 +4,8 @@ import { readAdminBranding } from "@/lib/admin/branding";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { POS_PALETTE_IDS } from "@/lib/pos-palette";
 import { POS_THEME_IDS } from "@/lib/pos-theme";
+import { POS_FONT_IDS, readPosFontColor } from "@/lib/pos-font";
+import { readPosRadius } from "@/lib/pos-shape";
 import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
 import { readBusinessPresetId } from "@/lib/admin/business";
 import { resolveProductImage } from "@/lib/product-images";
@@ -90,6 +92,10 @@ function readPosConfig(store: StoreRecord): PosConfig {
     palette: readEnum(source.palette, POS_PALETTE_IDS, "green"),
     customColor: typeof source.customColor === "string" && /^#[0-9a-f]{6}$/i.test(source.customColor) ? source.customColor : "#173a2b",
     uiStyle: readEnum(source.uiStyle, POS_THEME_IDS, "modern"),
+    fontFamily: readEnum(source.fontFamily, POS_FONT_IDS, "theme"),
+    fontColor: readPosFontColor(source.fontColor),
+    cardRadius: readPosRadius(source.cardRadius),
+    buttonRadius: readPosRadius(source.buttonRadius),
     defaultOrderType: enabledOrderTypes.includes(configuredDefault) ? configuredDefault : enabledOrderTypes[0],
     orderTypes: enabledOrderTypes,
     paymentMethods: {
