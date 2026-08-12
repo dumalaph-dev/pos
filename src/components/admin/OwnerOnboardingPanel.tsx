@@ -3,6 +3,7 @@
 import NextLink from "next/link";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { OWNER_GUIDANCE, OWNER_MONITORING_GUIDE, OWNER_ONBOARDING_PHASES, type OwnerGuidanceTopic, type OwnerOnboardingState } from "@/lib/admin/onboarding";
+import { PWAInstallButton, resetPwaInstallPrompt } from "@/components/PWAInstallPrompt";
 import { AdminIcon } from "./AdminIcon";
 
 const ONBOARDING_DISMISSED_KEY = "pos.owner-onboarding.dismissed";
@@ -211,6 +212,7 @@ export function OwnerOnboardingPanel({ state, isLechonHouseBusiness }: { state: 
           </div>
         </div>
         <div className="owner-onboarding__actions">
+          <PWAInstallButton className="owner-onboarding__install">Install Dumala App</PWAInstallButton>
           <button type="button" className="owner-onboarding__open" onClick={() => setIsOpen(true)}>{state.isComplete ? "Review setup" : "View setup steps"}<AdminIcon name="arrow" size={13} /></button>
           <button type="button" className="owner-onboarding__dismiss" onClick={() => { writeDismissed(ONBOARDING_DISMISSED_KEY, true); notifyGuidanceChange(); }}>Hide for now</button>
         </div>
@@ -258,6 +260,17 @@ export function RestoreOwnerGuidanceButton() {
     <button type="button" className="owner-guidance-reset" onClick={() => { resetOwnerGuidance(); setRestored(true); }}>
       <AdminIcon name={restored ? "check" : "refresh"} size={15} />
       {restored ? "Guide restored" : "Show guide again"}
+    </button>
+  );
+}
+
+export function RestorePWAInstallButton() {
+  const [restored, setRestored] = useState(false);
+
+  return (
+    <button type="button" className="owner-guidance-reset" onClick={() => { resetPwaInstallPrompt(); setRestored(true); }}>
+      <AdminIcon name={restored ? "check" : "download"} size={15} />
+      {restored ? "Install button restored" : "Show Install Dumala button"}
     </button>
   );
 }

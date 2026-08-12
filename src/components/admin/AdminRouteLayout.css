@@ -6760,6 +6760,26 @@ body.products-modal-open {
   filter: brightness(0.94);
 }
 
+.owner-onboarding__install {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border));
+  border-radius: 8px;
+  color: var(--primary);
+  background: var(--surface);
+  font-size: 10px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.owner-onboarding__install:hover {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
 .owner-onboarding__actions .owner-onboarding__dismiss {
   padding: 4px 0;
 }
@@ -7145,8 +7165,9 @@ body.products-modal-open {
   .owner-onboarding__actions {
     align-items: center;
     flex-direction: row;
+    flex-wrap: wrap;
     width: 100%;
-    justify-content: space-between;
+    justify-content: flex-start;
   }
 
   .owner-onboarding__footer {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -11,6 +11,8 @@ type StoredInstallState = "installed" | "dismissed" | null;
 
 const INSTALL_STATE_KEY = "dumala:pwa-install-state";
 const DISMISSAL_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const PWA_INSTALL_RESET_EVENT = "dumala:pwa-install-reset";
+const PWA_INSTALL_REQUEST_EVENT = "dumala:pwa-install-request";
 
 // `beforeinstallprompt` can be dispatched before React hydrates the root
 // layout. Keep the event at module scope so the prompt is not lost during the
@@ -65,6 +67,62 @@ function storeInstallState(state: "installed" | "dismissed") {
   }
 }
 
+function clearStoredInstallState() {
+  try {
+    if (window.localStorage.getItem(INSTALL_STATE_KEY) !== "installed") {
+      window.localStorage.removeItem(INSTALL_STATE_KEY);
+    }
+  } catch {
+    // Private browsing or restricted storage should not block the prompt.
+  }
+}
+
+export function resetPwaInstallPrompt() {
+  if (typeof window === "undefined") return;
+  clearStoredInstallState();
+  window.dispatchEvent(new Event(PWA_INSTALL_RESET_EVENT));
+}
+
+export function requestPwaInstall() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(PWA_INSTALL_REQUEST_EVENT));
+}
+
+export function PWAInstallButton({ className, children = "Install Dumala App" }: { className: string; children?: ReactNode }) {
+  const [available, setAvailable] = useState(false);
+  const [installed, setInstalled] = useState(false);
+
+  useEffect(() => {
+    const syncAvailability = () => {
+      const standalone = isStandalone();
+      const storedState = readStoredInstallState();
+      setInstalled(standalone || storedState === "installed");
+      setAvailable(!standalone && (Boolean(capturedInstallPrompt) || isIos()));
+    };
+
+    syncAvailability();
+    window.addEventListener("beforeinstallprompt", syncAvailability);
+    window.addEventListener("appinstalled", syncAvailability);
+    window.addEventListener(PWA_INSTALL_RESET_EVENT, syncAvailability);
+    window.addEventListener(PWA_INSTALL_REQUEST_EVENT, syncAvailability);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", syncAvailability);
+      window.removeEventListener("appinstalled", syncAvailability);
+      window.removeEventListener(PWA_INSTALL_RESET_EVENT, syncAvailability);
+      window.removeEventListener(PWA_INSTALL_REQUEST_EVENT, syncAvailability);
+    };
+  }, []);
+
+  if (!available || installed) return null;
+
+  return (
+    <button type="button" className={className} onClick={requestPwaInstall} data-pwa-install-action>
+      {children}
+    </button>
+  );
+}
+
 export default function PWAInstallPrompt() {
   const [ready, setReady] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<InstallPromptEvent | null>(null);
@@ -73,6 +131,7 @@ export default function PWAInstallPrompt() {
   const [dismissed, setDismissed] = useState(false);
   const [iosHelpOpen, setIosHelpOpen] = useState(false);
   const [installing, setInstalling] = useState(false);
+  const installingRef = useRef(false);
 
   useEffect(() => {
     const standalone = isStandalone();
@@ -96,6 +155,14 @@ export default function PWAInstallPrompt() {
       capturedInstallPrompt = null;
       setDeferredPrompt(null);
     };
+    const onReset = () => {
+      const standalone = isStandalone();
+      clearStoredInstallState();
+      setInstalled(standalone || readStoredInstallState() === "installed");
+      setDismissed(false);
+      setIos(!standalone && isIos());
+      if (!standalone && capturedInstallPrompt) setDeferredPrompt(capturedInstallPrompt);
+    };
     const syncStandaloneState = () => {
       if (isStandalone()) onInstalled();
     };
@@ -105,11 +172,13 @@ export default function PWAInstallPrompt() {
     }
     window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
     window.addEventListener("appinstalled", onInstalled);
+    window.addEventListener(PWA_INSTALL_RESET_EVENT, onReset);
     window.addEventListener("pageshow", syncStandaloneState);
     document.addEventListener("visibilitychange", syncStandaloneState);
     return () => {
       window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
       window.removeEventListener("appinstalled", onInstalled);
+      window.removeEventListener(PWA_INSTALL_RESET_EVENT, onReset);
       window.removeEventListener("pageshow", syncStandaloneState);
       document.removeEventListener("visibilitychange", syncStandaloneState);
     };
@@ -119,19 +188,19 @@ export default function PWAInstallPrompt() {
     storeInstallState("dismissed");
     setDismissed(true);
     setIosHelpOpen(false);
-    capturedInstallPrompt = null;
     setDeferredPrompt(null);
   }
 
-  async function install() {
-    if (ios && !deferredPrompt) {
+  const install = useCallback(async (promptOverride: InstallPromptEvent | null = deferredPrompt) => {
+    if (ios && !promptOverride) {
       setIosHelpOpen((current) => !current);
       return;
     }
 
-    const prompt = deferredPrompt;
-    if (!prompt || installing) return;
+    const prompt = promptOverride;
+    if (!prompt || installingRef.current) return;
 
+    installingRef.current = true;
     setInstalling(true);
     try {
       await prompt.prompt();
@@ -147,8 +216,29 @@ export default function PWAInstallPrompt() {
       if (capturedInstallPrompt === prompt) capturedInstallPrompt = null;
       setDeferredPrompt(null);
       setInstalling(false);
+      installingRef.current = false;
     }
-  }
+  }, [deferredPrompt, ios]);
+
+  useEffect(() => {
+    const onInstallRequest = () => {
+      if (isStandalone()) return;
+      clearStoredInstallState();
+      setDismissed(false);
+      if (!capturedInstallPrompt && isIos()) {
+        setIos(true);
+        setIosHelpOpen(true);
+        return;
+      }
+      if (capturedInstallPrompt) {
+        setDeferredPrompt(capturedInstallPrompt);
+        void install(capturedInstallPrompt);
+      }
+    };
+
+    window.addEventListener(PWA_INSTALL_REQUEST_EVENT, onInstallRequest);
+    return () => window.removeEventListener(PWA_INSTALL_REQUEST_EVENT, onInstallRequest);
+  }, [install]);
 
   if (typeof window !== "undefined" && window.location.pathname === "/display") return null;
   if (!ready || installed || dismissed || (!deferredPrompt && !ios)) return null;

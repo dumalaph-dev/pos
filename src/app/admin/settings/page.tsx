@@ -16,7 +16,7 @@ import {
 import { readAdminInventorySettings } from "@/lib/admin/inventory-settings";
 import { readAdminDiscountSettings } from "@/lib/admin/discount-settings";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
-import { RestoreOwnerGuidanceButton } from "@/components/admin/OwnerOnboardingPanel";
+import { RestoreOwnerGuidanceButton, RestorePWAInstallButton } from "@/components/admin/OwnerOnboardingPanel";
 import { updateOrganizationSettings } from "./actions";
 
 type AdminRole = "admin" | "manager" | "cashier";
@@ -144,6 +144,15 @@ export default async function SettingsPage({
         </section>
 
         {canWrite && <section className="admin-panel owner-guidance-settings mt-5 p-5 sm:p-6" aria-labelledby="owner-guidance-settings-heading"><div><p className="admin-panel__eyebrow">Owner help</p><h2 id="owner-guidance-settings-heading" className="admin-panel__title">Bring back the setup guide</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">Show the first-time checklist and all feature tips again on your next visit. This only changes guidance visibility in this browser; it does not change your business data.</p></div><RestoreOwnerGuidanceButton /></section>}
+
+        <section className="admin-panel owner-guidance-settings mt-5 p-5 sm:p-6" aria-labelledby="pwa-install-settings-heading">
+          <div>
+            <p className="admin-panel__eyebrow">Dumala app</p>
+            <h2 id="pwa-install-settings-heading" className="admin-panel__title">Install Dumala on this device</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">Closed the install pill? Restore it here, or use the same Install Dumala App action in the store owner setup guide. This only changes the install prompt for this browser and device.</p>
+          </div>
+          <RestorePWAInstallButton />
+        </section>
 
         <section className="admin-panel mt-5 p-5 sm:p-6" aria-labelledby="settings-scopes-heading">
           <div className="admin-panel__header">
