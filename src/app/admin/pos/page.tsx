@@ -6,10 +6,11 @@ import { POS_PALETTE_IDS } from "@/lib/pos-palette";
 import { POS_THEME_IDS } from "@/lib/pos-theme";
 import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
 import { readBusinessPresetId } from "@/lib/admin/business";
-import { isProductImageUrl } from "@/lib/product-images";
+import { resolveProductImage } from "@/lib/product-images";
 import { normalizePaperWidth, toPaperWidthValue } from "@/lib/paper-width";
 import { normalizeDisplayPairingToken } from "@/lib/display";
-import { normalizeDisplayPromotionRecord, normalizeDisplaySettings, type DisplayPromotionRecord } from "@/lib/display-config";
+import { normalizeDisplayGalleryRecord, normalizeDisplayPromotionRecord, normalizeDisplaySettings, type DisplayPromotionRecord } from "@/lib/display-config";
+import { buildDisplayMenuItems, type DisplayGalleryRecord, type DisplayMenuItem } from "@/lib/display-gallery";
 import PosSettingsScreen, {
   type AdminPosCategory,
   type AdminPosDevice,
@@ -110,25 +111,7 @@ function readPosConfig(store: StoreRecord): PosConfig {
 }
 
 function catalogImage(name: string, imageUrl: string | null) {
-  if (isProductImageUrl(imageUrl)) return imageUrl;
-  const normalized = name.trim().toLowerCase();
-  const imageMap: Record<string, string> = {
-    "whole lechon": "/food/whole-lechon-medium.png",
-    "whole lechon (small)": "/food/whole-lechon-small.png",
-    "whole lechon (medium)": "/food/whole-lechon-medium.png",
-    "lechon per kilo": "/food/whole-lechon-small.png",
-    "lechon regular": "/food/whole-lechon-small.png",
-    "lechon belly": "/food/lechon-belly-one.png",
-    "lechon belly (1/2kg)": "/food/lechon-belly-half.png",
-    "lechon belly (1kg)": "/food/lechon-belly-one.png",
-    "lechon paksiw": "/food/lechon-paksiw.png",
-    "lechon kawali": "/food/lechon-kawali.png",
-    rice: "/food/java-rice.png",
-    "java rice": "/food/java-rice.png",
-    "mang tomas": "/food/mang-tomas.png",
-    "mang tomas (small)": "/food/mang-tomas.png",
-  };
-  return imageMap[normalized] ?? null;
+  return resolveProductImage(name, imageUrl);
 }
 
 export default async function AdminPosPage({ searchParams }: { searchParams: Promise<{ store?: string | string[]; tab?: string | string[]; error?: string | string[]; saved?: string | string[] }> }) {
@@ -164,14 +147,15 @@ export default async function AdminPosPage({ searchParams }: { searchParams: Pro
 
   let devicesQuery = supabase.from("devices").select("id, store_id, name, device_prefix, printer_transport, printer_config, paired_display_id, is_active, last_seen_at").eq("org_id", profile.org_id).order("name");
   if (deviceScopeId) devicesQuery = devicesQuery.eq("store_id", deviceScopeId);
-  const [categoriesResult, productsResult, devicesResult, displayPromotionsResult] = storeId
+  const [categoriesResult, productsResult, devicesResult, displayPromotionsResult, displayGalleryResult] = storeId
     ? await Promise.all([
         supabase.from("categories").select("id, name, icon").eq("store_id", storeId).eq("is_active", true).order("sort_order"),
         supabase.from("products").select("id, name, pricing_mode, price, unit, category_id, image_url, track_stock, min_stock").eq("store_id", storeId).eq("is_active", true).order("sort_order"),
         devicesQuery,
         supabase.from("display_promotions").select("id, store_id, eyebrow, title, detail, tagline, image_url, is_active, sort_order, starts_at, ends_at").eq("store_id", storeId).order("sort_order").order("created_at"),
+        supabase.from("display_gallery_items").select("id, store_id, kind, title, image_url, image_path, overlay_position, is_active, sort_order").eq("store_id", storeId).eq("kind", "marketing").order("sort_order").order("created_at"),
       ])
-    : [{ data: [], error: null }, { data: [], error: null }, await devicesQuery, { data: [], error: null }];
+    : [{ data: [], error: null }, { data: [], error: null }, await devicesQuery, { data: [], error: null }, { data: [], error: null }];
 
   const stockResult = storeId
     ? await supabase.rpc("current_stock", { p_org_id: profile.org_id })
@@ -197,7 +181,11 @@ export default async function AdminPosPage({ searchParams }: { searchParams: Pro
   const displayPromotions = (displayPromotionsResult.data ?? [])
     .map(normalizeDisplayPromotionRecord)
     .filter((promotion): promotion is DisplayPromotionRecord => Boolean(promotion));
-  const queryWarning = Boolean(!store || organizationResult.error || storesResult.error || categoriesResult.error || productsResult.error || devicesResult.error || stockResult.error);
+  const displayGalleryItems = (displayGalleryResult.data ?? [])
+    .map(normalizeDisplayGalleryRecord)
+    .filter((item): item is DisplayGalleryRecord => Boolean(item));
+  const displayMenuItems = buildDisplayMenuItems(products, categories) as DisplayMenuItem[];
+  const queryWarning = Boolean(!store || organizationResult.error || storesResult.error || categoriesResult.error || productsResult.error || devicesResult.error || stockResult.error || displayGalleryResult.error);
   const organizationName = organizationResult.data?.name || profile.organizations?.name || DEFAULT_ORGANIZATION_NAME;
   const logoUrl = readAdminBranding(profile.organizations?.settings).logoUrl;
   const branchName = store?.name || profile.stores?.name || DEFAULT_STORE_NAME;
@@ -230,6 +218,9 @@ export default async function AdminPosPage({ searchParams }: { searchParams: Pro
       displayPairingToken={displayPairingToken}
       displayPromotions={displayPromotions}
       displayPromotionsUnavailable={Boolean(displayPromotionsResult.error)}
+      displayGalleryItems={displayGalleryItems}
+      displayMenuItems={displayMenuItems}
+      displayGalleryUnavailable={Boolean(displayGalleryResult.error)}
       initialDisplaySettings={normalizeDisplaySettings(store?.settings?.customer_display)}
       initialSettings={store ? readPosConfig(store) : readPosConfig({ id: "", name: DEFAULT_STORE_NAME, address: null, tin: null, vat_registered: true, vat_rate: 0.12, settings: {} })}
       initialBusinessPresetId={readBusinessPresetId(profile.organizations?.settings)}

@@ -1,5 +1,6 @@
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { createClient } from "@/lib/supabase/client";
+import { isDisplayGalleryImageUrl, isDisplayGalleryKind, isDisplayGalleryOverlayPosition, type DisplayGalleryItem } from "@/lib/display-gallery";
 import { isPosThemeId, type PosThemeId } from "@/lib/pos-theme";
 
 type BrowserSupabaseClient = ReturnType<typeof createClient>;
@@ -23,8 +24,13 @@ export type DisplayPromotion = {
   imageUrl: string | null;
 };
 
+export type { DisplayGalleryItem } from "@/lib/display-gallery";
+
 export type DisplaySettings = {
   showPromotions: boolean;
+  showGallery: boolean;
+  showMarketingGallery: boolean;
+  showMenuGallery: boolean;
   showQuantity: boolean;
   showDiscount: boolean;
   showSubtotal: boolean;
@@ -49,6 +55,7 @@ export type DisplayState =
       kind: "idle";
       branding: DisplayBranding;
       promotions?: DisplayPromotion[];
+      gallery?: DisplayGalleryItem[];
       settings?: DisplaySettings;
       theme?: PosThemeId;
     }
@@ -60,6 +67,7 @@ export type DisplayState =
       discount: number;
       total: number;
       promotions?: DisplayPromotion[];
+      gallery?: DisplayGalleryItem[];
       settings?: DisplaySettings;
       theme?: PosThemeId;
     }
@@ -71,6 +79,7 @@ export type DisplayState =
       changeDue: number | null;
       paymentMethod: string;
       promotions?: DisplayPromotion[];
+      gallery?: DisplayGalleryItem[];
       settings?: DisplaySettings;
       theme?: PosThemeId;
     }
@@ -80,6 +89,7 @@ export type DisplayState =
       orderNo: string;
       changeDue: number | null;
       promotions?: DisplayPromotion[];
+      gallery?: DisplayGalleryItem[];
       settings?: DisplaySettings;
       theme?: PosThemeId;
     };
@@ -148,9 +158,21 @@ export function isDisplayPromotion(value: unknown): value is DisplayPromotion {
     (value.imageUrl === null || typeof value.imageUrl === "string");
 }
 
+export function isDisplayGalleryItem(value: unknown): value is DisplayGalleryItem {
+  if (!isRecord(value)) return false;
+  return typeof value.id === "string" &&
+    isDisplayGalleryKind(value.kind) &&
+    typeof value.title === "string" &&
+    isDisplayGalleryImageUrl(value.imageUrl) &&
+    isDisplayGalleryOverlayPosition(value.overlayPosition);
+}
+
 export function isDisplaySettings(value: unknown): value is DisplaySettings {
   if (!isRecord(value)) return false;
   return typeof value.showPromotions === "boolean" &&
+    typeof value.showGallery === "boolean" &&
+    typeof value.showMarketingGallery === "boolean" &&
+    typeof value.showMenuGallery === "boolean" &&
     typeof value.showQuantity === "boolean" &&
     typeof value.showDiscount === "boolean" &&
     typeof value.showSubtotal === "boolean" &&
@@ -181,6 +203,7 @@ function isDisplayCartLine(value: unknown): value is DisplayCartLine {
 
 function isDisplayPresentation(value: Record<string, unknown>) {
   return (value.promotions === undefined || (Array.isArray(value.promotions) && value.promotions.every(isDisplayPromotion))) &&
+    (value.gallery === undefined || (Array.isArray(value.gallery) && value.gallery.every(isDisplayGalleryItem))) &&
     (value.settings === undefined || isDisplaySettings(value.settings)) &&
     (value.theme === undefined || isPosThemeId(value.theme));
 }

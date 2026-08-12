@@ -4,7 +4,6 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   createDisplayPromotion,
-  saveDisplaySettings,
   updateDisplayPromotion,
 } from "@/app/admin/pos/actions";
 import {
@@ -17,6 +16,8 @@ import {
   normalizeDisplayPairingToken,
   type DisplaySettings,
 } from "@/lib/display";
+import DisplayGalleryPanel from "@/components/admin/DisplayGalleryPanel";
+import type { DisplayGalleryRecord, DisplayMenuItem } from "@/lib/display-gallery";
 
 const FOCUSABLE_SELECTOR = "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])";
 
@@ -242,8 +243,12 @@ export default function DisplayPromotionsPanel({
   displayPairingToken,
   canWrite,
   initialPromotions,
-  initialSettings,
+  initialGalleryItems,
+  initialMenuItems,
+  settings,
+  onSettingsChange,
   promotionsUnavailable,
+  galleryUnavailable,
 }: {
   storeId: string;
   branchName: string;
@@ -251,15 +256,36 @@ export default function DisplayPromotionsPanel({
   displayPairingToken: string | null;
   canWrite: boolean;
   initialPromotions: DisplayPromotionRecord[];
-  initialSettings: DisplaySettings;
+  initialGalleryItems: DisplayGalleryRecord[];
+  initialMenuItems: DisplayMenuItem[];
+  settings: DisplaySettings;
+  onSettingsChange: (settings: DisplaySettings) => void;
   promotionsUnavailable: boolean;
+  galleryUnavailable: boolean;
 }) {
-  const [settings, setSettings] = useState(initialSettings);
   const [editingPromotion, setEditingPromotion] = useState<DisplayPromotionRecord | "new" | null>(null);
   const activePromotionCount = initialPromotions.filter((promotion) => promotion.isActive).length;
   const closePromotionModal = useCallback(() => setEditingPromotion(null), []);
   const updateSetting = <Key extends keyof DisplaySettings>(key: Key, value: DisplaySettings[Key]) => {
-    setSettings((current) => ({ ...current, [key]: value }));
+    onSettingsChange({ ...settings, [key]: value });
+  };
+  const updateAllGallerySources = (enabled: boolean) => {
+    onSettingsChange({
+      ...settings,
+      showGallery: enabled,
+      showMarketingGallery: enabled,
+      showMenuGallery: enabled,
+    });
+  };
+  const updateGallerySource = (kind: "marketing" | "menu", enabled: boolean) => {
+    const showMarketingGallery = kind === "marketing" ? enabled : settings.showMarketingGallery;
+    const showMenuGallery = kind === "menu" ? enabled : settings.showMenuGallery;
+    onSettingsChange({
+      ...settings,
+      showGallery: showMarketingGallery || showMenuGallery,
+      showMarketingGallery,
+      showMenuGallery,
+    });
   };
 
   return (
@@ -277,9 +303,7 @@ export default function DisplayPromotionsPanel({
         </div>
       </div>
 
-      <form action={saveDisplaySettings} className="pos-display-overview-grid">
-        <input type="hidden" name="store_id" value={storeId} />
-        <input type="hidden" name="settings" value={JSON.stringify(settings)} readOnly />
+      <div className="pos-display-overview-grid">
         <div className="pos-display-link-stack">
           <DisplayLinkCard branchName={branchName} token={displayPairingToken} />
           <section className="pos-display-completed-order-card" aria-labelledby="completed-order-title">
@@ -346,6 +370,7 @@ export default function DisplayPromotionsPanel({
           </div>
           <div className="pos-display-setting-grid">
             <DisplayToggle title="Shop promotions" description="Rotate cards while the display is idle." checked={settings.showPromotions} disabled={!canWrite} onChange={(value) => updateSetting("showPromotions", value)} />
+            <DisplayToggle title="Gallery playback" description="Use the source pills below to choose what rotates." checked={settings.showMarketingGallery || settings.showMenuGallery} disabled={!canWrite} onChange={updateAllGallerySources} />
             <DisplayToggle title="Item quantities" description="Show quantities and weights in the order." checked={settings.showQuantity} disabled={!canWrite} onChange={(value) => updateSetting("showQuantity", value)} />
             <DisplayToggle title="Subtotal" description="Show the pre-discount subtotal." checked={settings.showSubtotal} disabled={!canWrite} onChange={(value) => updateSetting("showSubtotal", value)} />
             <DisplayToggle title="Discounts" description="Show applied discounts before payment." checked={settings.showDiscount} disabled={!canWrite} onChange={(value) => updateSetting("showDiscount", value)} />
@@ -353,10 +378,21 @@ export default function DisplayPromotionsPanel({
           </div>
           <div className="pos-display-rotation">
             <label className="pos-config-field"><span>Promotion rotation</span><small>How long each card stays on screen.</small><select value={settings.rotationSeconds} disabled={!canWrite} onChange={(event) => updateSetting("rotationSeconds", Number(event.target.value))}><option value={5}>5 seconds</option><option value={7}>7 seconds</option><option value={10}>10 seconds</option><option value={15}>15 seconds</option><option value={20}>20 seconds</option></select></label>
-            <div className="pos-display-settings-footer"><small>Settings apply to {branchName}&apos;s paired display.</small><button type="submit" className="pos-save-button" disabled={!canWrite}>Save preferences</button></div>
+            <div className="pos-display-settings-footer"><small>Use Save Changes above to apply display settings to {branchName}&apos;s paired display.</small></div>
           </div>
         </div>
-      </form>
+      </div>
+
+      <DisplayGalleryPanel
+        storeId={storeId}
+        canWrite={canWrite}
+        settings={settings}
+        onToggleAll={updateAllGallerySources}
+        onToggleSource={updateGallerySource}
+        initialItems={initialGalleryItems}
+        menuItems={initialMenuItems}
+        galleryUnavailable={galleryUnavailable}
+      />
 
       <section className="pos-display-promotions" aria-labelledby="display-promotions-title">
         {promotionsUnavailable ? <div className="pos-display-schema-note" role="status"><strong>Saved promotion cards are waiting for the database migration.</strong><span>Apply <code>0042_display_promotions.sql</code> before creating or editing branch cards. Display preferences can still be saved now.</span></div> : null}

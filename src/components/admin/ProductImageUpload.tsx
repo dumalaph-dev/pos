@@ -20,6 +20,11 @@ type ProductImageUploadProps = {
   previewLabel?: string;
   fallbackIcon?: AdminIconName;
   assetLabel?: string;
+  maxImageSide?: number;
+  fallbackImageSide?: number;
+  maxBytes?: number;
+  recommendedText?: string;
+  required?: boolean;
 };
 
 type ImageSource = ImageBitmap | HTMLImageElement;
@@ -75,20 +80,20 @@ async function renderImage(source: ImageSource, maxSide: number, quality: number
   return canvasBlob(canvas, type, quality);
 }
 
-async function optimizeImage(file: File) {
+async function optimizeImage(file: File, maxImageSide: number, fallbackImageSide: number, maxBytes: number) {
   const source = await readImageSource(file);
   try {
-    const webpBlob = await renderImage(source, MAX_IMAGE_SIDE, INITIAL_QUALITY, "image/webp");
-    if (webpBlob && webpBlob.type === "image/webp" && webpBlob.size <= PRODUCT_IMAGE_MAX_BYTES) return new File([webpBlob], "product-photo.webp", { type: "image/webp" });
+    const webpBlob = await renderImage(source, maxImageSide, INITIAL_QUALITY, "image/webp");
+    if (webpBlob && webpBlob.type === "image/webp" && webpBlob.size <= maxBytes) return new File([webpBlob], "product-photo.webp", { type: "image/webp" });
 
     for (const quality of QUALITY_STEPS) {
-      const blob = await renderImage(source, MAX_IMAGE_SIDE, quality, "image/webp");
-      if (blob && blob.type === "image/webp" && blob.size <= PRODUCT_IMAGE_MAX_BYTES) return new File([blob], "product-photo.webp", { type: "image/webp" });
+      const blob = await renderImage(source, maxImageSide, quality, "image/webp");
+      if (blob && blob.type === "image/webp" && blob.size <= maxBytes) return new File([blob], "product-photo.webp", { type: "image/webp" });
     }
 
     for (const quality of [0.68, 0.58, 0.48]) {
-      const blob = await renderImage(source, FALLBACK_IMAGE_SIDE, quality, "image/jpeg");
-      if (blob && blob.size <= PRODUCT_IMAGE_MAX_BYTES) return new File([blob], "product-photo.jpg", { type: "image/jpeg" });
+      const blob = await renderImage(source, fallbackImageSide, quality, "image/jpeg");
+      if (blob && blob.size <= maxBytes) return new File([blob], "product-photo.jpg", { type: "image/jpeg" });
     }
   } finally {
     if ("close" in source && typeof source.close === "function") source.close();
@@ -112,8 +117,13 @@ export function ProductImageUpload({
   previewLabel = "Product photo preview",
   fallbackIcon = "box",
   assetLabel = "photo",
+  maxImageSide = MAX_IMAGE_SIDE,
+  fallbackImageSide = FALLBACK_IMAGE_SIDE,
+  maxBytes = PRODUCT_IMAGE_MAX_BYTES,
+  recommendedText,
+  required = false,
 }: ProductImageUploadProps) {
-  const defaultStatus = "JPG, PNG, or WebP · optimized to 1400px and under 900 KB";
+  const defaultStatus = recommendedText ?? `JPG, PNG, or WebP · optimized to ${maxImageSide}px and under ${formatBytes(maxBytes)}`;
   const [previewUrl, setPreviewUrl] = useState(existingImageUrl ?? null);
   const [status, setStatus] = useState(defaultStatus);
   const previewObjectUrl = useRef<string | null>(null);
@@ -148,7 +158,7 @@ export function ProductImageUpload({
 
     setStatus(`Optimizing ${assetLabel}…`);
     try {
-      const optimized = await optimizeImage(file);
+      const optimized = await optimizeImage(file, maxImageSide, fallbackImageSide, maxBytes);
       if (optimizationRequest.current !== requestId) return;
       const transfer = new DataTransfer();
       transfer.items.add(optimized);
@@ -183,6 +193,7 @@ export function ProductImageUpload({
               name={fieldName}
               type="file"
               accept="image/jpeg,image/png,image/webp"
+              required={required}
               disabled={!canWrite}
               aria-describedby={`${prefix}-image-help`}
               onChange={(event) => void handleFileChange(event)}

@@ -1,18 +1,21 @@
 import type { NextConfig } from "next";
 
-const configuredSupabaseImagePattern = (() => {
+const configuredSupabaseImagePatterns = (() => {
   const configuredUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!configuredUrl) return null;
+  if (!configuredUrl) return [];
   try {
     const url = new URL(configuredUrl);
-    return {
+    const base = {
       protocol: url.protocol.replace(":", "") as "http" | "https",
       hostname: url.hostname,
       ...(url.port ? { port: url.port } : {}),
-      pathname: "/storage/v1/object/public/product-images/**",
     };
+    return [
+      { ...base, pathname: "/storage/v1/object/public/product-images/**" },
+      { ...base, pathname: "/storage/v1/object/public/display-gallery/**" },
+    ];
   } catch {
-    return null;
+    return [];
   }
 })();
 
@@ -20,9 +23,12 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "*.supabase.co", pathname: "/storage/v1/object/public/product-images/**" },
+      { protocol: "https", hostname: "*.supabase.co", pathname: "/storage/v1/object/public/display-gallery/**" },
       { protocol: "http", hostname: "127.0.0.1", port: "54321", pathname: "/storage/v1/object/public/product-images/**" },
+      { protocol: "http", hostname: "127.0.0.1", port: "54321", pathname: "/storage/v1/object/public/display-gallery/**" },
       { protocol: "http", hostname: "localhost", port: "54321", pathname: "/storage/v1/object/public/product-images/**" },
-      ...(configuredSupabaseImagePattern ? [configuredSupabaseImagePattern] : []),
+      { protocol: "http", hostname: "localhost", port: "54321", pathname: "/storage/v1/object/public/display-gallery/**" },
+      ...configuredSupabaseImagePatterns,
     ],
   },
   experimental: {

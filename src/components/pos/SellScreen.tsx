@@ -11,7 +11,7 @@ import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { formatPeso, weightLineTotal } from "@/lib/money";
 import { formatStockQuantity, stockMovementDelta, stockStatus } from "@/lib/inventory";
-import { isProductImageUrl } from "@/lib/product-images";
+import { resolveProductImage } from "@/lib/product-images";
 import { readAdminBranding } from "@/lib/admin/branding";
 import { DEFAULT_ADMIN_DISCOUNT_SETTINGS, readAdminDiscountSettings } from "@/lib/admin/discount-settings";
 import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
@@ -57,11 +57,13 @@ import {
   normalizeDisplayPairingToken,
   saveDisplayPairingToken,
   type DisplayLink,
+  type DisplayGalleryItem,
   type DisplayPromotion,
   type DisplaySettings,
   type DisplayState,
 } from "@/lib/display";
-import { DEFAULT_DISPLAY_SETTINGS, normalizeDisplayPromotionRows, normalizeDisplaySettings } from "@/lib/display-config";
+import { DEFAULT_DISPLAY_SETTINGS, normalizeDisplayGalleryRows, normalizeDisplayPromotionRows, normalizeDisplaySettings } from "@/lib/display-config";
+import { buildDisplayMenuItems, displayMenuItemsToGalleryItems } from "@/lib/display-gallery";
 
 type Product = {
   id: string;
@@ -76,6 +78,17 @@ type Product = {
 };
 type Category = { id: string; name: string; icon: string | null };
 type StockRow = { store_id: string; product_id: string; qty: number };
+
+function withCatalogGallery<T extends { display_gallery?: DisplayGalleryItem[] }>(profile: T, products: Product[], categories: Category[]): T {
+  const marketingItems = Array.isArray(profile.display_gallery)
+    ? profile.display_gallery.filter((item) => item.kind === "marketing")
+    : [];
+  const menuItems = buildDisplayMenuItems(products, categories);
+  return {
+    ...profile,
+    display_gallery: [...marketingItems, ...displayMenuItemsToGalleryItems(menuItems)],
+  };
+}
 
 type CartLine = {
   key: string; // product id — one line per product
@@ -258,18 +271,6 @@ function readDeviceBinding(): PosDeviceBinding | null {
   }
 }
 
-const PRODUCT_IMAGES: Record<string, string> = {
-  "whole lechon (small)": "/food/whole-lechon-small.png",
-  "whole lechon (medium)": "/food/whole-lechon-medium.png",
-  "whole lechon (large)": "/food/whole-lechon-medium.png",
-  "lechon belly (1/2kg)": "/food/lechon-belly-half.png",
-  "lechon belly (1kg)": "/food/lechon-belly-one.png",
-  "lechon paksiw (1/2kg)": "/food/lechon-paksiw.png",
-  "lechon kawali (1/2kg)": "/food/lechon-kawali.png",
-  "java rice": "/food/java-rice.png",
-  "mang tomas (small)": "/food/mang-tomas.png",
-};
-
 type IconName =
   | "search"
   | "hold"
@@ -332,8 +333,7 @@ function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
 }
 
 function productImage(product: Product) {
-  const localImage = PRODUCT_IMAGES[product.name.trim().toLowerCase()];
-  return isProductImageUrl(product.image_url) ? product.image_url : localImage ?? "/food/whole-lechon-small.png";
+  return resolveProductImage(product.name, product.image_url);
 }
 
 function categoryIcon(name: string): IconName {
@@ -427,6 +427,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
       device_id: nextProfile.device_id ?? null,
       display_pairing_token: normalizeDisplayPairingToken(nextProfile.display_pairing_token) ?? loadDisplayPairingToken(),
       display_promotions: Array.isArray(nextProfile.display_promotions) ? nextProfile.display_promotions : nextProfile.display_promotions,
+      display_gallery: Array.isArray(nextProfile.display_gallery) ? nextProfile.display_gallery : nextProfile.display_gallery,
       display_settings: nextProfile.display_settings ? normalizeDisplaySettings(nextProfile.display_settings) : undefined,
       pos_config: nextConfig,
     };
@@ -479,12 +480,14 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     if (offlineProfile) {
       const cached = await loadCachedCatalog(offlineProfile.store_id ?? offlineProfile.org_id, offlineProfile.id).catch(() => null);
       if (cached) {
-        applyProfile(cached.profile);
-        setCategories(cached.categories as Category[]);
-        setProducts(cached.products as Product[]);
+        const cachedCategories = cached.categories as Category[];
+        const cachedProducts = cached.products as Product[];
+        applyProfile(withCatalogGallery(cached.profile, cachedProducts, cachedCategories));
+        setCategories(cachedCategories);
+        setProducts(cachedProducts);
         setStockByProductId(cached.stock ?? {});
       } else {
-        applyProfile(offlineProfile);
+        applyProfile(withCatalogGallery(offlineProfile, [], []));
         setCategories([]);
         setProducts([]);
         setStockByProductId({});
@@ -514,6 +517,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     let databaseDeviceId: string | null = null;
     let databaseDisplayPairingToken: string | null = null;
     let databaseDisplayPromotions: DisplayPromotion[] | undefined;
+    let databaseDisplayGallery: DisplayGalleryItem[] | undefined;
 
     try {
       const {
@@ -575,6 +579,16 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
               .order("sort_order")
               .order("created_at");
             databaseDisplayPromotions = normalizeDisplayPromotionRows(displayPromotionRows ?? []);
+            const { data: displayGalleryRows } = await supabase
+              .from("display_gallery_items")
+              .select("id, store_id, kind, title, image_url, image_path, is_active, sort_order, overlay_position")
+              .eq("store_id", effectiveStoreId)
+              .eq("kind", "marketing")
+              .eq("is_active", true)
+              .order("kind")
+              .order("sort_order")
+              .order("created_at");
+            databaseDisplayGallery = normalizeDisplayGalleryRows(displayGalleryRows ?? []);
           }
           profileData = {
             id: prof.id,
@@ -590,6 +604,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
             device_id: databaseDeviceId,
             display_pairing_token: databaseDisplayPairingToken,
             display_promotions: databaseDisplayPromotions?.length ? databaseDisplayPromotions : undefined,
+            display_gallery: databaseDisplayGallery,
             display_settings: store.displaySettings,
             pos_config: store.posConfig,
           };
@@ -614,7 +629,6 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
       setLoading(false);
       return;
     }
-    applyProfile(profileData, databasePrinterSettings);
     if (profileData.device_id && profileData.store_id) {
       void supabase
         .from("devices")
@@ -665,8 +679,12 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
           }
         }
       }
-      setCategories((catRes.data ?? []) as Category[]);
-      setProducts((prodRes.data ?? []) as Product[]);
+      const nextCategories = (catRes.data ?? []) as Category[];
+      const nextProducts = (prodRes.data ?? []) as Product[];
+      const catalogProfile = withCatalogGallery(profileData, nextProducts, nextCategories);
+      applyProfile(catalogProfile, databasePrinterSettings);
+      setCategories(nextCategories);
+      setProducts(nextProducts);
       if (stockError) {
         // A catalog can still be useful when the ledger query is unavailable;
         // keep tracked tiles in the unknown state instead of falsely showing 0.
@@ -678,7 +696,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
         await saveCatalogCache(
           prodRes.data ?? [],
           catRes.data ?? [],
-          profileData,
+          catalogProfile,
           stockError ? undefined : nextStock,
         );
       } catch {
@@ -706,6 +724,40 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     // eslint-disable-next-line react-hooks/set-state-in-effect -- catalog hydration is the external cache/network boundary.
     void refreshCatalog();
   }, [refreshCatalog]);
+
+  const refreshDisplaySettings = useCallback(async () => {
+    const storeId = profile?.store_id;
+    if (offlineProfile || !storeId || !navigator.onLine) return;
+
+    const { data, error } = await supabase
+      .from("stores")
+      .select("settings")
+      .eq("id", storeId)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (error || !data) return;
+
+    const storeSettings = isRecord(data.settings) ? data.settings : {};
+    const nextDisplaySettings = normalizeDisplaySettings(storeSettings.customer_display);
+    setProfile((current) => {
+      if (!current || current.store_id !== storeId) return current;
+      const currentDisplaySettings = current.display_settings ?? DEFAULT_DISPLAY_SETTINGS;
+      if (JSON.stringify(currentDisplaySettings) === JSON.stringify(nextDisplaySettings)) return current;
+      return { ...current, display_settings: nextDisplaySettings };
+    });
+  }, [offlineProfile, profile?.store_id, supabase]);
+
+  useEffect(() => {
+    if (offlineProfile || !profile?.store_id) return;
+    const refresh = () => { void refreshDisplaySettings(); };
+    refresh();
+    const timer = window.setInterval(refresh, 4000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [offlineProfile, profile?.store_id, refreshDisplaySettings]);
 
   // P5: the customer display is a passive side effect. It keeps the latest
   // snapshot internally and never participates in the sale's critical path.
@@ -846,6 +898,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     settings: displaySettings,
     theme: posConfig.uiStyle,
     ...(profile?.display_promotions === undefined ? {} : { promotions: profile.display_promotions }),
+    ...(profile?.display_gallery === undefined ? {} : { gallery: profile.display_gallery }),
   }), [displaySettings, posConfig.uiStyle, profile]);
 
   useEffect(() => {
