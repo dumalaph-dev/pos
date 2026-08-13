@@ -2,7 +2,7 @@
 
 **Project:** Dumala POS
 **Created:** 2026-08-13
-**Status:** Phase 5 initial inventory slice complete; Phase 6 in progress; first deployment telemetry capture complete; authoritative Vercel log aggregation remains pending access
+**Status:** Phase 5 initial inventory slice complete; Phase 6 in progress; two production optimization batches deployed; authoritative Vercel log aggregation remains pending access
 **Owner:** Product and engineering
 
 ## Purpose
@@ -124,7 +124,7 @@ This document is the working plan for the entire initiative. Update the checkbox
 
 ### Phase 6 — Remaining dialogs and server-navigation optimization
 
-**Status:** In progress — first payload projection/telemetry batch deployed; Sales/Orders summary-detail optimization slice in rollout
+**Status:** In progress — Sales/Orders summary-detail batch deployed; Inventory payload/telemetry slice next
 
 - [ ] Convert suitable product, customer, supplier, expense, employee, and branch detail flows to local dialogs.
 - [ ] Move filter/search/pagination state to client state with URL synchronization where appropriate.
@@ -165,7 +165,7 @@ Orders, Sales, Dashboard, and Promotions are included in the first cross-page sl
 
 Each interaction should record only non-sensitive metadata:
 
-- `surface`: dashboard, sales, orders, shifts, or z-readings
+- `surface`: dashboard, sales, orders, shifts, inventory, variance, promotions, audit, or admin
 - `interaction`: open, close, back, or route-navigation fallback
 - `mode`: online, offline, or degraded
 - `duration_ms`
@@ -343,7 +343,15 @@ Do not record order numbers, customer names, employee names, receipt payloads, o
 - Orders, Sales, and Dashboard list queries now select only the summary fields needed for tables, KPIs, trends, and filters. Full receipt fields are fetched only for the visible/deep-linked receipt records.
 - Sales top-selling items are aggregated by the bounded `admin_sales_top_items` RPC instead of serializing the full period's `order_items` ledger into every Sales document. Receipt line items remain complete for the visible/deep-linked receipts.
 - Migrations `0045_admin_sales_summary.sql` and `0046_admin_sales_summary_weight.sql` are applied to the linked production database. Read-only verification confirmed the RPC exists, both supporting indexes exist, and the RPC returns at most the requested five sample rows.
-- The application changes are currently on `codex/phase6-summary-pagination` and await application validation and deployment. Inventory's remaining large server-rendered payload is intentionally the next focused slice after this rollout.
+- The application changes were deployed from `codex/phase6-summary-pagination` through PR #20 at production merge commit `5d61e2ca296194e06284c20ad9ff5853bde1f467`. Post-merge CI, Vercel, and remote production preflight passed. Inventory's remaining large server-rendered payload is intentionally the next focused slice after this rollout.
+
+### 2026-08-14 — Phase 6 Inventory payload/telemetry follow-up
+
+- Expanded the bounded performance surface vocabulary and route mapping to include Inventory, Variance, Promotions, and Audit, so the next production window can compare all high-payload admin routes through the same structured event shape.
+- Inventory movement and yield forms now receive only the product option fields they render (`id`, `name`, `store_id`, and `unit`). The scoped product read-model hydration is bounded to the current inventory page and upserts across pages; the full inventory snapshot remains the offline source of truth and is still replaced per branch scope.
+- This preserves server-side filtering, stock calculations, offline inventory snapshots, and inventory mutation payloads while avoiding a full catalog-shaped client hydration batch on every Inventory navigation. Migration `0047_inventory_tracked_products_idx.sql` adds the matching `(org_id, store_id, track_stock, sort_order, name)` index.
+- The signed-in browser session was unavailable during this post-deploy window and Vercel deployment-log access is not connected, so authoritative server p50/p95 and compressed-byte deltas remain pending. No server percentile is inferred from the browser HTML proxies.
+- The application changes are currently on `codex/phase6-inventory-summary` and have passed local typecheck, lint, production build, diff checks, and linked migration verification; they await deployment.
 
 ## References
 

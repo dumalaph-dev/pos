@@ -89,6 +89,7 @@ type ProductRecord = {
 };
 
 type BaseProductRecord = Omit<ProductRecord, "supplier_id" | "sku" | "barcode" | "cost_price" | "min_stock">;
+type InventoryProductOption = Pick<ProductRecord, "id" | "name" | "store_id" | "unit">;
 
 type MovementRecord = {
   id: string;
@@ -364,6 +365,7 @@ export default async function InventoryPage({
     .from("products")
     .select("id, store_id, category_id, supplier_id, name, sku, barcode, pricing_mode, price, cost_price, unit, min_stock, track_stock, image_url, is_active, sort_order")
     .eq("org_id", profile.org_id)
+    .eq("track_stock", true)
     .order("sort_order")
     .order("name")
     .limit(2000);
@@ -421,6 +423,7 @@ export default async function InventoryPage({
       .from("products")
       .select("id, store_id, category_id, name, pricing_mode, price, unit, track_stock, image_url, is_active, sort_order")
       .eq("org_id", profile.org_id)
+      .eq("track_stock", true)
       .order("sort_order")
       .order("name")
       .limit(2000);
@@ -552,7 +555,9 @@ export default async function InventoryPage({
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
   const activeBranches = visibleBranches.filter((branch) => branch.is_active);
   const activeBranchIds = new Set(activeBranches.map((branch) => branch.id));
-  const formProducts = trackedProducts.filter((product) => product.is_active && activeBranchIds.has(product.store_id));
+  const formProducts: InventoryProductOption[] = trackedProducts
+    .filter((product) => product.is_active && activeBranchIds.has(product.store_id))
+    .map(({ id, name, store_id, unit }) => ({ id, name, store_id, unit }));
   const isLechonHouseBusinessSelected = isLechonHouseBusiness(profile.organizations?.settings);
   const selectedMovementProduct = selectedProductId ? productById.get(selectedProductId) : undefined;
   const defaultProduct = formProducts.find((product) => product.id === selectedMovementProduct?.id) ?? formProducts[0];
@@ -588,28 +593,28 @@ export default async function InventoryPage({
   const hiddenColumnCount = columnOptions.length - visibleColumns.size;
   const branding = readAdminBranding(profile.organizations?.settings);
   const cacheScope = { userId: user.id, orgId: profile.org_id, storeId: selectedBranchId, role: profile.role };
-  const inventoryProductCacheRecords: Array<{ id: string; data: InventoryProductReadModel }> = products.map((product) => ({
-    id: product.id,
+  const inventoryProductCacheRecords: Array<{ id: string; data: InventoryProductReadModel }> = pageRows.map((row) => ({
+    id: row.product.id,
     data: {
-      id: product.id,
-      storeId: product.store_id,
-      categoryId: product.category_id,
-      supplierId: product.supplier_id,
-      name: product.name,
-      sku: product.sku,
-      barcode: product.barcode,
-      pricingMode: product.pricing_mode,
-      price: Number(product.price),
-      costPrice: product.cost_price === null ? null : Number(product.cost_price),
-      unit: product.unit,
-      minStock: Number(product.min_stock),
-      trackStock: product.track_stock,
-      imageUrl: product.image_url,
-      isActive: product.is_active,
-      sortOrder: product.sort_order,
-      categoryName: product.category_id ? categoryById.get(product.category_id)?.name ?? "Uncategorized" : "Uncategorized",
-      supplierName: product.supplier_id ? supplierById.get(product.supplier_id)?.name ?? "Unassigned" : "Unassigned",
-      branchName: branchById.get(product.store_id)?.name ?? DEFAULT_STORE_NAME,
+      id: row.product.id,
+      storeId: row.product.store_id,
+      categoryId: row.product.category_id,
+      supplierId: row.product.supplier_id,
+      name: row.product.name,
+      sku: row.product.sku,
+      barcode: row.product.barcode,
+      pricingMode: row.product.pricing_mode,
+      price: Number(row.product.price),
+      costPrice: row.product.cost_price === null ? null : Number(row.product.cost_price),
+      unit: row.product.unit,
+      minStock: Number(row.product.min_stock),
+      trackStock: row.product.track_stock,
+      imageUrl: row.product.image_url,
+      isActive: row.product.is_active,
+      sortOrder: row.product.sort_order,
+      categoryName: row.categoryName,
+      supplierName: row.supplierName,
+      branchName: row.branch.name,
     },
   }));
   const inventorySnapshotCacheRecords: Array<{ id: string; data: InventoryStockSnapshot }> = allRows.map((row) => ({
@@ -647,7 +652,11 @@ export default async function InventoryPage({
     },
   }));
   const inventoryCacheBatches: AdminReadModelBatch[] = [
-    { entity: "products", records: inventoryProductCacheRecords, replace: true },
+    // Keep the product cache bounded to the current page. Product records are
+    // not read by the offline recovery shell; inventory snapshots are the
+    // authoritative offline view. Upserting lets users build a useful cache
+    // while paging without serializing the full catalog on every navigation.
+    { entity: "products", records: inventoryProductCacheRecords },
     { entity: "inventory", records: inventorySnapshotCacheRecords, replace: true },
     { entity: "inventory_movements", records: inventoryMovementCacheRecords },
   ];
@@ -790,7 +799,7 @@ function InventoryMetric({ label, value, detail, tone, icon }: { label: string; 
   return <article className="admin-kpi-card min-h-[116px]"><div className="admin-kpi-card__inner"><div className="admin-kpi-card__top"><span className="admin-kpi-card__label">{label}</span><span className={`admin-kpi-card__icon ${tone}`}><AdminIcon name={icon} size={17} /></span></div><p className="admin-kpi-card__value tnums">{value}</p><p className="admin-kpi-card__trend">{detail}</p></div></article>;
 }
 
-function StockMovementForm({ scope, branches, products, defaultBranch, defaultProductId, defaultMovement, canWrite, open }: { scope: AdminCacheScope; branches: BranchRecord[]; products: ProductRecord[]; defaultBranch: string; defaultProductId: string; defaultMovement: Exclude<StockMovementType, "sale">; canWrite: boolean; open: boolean }) {
+function StockMovementForm({ scope, branches, products, defaultBranch, defaultProductId, defaultMovement, canWrite, open }: { scope: AdminCacheScope; branches: BranchRecord[]; products: InventoryProductOption[]; defaultBranch: string; defaultProductId: string; defaultMovement: Exclude<StockMovementType, "sale">; canWrite: boolean; open: boolean }) {
   return (
     <details id="stock-movement" open={open} className="admin-panel mt-4 p-4">
       <summary className="inventory-section-summary">
