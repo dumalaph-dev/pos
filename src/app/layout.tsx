@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import OfflineBanner from "@/components/OfflineBanner";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 import SWRegister from "@/components/SWRegister";
@@ -47,6 +48,7 @@ export default function RootLayout({
         {children}
         <PWAInstallPrompt />
         <SWRegister />
+        <Analytics />
       </body>
     </html>
   );
