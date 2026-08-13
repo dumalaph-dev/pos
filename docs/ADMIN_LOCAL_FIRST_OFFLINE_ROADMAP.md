@@ -105,6 +105,8 @@ This document is the working plan for the entire initiative. Update the checkbox
 - [x] Prevent cached permissions from authorizing sensitive actions.
 - [x] Clear private admin cache when credentials, users, organizations, or branch scope change.
 - [x] Surface offline, last-synced, and read-only state consistently.
+- [x] Verify same-origin signed-in online PIN enrollment and hydrate orders, shifts, inventory, variance, and audit caches.
+- [ ] Complete an actual network-unavailable reload, PIN unlock, cached-read verification, and mutation-gating drill.
 
 **Exit criteria:** An authorized user can reopen a previously synchronized admin workspace offline and view permitted cached data without exposing another user’s data.
 
@@ -266,6 +268,13 @@ Do not record order numbers, customer names, employee names, receipt payloads, o
 - Added `AdminMutationForm` so stock movements and physical counts queue locally first for low-latency interaction, even while online. `AdminMutationSync` replays them on reconnect or a 30-second cadence through the authenticated Supabase client, deletes only successful receipts, and backs off transient failures.
 - Permanent server-validation failures are retained as visible conflicts for review. Billing, permissions, employee authentication, refunds, voids, Z-generation, and shift closing remain online-only.
 - Validation passed after the slice: `npm run typecheck`, `npm run lint`, `npm run build`, and `git diff --check` (line-ending warnings only). Migration `0044` is now applied to the linked Supabase project and a linked dry-run reports no pending migrations. Remote schema lint completes with one pre-existing warning in `build_staff_login_slug`; the same-origin signed-in browser drill remains open.
+
+### 2026-08-13 — Phase 4 deployed online acceptance
+
+- The merged frontend was live on `https://dumala.store`; the signed-in admin session showed the `Secure offline admin` / `Enable read-only recovery` prompt.
+- Enrolled a temporary device-local PIN for the smoke test. The prompt closed successfully, confirming the admin scope enrollment path without exposing the raw PIN.
+- Opened a receipt locally at `/admin/orders?order=...` and closed it back to `/admin/orders`. Visited Shifts, Inventory, Variance, and Audit so their scoped read models were hydrated online.
+- The Chrome control surface does not expose per-tab network emulation. The actual network-unavailable reload and PIN unlock remain open for a physical offline toggle or an equivalent staging harness; the user’s Orders tab was restored before release.
 
 ## References
 
