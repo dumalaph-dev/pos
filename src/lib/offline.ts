@@ -60,6 +60,20 @@ export type OfflineProfileSnapshot = {
   pos_config?: unknown;
 };
 
+/**
+ * Explicit, device-local permission to reopen cached admin read models.
+ *
+ * This is deliberately narrower than a Supabase session: it never authorizes
+ * a server mutation and it is only accepted for admin/manager profiles on the
+ * same organization and branch context that was approved online.
+ */
+export type OfflineAdminScope = {
+  org_id: string;
+  store_id: string | null;
+  role: "admin" | "manager";
+  enabled_at: string;
+};
+
 export const OFFLINE_PIN_MIN_LENGTH = 4;
 export const OFFLINE_PIN_MAX_LENGTH = 6;
 export const OFFLINE_PIN_MAX_ATTEMPTS = 5;
@@ -77,6 +91,8 @@ export type OfflineCredential = {
   failed_attempts: number;
   locked_until: number | null;
   updated_at: string;
+  /** Missing on credentials enrolled before offline admin recovery shipped. */
+  admin_scope?: OfflineAdminScope | null;
 };
 
 export type OfflinePinVerificationResult =
@@ -119,6 +135,16 @@ function isOfflineProfileSnapshot(value: unknown): value is OfflineProfileSnapsh
   );
 }
 
+function isOfflineAdminScopeForProfile(value: unknown, profile: OfflineProfileSnapshot): value is OfflineAdminScope {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.org_id === "string" && value.org_id.length > 0 && value.org_id === profile.org_id &&
+    isNullableString(value.store_id) &&
+    (value.role === "admin" || value.role === "manager") && value.role === profile.role &&
+    typeof value.enabled_at === "string" && value.enabled_at.length > 0
+  );
+}
+
 function isCachedProduct(value: unknown): boolean {
   if (!isRecord(value)) return false;
   return (
@@ -154,7 +180,8 @@ function isOfflineCredential(value: unknown): value is OfflineCredential {
     typeof value.iterations === "number" && value.iterations === OFFLINE_PIN_PBKDF2_ITERATIONS &&
     typeof value.failed_attempts === "number" && Number.isInteger(value.failed_attempts) && value.failed_attempts >= 0 &&
     (value.locked_until === null || (typeof value.locked_until === "number" && Number.isFinite(value.locked_until))) &&
-    typeof value.updated_at === "string" && value.updated_at.length > 0
+    typeof value.updated_at === "string" && value.updated_at.length > 0 &&
+    (value.admin_scope === undefined || value.admin_scope === null || isOfflineAdminScopeForProfile(value.admin_scope, value.profile))
   );
 }
 
@@ -370,15 +397,35 @@ export async function getOfflineCredential(): Promise<OfflineCredential | null> 
   }
 }
 
+export function getOfflineAdminScope(credential: OfflineCredential | null): OfflineAdminScope | null {
+  const scope = credential?.admin_scope;
+  return scope && isOfflineAdminScopeForProfile(scope, credential.profile) ? scope : null;
+}
+
+export function isOfflineAdminCredential(credential: OfflineCredential | null): boolean {
+  return Boolean(getOfflineAdminScope(credential));
+}
+
 /** Save a salted, device-local PIN verifier. The raw PIN is never persisted. */
 export async function enrollOfflineCredential(
   profile: OfflineProfileSnapshot,
   pin: string,
+  options: { adminScope?: OfflineAdminScope | null } = {},
 ): Promise<OfflineCredential> {
   if (!isPin(pin)) {
     throw new Error(`Offline PIN must be ${OFFLINE_PIN_MIN_LENGTH} to ${OFFLINE_PIN_MAX_LENGTH} digits.`);
   }
   if (!isOfflineProfileSnapshot(profile)) throw new Error("A signed-in profile is required.");
+
+  const existing = await getOfflineCredential();
+  const requestedAdminScope = Object.prototype.hasOwnProperty.call(options, "adminScope")
+    ? options.adminScope ?? null
+    : existing?.user_id === profile.id && existing.profile.org_id === profile.org_id
+      ? getOfflineAdminScope(existing)
+      : null;
+  if (requestedAdminScope && !isOfflineAdminScopeForProfile(requestedAdminScope, profile)) {
+    throw new Error("Offline admin access must match the signed-in admin profile.");
+  }
 
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const verifier = await derivePinVerifier(pin, salt, OFFLINE_PIN_PBKDF2_ITERATIONS);
@@ -393,6 +440,7 @@ export async function enrollOfflineCredential(
     failed_attempts: 0,
     locked_until: null,
     updated_at: new Date().toISOString(),
+    admin_scope: requestedAdminScope,
   };
   await getDb().offlineAuth.put(credential);
   return credential;

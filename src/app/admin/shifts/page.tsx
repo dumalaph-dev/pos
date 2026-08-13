@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
-import { ShiftDialog } from "@/components/admin/ShiftDialog";
+import { ShiftDialogController, type ShiftDialogRecord, type ShiftZReadingRecord } from "@/components/admin/ShiftDialogController";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
@@ -15,9 +15,7 @@ import {
   parseShiftReadingList,
   shiftLabel,
   varianceLabel,
-  type ShiftReading,
 } from "@/lib/shifts";
-import { closeShiftFromAdmin, generateZReading } from "./actions";
 
 type AdminRole = "admin" | "manager" | "cashier";
 type ShiftStatusFilter = "all" | "open" | "closed" | "unread";
@@ -32,20 +30,6 @@ type ProfileRecord = {
 
 type BranchRecord = { id: string; name: string; is_active: boolean };
 type StaffRecord = { id: string; full_name: string | null };
-
-type ZReadingRecord = {
-  id: string;
-  shift_id: string;
-  store_id: string;
-  z_number: number;
-  business_date: string;
-  net_sales: number;
-  declared_cash: number;
-  cash_variance: number;
-  grand_total_after: number;
-  note: string | null;
-  generated_at: string;
-};
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_RANGE_DAYS = 7;
@@ -190,7 +174,7 @@ export default async function ShiftsPage({
   const allReadings = parseShiftReadingList(readingResult.data);
   const staff = (staffResult.data ?? []) as StaffRecord[];
   const staffById = new Map(staff.map((person) => [person.id, person]));
-  const zReadings = (zReadingResult.data ?? []) as ZReadingRecord[];
+  const zReadings = (zReadingResult.data ?? []) as ShiftZReadingRecord[];
   const zByShiftId = new Map(zReadings.map((reading) => [reading.shift_id, reading]));
 
   const readings = allReadings.filter((reading) => {
@@ -201,10 +185,6 @@ export default async function ShiftsPage({
   });
 
   const selectedShiftId = readParam(params.shift);
-  const selectedReading = selectedShiftId
-    ? allReadings.find((reading) => reading.shiftId === selectedShiftId) ?? null
-    : null;
-  const selectedZReading = selectedReading ? zByShiftId.get(selectedReading.shiftId) ?? null : null;
 
   const openTills = allReadings.filter((reading) => reading.isOpen).length;
   const netSalesTotal = allReadings.reduce((sum, reading) => sum + reading.netSales, 0);
@@ -225,6 +205,14 @@ export default async function ShiftsPage({
         ? "Z-reading generated and sealed into the archive."
         : "";
   const returnTo = shiftsHref({ from, to, status });
+  const shiftDialogRecords: ShiftDialogRecord[] = allReadings.map((reading) => ({
+    reading,
+    zReading: zByShiftId.get(reading.shiftId) ?? null,
+    cashierName: staffById.get(reading.cashierId)?.full_name ?? "Unknown",
+    branchName: branchById.get(reading.storeId)?.name ?? "Unknown branch",
+    canWrite,
+    returnTo,
+  }));
 
   return (
     <main className="admin-page text-ink">
@@ -285,6 +273,12 @@ export default async function ShiftsPage({
           </form>
         </section>
 
+        <ShiftDialogController
+          key={selectedShiftId || "shifts-list"}
+          initialShiftId={selectedShiftId || null}
+          records={shiftDialogRecords}
+          cacheScope={{ userId: user.id, orgId: profile.org_id, storeId: selectedBranchId, role: profile.role }}
+        >
         <div className="mt-4 space-y-4">
           <section aria-labelledby="shift-list-heading" className="admin-panel min-w-0 p-5">
             <div className="admin-panel__header">
@@ -313,6 +307,8 @@ export default async function ShiftsPage({
                           <td>
                             <Link
                               href={shiftsHref({ from, to, status, shift: reading.shiftId })}
+                              prefetch={false}
+                              data-shift-trigger={reading.shiftId}
                               className="font-extrabold text-primary hover:underline"
                               aria-haspopup="dialog"
                               aria-label={`Open ${reading.isOpen ? "live X-reading" : "closed shift"} ${shiftLabel(reading)}`}
@@ -367,6 +363,8 @@ export default async function ShiftsPage({
                     <span className="min-w-0">
                       <Link
                         href={shiftsHref({ from, to, status, shift: reading.shift_id })}
+                        prefetch={false}
+                        data-shift-trigger={reading.shift_id}
                         className="block text-xs font-extrabold text-primary hover:underline"
                         aria-haspopup="dialog"
                       >
@@ -384,26 +382,13 @@ export default async function ShiftsPage({
             )}
           </section>
         </div>
-
-        {selectedReading ? (
-          <ShiftDialog closeHref={returnTo} titleId="shift-detail-heading">
-            <ShiftDetail
-              reading={selectedReading}
-              zReading={selectedZReading}
-              cashierName={staffById.get(selectedReading.cashierId)?.full_name ?? "Unknown"}
-              branchName={branchById.get(selectedReading.storeId)?.name ?? "Unknown branch"}
-              canWrite={canWrite}
-              returnTo={returnTo}
-              closeHref={returnTo}
-            />
-          </ShiftDialog>
-        ) : null}
+        </ShiftDialogController>
       </div>
     </main>
   );
 }
 
-function ShiftDetail({
+/* function ShiftDetail({
   reading,
   zReading,
   cashierName,
@@ -539,6 +524,8 @@ function ShiftDetail({
     </section>
   );
 }
+
+*/
 
 function ShiftMetric({ label, value, detail, tone, icon }: { label: string; value: string; detail: string; tone: string; icon: "history" | "pos" | "wallet" | "reports" }) {
   return (

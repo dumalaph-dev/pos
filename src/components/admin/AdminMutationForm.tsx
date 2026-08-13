@@ -1,0 +1,130 @@
+"use client";
+
+import type { FormEvent, ReactNode } from "react";
+import { useState } from "react";
+import { toCentavos } from "@/lib/money";
+import {
+  createAdminCacheScopeKey,
+  enqueueAdminMutation,
+  type AdminCacheScope,
+  type AdminInventoryCountPayload,
+  type AdminInventoryMovementPayload,
+  type AdminMutationKind,
+  type AdminMutationPayload,
+} from "@/lib/admin/local-first-store";
+
+type MutationFormState =
+  | { phase: "idle" }
+  | { phase: "saving" }
+  | { phase: "queued"; message: string }
+  | { phase: "error"; message: string };
+
+const MOVEMENT_TYPES = new Set(["receive", "yield_in", "yield_out", "waste", "adjust"]);
+
+function textValue(data: FormData, name: string): string {
+  const value = data.get(name);
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function readMovementPayload(data: FormData): AdminInventoryMovementPayload {
+  const type = textValue(data, "type");
+  const qty = Number(textValue(data, "qty"));
+  const unitCostValue = textValue(data, "unit_cost");
+  const unitCostPeso = unitCostValue ? Number(unitCostValue) : null;
+  if (!MOVEMENT_TYPES.has(type) || !Number.isFinite(qty)) {
+    throw new Error("Choose a movement type and enter a valid quantity.");
+  }
+  if (unitCostPeso !== null && !Number.isFinite(unitCostPeso)) {
+    throw new Error("Unit cost must be a valid amount.");
+  }
+  return {
+    storeId: textValue(data, "store_id"),
+    productId: textValue(data, "product_id"),
+    type: type as AdminInventoryMovementPayload["type"],
+    qty,
+    unitCostCentavos: unitCostPeso === null ? null : toCentavos(unitCostPeso),
+    reason: textValue(data, "reason") || null,
+  };
+}
+
+function readCountPayload(data: FormData): AdminInventoryCountPayload {
+  const counts: AdminInventoryCountPayload["counts"] = [];
+  for (const [name, value] of data.entries()) {
+    if (!name.startsWith("counted_") || typeof value !== "string") continue;
+    const productId = name.slice("counted_".length);
+    const countedQty = Number(value.trim());
+    counts.push({ product_id: productId, counted_qty: countedQty });
+  }
+  return {
+    storeId: textValue(data, "store_id"),
+    countDate: textValue(data, "count_date"),
+    counts,
+  };
+}
+
+function readPayload(kind: AdminMutationKind, data: FormData): AdminMutationPayload {
+  return kind === "inventory_movement" ? readMovementPayload(data) : readCountPayload(data);
+}
+
+export function AdminMutationForm({
+  children,
+  scope,
+  kind,
+  className,
+}: {
+  children: ReactNode;
+  scope: AdminCacheScope;
+  kind: AdminMutationKind;
+  className?: string;
+}) {
+  const [state, setState] = useState<MutationFormState>({ phase: "idle" });
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (state.phase === "saving") return;
+
+    setState({ phase: "saving" });
+    try {
+      const payload = readPayload(kind, new FormData(event.currentTarget));
+      if (payload.storeId !== scope.storeId) {
+        throw new Error("The selected branch changed. Refresh the page before saving this change.");
+      }
+      await enqueueAdminMutation(scope, kind, payload);
+      const online = typeof navigator === "undefined" || navigator.onLine;
+      setState({
+        phase: "queued",
+        message: online
+          ? "Saved on this device. Syncing securely in the background."
+          : "Saved on this device. It will sync automatically when the connection returns.",
+      });
+      window.dispatchEvent(new CustomEvent("dumala:admin-mutation-queued", {
+        detail: { scopeKey: createAdminCacheScopeKey(scope) },
+      }));
+    } catch (error) {
+      setState({
+        phase: "error",
+        message: error instanceof Error ? error.message : "The change could not be saved on this device.",
+      });
+    }
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      data-admin-mutation-form={kind}
+      aria-busy={state.phase === "saving"}
+      className={className}
+    >
+      {children}
+      {state.phase !== "idle" && (
+        <p
+          role={state.phase === "error" ? "alert" : "status"}
+          aria-live="polite"
+          className={`md:col-span-2 xl:col-span-4 text-xs font-semibold ${state.phase === "error" ? "text-danger" : "text-success"}`}
+        >
+          {state.phase === "saving" ? "Saving on this device…" : state.message}
+        </p>
+      )}
+    </form>
+  );
+}

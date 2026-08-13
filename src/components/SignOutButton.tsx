@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { signOut } from "@/app/actions";
 import { clearOfflineCaches } from "@/lib/offline-cache";
 import { clearOfflineSession } from "@/lib/offline";
+import { clearAdminLocalFirstCache } from "@/lib/admin/local-first-store";
 
 /* Kept as utilities rather than a CSS class: most of globals.css is unlayered
    and would outrank Tailwind's utilities layer, so a class here would silently
@@ -68,6 +69,7 @@ export function SignOutButton({
       className={variant === "menu" ? "contents" : undefined}
       action={async () => {
         await clearOfflineSession();
+        await clearAdminLocalFirstCache();
         await clearOfflineCaches();
         try {
           await signOut();

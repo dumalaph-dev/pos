@@ -101,7 +101,7 @@ export function AdminDialog({
     <div
       className={backdropClassName}
       role="presentation"
-      onMouseDown={(event) => {
+      onPointerDown={(event) => {
         if (event.target === event.currentTarget) closeDialog();
       }}
     >

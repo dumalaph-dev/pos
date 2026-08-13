@@ -2,14 +2,17 @@ import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
+import { OrderDialogController } from "@/components/admin/OrderDialogController";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
+import type { OrderReceiptData } from "@/lib/admin/order-receipts";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { loadReversedOrderIds, selectNetSales } from "@/lib/admin/sales-reports";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 
 type AdminRole = "admin" | "manager" | "cashier";
 type OrderStatus = "completed" | "voided" | "refunded";
+type PaymentMethod = "cash" | "gcash" | "maya" | "card";
 type DiscountType = "senior" | "pwd" | "custom";
 type PromotionRange = "7d" | "30d" | "all";
 
@@ -21,20 +24,50 @@ type ProfileRecord = {
   password_change_required: boolean;
 };
 
-type BranchRecord = { id: string; name: string; is_active: boolean };
+type BranchRecord = {
+  id: string;
+  name: string;
+  address: string | null;
+  tin: string | null;
+  vat_registered: boolean;
+  vat_rate: number;
+  is_active: boolean;
+};
 type OrderRecord = {
   id: string;
   order_no: string;
   store_id: string;
+  cashier_id: string;
   status: OrderStatus;
   discount_type: "none" | DiscountType;
   discount_amount: number;
   discount_ref: string | null;
   subtotal: number;
+  vatable_sale: number;
+  vat_amount: number;
+  vat_exempt_sale: number;
   total: number;
+  payment_method: PaymentMethod;
+  payment_ref: string | null;
+  amount_tendered: number | null;
+  change_due: number | null;
+  note: string | null;
   created_at: string;
+  created_at_device: string;
   reversal_of: string | null;
 };
+
+type OrderItemRecord = {
+  order_id: string;
+  product_id: string | null;
+  name_snapshot: string;
+  qty: number;
+  weight_kg: number | null;
+  line_total: number;
+};
+
+type ProductRecord = { id: string; unit: string };
+type CashierRecord = { id: string; full_name: string; role: AdminRole };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SINGAPORE_DAY_FORMATTER = new Intl.DateTimeFormat("en-CA", {
@@ -116,11 +149,12 @@ function dayKey(value: Date) {
 export default async function PromotionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string | string[] }>;
+  searchParams: Promise<{ range?: string | string[]; order?: string | string[] }>;
 }) {
   const params = await searchParams;
   const requestedRange = readParam(params.range);
   const range: PromotionRange = isPromotionRange(requestedRange) ? requestedRange : "30d";
+  const selectedOrderId = readParam(params.order);
   const supabase = await createClient();
   const user = await getAuthenticatedUser();
 
@@ -136,7 +170,7 @@ export default async function PromotionsPage({
   const startDate = range === "7d" ? new Date(todayStart.getTime() - DAY_MS * 6) : range === "30d" ? new Date(todayStart.getTime() - DAY_MS * 29) : null;
   let ordersQuery = supabase
     .from("orders")
-    .select("id, order_no, store_id, status, discount_type, discount_amount, discount_ref, subtotal, total, created_at, reversal_of")
+    .select("id, order_no, store_id, cashier_id, status, discount_type, discount_amount, discount_ref, subtotal, vatable_sale, vat_amount, vat_exempt_sale, total, payment_method, payment_ref, amount_tendered, change_due, note, created_at, created_at_device, reversal_of")
     .eq("org_id", profile.org_id)
     .eq("status", "completed")
     .is("reversal_of", null)
@@ -144,13 +178,36 @@ export default async function PromotionsPage({
     .limit(5000);
   if (startDate) ordersQuery = ordersQuery.gte("created_at", startDate.toISOString()).lt("created_at", todayEnd.toISOString());
 
-  const [branchesResult, ordersResult] = await Promise.all([
-    supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name"),
+  const itemsQuery = supabase
+    .from("order_items")
+    .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status, reversal_of, org_id, created_at)")
+    .eq("orders.org_id", profile.org_id)
+    .eq("orders.status", "completed")
+    .is("orders.reversal_of", null)
+    .limit(10000);
+  if (startDate) itemsQuery.gte("orders.created_at", startDate.toISOString()).lt("orders.created_at", todayEnd.toISOString());
+
+  const branchesQuery = supabase.from("stores").select("id, name, address, tin, vat_registered, vat_rate, is_active").eq("org_id", profile.org_id).order("name");
+  const productsQuery = supabase.from("products").select("id, unit").eq("org_id", profile.org_id).limit(3000);
+  const cashiersQuery = supabase.from("profiles").select("id, full_name, role").eq("org_id", profile.org_id).order("full_name").limit(300);
+  const [branchesResult, ordersResult, itemsResult, productsResult, cashiersResult] = await Promise.all([
+    branchesQuery,
     ordersQuery,
+    itemsQuery,
+    productsQuery,
+    cashiersQuery,
   ]);
   const branches = (branchesResult.data ?? []) as BranchRecord[];
   const orders = (ordersResult.data ?? []) as OrderRecord[];
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
+  const productById = new Map(((productsResult.data ?? []) as ProductRecord[]).map((product) => [product.id, product]));
+  const cashierById = new Map(((cashiersResult.data ?? []) as CashierRecord[]).map((cashier) => [cashier.id, cashier]));
+  const itemsByOrder = new Map<string, OrderItemRecord[]>();
+  for (const item of (itemsResult.data ?? []) as OrderItemRecord[]) {
+    const items = itemsByOrder.get(item.order_id) ?? [];
+    items.push(item);
+    itemsByOrder.set(item.order_id, items);
+  }
   // A discount on a sale that was later voided was never actually given, so the
   // reversed originals are dropped before any total is computed (0020).
   const reversalLookup = await loadReversedOrderIds(supabase, profile.org_id, orders.map((order) => order.id));
@@ -194,9 +251,59 @@ export default async function PromotionsPage({
   });
   const maxDiscountDay = Math.max(...discountSeries.map((point) => point.value), 0);
   const recentDiscounts = discountedOrders.slice(0, 8);
-  const queryWarning = Boolean(branchesResult.error || ordersResult.error || reversalLookup.failed);
+  const queryWarning = Boolean(branchesResult.error || ordersResult.error || itemsResult.error || productsResult.error || cashiersResult.error || reversalLookup.failed);
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
   const rangeLabel = rangeOptions.find((option) => option.value === range)?.label ?? "Last 30 days";
+  const selectedOrder = selectedOrderId ? completedOrders.find((order) => order.id === selectedOrderId) ?? null : null;
+  const receiptOrders = selectedOrder && !recentDiscounts.some((order) => order.id === selectedOrder.id)
+    ? [selectedOrder, ...recentDiscounts]
+    : recentDiscounts;
+  const receiptReturnTo = `/admin/promotions?range=${range}`;
+  const promotionReceipts: OrderReceiptData[] = receiptOrders.map((order) => {
+    const branch = branchById.get(order.store_id);
+    return {
+      order: {
+        id: order.id,
+        order_no: order.order_no,
+        status: order.status,
+        subtotal: Number(order.subtotal),
+        discount_amount: Number(order.discount_amount),
+        discount_ref: order.discount_ref,
+        vatable_sale: Number(order.vatable_sale ?? 0),
+        vat_amount: Number(order.vat_amount ?? 0),
+        vat_exempt_sale: Number(order.vat_exempt_sale ?? 0),
+        total: Number(order.total),
+        payment_method: order.payment_method,
+        payment_ref: order.payment_ref,
+        amount_tendered: order.amount_tendered == null ? null : Number(order.amount_tendered),
+        change_due: order.change_due == null ? null : Number(order.change_due),
+        note: order.note,
+        created_at: order.created_at,
+        created_at_device: order.created_at_device || order.created_at,
+      },
+      items: (itemsByOrder.get(order.id) ?? []).map((item) => ({
+        order_id: item.order_id,
+        product_id: item.product_id,
+        name_snapshot: item.name_snapshot,
+        qty: Number(item.qty),
+        weight_kg: item.weight_kg == null ? null : Number(item.weight_kg),
+        unit: productById.get(item.product_id ?? "")?.unit ?? (item.weight_kg ? "kg" : "item"),
+        line_total: Number(item.line_total),
+      })),
+      branch: {
+        name: branch?.name ?? "Unknown branch",
+        address: branch?.address ?? null,
+        tin: branch?.tin ?? null,
+        vatRegistered: Boolean(branch?.vat_registered),
+        vatRate: Number(branch?.vat_rate ?? 0.12),
+      },
+      cashierName: cashierById.get(order.cashier_id)?.full_name ?? "Unknown cashier",
+      returnTo: receiptReturnTo,
+      canManage: profile.role === "admin",
+      canReprint: profile.role === "admin" || profile.role === "manager",
+      reversal: null,
+    };
+  });
 
   return (
     <main className="admin-page text-ink">
@@ -218,7 +325,14 @@ export default async function PromotionsPage({
             <section aria-labelledby="types-heading" className="admin-panel p-5"><div className="admin-panel__header"><div><p className="admin-panel__eyebrow">Offer mix</p><h2 id="types-heading" className="admin-panel__title">Discount types</h2><p className="admin-panel__subtitle">POS discounts used in the selected period</p></div></div><div className="mt-4 grid gap-3">{typeTotals.map((item) => <div key={item.type} className="rounded-btn border border-line bg-surface-raised p-3"><div className="flex items-center justify-between gap-3"><span className={`rounded-pill px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${discountClass(item.type)}`}>{discountLabel(item.type)}</span><strong className="tnums text-sm font-extrabold text-ink">{displayPeso(item.total)}</strong></div><div className="mt-2 flex justify-between gap-3 text-[10px] text-ink-muted"><span>{item.orders} order{item.orders === 1 ? "" : "s"}</span><span>Avg {displayPeso(item.average)}</span></div></div>)}</div></section>
           </div>
 
-          <section aria-labelledby="discounted-orders-heading" className="admin-panel mt-4 p-5"><div className="admin-panel__header"><div><p className="admin-panel__eyebrow">Audit view</p><h2 id="discounted-orders-heading" className="admin-panel__title">Recent discounted orders</h2><p className="admin-panel__subtitle">Verify that discounts are being applied with the expected reference.</p></div><Link href="/admin/orders?status=completed" className="admin-kpi-card__link mt-0">View all orders <AdminIcon name="arrow" size={14} /></Link></div>{recentDiscounts.length === 0 ? <PromotionEmpty title="No discounts used yet" detail="Completed POS orders with Senior, PWD, or Custom discounts will appear here." /> : <div className="mt-4 overflow-x-auto"><table className="admin-list-table min-w-[760px]"><thead><tr><th>Order</th><th>When</th><th>Branch</th><th>Offer</th><th>Reference</th><th>Discount</th><th>Net total</th></tr></thead><tbody>{recentDiscounts.map((order) => <tr key={order.id}><td className="whitespace-nowrap font-extrabold text-primary">{order.order_no}</td><td className="whitespace-nowrap text-ink-muted">{formatDateTime(order.created_at)}</td><td className="whitespace-nowrap">{branchById.get(order.store_id)?.name ?? "Unknown branch"}</td><td><span className={`inline-flex rounded-pill px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${discountClass(order.discount_type as DiscountType)}`}>{discountLabel(order.discount_type)}</span></td><td className="text-ink-muted">{order.discount_ref ? "Reference captured" : "No reference"}</td><td className="tnums whitespace-nowrap font-extrabold text-danger">-{displayPeso(order.discount_amount)}</td><td className="tnums whitespace-nowrap font-extrabold">{displayPeso(order.total)}</td></tr>)}</tbody></table></div>}</section>
+          <OrderDialogController
+            initialOrderId={selectedOrderId || null}
+            receipts={promotionReceipts}
+            cacheScope={{ userId: user.id, orgId: profile.org_id, storeId: null, role: profile.role }}
+            performanceSurface="admin"
+          >
+            <section aria-labelledby="discounted-orders-heading" className="admin-panel mt-4 p-5"><div className="admin-panel__header"><div><p className="admin-panel__eyebrow">Audit view</p><h2 id="discounted-orders-heading" className="admin-panel__title">Recent discounted orders</h2><p className="admin-panel__subtitle">Verify that discounts are being applied with the expected reference.</p></div><Link href="/admin/orders?status=completed" className="admin-kpi-card__link mt-0">View all orders <AdminIcon name="arrow" size={14} /></Link></div>{recentDiscounts.length === 0 ? <PromotionEmpty title="No discounts used yet" detail="Completed POS orders with Senior, PWD, or Custom discounts will appear here." /> : <div className="mt-4 overflow-x-auto"><table className="admin-list-table min-w-[760px]"><thead><tr><th>Order</th><th>When</th><th>Branch</th><th>Offer</th><th>Reference</th><th>Discount</th><th>Net total</th></tr></thead><tbody>{recentDiscounts.map((order) => { const receiptHref = `/admin/promotions?range=${range}&order=${encodeURIComponent(order.id)}`; return <tr key={order.id}><td className="whitespace-nowrap"><Link href={receiptHref} prefetch={false} data-order-trigger={order.id} aria-haspopup="dialog" className="font-extrabold text-primary hover:underline">{order.order_no}</Link></td><td className="whitespace-nowrap text-ink-muted">{formatDateTime(order.created_at)}</td><td className="whitespace-nowrap">{branchById.get(order.store_id)?.name ?? "Unknown branch"}</td><td><span className={`inline-flex rounded-pill px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${discountClass(order.discount_type as DiscountType)}`}>{discountLabel(order.discount_type)}</span></td><td className="text-ink-muted">{order.discount_ref ? "Reference captured" : "No reference"}</td><td className="tnums whitespace-nowrap font-extrabold text-danger">-{displayPeso(order.discount_amount)}</td><td className="tnums whitespace-nowrap font-extrabold">{displayPeso(order.total)}</td></tr>; })}</tbody></table></div>}</section>
+          </OrderDialogController>
 
           <div className="mt-4 grid gap-4 md:grid-cols-3"><PromotionGuide title="Senior citizen" detail="POS applies the configured statutory discount and captures the reference." tone="bg-primary-soft text-primary" /><PromotionGuide title="PWD" detail="Use the POS discount flow so the order retains its discount reference." tone="bg-success/10 text-success" /><PromotionGuide title="Custom" detail="Custom percentage discounts are recorded for reporting and review." tone="bg-warning/15 text-warning" /></div>
       </div>

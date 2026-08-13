@@ -6,9 +6,11 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { clearOfflineCaches } from "@/lib/offline-cache";
-import { clearOfflineSession, getOfflineCredential, loadCachedCatalog, type OfflineCredential, type OfflineProfileSnapshot } from "@/lib/offline";
+import { clearOfflineSession, getOfflineAdminScope, getOfflineCredential, loadCachedCatalog, type OfflineCredential, type OfflineProfileSnapshot } from "@/lib/offline";
+import { clearAdminLocalFirstCache, getAdminOfflineCacheStatus } from "@/lib/admin/local-first-store";
 import SellScreen from "@/components/pos/SellScreen";
 import OfflinePinUnlock from "@/components/OfflinePinUnlock";
+import AdminOfflineShell from "@/components/admin/AdminOfflineShell";
 
 export default function OwnerLoginPage() {
   const router = useRouter();
@@ -18,10 +20,12 @@ export default function OwnerLoginPage() {
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [emailLoading, setEmailLoading] = useState(false);
   const [posPath, setPosPath] = useState(false);
-  const [browserOffline, setBrowserOffline] = useState(false);
+  const [adminPath, setAdminPath] = useState(false);
   const [offlineCredential, setOfflineCredential] = useState<OfflineCredential | null>(null);
   const [offlineCatalogReady, setOfflineCatalogReady] = useState(false);
   const [offlineProfile, setOfflineProfile] = useState<OfflineProfileSnapshot | null>(null);
+  const [offlineAdminCacheReady, setOfflineAdminCacheReady] = useState(false);
+  const [offlineAdminCredential, setOfflineAdminCredential] = useState<OfflineCredential | null>(null);
 
   // Backstop for every sign-out path that lands here, not just SignOutButton:
   // wipe the app-shell caches so nothing from the last session is left for the
@@ -34,6 +38,7 @@ export default function OwnerLoginPage() {
     let noticeTimer: number | undefined;
     if (signedOut) {
       void clearOfflineSession();
+      void clearAdminLocalFirstCache();
       void clearOfflineCaches();
     }
     if (authError) noticeTimer = window.setTimeout(() => setAuthNotice(authError), 0);
@@ -49,18 +54,20 @@ export default function OwnerLoginPage() {
   useEffect(() => {
     let active = true;
     const pathIsPos = window.location.pathname.startsWith("/pos");
+    const pathIsAdmin = window.location.pathname.startsWith("/admin");
     const browserIsOffline = !navigator.onLine;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- this reads browser-owned navigation state once.
     setPosPath(pathIsPos);
-    setBrowserOffline(browserIsOffline);
+    setAdminPath(pathIsAdmin);
     const onOffline = () => {
-      setBrowserOffline(true);
       void checkOfflineAccess();
     };
-    const onOnline = () => setBrowserOffline(false);
+    const onOnline = () => {
+      void checkOfflineAccess();
+    };
     window.addEventListener("offline", onOffline);
     window.addEventListener("online", onOnline);
-    if (!pathIsPos && !browserIsOffline) {
+    if (!pathIsPos && !pathIsAdmin && !browserIsOffline) {
       return () => {
         active = false;
         window.removeEventListener("offline", onOffline);
@@ -70,12 +77,22 @@ export default function OwnerLoginPage() {
 
     async function checkOfflineAccess() {
       const credential = await getOfflineCredential();
-      const cached = credential
+      const cached = pathIsPos && credential
         ? await loadCachedCatalog(credential.profile.store_id ?? credential.profile.org_id, credential.user_id).catch(() => null)
+        : null;
+      const adminScope = credential ? getOfflineAdminScope(credential) : null;
+      const adminCached = pathIsAdmin && credential && adminScope
+        ? await getAdminOfflineCacheStatus({
+          userId: credential.user_id,
+          orgId: adminScope.org_id,
+          storeId: adminScope.store_id,
+          role: adminScope.role,
+        }).catch(() => null)
         : null;
       if (!active) return;
       setOfflineCredential(credential);
       setOfflineCatalogReady(Boolean(cached));
+      setOfflineAdminCacheReady(Boolean(adminCached?.ready));
     }
 
     void checkOfflineAccess();
@@ -92,6 +109,20 @@ export default function OwnerLoginPage() {
     setOfflineProfile(cached.profile);
   }
 
+  async function openOfflineAdmin(credential: OfflineCredential) {
+    const adminScope = getOfflineAdminScope(credential);
+    if (!adminScope) throw new Error("Offline admin access is not enabled for this device.");
+    const status = await getAdminOfflineCacheStatus({
+      userId: credential.user_id,
+      orgId: adminScope.org_id,
+      storeId: adminScope.store_id,
+      role: adminScope.role,
+    }).catch(() => null);
+    if (!status?.ready) throw new Error("No cached admin read models are ready yet. Sign in online and open the admin pages once.");
+    setOfflineAdminCredential(credential);
+  }
+
+  if (offlineAdminCredential) return <AdminOfflineShell credential={offlineAdminCredential} />;
   if (offlineProfile) return <SellScreen offlineProfile={offlineProfile} />;
 
   async function onEmailSubmit(event: React.FormEvent) {
@@ -144,13 +175,20 @@ export default function OwnerLoginPage() {
         <h1 className="sr-only">Owner workspace access</h1>
         <p className="mt-4 text-sm leading-6 text-ink-muted">Manage your business, branches, staff, and POS settings from one place.</p>
         {authNotice && <p role="alert" className="mt-4 rounded-btn border border-danger/25 bg-danger-soft px-4 py-3 text-sm font-semibold text-danger">{authNotice}</p>}
-        {(browserOffline || posPath) && offlineCredential && offlineCatalogReady && (
+        {posPath && offlineCredential && offlineCatalogReady && (
           <OfflinePinUnlock credential={offlineCredential} onUnlock={openOfflinePos} />
         )}
-        {(browserOffline || posPath) && offlineCredential && !offlineCatalogReady && (
+        {posPath && offlineCredential && !offlineCatalogReady && (
           <p role="status" className="mt-4 rounded-btn border border-warning/35 bg-warning/10 px-4 py-3 text-sm font-semibold text-ink">An offline PIN is saved, but this branch menu is not cached yet. Sign in online and open POS once.</p>
         )}
-        {(browserOffline || posPath) && !offlineCredential && <p role="status" className="mt-4 rounded-btn border border-warning/35 bg-warning/10 px-4 py-3 text-sm font-semibold text-ink">This tablet is offline or the POS server cannot be reached. Sign in online once, open POS, and create an offline PIN before the next offline shift.</p>}
+        {posPath && !offlineCredential && <p role="status" className="mt-4 rounded-btn border border-warning/35 bg-warning/10 px-4 py-3 text-sm font-semibold text-ink">This tablet is offline or the POS server cannot be reached. Sign in online once, open POS, and create an offline PIN before the next offline shift.</p>}
+        {adminPath && offlineCredential && offlineAdminCacheReady && (
+          <OfflinePinUnlock credential={offlineCredential} onUnlock={openOfflineAdmin} />
+        )}
+        {adminPath && offlineCredential && !offlineAdminCacheReady && (
+          <p role="status" className="mt-4 rounded-btn border border-warning/35 bg-warning/10 px-4 py-3 text-sm font-semibold text-ink">Offline admin recovery is not ready for this device. Sign in online as an admin or manager, enable read-only offline access, and open the admin pages once to cache them.</p>
+        )}
+        {adminPath && !offlineCredential && <p role="status" className="mt-4 rounded-btn border border-warning/35 bg-warning/10 px-4 py-3 text-sm font-semibold text-ink">This admin workspace is unavailable offline until an admin or manager enables device-bound read-only recovery while online.</p>}
 
         <form onSubmit={onEmailSubmit} className="mt-6">
           <label className="block text-sm font-medium text-ink" htmlFor="email">

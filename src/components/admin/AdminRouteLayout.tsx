@@ -9,9 +9,11 @@ import { getAdminProfile } from "@/lib/admin/profile";
 import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
 import { readAdminBranding } from "@/lib/admin/branding";
 import { isSubscriptionAccessCurrent } from "@/lib/trial";
+import type { OfflineProfileSnapshot } from "@/lib/offline";
 
 type AdminRole = "admin" | "manager" | "cashier";
 type ShellProfile = {
+  full_name: string | null;
   role: AdminRole | null;
   org_id: string;
   store_id: string | null;
@@ -106,6 +108,17 @@ export default async function AdminRouteLayout({ children }: { children: ReactNo
   const branchName = selectedBranchId ? branches.find((branch) => branch.id === selectedBranchId)?.name ?? profile.stores?.name ?? DEFAULT_STORE_NAME : "All branches";
   const connection = await readConnection(profile.org_id, selectedBranchId);
   const branding = readAdminBranding(profile.organizations?.settings);
+  const offlineProfile: OfflineProfileSnapshot = {
+    id: user.id,
+    org_id: profile.org_id,
+    store_id: selectedBranchId,
+    store_name: branchName,
+    store_address: null,
+    store_tin: null,
+    brand_logo_url: branding.logoUrl,
+    full_name: profile.full_name,
+    role: profile.role,
+  };
 
-  return <AdminShell branding={branding} branchName={branchName} connection={connection} branches={branches} selectedBranchId={selectedBranchId} canSwitchBranches={canSwitchBranches} canManageBranches={canSwitchBranches}>{children}</AdminShell>;
+  return <AdminShell branding={branding} branchName={branchName} connection={connection} branches={branches} selectedBranchId={selectedBranchId} canSwitchBranches={canSwitchBranches} canManageBranches={canSwitchBranches} offlineProfile={offlineProfile}>{children}</AdminShell>;
 }

@@ -12,7 +12,7 @@
  * and falls back to the login shell when the network is down. This is an
  * allowlist: a new route is uncacheable until deliberately added below.
  */
-const VERSION = "pos-shell-v6";
+const VERSION = "pos-shell-v7";
 
 /* The login page at "/login" is the only document safe to serve to anyone.
  * /pos and /admin are deliberately NOT precached: they 302 to "/login" when

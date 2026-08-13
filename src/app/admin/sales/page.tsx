@@ -3,12 +3,14 @@ import { Fragment } from "react";
 import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
+import { OrderDialogController } from "@/components/admin/OrderDialogController";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import { isProductImageUrl } from "@/lib/product-images";
 import { salesQuantity, stockStatus } from "@/lib/inventory";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import { getAdminProfile } from "@/lib/admin/profile";
+import type { OrderReceiptData } from "@/lib/admin/order-receipts";
 import { loadReversedOrderIds, selectNetSales } from "@/lib/admin/sales-reports";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 
@@ -25,7 +27,15 @@ type ProfileRecord = {
   password_change_required: boolean;
 };
 
-type BranchRecord = { id: string; name: string; is_active: boolean };
+type BranchRecord = {
+  id: string;
+  name: string;
+  address: string | null;
+  tin: string | null;
+  vat_registered: boolean;
+  vat_rate: number;
+  is_active: boolean;
+};
 type CashierRecord = { id: string; full_name: string; role: AdminRole };
 
 type SalesOrder = {
@@ -36,10 +46,18 @@ type SalesOrder = {
   status: OrderStatus;
   subtotal: number;
   discount_amount: number;
+  discount_ref: string | null;
+  vatable_sale: number;
   vat_amount: number;
+  vat_exempt_sale: number;
   total: number;
   payment_method: PaymentMethod;
+  payment_ref: string | null;
+  amount_tendered: number | null;
+  change_due: number | null;
+  note: string | null;
   created_at: string;
+  created_at_device: string;
   reversal_of: string | null;
 };
 
@@ -272,12 +290,13 @@ function salesHref({ range, branch, page, pageSize, order }: { range: SalesRange
 export default async function SalesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string | string[]; branch?: string | string[]; page?: string | string[]; pageSize?: string | string[] }>;
+  searchParams: Promise<{ range?: string | string[]; branch?: string | string[]; page?: string | string[]; pageSize?: string | string[]; order?: string | string[] }>;
 }) {
   const params = await searchParams;
   const requestedRange = readParam(params.range);
   const range: SalesRange = isSalesRange(requestedRange) ? requestedRange : "7d";
   const requestedBranchFilter = readParam(params.branch);
+  const selectedOrderId = readParam(params.order);
   const pageSize = readPageSize(readParam(params.pageSize));
   const requestedPage = readPage(readParam(params.page));
   const supabase = await createClient();
@@ -293,7 +312,7 @@ export default async function SalesPage({
 
   const { start: todayStart } = getSingaporeDayBounds();
   const window = rangeWindow(range, todayStart);
-  const branchesResult = await supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name");
+  const branchesResult = await supabase.from("stores").select("id, name, address, tin, vat_registered, vat_rate, is_active").eq("org_id", profile.org_id).order("name");
   const branches = (branchesResult.data ?? []) as BranchRecord[];
   const selectedBranchId = profile.role === "admin"
     ? await getSelectedAdminBranchId(branches, profile.store_id)
@@ -301,7 +320,7 @@ export default async function SalesPage({
   const branchFilter = selectedBranchId ?? (branches.some((branch) => branch.id === requestedBranchFilter) ? requestedBranchFilter : "");
   let currentOrdersQuery = supabase
     .from("orders")
-    .select("id, order_no, store_id, cashier_id, status, subtotal, discount_amount, vat_amount, total, payment_method, created_at, reversal_of")
+    .select("id, order_no, store_id, cashier_id, status, subtotal, discount_amount, discount_ref, vatable_sale, vat_amount, vat_exempt_sale, total, payment_method, payment_ref, amount_tendered, change_due, note, created_at, created_at_device, reversal_of")
     .eq("org_id", profile.org_id)
     .gte("created_at", window.currentStart.toISOString())
     .lt("created_at", window.currentEnd.toISOString())
@@ -309,7 +328,7 @@ export default async function SalesPage({
     .limit(5000);
   let previousOrdersQuery = supabase
     .from("orders")
-    .select("id, order_no, store_id, cashier_id, status, subtotal, discount_amount, vat_amount, total, payment_method, created_at, reversal_of")
+    .select("id, order_no, store_id, cashier_id, status, subtotal, discount_amount, discount_ref, vatable_sale, vat_amount, vat_exempt_sale, total, payment_method, payment_ref, amount_tendered, change_due, note, created_at, created_at_device, reversal_of")
     .eq("org_id", profile.org_id)
     .gte("created_at", window.previousStart.toISOString())
     .lt("created_at", window.previousEnd.toISOString())
@@ -330,7 +349,6 @@ export default async function SalesPage({
     .from("order_items")
     .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status, reversal_of)")
     .eq("orders.org_id", profile.org_id)
-    .eq("orders.status", "completed")
     .is("orders.reversal_of", null)
     .gte("orders.created_at", window.currentStart.toISOString())
     .lt("orders.created_at", window.currentEnd.toISOString());
@@ -457,6 +475,67 @@ export default async function SalesPage({
   const visibleOrders = currentOrders.slice((page - 1) * pageSize, page * pageSize);
   const comparisonLabel = range === "7d" ? "previous 7 days" : range === "30d" ? "previous 30 days" : "previous 90 days";
   const exportHref = `/admin/report?range=${range}${branchFilter ? `&branch=${encodeURIComponent(branchFilter)}` : ""}`;
+  const selectedOrder = selectedOrderId ? currentOrders.find((order) => order.id === selectedOrderId) ?? null : null;
+  const receiptOrders = selectedOrder && !visibleOrders.some((order) => order.id === selectedOrder.id)
+    ? [selectedOrder, ...visibleOrders]
+    : visibleOrders;
+  const itemsByOrder = new Map<string, OrderItemRecord[]>();
+  for (const item of orderItems) {
+    const items = itemsByOrder.get(item.order_id) ?? [];
+    items.push(item);
+    itemsByOrder.set(item.order_id, items);
+  }
+  const reversalByOrderId = new Map(
+    currentOrders
+      .filter((order) => order.reversal_of)
+      .map((order) => [order.reversal_of as string, { status: order.status, order_no: order.order_no, created_at: order.created_at }]),
+  );
+  const returnTo = salesHref({ range, branch: branchFilter, page, pageSize });
+  const orderReceipts: OrderReceiptData[] = receiptOrders.map((order) => {
+    const branch = branchById.get(order.store_id);
+    return {
+      order: {
+        id: order.id,
+        order_no: order.order_no,
+        status: order.status,
+        subtotal: Number(order.subtotal),
+        discount_amount: Number(order.discount_amount),
+        discount_ref: order.discount_ref,
+        vatable_sale: Number(order.vatable_sale ?? 0),
+        vat_amount: Number(order.vat_amount),
+        vat_exempt_sale: Number(order.vat_exempt_sale ?? 0),
+        total: Number(order.total),
+        payment_method: order.payment_method,
+        payment_ref: order.payment_ref,
+        amount_tendered: order.amount_tendered == null ? null : Number(order.amount_tendered),
+        change_due: order.change_due == null ? null : Number(order.change_due),
+        note: order.note,
+        created_at: order.created_at,
+        created_at_device: order.created_at_device || order.created_at,
+      },
+      items: (itemsByOrder.get(order.id) ?? []).map((item) => ({
+        order_id: item.order_id,
+        product_id: item.product_id,
+        name_snapshot: item.name_snapshot,
+        qty: Number(item.qty),
+        weight_kg: item.weight_kg == null ? null : Number(item.weight_kg),
+        unit: productById.get(item.product_id ?? "")?.unit ?? (item.weight_kg ? "kg" : "item"),
+        line_total: Number(item.line_total),
+      })),
+      branch: {
+        name: branch?.name ?? "Unknown branch",
+        address: branch?.address ?? null,
+        tin: branch?.tin ?? null,
+        vatRegistered: Boolean(branch?.vat_registered),
+        vatRate: Number(branch?.vat_rate ?? 0.12),
+      },
+      cashierName: cashierById.get(order.cashier_id)?.full_name ?? "Unknown cashier",
+      returnTo,
+      canManage: profile.role === "admin",
+      canReprint: profile.role === "admin" || profile.role === "manager",
+      reversal: reversalByOrderId.get(order.id) ?? null,
+    };
+  });
 
   return (
     <main className="admin-page text-ink">
@@ -507,7 +586,14 @@ export default async function SalesPage({
             <SummaryPanel summary={currentSummary} />
           </div>
 
-          <RecentTransactions orders={visibleOrders} totalOrders={currentOrders.length} page={page} pageSize={pageSize} totalPages={totalPages} range={range} branch={branchFilter} branchById={branchById} cashierById={cashierById} itemCountByOrder={itemCountByOrder} />
+          <OrderDialogController
+            initialOrderId={selectedOrderId || null}
+            receipts={orderReceipts}
+            cacheScope={{ userId: user.id, orgId: profile.org_id, storeId: branchFilter || null, role: profile.role }}
+            performanceSurface="sales"
+          >
+            <RecentTransactions orders={visibleOrders} totalOrders={currentOrders.length} page={page} pageSize={pageSize} totalPages={totalPages} range={range} branch={branchFilter} branchById={branchById} cashierById={cashierById} itemCountByOrder={itemCountByOrder} />
+          </OrderDialogController>
       </div>
     </main>
   );
@@ -574,7 +660,7 @@ function SummaryPanel({ summary }: { summary: ReturnType<typeof summarizeOrders>
 function RecentTransactions({ orders, totalOrders, page, pageSize, totalPages, range, branch, branchById, cashierById, itemCountByOrder }: { orders: SalesOrder[]; totalOrders: number; page: number; pageSize: number; totalPages: number; range: SalesRange; branch: string; branchById: Map<string, BranchRecord>; cashierById: Map<string, CashierRecord>; itemCountByOrder: Map<string, number> }) {
   const firstRow = totalOrders === 0 ? 0 : (page - 1) * pageSize + 1;
   const lastRow = Math.min(page * pageSize, totalOrders);
-  return <section aria-labelledby="recent-sales-heading" className="admin-panel mt-4 min-w-0 p-5"><div className="admin-panel__header"><div><h2 id="recent-sales-heading" className="admin-panel__title">Recent sales transactions</h2><p className="admin-panel__subtitle">Latest transactions in the selected period</p></div><Link href={`/admin/orders?range=${range}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}`} className="text-xs font-extrabold text-primary hover:underline">View all</Link></div>{orders.length === 0 ? <EmptyPanelState title="No transactions in this period" detail="Completed POS activity will appear here once orders are recorded." /> : <><div className="mt-4 overflow-x-auto"><table className="admin-list-table min-w-[900px]"><thead><tr><th>Invoice no.</th><th>Date &amp; time</th><th>Branch</th><th>Cashier</th><th>Items</th><th>Total</th><th>Status</th><th>Action</th></tr></thead><tbody>{orders.map((order) => <tr key={order.id}><td><Link href={`/admin/orders?range=${range}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}&order=${order.id}`} className="font-extrabold text-primary hover:underline">{order.order_no}</Link></td><td className="whitespace-nowrap text-ink-muted">{formatDateTime(order.created_at)}</td><td className="whitespace-nowrap">{branchById.get(order.store_id)?.name ?? "Unknown branch"}</td><td className="whitespace-nowrap">{cashierById.get(order.cashier_id)?.full_name ?? "Unknown cashier"}</td><td className="tnums whitespace-nowrap">{formatQuantity(itemCountByOrder.get(order.id) ?? 0)}</td><td className="tnums whitespace-nowrap font-extrabold">{displayPeso(order.total)}</td><td><span className={`inline-flex rounded-pill px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${statusClass(order.status)}`}>{statusLabel(order.status)}</span></td><td><Link href={`/admin/orders?range=${range}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}&order=${order.id}`} className="inline-flex items-center gap-1 font-extrabold text-primary hover:underline">View <AdminIcon name="arrow" size={12} /></Link></td></tr>)}</tbody></table></div><div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4"><span className="text-[10px] font-semibold text-ink-muted">Showing {firstRow} to {lastRow} of {totalOrders} transactions</span><div className="flex items-center gap-1"><PaginationLink href={page > 1 ? salesHref({ range, branch, page: page - 1, pageSize }) : undefined} label="Previous" symbol="‹" />{Array.from({ length: Math.min(totalPages, 5) }, (_, index) => index + 1).map((pageNumber) => <Link key={pageNumber} href={salesHref({ range, branch, page: pageNumber, pageSize })} className={`grid h-8 min-w-8 place-items-center rounded-btn px-2 text-[10px] font-extrabold ${pageNumber === page ? "bg-primary text-primary-fg" : "border border-line bg-surface text-primary hover:bg-primary-soft"}`}>{pageNumber}</Link>)}{totalPages > 5 && <span className="grid h-8 min-w-8 place-items-center text-[10px] text-ink-muted">…</span>}<PaginationLink href={page < totalPages ? salesHref({ range, branch, page: page + 1, pageSize }) : undefined} label="Next" symbol="›" /></div><PageSizeForm range={range} branch={branch} pageSize={pageSize} /></div></>}</section>;
+  return <section aria-labelledby="recent-sales-heading" className="admin-panel mt-4 min-w-0 p-5"><div className="admin-panel__header"><div><h2 id="recent-sales-heading" className="admin-panel__title">Recent sales transactions</h2><p className="admin-panel__subtitle">Latest transactions in the selected period</p></div><Link href={`/admin/orders?range=${range}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}`} className="text-xs font-extrabold text-primary hover:underline">View all</Link></div>{orders.length === 0 ? <EmptyPanelState title="No transactions in this period" detail="Completed POS activity will appear here once orders are recorded." /> : <><div className="mt-4 overflow-x-auto"><table className="admin-list-table min-w-[900px]"><thead><tr><th>Invoice no.</th><th>Date &amp; time</th><th>Branch</th><th>Cashier</th><th>Items</th><th>Total</th><th>Status</th><th>Action</th></tr></thead><tbody>{orders.map((order) => { const receiptHref = salesHref({ range, branch, order: order.id }); return <tr key={order.id}><td><Link href={receiptHref} prefetch={false} data-order-trigger={order.id} aria-haspopup="dialog" className="font-extrabold text-primary hover:underline">{order.order_no}</Link></td><td className="whitespace-nowrap text-ink-muted">{formatDateTime(order.created_at)}</td><td className="whitespace-nowrap">{branchById.get(order.store_id)?.name ?? "Unknown branch"}</td><td className="whitespace-nowrap">{cashierById.get(order.cashier_id)?.full_name ?? "Unknown cashier"}</td><td className="tnums whitespace-nowrap">{formatQuantity(itemCountByOrder.get(order.id) ?? 0)}</td><td className="tnums whitespace-nowrap font-extrabold">{displayPeso(order.total)}</td><td><span className={`inline-flex rounded-pill px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${statusClass(order.status)}`}>{statusLabel(order.status)}</span></td><td><Link href={receiptHref} prefetch={false} data-order-trigger={order.id} aria-haspopup="dialog" aria-label={`View order ${order.order_no}`} className="inline-flex items-center gap-1 font-extrabold text-primary hover:underline">View <AdminIcon name="arrow" size={12} /></Link></td></tr>; })}</tbody></table></div><div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4"><span className="text-[10px] font-semibold text-ink-muted">Showing {firstRow} to {lastRow} of {totalOrders} transactions</span><div className="flex items-center gap-1"><PaginationLink href={page > 1 ? salesHref({ range, branch, page: page - 1, pageSize }) : undefined} label="Previous" symbol="‹" />{Array.from({ length: Math.min(totalPages, 5) }, (_, index) => index + 1).map((pageNumber) => <Link key={pageNumber} href={salesHref({ range, branch, page: pageNumber, pageSize })} className={`grid h-8 min-w-8 place-items-center rounded-btn px-2 text-[10px] font-extrabold ${pageNumber === page ? "bg-primary text-primary-fg" : "border border-line bg-surface text-primary hover:bg-primary-soft"}`}>{pageNumber}</Link>)}{totalPages > 5 && <span className="grid h-8 min-w-8 place-items-center text-[10px] text-ink-muted">…</span>}<PaginationLink href={page < totalPages ? salesHref({ range, branch, page: page + 1, pageSize }) : undefined} label="Next" symbol="›" /></div><PageSizeForm range={range} branch={branch} pageSize={pageSize} /></div></>}</section>;
 }
 
 function PaginationLink({ href, label, symbol }: { href?: string; label: string; symbol: string }) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useFormStatus } from "react-dom";
 import { recordOrderAction, recordOrderReprint } from "@/app/admin/orders/actions";
 import { AdminIcon } from "@/components/admin/AdminIcon";
@@ -33,6 +33,23 @@ type OrderActionOrder = {
   change_due: number | null;
   created_at_device: string;
 };
+
+function subscribeOnlineStatus(onChange: () => void) {
+  window.addEventListener("online", onChange);
+  window.addEventListener("offline", onChange);
+  return () => {
+    window.removeEventListener("online", onChange);
+    window.removeEventListener("offline", onChange);
+  };
+}
+
+function getOnlineStatus() {
+  return typeof navigator === "undefined" ? true : navigator.onLine;
+}
+
+function getServerOnlineStatus() {
+  return true;
+}
 
 function OrderActionSubmit({ action }: { action: "voided" | "refunded" }) {
   const { pending } = useFormStatus();
@@ -67,7 +84,9 @@ export function AdminOrderActions({
   returnTo,
   canManage,
   canReprint,
+  className = "",
   hasReversal,
+  readOnlyReason,
 }: {
   order: OrderActionOrder;
   items: OrderActionItem[];
@@ -80,10 +99,13 @@ export function AdminOrderActions({
   returnTo: string;
   canManage: boolean;
   canReprint: boolean;
+  className?: string;
   hasReversal: boolean;
+  readOnlyReason?: "cached";
 }) {
   const [reprintState, setReprintState] = useState<"idle" | "printing" | "success" | "error">("idle");
   const [reprintMessage, setReprintMessage] = useState("");
+  const isOnline = useSyncExternalStore(subscribeOnlineStatus, getOnlineStatus, getServerOnlineStatus);
 
   const reprint = async () => {
     if (!canReprint || reprintState === "printing") return;
@@ -135,16 +157,16 @@ export function AdminOrderActions({
     }
   };
 
-  const showActionForm = canManage && order.status === "completed" && !hasReversal;
+  const showActionForm = isOnline && canManage && order.status === "completed" && !hasReversal;
 
   return (
-    <section className="mt-5 border-t border-line pt-4" aria-labelledby="order-actions-heading">
+    <section className={`mt-5 border-t border-line pt-4 ${className}`} aria-labelledby="order-actions-heading">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p id="order-actions-heading" className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted">Order actions</p>
           <p className="mt-1 text-xs leading-5 text-ink-muted">Reprints use this browser&apos;s printer settings. Voids and refunds create an audited reversal.</p>
         </div>
-        {canReprint && (
+        {canReprint && isOnline && (
           <button
             type="button"
             onClick={() => void reprint()}
@@ -193,6 +215,14 @@ export function AdminOrderActions({
             <OrderActionSubmit action="refunded" />
           </div>
         </form>
+      ) : !isOnline ? (
+        <p className="mt-4 rounded-btn border border-warning/30 bg-warning/10 px-3 py-2.5 text-xs leading-5 text-ink">
+          Offline mode is read-only. Reprint, void, and refund actions will be available after the connection returns.
+        </p>
+      ) : readOnlyReason === "cached" ? (
+        <p className="mt-4 rounded-btn border border-line bg-surface-raised px-3 py-2.5 text-xs leading-5 text-ink-muted">
+          This cached receipt is read-only. Reopen it while online to access authorized order actions.
+        </p>
       ) : canManage && hasReversal ? (
         <p className="mt-4 rounded-btn border border-line bg-surface-raised px-3 py-2.5 text-xs leading-5 text-ink-muted">
           This order already has a void or refund action. The original sale remains available above for audit history.

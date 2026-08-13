@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
-import { OrderDialogController, type OrderReceiptData } from "@/components/admin/OrderDialogController";
+import { OrderDialogController } from "@/components/admin/OrderDialogController";
 import { SignOutButton } from "@/components/SignOutButton";
 import { salesQuantity } from "@/lib/inventory";
 import { formatPeso } from "@/lib/money";
@@ -11,6 +11,7 @@ import { isProductImageUrl } from "@/lib/product-images";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { loadReversedOrderIds, selectNetSales } from "@/lib/admin/sales-reports";
+import type { OrderReceiptData } from "@/lib/admin/order-receipts";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 
 type AdminRole = "admin" | "manager" | "cashier";
@@ -576,7 +577,7 @@ export default async function OrdersPage({
           <section aria-labelledby="orders-table-heading" className="admin-panel mt-4 min-w-0 p-5">
             <div className="admin-panel__header"><div><p className="admin-panel__eyebrow">Live order register</p><h2 id="orders-table-heading" className="admin-panel__title">All orders</h2><p className="admin-panel__subtitle">{filteredOrders.length} matching order{filteredOrders.length === 1 ? "" : "s"} · {formatDateRange(startDate, todayEnd)}</p></div><span className="rounded-pill bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary">RLS-scoped records</span></div>
              {filteredOrders.length === 0 ? <EmptyOrders /> : (
-               <OrderDialogController key={selectedOrder?.id ?? "orders-list"} initialOrderId={selectedOrder?.id ?? null} receipts={orderReceipts}>
+              <OrderDialogController key={selectedOrder?.id ?? "orders-list"} initialOrderId={selectedOrder?.id ?? null} receipts={orderReceipts} cacheScope={{ userId: user.id, orgId: profile.org_id, storeId: branchFilter || null, role: profile.role }}>
                  <OrdersTable orders={visibleOrders} selectedOrderId={selectedOrder?.id ?? null} range={range} status={status} payment={payment} branch={branchFilter} query={searchQuery} page={page} pageSize={pageSize} branchById={branchById} cashierById={cashierById} itemCountByOrder={itemCountByOrder} itemsByOrder={itemsByOrder} productById={productById} totalOrders={filteredOrders.length} totalPages={totalPages} />
                </OrderDialogController>
              )}

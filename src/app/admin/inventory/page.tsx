@@ -5,7 +5,9 @@ import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { BranchProductSelector } from "@/components/admin/BranchProductSelector";
+import { AdminMutationForm } from "@/components/admin/AdminMutationForm";
 import { MultiProductModal } from "@/components/admin/MultiProductModal";
+import { AdminReadModelHydrator, type AdminReadModelBatch } from "@/components/admin/AdminReadModelHydrator";
 import { YieldEntryForm } from "@/components/admin/YieldEntryForm";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
@@ -22,8 +24,13 @@ import { readAdminBranding } from "@/lib/admin/branding";
 import { dashboardLowStockThreshold, readAdminInventorySettings } from "@/lib/admin/inventory-settings";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
-import { recordStockMovement } from "./actions";
 import { OwnerGuidance } from "@/components/admin/OwnerOnboardingPanel";
+import type {
+  InventoryMovementReadModel,
+  InventoryProductReadModel,
+  InventoryStockSnapshot,
+} from "@/lib/admin/inventory-read-models";
+import type { AdminCacheScope } from "@/lib/admin/local-first-store";
 
 type AdminRole = "admin" | "manager" | "cashier";
 type PricingMode = "fixed" | "per_kg";
@@ -583,10 +590,75 @@ export default async function InventoryPage({
   const activeFilterCount = [category !== "all", status !== "all", Boolean(supplier)].filter(Boolean).length;
   const hiddenColumnCount = columnOptions.length - visibleColumns.size;
   const branding = readAdminBranding(profile.organizations?.settings);
+  const cacheScope = { userId: user.id, orgId: profile.org_id, storeId: selectedBranchId, role: profile.role };
+  const inventoryProductCacheRecords: Array<{ id: string; data: InventoryProductReadModel }> = products.map((product) => ({
+    id: product.id,
+    data: {
+      id: product.id,
+      storeId: product.store_id,
+      categoryId: product.category_id,
+      supplierId: product.supplier_id,
+      name: product.name,
+      sku: product.sku,
+      barcode: product.barcode,
+      pricingMode: product.pricing_mode,
+      price: Number(product.price),
+      costPrice: product.cost_price === null ? null : Number(product.cost_price),
+      unit: product.unit,
+      minStock: Number(product.min_stock),
+      trackStock: product.track_stock,
+      imageUrl: product.image_url,
+      isActive: product.is_active,
+      sortOrder: product.sort_order,
+      categoryName: product.category_id ? categoryById.get(product.category_id)?.name ?? "Uncategorized" : "Uncategorized",
+      supplierName: product.supplier_id ? supplierById.get(product.supplier_id)?.name ?? "Unassigned" : "Unassigned",
+      branchName: branchById.get(product.store_id)?.name ?? DEFAULT_STORE_NAME,
+    },
+  }));
+  const inventorySnapshotCacheRecords: Array<{ id: string; data: InventoryStockSnapshot }> = allRows.map((row) => ({
+    id: `${row.branch.id}:${row.product.id}`,
+    data: {
+      id: `${row.branch.id}:${row.product.id}`,
+      storeId: row.branch.id,
+      productId: row.product.id,
+      branchName: row.branch.name,
+      productName: row.product.name,
+      categoryName: row.categoryName,
+      supplierName: row.supplierName,
+      unit: row.product.unit,
+      onHand: row.onHand,
+      minimum: row.minStock,
+      status: row.status,
+      inventoryValue: row.inventoryValue,
+    },
+  }));
+  const inventoryMovementCacheRecords: Array<{ id: string; data: InventoryMovementReadModel }> = movements.map((movement) => ({
+    id: movement.id,
+    data: {
+      id: movement.id,
+      storeId: movement.store_id,
+      productId: movement.product_id,
+      productName: productById.get(movement.product_id)?.name ?? "Unknown product",
+      branchName: branchById.get(movement.store_id)?.name ?? DEFAULT_STORE_NAME,
+      type: movement.type,
+      quantity: Number(movement.qty),
+      unit: movement.unit,
+      unitCost: movement.unit_cost === null ? null : Number(movement.unit_cost),
+      reason: movement.reason,
+      refOrderId: movement.ref_order_id,
+      createdAt: movement.created_at,
+    },
+  }));
+  const inventoryCacheBatches: AdminReadModelBatch[] = [
+    { entity: "products", records: inventoryProductCacheRecords, replace: true },
+    { entity: "inventory", records: inventorySnapshotCacheRecords, replace: true },
+    { entity: "inventory_movements", records: inventoryMovementCacheRecords },
+  ];
 
   return (
     <main data-admin-theme={branding.theme} className="admin-page text-ink">
       <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
+        <AdminReadModelHydrator scope={cacheScope} batches={inventoryCacheBatches}>
           <header className="admin-topbar">
             <Link href="/admin" className="admin-mobile-brand" aria-label={`${branding.brandName} ${branding.brandTagline} dashboard`}><AdminBrandLogo logoUrl={branding.logoUrl} className="admin-brand__mark" iconSize={20} label="Brand logo" /><span className="admin-brand__copy"><strong>{branding.brandName}</strong><small>{branding.brandTagline}</small></span></Link>
             <Link href="#inventory-filters-heading" className="admin-icon-button" aria-label="Search inventory"><AdminIcon name="search" size={19} /></Link>
@@ -702,7 +774,7 @@ export default async function InventoryPage({
               </section>
 
               {isLechonHouseBusinessSelected && <YieldEntryForm branches={activeBranches} products={formProducts} defaultBranch={defaultBranch} defaultSourceProductId={defaultProduct?.id ?? ""} defaultOutputProductId={defaultYieldOutputProduct?.id ?? ""} canWrite={canWrite} open={Boolean(readParam(params.yield) || readParam(params.saved) === "yield")} />}
-              <StockMovementForm branches={activeBranches} products={formProducts} defaultBranch={defaultBranch} defaultProductId={defaultProduct?.id ?? ""} defaultMovement={defaultMovement} canWrite={canWrite} open={Boolean(readParam(params.movement) || selectedProductId || (readParam(params.error) && !readParam(params.yield)))} />
+              <StockMovementForm scope={cacheScope} branches={activeBranches} products={formProducts} defaultBranch={defaultBranch} defaultProductId={defaultProduct?.id ?? ""} defaultMovement={defaultMovement} canWrite={canWrite} open={Boolean(readParam(params.movement) || selectedProductId || (readParam(params.error) && !readParam(params.yield)))} />
             </div>
 
             <aside className="grid content-start gap-3">
@@ -711,6 +783,7 @@ export default async function InventoryPage({
               <section className="admin-panel p-4"><div className="flex items-center justify-between gap-2"><h2 className="text-sm font-extrabold text-ink">Recent stock movements</h2><Link href="#stock-movement" className="text-[10px] font-extrabold text-primary hover:underline">View all</Link></div>{recentMovements.length === 0 ? <p className="mt-4 rounded-btn border border-dashed border-line-strong px-3 py-5 text-center text-[10px] text-ink-muted">No stock movements yet.</p> : <div className="mt-3 divide-y divide-line/70">{recentMovements.map((movement) => { const product = productById.get(movement.product_id); const delta = stockMovementDelta(movement.type, Number(movement.qty)); return <div key={movement.id} className="flex items-start gap-2 py-3 first:pt-0"><span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-extrabold ${movementClass(movement.type)}`} aria-hidden="true">{delta >= 0 ? "↓" : "↑"}</span><span className="min-w-0 flex-1"><strong className="block truncate text-[10px] font-extrabold text-ink">{movementLabel(movement.type)}</strong><small className="mt-1 block truncate text-[10px] text-ink-muted">{product?.name ?? "Unknown product"}</small><small className="block text-[9px] text-ink-muted">{formatDateTime(movement.created_at)}</small></span><strong className={`tnums whitespace-nowrap text-[10px] font-extrabold ${delta >= 0 ? "text-success" : "text-danger"}`}>{delta >= 0 ? "+" : "−"}{formatStockQuantity(Math.abs(delta))} {movement.unit}</strong></div>; })}</div>}<Link href="/admin/reports/inventory" className="inventory-button mt-3 w-full rounded-btn border border-line-strong text-[10px] font-extrabold text-primary transition hover:bg-primary-soft"><AdminIcon name="chart" size={14} />View inventory reports</Link></section>
             </aside>
           </div>
+        </AdminReadModelHydrator>
       </div>
     </main>
   );
@@ -720,7 +793,7 @@ function InventoryMetric({ label, value, detail, tone, icon }: { label: string; 
   return <article className="admin-kpi-card min-h-[116px]"><div className="admin-kpi-card__inner"><div className="admin-kpi-card__top"><span className="admin-kpi-card__label">{label}</span><span className={`admin-kpi-card__icon ${tone}`}><AdminIcon name={icon} size={17} /></span></div><p className="admin-kpi-card__value tnums">{value}</p><p className="admin-kpi-card__trend">{detail}</p></div></article>;
 }
 
-function StockMovementForm({ branches, products, defaultBranch, defaultProductId, defaultMovement, canWrite, open }: { branches: BranchRecord[]; products: ProductRecord[]; defaultBranch: string; defaultProductId: string; defaultMovement: Exclude<StockMovementType, "sale">; canWrite: boolean; open: boolean }) {
+function StockMovementForm({ scope, branches, products, defaultBranch, defaultProductId, defaultMovement, canWrite, open }: { scope: AdminCacheScope; branches: BranchRecord[]; products: ProductRecord[]; defaultBranch: string; defaultProductId: string; defaultMovement: Exclude<StockMovementType, "sale">; canWrite: boolean; open: boolean }) {
   return (
     <details id="stock-movement" open={open} className="admin-panel mt-4 p-4">
       <summary className="inventory-section-summary">
@@ -738,14 +811,14 @@ function StockMovementForm({ branches, products, defaultBranch, defaultProductId
           <Link href="/products?create=product&inventory=1" className="inventory-button mt-3 rounded-btn bg-primary text-[11px] font-extrabold text-primary-fg">Add item</Link>
         </div>
       ) : (
-        <form action={recordStockMovement} className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <AdminMutationForm scope={scope} kind="inventory_movement" className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <BranchProductSelector branches={branches} products={products} defaultBranch={defaultBranch} defaultProductId={defaultProductId} canWrite={canWrite} />
           <InventoryField label="Movement" htmlFor="inventory-type"><select id="inventory-type" name="type" defaultValue={defaultMovement} required disabled={!canWrite} className="inventory-input inventory-input--compact text-xs">{movementOptions.map((option) => <option key={option.value} value={option.value}>{option.label} · {option.detail}</option>)}</select></InventoryField>
           <InventoryField label="Quantity" htmlFor="inventory-qty"><input id="inventory-qty" name="qty" type="number" inputMode="decimal" step="0.001" placeholder="e.g. 10 or -2" required disabled={!canWrite} className="inventory-input inventory-input--compact tnums text-xs" /></InventoryField>
           <InventoryField label="Unit cost · ₱" htmlFor="inventory-cost"><input id="inventory-cost" name="unit_cost" type="number" inputMode="decimal" min="0" step="0.01" placeholder="Optional" disabled={!canWrite} className="inventory-input inventory-input--compact tnums text-xs" /></InventoryField>
           <InventoryField label="Reason / reference" htmlFor="inventory-reason" className="md:col-span-2"><input id="inventory-reason" name="reason" placeholder="Required for waste and adjustments" disabled={!canWrite} className="inventory-input inventory-input--compact text-xs" /></InventoryField>
           <button type="submit" disabled={!canWrite} className="inventory-button self-end rounded-btn bg-primary text-[11px] font-extrabold text-primary-fg transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50">Record movement</button>
-        </form>
+        </AdminMutationForm>
       )}
     </details>
   );
