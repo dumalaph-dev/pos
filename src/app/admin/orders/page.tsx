@@ -65,6 +65,11 @@ type OrderRecord = {
   reversal_of: string | null;
 };
 
+type OrderSummaryRecord = Pick<
+  OrderRecord,
+  "id" | "order_no" | "store_id" | "cashier_id" | "status" | "subtotal" | "discount_amount" | "total" | "payment_method" | "created_at" | "reversal_of"
+>;
+
 type ReversalRecord = {
   id: string;
   reversal_of: string;
@@ -118,6 +123,7 @@ const paymentOptions: Array<{ value: PaymentFilter; label: string }> = [
   { value: "card", label: "Card" },
 ];
 const ORDER_LIST_FIELDS = "id, order_no, store_id, cashier_id, status, subtotal, discount_type, discount_amount, discount_ref, vatable_sale, vat_amount, vat_exempt_sale, total, payment_method, payment_ref, amount_tendered, change_due, note, created_at, created_at_device, reversal_of";
+const ORDER_SUMMARY_FIELDS = "id, order_no, store_id, cashier_id, status, subtotal, discount_amount, total, payment_method, created_at, reversal_of";
 const singaporeDateFormatter = new Intl.DateTimeFormat("en-US", {
   day: "2-digit",
   month: "2-digit",
@@ -235,7 +241,7 @@ function productImage(product: ProductRecord | undefined) {
  * reversal (0020) adds a linked row and leaves the original at `completed`, so
  * without this the sales figure would still include a voided order.
  */
-function orderSummary(orders: OrderRecord[], reversedIds: Set<string>) {
+function orderSummary(orders: OrderSummaryRecord[], reversedIds: Set<string>) {
   const completed = selectNetSales(orders, reversedIds);
   return {
     total: orders.length,
@@ -265,7 +271,7 @@ function sparklinePoints(values: number[], width = 160, height = 30) {
   }).join(" ");
 }
 
-function buildTrendBuckets(orders: OrderRecord[], start: Date | null, end: Date, reversedIds: Set<string>) {
+function buildTrendBuckets(orders: OrderSummaryRecord[], start: Date | null, end: Date, reversedIds: Set<string>) {
   const buckets = new Map<string, TrendBucket>();
   if (start) {
     const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / DAY_MS));
@@ -356,13 +362,13 @@ export default async function OrdersPage({
 
   let ordersQuery = supabase
     .from("orders")
-    .select(ORDER_LIST_FIELDS)
+    .select(ORDER_SUMMARY_FIELDS)
     .eq("org_id", profile.org_id)
     .order("created_at", { ascending: false })
     .limit(1000);
   let previousOrdersQuery = supabase
     .from("orders")
-    .select(ORDER_LIST_FIELDS)
+    .select(ORDER_SUMMARY_FIELDS)
     .eq("org_id", profile.org_id)
     .order("created_at", { ascending: false })
     .limit(1000);
@@ -398,8 +404,8 @@ export default async function OrdersPage({
 
   const cashiers = (cashiersResult.data ?? []) as CashierRecord[];
   const products = (productsResult.data ?? []) as ProductRecord[];
-  const orders = (ordersResult.data ?? []) as OrderRecord[];
-  const previousOrders = (previousOrdersResult?.data ?? []) as OrderRecord[];
+  const orders = (ordersResult.data ?? []) as OrderSummaryRecord[];
+  const previousOrders = (previousOrdersResult?.data ?? []) as OrderSummaryRecord[];
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
   const cashierById = new Map(cashiers.map((cashier) => [cashier.id, cashier]));
   const productById = new Map(products.map((product) => [product.id, product]));
@@ -418,6 +424,14 @@ export default async function OrdersPage({
   const page = Math.min(requestedPage, totalPages);
   const visibleOrderIds = new Set(filteredOrders.slice((page - 1) * pageSize, page * pageSize).map((order) => order.id));
   if (selectedOrder?.id) visibleOrderIds.add(selectedOrder.id);
+
+  const orderDetailsPromise = visibleOrderIds.size > 0
+    ? supabase
+        .from("orders")
+        .select(ORDER_LIST_FIELDS)
+        .eq("org_id", profile.org_id)
+        .in("id", [...visibleOrderIds])
+    : Promise.resolve({ data: [] as OrderRecord[], error: null });
 
   // The table only needs line items and reversal badges for the rows on the
   // current page (plus a deep-linked selected order). Fetching the whole date
@@ -443,11 +457,14 @@ export default async function OrdersPage({
       .filter((order) => order.status === "completed" && !order.reversal_of)
       .map((order) => order.id),
   );
-  const [reversalResult, orderItemsResult, metricsReversalLookup] = await Promise.all([
+  const [orderDetailsResult, reversalResult, orderItemsResult, metricsReversalLookup] = await Promise.all([
+    orderDetailsPromise,
     reversalPromise,
     orderItemsPromise,
     metricsReversalLookupPromise,
   ]);
+  const orderDetails = (orderDetailsResult.data ?? []) as OrderRecord[];
+  const orderById = new Map(orderDetails.map((order) => [order.id, order]));
   const reversals = (reversalResult.data ?? []) as unknown as ReversalRecord[];
   const reversalByOrderId = new Map(reversals.map((reversal) => [reversal.reversal_of, reversal]));
 
@@ -473,11 +490,15 @@ export default async function OrdersPage({
   const canManageOrders = profile.role === "admin";
   const canReprintOrders = profile.role === "admin" || profile.role === "manager";
   const returnHref = buildOrderHref({ range, status, payment, branch: branchFilter, query: searchQuery, page, pageSize });
-  const queryWarning = Boolean(branchesResult.error || cashiersResult.error || productsResult.error || ordersResult.error || previousOrdersResult?.error || orderItemsError || reversalResult.error || metricsReversalLookup.failed);
+  const queryWarning = Boolean(branchesResult.error || cashiersResult.error || productsResult.error || ordersResult.error || previousOrdersResult?.error || orderDetailsResult.error || orderItemsError || reversalResult.error || metricsReversalLookup.failed);
   const visibleOrders = filteredOrders.slice((page - 1) * pageSize, page * pageSize);
-  const receiptOrders = selectedOrder && !visibleOrders.some((order) => order.id === selectedOrder.id)
+  const receiptSummaryOrders = selectedOrder && !visibleOrders.some((order) => order.id === selectedOrder.id)
     ? [selectedOrder, ...visibleOrders]
     : visibleOrders;
+  const receiptOrders = receiptSummaryOrders.flatMap((order) => {
+    const detail = orderById.get(order.id);
+    return detail ? [detail] : [];
+  });
   const orderReceipts: OrderReceiptData[] = receiptOrders.map((order) => {
     const branch = branchById.get(order.store_id);
     return {
@@ -593,7 +614,7 @@ function OrderMetric({ label, value, trend, comparisonLabel, values, tone, icon,
   return <article className="admin-kpi-card min-h-[139px]"><div className="admin-kpi-card__inner"><div className="admin-kpi-card__top"><span className="admin-kpi-card__label">{label}</span><span className={`admin-kpi-card__icon ${tone}`}><AdminIcon name={icon} size={17} /></span></div><p className="admin-kpi-card__value tnums text-[20px]">{value}</p><p className="admin-kpi-card__trend"><strong className={trend === null ? "text-ink-muted" : favorableTrend ? "text-success" : "text-danger"}>{trend === null ? "—" : `${trend >= 0 ? "▲" : "▼"} ${Math.abs(trend).toFixed(1)}%`}</strong><span>{trend === null ? "No prior baseline" : `vs ${comparisonLabel.toLowerCase()}`}</span></p><svg className="admin-sparkline" viewBox="0 0 160 30" preserveAspectRatio="none" aria-hidden="true"><polyline points={sparklinePoints(values)} stroke="var(--primary)" /></svg></div></article>;
 }
 
-function OrdersTable({ orders, selectedOrderId, range, status, payment, branch, query, page, pageSize, branchById, cashierById, itemCountByOrder, itemsByOrder, productById, totalOrders, totalPages }: { orders: OrderRecord[]; selectedOrderId: string | null; range: OrderRange; status: OrderStatusFilter; payment: PaymentFilter; branch: string; query: string; page: number; pageSize: number; branchById: Map<string, BranchRecord>; cashierById: Map<string, CashierRecord>; itemCountByOrder: Map<string, number>; itemsByOrder: Map<string, OrderItemRecord[]>; productById: Map<string, ProductRecord>; totalOrders: number; totalPages: number }) {
+function OrdersTable({ orders, selectedOrderId, range, status, payment, branch, query, page, pageSize, branchById, cashierById, itemCountByOrder, itemsByOrder, productById, totalOrders, totalPages }: { orders: OrderSummaryRecord[]; selectedOrderId: string | null; range: OrderRange; status: OrderStatusFilter; payment: PaymentFilter; branch: string; query: string; page: number; pageSize: number; branchById: Map<string, BranchRecord>; cashierById: Map<string, CashierRecord>; itemCountByOrder: Map<string, number>; itemsByOrder: Map<string, OrderItemRecord[]>; productById: Map<string, ProductRecord>; totalOrders: number; totalPages: number }) {
   const firstRow = totalOrders === 0 ? 0 : (page - 1) * pageSize + 1;
   const lastRow = Math.min(page * pageSize, totalOrders);
   return <div className="min-w-0"><div className="overflow-x-auto"><table className="admin-list-table min-w-[1050px]"><thead><tr><th>Order no.</th><th>Date &amp; time</th><th>Cashier</th><th>Branch</th><th>Order items</th><th>Amount</th><th>Status</th><th>Payment</th><th>Actions</th></tr></thead><tbody>{orders.map((order) => { const items = itemsByOrder.get(order.id) ?? []; const firstItem = items[0]; const itemCount = itemCountByOrder.get(order.id) ?? 0; const href = buildOrderHref({ range, status, payment, branch, query, page, pageSize, order: order.id }); return <tr key={order.id} className={selectedOrderId === order.id ? "bg-primary-soft/55" : undefined}><td><Link href={href} prefetch={false} data-order-trigger={order.id} aria-haspopup="dialog" className="font-extrabold text-primary hover:underline">{order.order_no}</Link><small className="mt-1 block text-[10px] text-ink-muted">{cashierById.get(order.cashier_id)?.full_name ?? "Cashier unavailable"}</small></td><td className="whitespace-nowrap text-ink-muted">{formatDateTime(order.created_at)}</td><td className="whitespace-nowrap">{cashierById.get(order.cashier_id)?.full_name ?? "Unknown cashier"}</td><td className="whitespace-nowrap">{branchById.get(order.store_id)?.name ?? "Unknown branch"}</td><td><OrderItemPreview item={firstItem} itemCount={itemCount} productById={productById} /></td><td className="tnums whitespace-nowrap font-extrabold">{displayPeso(order.total)}</td><td><span className={`inline-flex rounded-pill px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${statusClass(order.status)}`}>{statusLabel(order.status)}</span></td><td className="whitespace-nowrap">{paymentLabel(order.payment_method)}</td><td><Link href={href} prefetch={false} data-order-trigger={order.id} aria-haspopup="dialog" aria-label={`View order ${order.order_no}`} className="grid h-8 w-8 place-items-center rounded-btn border border-line bg-surface text-primary transition hover:bg-primary-soft"><AdminIcon name="eye" size={15} /></Link></td></tr>; })}</tbody></table></div><div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4"><span className="text-[10px] font-semibold text-ink-muted">Showing {firstRow} to {lastRow} of {totalOrders} orders</span><div className="flex items-center gap-1"><PaginationLink href={page > 1 ? buildOrderHref({ range, status, payment, branch, query, page: page - 1, pageSize }) : undefined} label="Previous" symbol="‹" />{Array.from({ length: Math.min(totalPages, 5) }, (_, index) => index + 1).map((pageNumber) => <Link key={pageNumber} href={buildOrderHref({ range, status, payment, branch, query, page: pageNumber, pageSize })} className={`grid h-8 min-w-8 place-items-center rounded-btn px-2 text-[10px] font-extrabold ${pageNumber === page ? "bg-primary text-primary-fg" : "border border-line bg-surface text-primary hover:bg-primary-soft"}`}>{pageNumber}</Link>)}{totalPages > 5 && <span className="grid h-8 min-w-8 place-items-center text-[10px] text-ink-muted">…</span>}<PaginationLink href={page < totalPages ? buildOrderHref({ range, status, payment, branch, query, page: page + 1, pageSize }) : undefined} label="Next" symbol="›" /></div><OrderPageSizeForm range={range} status={status} payment={payment} branch={branch} query={query} pageSize={pageSize} /></div></div>;

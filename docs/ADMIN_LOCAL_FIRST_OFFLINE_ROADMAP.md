@@ -2,7 +2,7 @@
 
 **Project:** Dumala POS
 **Created:** 2026-08-13
-**Status:** Phase 5 initial inventory slice complete; Phase 6 in progress; production request/payload baseline remains pending deployment
+**Status:** Phase 5 initial inventory slice complete; Phase 6 in progress; first deployment telemetry capture complete; authoritative Vercel log aggregation remains pending access
 **Owner:** Product and engineering
 
 ## Purpose
@@ -124,7 +124,7 @@ This document is the working plan for the entire initiative. Update the checkbox
 
 ### Phase 6 — Remaining dialogs and server-navigation optimization
 
-**Status:** In progress — branch payload projection and deployment telemetry slice complete; focused large-query optimization next
+**Status:** In progress — first payload projection/telemetry batch deployed; Sales/Orders summary-detail optimization slice in rollout
 
 - [ ] Convert suitable product, customer, supplier, expense, employee, and branch detail flows to local dialogs.
 - [ ] Move filter/search/pagination state to client state with URL synchronization where appropriate.
@@ -132,7 +132,7 @@ This document is the working plan for the entire initiative. Update the checkbox
 - [x] Reduce repeated admin connection/device-heartbeat queries with a short user/organization/branch-scoped advisory TTL.
 - [x] Reduce branch fields in non-receipt server-rendered routes through a shared `id/name/is_active` projection; receipt routes retain the tax/address fields required to render receipts.
 - [ ] Reduce repeated admin profile queries.
-- [ ] Reduce large server payloads and use focused summaries/pagination.
+- [x] Reduce large server payloads and use focused summaries/pagination for Orders, Sales, and Dashboard receipt data; Inventory remains the next large-payload target.
 - [x] Add bounded deployment-level request/payload telemetry for online soft navigations without sending private URLs or record identifiers.
 - [ ] Add background refresh instead of blocking every interaction on a full server render.
 
@@ -145,7 +145,7 @@ This document is the working plan for the entire initiative. Update the checkbox
 - [ ] Test multi-branch and role isolation.
 - [ ] Test sign-out and cache cleanup on a shared terminal.
 - [ ] Test duplicate prevention and conflict recovery for queued writes.
-- [ ] Record p50/p95 interaction latency and request counts.
+- [ ] Record authoritative server p50/p95 interaction latency, request counts, and compressed payload bytes from deployment logs.
 - [ ] Roll out in slices with rollback notes and production monitoring.
 
 ## First implementation slice
@@ -314,7 +314,7 @@ Do not record order numbers, customer names, employee names, receipt payloads, o
 - Added `src/lib/admin/branches.ts` and moved branch reads used by the AdminRouteLayout plus Dashboard, Orders, Sales, Promotions, Shifts, Inventory, Variance, Audit, Customers, Expenses, Suppliers, and Billing to a request-scoped React cache. This removes duplicate layout/page branch queries without persistent stale data or authorization changes.
 - Added `src/lib/admin/connection.ts` with a 15-second advisory cache for the sidebar device-heartbeat status, keyed by user, organization, and selected branch. It does not participate in authorization or mutation decisions.
 - Validation passed after the optimization: `npm run typecheck`, `npm run lint`, `npm run build`, and `git diff --check`.
-- This baseline identified large server-rendered payloads and remaining profile/device reads as the next Phase 6 measurement targets; the first payload and deployment-telemetry slice is recorded below, with production measurement pending deployment.
+- This baseline identified large server-rendered payloads and remaining profile/device reads as the next Phase 6 measurement targets; the first payload and deployment-telemetry slice is recorded below.
 
 ### 2026-08-14 — Phase 5 final inventory movement acceptance
 
@@ -328,7 +328,22 @@ Do not record order numbers, customer names, employee names, receipt payloads, o
 - Narrowed Promotions line-item reads to the eight recent discounted receipts plus an optional deep-linked receipt instead of fetching up to 10,000 unrelated line items. Report totals still use the order summary query, and receipt contents remain complete for the records rendered by the page.
 - Extended the existing admin interaction marks with resource-count, transfer-byte, and encoded-body-byte deltas. `AdminPerformanceReporter` sends only online, request-started navigation metrics to the authenticated `/api/admin/performance` endpoint; local modal opens do not send a request.
 - The reporter also captures one initial-document navigation sample per admin page load, including document transfer/encoded-body bytes and aggregate resource bytes. The route validates a small bounded payload and emits structured `dumala_admin_performance` deployment logs without URLs, query strings, order/customer/staff identifiers, user IDs, organization IDs, or request bodies. These logs are the measurement source for the next focused summaries/pagination slice.
-- Validation passed: `npm run typecheck`, `npm run lint`, `npm run build`, and `git diff --check` (line-ending warnings only). The changes are still uncommitted and not deployed, so production p50/p95 and byte baselines remain pending.
+- Validation passed: `npm run typecheck`, `npm run lint`, `npm run build`, and `git diff --check` (line-ending warnings only). At the time of this log the batch was still uncommitted and not deployed; deployment and production capture are recorded in the rollout entry below.
+
+### 2026-08-14 — Phase 6 first deployment and production capture
+
+- The branch-payload projection and deployment-telemetry batch was merged to `main` in PR #19 at merge commit `4f35a14a6f2da2ebe56496f389082f6079ff93cc`. Post-merge CI and the Vercel deployment check passed; `npm run production:preflight` returned HTTP 200 for the production shell, manifest, and service worker.
+- The authenticated production reporter is now emitting bounded `dumala_admin_performance` events for initial admin documents and online soft navigations. Events contain only aggregate timing/resource/byte fields and no URLs, record identifiers, user IDs, organization IDs, or request bodies.
+- An 18-sample signed-in production browser capture (three loads per route) produced these HTML-size proxies and route-open observations: Dashboard median 122,186 characters (max 134,705), Orders median 155,397 (max 167,916; one 7,650 ms cold observation), Sales median 215,015 (max 215,015), Shifts median 95,088 (max 95,552), Inventory median/max 238,238, and Promotions median 99,055 (max 111,574). These are browser harness timings and DOM `outerHTML` sizes, not authoritative server p50/p95 or compressed transfer bytes.
+- The next optimization targets are therefore Sales and Inventory payloads, followed by Orders cold-load variance. The focused slice below moves order lists to summary projections, loads full receipt fields only for visible/deep-linked orders, and aggregates Sales top items in Postgres.
+- Vercel deployment-log access is still required to calculate authoritative server p50/p95 and compressed payload percentiles from `dumala_admin_performance`; until that access is available, browser proxies must not be presented as server metrics.
+
+### 2026-08-14 — Phase 6 Sales/Orders summary-detail slice
+
+- Orders, Sales, and Dashboard list queries now select only the summary fields needed for tables, KPIs, trends, and filters. Full receipt fields are fetched only for the visible/deep-linked receipt records.
+- Sales top-selling items are aggregated by the bounded `admin_sales_top_items` RPC instead of serializing the full period's `order_items` ledger into every Sales document. Receipt line items remain complete for the visible/deep-linked receipts.
+- Migrations `0045_admin_sales_summary.sql` and `0046_admin_sales_summary_weight.sql` are applied to the linked production database. Read-only verification confirmed the RPC exists, both supporting indexes exist, and the RPC returns at most the requested five sample rows.
+- The application changes are currently on `codex/phase6-summary-pagination` and await application validation and deployment. Inventory's remaining large server-rendered payload is intentionally the next focused slice after this rollout.
 
 ## References
 
