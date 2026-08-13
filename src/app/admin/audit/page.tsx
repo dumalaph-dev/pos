@@ -2,10 +2,12 @@ import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
+import { AdminReadModelHydrator, type AdminReadModelBatch } from "@/components/admin/AdminReadModelHydrator";
 import { SignOutButton } from "@/components/SignOutButton";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
+import type { AuditEventReadModel } from "@/lib/admin/audit-read-models";
 
 type AdminRole = "admin" | "manager" | "cashier";
 
@@ -275,10 +277,34 @@ export default async function AuditPage({
   const firstRow = totalCount === 0 ? 0 : offset + 1;
   const lastRow = Math.min(offset + auditLogs.length, totalCount);
   const pageNumbers = getPageNumbers(totalPages, requestedPage);
+  const cacheScope = { userId: user.id, orgId: profile.org_id, storeId: branchFilter || null, role: profile.role };
+  const auditCacheRecords: Array<{ id: string; data: AuditEventReadModel }> = auditLogs.map((entry) => ({
+    id: entry.id,
+    data: {
+      id: entry.id,
+      orgId: entry.org_id,
+      storeId: entry.store_id,
+      actorId: entry.actor_id,
+      actorName: entry.actor_id ? actorById.get(entry.actor_id)?.full_name ?? "Unknown actor" : "System event",
+      actorRole: entry.actor_id ? actorById.get(entry.actor_id)?.role ?? null : null,
+      action: entry.action,
+      entity: entry.entity,
+      entityId: entry.entity_id,
+      before: entry.before,
+      after: entry.after,
+      deviceId: entry.device_id,
+      branchName: entry.store_id ? branchById.get(entry.store_id)?.name ?? "Unknown branch" : "All branches",
+      createdAt: entry.created_at,
+    },
+  }));
+  const auditCacheBatches: AdminReadModelBatch[] = [
+    { entity: "audit", records: auditCacheRecords },
+  ];
 
   return (
     <main className="admin-page text-ink">
       <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
+        <AdminReadModelHydrator scope={cacheScope} batches={auditCacheBatches}>
           <AdminPageHeader title="Audit log">
             <Link href="/admin" className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Overview</Link>
             <Link href="/admin/settings" className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Settings</Link>
@@ -319,6 +345,7 @@ export default async function AuditPage({
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4"><span className="text-[10px] font-semibold text-ink-muted">Page {requestedPage} of {totalPages} · {totalCount.toLocaleString("en-PH")} total matching events</span><div className="flex items-center gap-1">{requestedPage > 1 ? <Link href={auditHref({ branch: branchFilter, actor: actorFilter, action: actionFilter, dateFrom, dateTo, page: requestedPage - 1 })} className="grid h-8 min-w-8 place-items-center rounded-btn border border-line text-sm font-extrabold text-primary hover:bg-primary-soft" aria-label="Previous audit page">‹</Link> : <span className="grid h-8 min-w-8 place-items-center rounded-btn border border-line text-sm font-extrabold text-ink-subtle" aria-hidden="true">‹</span>}{pageNumbers.map((pageNumber) => <Link key={pageNumber} href={auditHref({ branch: branchFilter, actor: actorFilter, action: actionFilter, dateFrom, dateTo, page: pageNumber })} className={`grid h-8 min-w-8 place-items-center rounded-btn px-2 text-[10px] font-extrabold ${pageNumber === requestedPage ? "bg-primary text-primary-fg" : "border border-line bg-surface text-primary hover:bg-primary-soft"}`}>{pageNumber}</Link>)}{requestedPage < totalPages ? <Link href={auditHref({ branch: branchFilter, actor: actorFilter, action: actionFilter, dateFrom, dateTo, page: requestedPage + 1 })} className="grid h-8 min-w-8 place-items-center rounded-btn border border-line text-sm font-extrabold text-primary hover:bg-primary-soft" aria-label="Next audit page">›</Link> : <span className="grid h-8 min-w-8 place-items-center rounded-btn border border-line text-sm font-extrabold text-ink-subtle" aria-hidden="true">›</span>}</div></div>
             </>}
           </section>
+        </AdminReadModelHydrator>
       </div>
     </main>
   );

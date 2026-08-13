@@ -4,6 +4,7 @@ import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { AdminMenu } from "@/components/admin/AdminMenu";
+import { OrderDialogController } from "@/components/admin/OrderDialogController";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import { formatStockQuantity, salesQuantity, stockStatus } from "@/lib/inventory";
@@ -11,6 +12,7 @@ import { isProductImageUrl } from "@/lib/product-images";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import { isLechonHouseBusiness } from "@/lib/admin/business";
 import { getAdminProfile } from "@/lib/admin/profile";
+import type { OrderReceiptData } from "@/lib/admin/order-receipts";
 import { readAdminBranding } from "@/lib/admin/branding";
 import { dashboardLowStockThreshold, readAdminInventorySettings } from "@/lib/admin/inventory-settings";
 import { buildOwnerOnboardingState, hasConfiguredOwnerBusinessProfile, hasConfiguredOwnerDashboardSettings } from "@/lib/admin/onboarding";
@@ -35,7 +37,17 @@ type ProfileRecord = {
 type BranchRecord = {
   id: string;
   name: string;
+  address: string | null;
+  tin: string | null;
+  vat_registered: boolean;
+  vat_rate: number;
   is_active: boolean;
+};
+
+type CashierRecord = {
+  id: string;
+  full_name: string;
+  role: AdminRole;
 };
 
 type CategoryRecord = {
@@ -59,18 +71,28 @@ type OrderRecord = {
   id: string;
   order_no: string;
   store_id: string;
+  cashier_id: string;
   status: OrderStatus;
+  subtotal: number;
   discount_amount: number;
+  discount_ref: string | null;
+  vatable_sale: number;
   vat_amount: number;
+  vat_exempt_sale: number;
   total: number;
   payment_method: PaymentMethod;
+  payment_ref: string | null;
+  amount_tendered: number | null;
+  change_due: number | null;
+  note: string | null;
   created_at: string;
+  created_at_device: string;
   reversal_of: string | null;
 };
 
 type OrderItemRecord = {
   order_id: string;
-  product_id: string;
+  product_id: string | null;
   name_snapshot: string;
   qty: number;
   weight_kg: number | null;
@@ -112,6 +134,10 @@ const LOCAL_PRODUCT_IMAGES: Record<string, string> = {
   "java rice": "/food/java-rice.png",
   "mang tomas (small)": "/food/mang-tomas.png",
 };
+
+function readParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
 
 function getSingaporeDayBounds() {
   const date = new Intl.DateTimeFormat("en-CA", {
@@ -180,7 +206,11 @@ function productImage(product: { name: string; image_url?: string | null }) {
     : LOCAL_PRODUCT_IMAGES[product.name.trim().toLowerCase()] ?? "/food/whole-lechon-small.png";
 }
 
-export default async function AdminPage() {
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ order?: string | string[] }>;
+}) {
   const supabase = await createClient();
   const user = await getAuthenticatedUser();
 
@@ -193,11 +223,13 @@ export default async function AdminPage() {
   if (profile?.password_change_required) redirect("/account/password?required=1");
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile) return <AdminProfileMissing />;
+  const params = await searchParams;
+  const selectedOrderId = readParam(params.order);
   const inventorySettings = readAdminInventorySettings(profile.organizations?.settings);
 
   const branchesResult = await supabase
     .from("stores")
-    .select("id, name, is_active")
+    .select("id, name, address, tin, vat_registered, vat_rate, is_active")
     .eq("org_id", profile.org_id)
     .order("name");
   const branches = (branchesResult.data ?? []) as BranchRecord[];
@@ -218,7 +250,7 @@ export default async function AdminPage() {
     .eq("org_id", profile.org_id);
   let ordersQuery = supabase
     .from("orders")
-    .select("id, order_no, store_id, status, discount_amount, vat_amount, total, payment_method, created_at, reversal_of")
+    .select("id, order_no, store_id, cashier_id, status, subtotal, discount_amount, discount_ref, vatable_sale, vat_amount, vat_exempt_sale, total, payment_method, payment_ref, amount_tendered, change_due, note, created_at, created_at_device, reversal_of")
     .eq("org_id", profile.org_id);
   let itemsQuery = supabase
     .from("order_items")
@@ -233,6 +265,7 @@ export default async function AdminPage() {
     .select("is_active")
     .eq("org_id", profile.org_id)
     .limit(100);
+  let cashiersQuery = supabase.from("profiles").select("id, full_name, role").eq("org_id", profile.org_id);
   const subscriptionQuery = supabase
     .from("organizations")
     .select("created_at, subscription_status, subscription_trial_ends_at, subscription_current_period_end")
@@ -261,6 +294,7 @@ export default async function AdminPage() {
     ordersQuery = ordersQuery.eq("store_id", selectedBranchId);
     itemsQuery = itemsQuery.eq("orders.store_id", selectedBranchId);
     devicesQuery = devicesQuery.eq("store_id", selectedBranchId);
+    cashiersQuery = cashiersQuery.eq("store_id", selectedBranchId);
   }
 
   productsQuery = productsQuery.order("name").limit(1000);
@@ -271,7 +305,7 @@ export default async function AdminPage() {
     .order("created_at", { ascending: false })
     .limit(2000);
 
-  const [productsResult, categoriesResult, ordersResult, stockResult, itemsResult, devicesResult, subscriptionResult, onboardingStaffResult, onboardingInventoryResult, onboardingDevicesResult, onboardingCategoriesResult, onboardingProductsResult] = await Promise.all([
+  const [productsResult, categoriesResult, ordersResult, stockResult, itemsResult, devicesResult, cashiersResult, subscriptionResult, onboardingStaffResult, onboardingInventoryResult, onboardingDevicesResult, onboardingCategoriesResult, onboardingProductsResult] = await Promise.all([
     productsQuery,
     categoriesQuery,
     ordersQuery,
@@ -283,6 +317,7 @@ export default async function AdminPage() {
     // sequential query with a huge .in() filter.
     itemsQuery,
     devicesQuery,
+    cashiersQuery.order("full_name").limit(200),
     subscriptionQuery,
     onboardingStaffQuery ?? Promise.resolve({ data: [], error: null }),
     onboardingInventoryQuery ?? Promise.resolve({ data: [], error: null }),
@@ -307,6 +342,7 @@ export default async function AdminPage() {
   const allOrders = ((ordersResult.data ?? []) as OrderRecord[]).filter((order) => !selectedBranchId || order.store_id === selectedBranchId);
   const stock = ((stockResult.data ?? []) as StockRow[]).filter((row) => !selectedBranchId || row.store_id === selectedBranchId);
   const devices = (devicesResult.data ?? []) as DeviceRecord[];
+  const cashiers = (cashiersResult.data ?? []) as CashierRecord[];
   const todayOrders = allOrders.filter((order) => {
     const timestamp = new Date(order.created_at).getTime();
     return timestamp >= start.getTime() && timestamp < end.getTime();
@@ -339,10 +375,12 @@ export default async function AdminPage() {
   const reversedIds = reversalLookup.reversedIds;
 
   const queryWarning = Boolean(
-    branchesResult.error || productsResult.error || categoriesResult.error || ordersResult.error || stockResult.error || devicesResult.error || orderItemsError || reversalLookup.failed,
+    branchesResult.error || productsResult.error || categoriesResult.error || ordersResult.error || stockResult.error || devicesResult.error || cashiersResult.error || orderItemsError || reversalLookup.failed,
   );
   const categoryById = new Map(categories.map((category) => [category.id, category]));
   const productById = new Map(products.map((product) => [product.id, product]));
+  const branchById = new Map(branches.map((branch) => [branch.id, branch]));
+  const cashierById = new Map(cashiers.map((cashier) => [cashier.id, cashier]));
   const completedOrders = selectNetSales(todayOrders, reversedIds);
   const totalSales = completedOrders.reduce((sum, order) => sum + Number(order.total), 0);
   const averageTicket = completedOrders.length ? Math.round(totalSales / completedOrders.length) : 0;
@@ -411,7 +449,7 @@ export default async function AdminPage() {
   let kgSold = 0;
   for (const item of orderItems) {
     if (!completedOrderIds.has(item.order_id)) continue;
-    const product = productById.get(item.product_id);
+    const product = item.product_id ? productById.get(item.product_id) : undefined;
     const topItem = topItemsByName.get(item.name_snapshot) ?? { name: item.name_snapshot, qty: 0, unit: product?.unit ?? "items", total: 0 };
     topItem.qty += salesQuantity(item);
     topItem.total += Number(item.line_total);
@@ -472,6 +510,66 @@ export default async function AdminPage() {
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
   const userInitial = firstName.charAt(0).toUpperCase();
   const branding = readAdminBranding(profile.organizations?.settings);
+  const selectedOrder = selectedOrderId ? allOrders.find((order) => order.id === selectedOrderId) ?? null : null;
+  const dashboardReceiptOrders = selectedOrder && !completedOrders.slice(0, 5).some((order) => order.id === selectedOrder.id)
+    ? [selectedOrder, ...completedOrders.slice(0, 5)]
+    : completedOrders.slice(0, 5);
+  const itemsByOrder = new Map<string, OrderItemRecord[]>();
+  for (const item of orderItems) {
+    const items = itemsByOrder.get(item.order_id) ?? [];
+    items.push(item);
+    itemsByOrder.set(item.order_id, items);
+  }
+  const reversalByOrderId = new Map(
+    allOrders
+      .filter((order) => order.reversal_of)
+      .map((order) => [order.reversal_of as string, { status: order.status, order_no: order.order_no, created_at: order.created_at }]),
+  );
+  const dashboardReceipts: OrderReceiptData[] = dashboardReceiptOrders.map((order) => {
+    const branch = branchById.get(order.store_id);
+    return {
+      order: {
+        id: order.id,
+        order_no: order.order_no,
+        status: order.status,
+        subtotal: Number(order.subtotal),
+        discount_amount: Number(order.discount_amount),
+        discount_ref: order.discount_ref,
+        vatable_sale: Number(order.vatable_sale ?? 0),
+        vat_amount: Number(order.vat_amount),
+        vat_exempt_sale: Number(order.vat_exempt_sale ?? 0),
+        total: Number(order.total),
+        payment_method: order.payment_method,
+        payment_ref: order.payment_ref,
+        amount_tendered: order.amount_tendered == null ? null : Number(order.amount_tendered),
+        change_due: order.change_due == null ? null : Number(order.change_due),
+        note: order.note,
+        created_at: order.created_at,
+        created_at_device: order.created_at_device || order.created_at,
+      },
+      items: (itemsByOrder.get(order.id) ?? []).map((item) => ({
+        order_id: item.order_id,
+        product_id: item.product_id,
+        name_snapshot: item.name_snapshot,
+        qty: Number(item.qty),
+        weight_kg: item.weight_kg == null ? null : Number(item.weight_kg),
+        unit: productById.get(item.product_id ?? "")?.unit ?? (item.weight_kg ? "kg" : "item"),
+        line_total: Number(item.line_total),
+      })),
+      branch: {
+        name: branch?.name ?? "Unknown branch",
+        address: branch?.address ?? null,
+        tin: branch?.tin ?? null,
+        vatRegistered: Boolean(branch?.vat_registered),
+        vatRate: Number(branch?.vat_rate ?? 0.12),
+      },
+      cashierName: cashierById.get(order.cashier_id)?.full_name ?? "Unknown cashier",
+      returnTo: "/admin",
+      canManage: profile.role === "admin",
+      canReprint: profile.role === "admin" || profile.role === "manager",
+      reversal: reversalByOrderId.get(order.id) ?? null,
+    };
+  });
 
   return (
     <main data-admin-theme={branding.theme} className="admin-page text-ink">
@@ -605,10 +703,17 @@ export default async function AdminPage() {
           </div>
 
           <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.12fr)_minmax(0,1fr)_minmax(260px,0.86fr)]">
+            <OrderDialogController
+              initialOrderId={selectedOrderId || null}
+              receipts={dashboardReceipts}
+              cacheScope={{ userId: user.id, orgId: profile.org_id, storeId: selectedBranchId, role: profile.role }}
+              performanceSurface="dashboard"
+            >
             <section id="recent-transactions" aria-labelledby="recent-heading" className="admin-panel min-w-0 p-5">
               <div className="admin-panel__header"><div><h2 id="recent-heading" className="admin-panel__title">Recent Transactions</h2><p className="admin-panel__subtitle">Latest completed transactions · {currentBranchName}</p></div><Link href={ordersHref} className="admin-kpi-card__link mt-0">View all</Link></div>
-              <div className="mt-3 overflow-x-auto"><table className="admin-list-table min-w-[500px]"><thead><tr><th>Time</th><th>Invoice</th><th>Customer</th><th>Method</th><th>Amount</th></tr></thead><tbody>{completedOrders.slice(0, 5).length === 0 ? <tr><td colSpan={5}><EmptyState title="No transactions today" detail="Completed sales will appear here." /></td></tr> : completedOrders.slice(0, 5).map((order) => <tr key={order.id}><td className="whitespace-nowrap text-ink-muted">{formatDateTime(order.created_at)}</td><td className="whitespace-nowrap">{order.order_no}</td><td>Walk-in customer</td><td>{paymentLabel(order.payment_method)}</td><td className="tnums whitespace-nowrap text-right font-extrabold text-success">{displayPeso(order.total)}</td></tr>)}</tbody></table></div>
+              <div className="mt-3 overflow-x-auto"><table className="admin-list-table min-w-[500px]"><thead><tr><th>Time</th><th>Invoice</th><th>Customer</th><th>Method</th><th>Amount</th></tr></thead><tbody>{completedOrders.slice(0, 5).length === 0 ? <tr><td colSpan={5}><EmptyState title="No transactions today" detail="Completed sales will appear here." /></td></tr> : completedOrders.slice(0, 5).map((order) => { const receiptHref = `/admin?order=${encodeURIComponent(order.id)}${branchQuery}`; return <tr key={order.id}><td className="whitespace-nowrap text-ink-muted">{formatDateTime(order.created_at)}</td><td className="whitespace-nowrap"><Link href={receiptHref} prefetch={false} data-order-trigger={order.id} aria-haspopup="dialog" className="font-extrabold text-primary hover:underline">{order.order_no}</Link></td><td>Walk-in customer</td><td>{paymentLabel(order.payment_method)}</td><td className="tnums whitespace-nowrap text-right font-extrabold text-success">{displayPeso(order.total)}</td></tr>; })}</tbody></table></div>
             </section>
+            </OrderDialogController>
 
             <section id="low-stock-alerts" aria-labelledby="low-stock-heading" className="admin-panel min-w-0 p-5">
               <div className="admin-panel__header"><div><h2 id="low-stock-heading" className="admin-panel__title">Low Stock Alerts</h2><p className="admin-panel__subtitle">Items that need to be restocked</p></div><Link href="/admin/inventory" className="admin-kpi-card__link mt-0">View all</Link></div>

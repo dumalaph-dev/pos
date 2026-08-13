@@ -1,14 +1,16 @@
 import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
+import { AdminMutationForm } from "@/components/admin/AdminMutationForm";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
+import { AdminReadModelHydrator, type AdminReadModelBatch } from "@/components/admin/AdminReadModelHydrator";
 import { SignOutButton } from "@/components/SignOutButton";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import { readAdminBranding } from "@/lib/admin/branding";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { formatStockQuantity, stockMovementDelta } from "@/lib/inventory";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
-import { recordInventoryCount } from "../actions";
 import { OwnerGuidance } from "@/components/admin/OwnerOnboardingPanel";
+import type { InventoryVarianceReadModel } from "@/lib/admin/inventory-read-models";
 
 type AdminRole = "admin" | "manager" | "cashier";
 type ProfileRecord = {
@@ -179,10 +181,35 @@ export default async function InventoryVariancePage({
   const errorMessage = readParam(params.error);
   const savedMessage = readParam(params.saved) === "1" ? `End-of-day count saved for ${formatDate(countDate)}.` : "";
   const formDisabled = !canWrite || !branchId || products.length === 0 || Boolean(productsResult.error || countsResult.error);
+  const cacheScope = { userId: user.id, orgId: profile.org_id, storeId: branchId || null, role: profile.role };
+  const varianceCacheRecords: Array<{ id: string; data: InventoryVarianceReadModel }> = rows.map((row) => {
+    const count = countByProductId.get(row.id);
+    const id = `${branchId}:${countDate}:${row.id}`;
+    return {
+      id,
+      data: {
+        id,
+        storeId: branchId,
+        productId: row.id,
+        productName: row.name,
+        unit: row.unit,
+        countDate,
+        expected: row.expectedQty,
+        counted: row.countedQty,
+        variance: row.varianceQty,
+        status: row.status,
+        updatedAt: count?.updated_at ?? null,
+      },
+    };
+  });
+  const varianceCacheBatches: AdminReadModelBatch[] = [
+    { entity: "inventory_variance", records: varianceCacheRecords },
+  ];
 
   return (
     <main data-admin-theme={branding.theme} className="admin-page text-ink">
       <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
+        <AdminReadModelHydrator scope={cacheScope} batches={varianceCacheBatches}>
         <header className="admin-reference-header flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-3 shadow-[var(--shadow-card)] sm:px-5">
           <div className="flex min-w-0 items-center gap-3">
             <Link href="/admin/inventory" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-primary/25 bg-primary-soft text-primary" aria-label="Back to inventory"><AdminIcon name="inventory" size={20} /></Link>
@@ -218,13 +245,14 @@ export default async function InventoryVariancePage({
 
         <section className="admin-panel mt-5 overflow-hidden" aria-labelledby="variance-table-heading">
           <div className="flex flex-wrap items-end justify-between gap-3 border-b border-line px-4 py-4 sm:px-5"><div><p className="admin-panel__eyebrow">{branch?.name ?? "No branch selected"} · {formatDate(countDate)}</p><h2 id="variance-table-heading" className="admin-panel__title">Expected versus counted</h2><p className="admin-panel__subtitle">Expected quantities include ledger activity through the end of the selected Singapore business day.</p></div><span className="rounded-pill bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary">{countedRows.length === rows.length && rows.length > 0 ? "Count complete" : "Count in progress"}</span></div>
-          {rows.length === 0 ? <div className="grid place-items-center px-4 py-14 text-center"><span className="grid h-12 w-12 place-items-center rounded-full bg-primary-soft text-primary"><AdminIcon name="inventory" size={23} /></span><p className="mt-4 text-sm font-extrabold text-ink">No tracked products found</p><p className="mt-1 max-w-sm text-xs leading-5 text-ink-muted">Enable stock tracking on products before closing a physical inventory count.</p><Link href="/products" className="inventory-button mt-3 rounded-btn bg-primary text-[11px] font-extrabold text-primary-fg">Open Products</Link></div> : <form action={recordInventoryCount}>
+          {rows.length === 0 ? <div className="grid place-items-center px-4 py-14 text-center"><span className="grid h-12 w-12 place-items-center rounded-full bg-primary-soft text-primary"><AdminIcon name="inventory" size={23} /></span><p className="mt-4 text-sm font-extrabold text-ink">No tracked products found</p><p className="mt-1 max-w-sm text-xs leading-5 text-ink-muted">Enable stock tracking on products before closing a physical inventory count.</p><Link href="/products" className="inventory-button mt-3 rounded-btn bg-primary text-[11px] font-extrabold text-primary-fg">Open Products</Link></div> : <AdminMutationForm scope={cacheScope} kind="inventory_count">
             <input type="hidden" name="store_id" value={branchId} />
             <input type="hidden" name="count_date" value={countDate} />
             <div className="overflow-x-auto"><table className="admin-list-table min-w-[760px]"><thead><tr><th>Product</th><th>Expected at close</th><th>Counted quantity</th><th>Variance</th><th>Status</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><strong>{row.name}</strong><small className="mt-1 block text-[10px] text-ink-muted">Unit: {row.unit}</small></td><td className="tnums whitespace-nowrap font-extrabold">{formatStockQuantity(row.expectedQty)} {row.unit}</td><td><label className="sr-only" htmlFor={`counted-${row.id}`}>Counted quantity for {row.name}</label><input id={`counted-${row.id}`} name={`counted_${row.id}`} type="number" min="0" step="0.001" inputMode="decimal" defaultValue={row.countedQty === null ? "" : String(row.countedQty)} required disabled={formDisabled} className="inventory-input inventory-input--compact tnums max-w-[160px]" placeholder="Enter count" /></td><td className={`tnums whitespace-nowrap font-extrabold ${row.status === "short" ? "text-danger" : row.status === "over" ? "text-warning" : row.status === "balanced" ? "text-success" : "text-ink-muted"}`}>{row.varianceQty === null ? "—" : `${row.varianceQty >= 0 ? "+" : "−"}${formatStockQuantity(Math.abs(row.varianceQty))} ${row.unit}`}</td><td><span className={`inline-flex whitespace-nowrap rounded-pill px-2.5 py-1 text-[10px] font-extrabold ${statusClass(row.status)}`}>{statusLabel(row.status)}</span></td></tr>)}</tbody></table></div>
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-4 sm:px-5"><p className="max-w-2xl text-xs leading-5 text-ink-muted">Saving applies a signed adjustment for the difference. If you correct the count later, only the new difference is added, so the ledger will not double-count the reconciliation.</p><button type="submit" disabled={formDisabled} className="min-h-11 rounded-btn bg-primary px-5 text-sm font-extrabold text-primary-fg transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50">Save physical count</button></div>
-          </form>}
+          </AdminMutationForm>}
         </section>
+        </AdminReadModelHydrator>
       </div>
     </main>
   );

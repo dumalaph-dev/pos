@@ -2,8 +2,11 @@ import type { ReactNode } from "react";
 import { AdminSidebar, type AdminSidebarConnection } from "./AdminSidebar";
 import { AdminNavigationProgress } from "./AdminNavigationProgress";
 import { AdminBranchSwitcher } from "./AdminBranchSwitcher";
+import { OfflineAdminSetup } from "./OfflineAdminSetup";
+import { AdminMutationSync } from "./AdminMutationSync";
 import type { AdminBranchOption } from "@/lib/admin/branch-context";
 import type { AdminBranding } from "@/lib/admin/branding";
+import type { OfflineProfileSnapshot } from "@/lib/offline";
 
 export function AdminShell({
   branding,
@@ -13,6 +16,7 @@ export function AdminShell({
   selectedBranchId,
   canSwitchBranches,
   canManageBranches,
+  offlineProfile,
   children,
 }: {
   branding: AdminBranding;
@@ -22,6 +26,7 @@ export function AdminShell({
   selectedBranchId?: string | null;
   canSwitchBranches?: boolean;
   canManageBranches?: boolean;
+  offlineProfile?: OfflineProfileSnapshot;
   children: ReactNode;
 }) {
   return (
@@ -29,6 +34,8 @@ export function AdminShell({
       <AdminNavigationProgress />
       <AdminSidebar branding={branding} branchName={branchName} connection={connection} branches={branches} selectedBranchId={selectedBranchId} canSwitchBranches={canSwitchBranches} canManageBranches={canManageBranches} />
       <div className="admin-shell__content min-w-0">
+        {offlineProfile && <OfflineAdminSetup profile={offlineProfile} storeId={offlineProfile.store_id} branchName={branchName} />}
+        {offlineProfile?.role === "admin" && <AdminMutationSync scope={{ userId: offlineProfile.id, orgId: offlineProfile.org_id, storeId: offlineProfile.store_id, role: offlineProfile.role }} />}
         <div className="admin-mobile-context">
           <AdminBranchSwitcher branchName={branchName} branches={branches ?? []} selectedBranchId={selectedBranchId ?? null} canSwitch={Boolean(canSwitchBranches)} canManageBranches={Boolean(canManageBranches)} />
         </div>
