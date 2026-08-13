@@ -265,7 +265,7 @@ Do not record order numbers, customer names, employee names, receipt payloads, o
 - Upgraded `dumala-admin-db` to version 2 with a scoped admin mutation outbox. Records carry the exact user, organization, branch, role, mutation kind, payload, attempts, retry time, and conflict/error state; no PIN material is stored.
 - Added `AdminMutationForm` so stock movements and physical counts queue locally first for low-latency interaction, even while online. `AdminMutationSync` replays them on reconnect or a 30-second cadence through the authenticated Supabase client, deletes only successful receipts, and backs off transient failures.
 - Permanent server-validation failures are retained as visible conflicts for review. Billing, permissions, employee authentication, refunds, voids, Z-generation, and shift closing remain online-only.
-- Validation passed after the slice: `npm run typecheck`, `npm run lint`, `npm run build`, and `git diff --check` (line-ending warnings only). Applying migration `0044` and completing the same-origin signed-in browser drill remain deployment acceptance tasks.
+- Validation passed after the slice: `npm run typecheck`, `npm run lint`, `npm run build`, and `git diff --check` (line-ending warnings only). Migration `0044` is now applied to the linked Supabase project and a linked dry-run reports no pending migrations. Remote schema lint completes with one pre-existing warning in `build_staff_login_slug`; the same-origin signed-in browser drill remains open.
 
 ## References
 
