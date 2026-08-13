@@ -2,7 +2,7 @@
 
 **Project:** Dumala POS
 **Created:** 2026-08-13
-**Status:** Phase 5 initial inventory slice complete; Phase 6 in progress; two production optimization batches deployed; authoritative Vercel log aggregation remains pending access
+**Status:** Phase 5 initial inventory slice complete; Phase 6 in progress; two production optimization batches deployed; durable production telemetry rollout in progress
 **Owner:** Product and engineering
 
 ## Purpose
@@ -124,7 +124,7 @@ This document is the working plan for the entire initiative. Update the checkbox
 
 ### Phase 6 — Remaining dialogs and server-navigation optimization
 
-**Status:** In progress — Sales/Orders summary-detail batch deployed; Inventory payload/telemetry slice next
+**Status:** In progress — Sales/Orders and Inventory payload slices deployed; durable p50/p95 collection rollout in progress
 
 - [ ] Convert suitable product, customer, supplier, expense, employee, and branch detail flows to local dialogs.
 - [ ] Move filter/search/pagination state to client state with URL synchronization where appropriate.
@@ -145,7 +145,7 @@ This document is the working plan for the entire initiative. Update the checkbox
 - [ ] Test multi-branch and role isolation.
 - [ ] Test sign-out and cache cleanup on a shared terminal.
 - [ ] Test duplicate prevention and conflict recovery for queued writes.
-- [ ] Record authoritative server p50/p95 interaction latency, request counts, and compressed payload bytes from deployment logs.
+- [ ] Collect a production window through `admin-performance-summary.sql` and record authoritative p50/p95 interaction latency, request counts, and observed transfer/encoded-byte percentiles.
 - [ ] Roll out in slices with rollback notes and production monitoring.
 
 ## First implementation slice
@@ -351,7 +351,14 @@ Do not record order numbers, customer names, employee names, receipt payloads, o
 - Inventory movement and yield forms now receive only the product option fields they render (`id`, `name`, `store_id`, and `unit`). The scoped product read-model hydration is bounded to the current inventory page and upserts across pages; the full inventory snapshot remains the offline source of truth and is still replaced per branch scope.
 - This preserves server-side filtering, stock calculations, offline inventory snapshots, and inventory mutation payloads while avoiding a full catalog-shaped client hydration batch on every Inventory navigation. Migration `0047_inventory_tracked_products_idx.sql` adds the matching `(org_id, store_id, track_stock, sort_order, name)` index.
 - The signed-in browser session was unavailable during this post-deploy window and Vercel deployment-log access is not connected, so authoritative server p50/p95 and compressed-byte deltas remain pending. No server percentile is inferred from the browser HTML proxies.
-- The application changes are currently on `codex/phase6-inventory-summary` and have passed local typecheck, lint, production build, diff checks, and linked migration verification; they await deployment.
+- The application changes were deployed from `codex/phase6-inventory-summary` through PR #21 at production merge commit `a449e1091cd0c8b0411e4f80a06244c85388a8ea`. Post-merge CI, Vercel, and remote production preflight passed.
+
+### 2026-08-14 — Phase 7 telemetry persistence rollout
+
+- Added migration `0048_admin_performance_samples.sql`, an authenticated insert-only/RLS-protected table containing only bounded route-level timings, resource counts, transfer/encoded byte aggregates, and sample dimensions. It stores no URLs, query strings, record identifiers, user IDs, organization IDs, or request bodies.
+- `/api/admin/performance` continues to emit the structured `dumala_admin_performance` deployment event and now persists the same sample to Supabase. A failed telemetry insert does not block or surface on the admin UI; the event records `persisted: false` for operational diagnosis.
+- Added `scripts/admin-performance-summary.sql` to calculate 24-hour p50/p95 duration and observed transfer/encoded-byte percentiles by surface and sample type. It currently returns no rows because an authenticated production browser session was not available after deployment; no synthetic or unauthenticated sample was inserted.
+- The next step is to let normal signed-in admin traffic run, execute the summary query, and use the resulting Sales/Inventory/Orders p50/p95 and byte data to choose the next pagination/summary change.
 
 ## References
 
