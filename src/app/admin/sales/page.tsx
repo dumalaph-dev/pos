@@ -62,6 +62,11 @@ type SalesOrder = {
   reversal_of: string | null;
 };
 
+type SalesOrderSummary = Pick<
+  SalesOrder,
+  "id" | "order_no" | "store_id" | "cashier_id" | "status" | "subtotal" | "discount_amount" | "vat_amount" | "total" | "payment_method" | "created_at" | "reversal_of"
+>;
+
 type OrderItemRecord = {
   order_id: string;
   product_id: string | null;
@@ -86,6 +91,14 @@ type StockRow = {
   store_id: string;
   product_id: string;
   qty: number;
+};
+
+type TopSellingItemRecord = {
+  product_id: string | null;
+  name: string;
+  unit: string;
+  qty: number;
+  total: number;
 };
 
 type DailyBucket = {
@@ -122,6 +135,8 @@ const rangeOptions: Array<{ value: SalesRange; label: string; days: number }> = 
 ];
 const weekdayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const hourlyRange = Array.from({ length: 14 }, (_, index) => index + 7);
+const ORDER_LIST_FIELDS = "id, order_no, store_id, cashier_id, status, subtotal, discount_amount, discount_ref, vatable_sale, vat_amount, vat_exempt_sale, total, payment_method, payment_ref, amount_tendered, change_due, note, created_at, created_at_device, reversal_of";
+const ORDER_SUMMARY_FIELDS = "id, order_no, store_id, cashier_id, status, subtotal, discount_amount, vat_amount, total, payment_method, created_at, reversal_of";
 const singaporeDateFormatter = new Intl.DateTimeFormat("en-US", {
   day: "2-digit",
   month: "2-digit",
@@ -230,7 +245,7 @@ function productImage(product: ProductRecord | undefined) {
  * it this would count a voided sale as revenue, because a reversal (0020) adds
  * a new row and leaves the original at `completed`.
  */
-function summarizeOrders(orders: SalesOrder[], reversedIds: Set<string>) {
+function summarizeOrders(orders: SalesOrderSummary[], reversedIds: Set<string>) {
   const completed = selectNetSales(orders, reversedIds);
   const refunded = orders.filter((order) => order.status === "refunded");
   return {
@@ -321,7 +336,7 @@ export default async function SalesPage({
   const branchFilter = selectedBranchId ?? (branches.some((branch) => branch.id === requestedBranchFilter) ? requestedBranchFilter : "");
   let currentOrdersQuery = supabase
     .from("orders")
-    .select("id, order_no, store_id, cashier_id, status, subtotal, discount_amount, discount_ref, vatable_sale, vat_amount, vat_exempt_sale, total, payment_method, payment_ref, amount_tendered, change_due, note, created_at, created_at_device, reversal_of")
+    .select(ORDER_SUMMARY_FIELDS)
     .eq("org_id", profile.org_id)
     .gte("created_at", window.currentStart.toISOString())
     .lt("created_at", window.currentEnd.toISOString())
@@ -329,7 +344,7 @@ export default async function SalesPage({
     .limit(5000);
   let previousOrdersQuery = supabase
     .from("orders")
-    .select("id, order_no, store_id, cashier_id, status, subtotal, discount_amount, discount_ref, vatable_sale, vat_amount, vat_exempt_sale, total, payment_method, payment_ref, amount_tendered, change_due, note, created_at, created_at_device, reversal_of")
+    .select(ORDER_SUMMARY_FIELDS)
     .eq("org_id", profile.org_id)
     .gte("created_at", window.previousStart.toISOString())
     .lt("created_at", window.previousEnd.toISOString())
@@ -346,27 +361,25 @@ export default async function SalesPage({
     productsQuery = productsQuery.eq("store_id", branchFilter);
   }
 
-  let itemsQuery = supabase
-    .from("order_items")
-    .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status, reversal_of)")
-    .eq("orders.org_id", profile.org_id)
-    .is("orders.reversal_of", null)
-    .gte("orders.created_at", window.currentStart.toISOString())
-    .lt("orders.created_at", window.currentEnd.toISOString());
-  if (branchFilter) itemsQuery = itemsQuery.eq("orders.store_id", branchFilter);
   let cashiersQuery = supabase.from("profiles").select("id, full_name, role").eq("org_id", profile.org_id);
   if (branchFilter) cashiersQuery = cashiersQuery.eq("store_id", branchFilter);
   cashiersQuery = cashiersQuery.order("full_name").limit(200);
 
-  const [cashiersResult, productsResult, stockResult, itemsResult, currentOrdersResult, previousOrdersResult] = await Promise.all([
+  const [cashiersResult, productsResult, stockResult, topItemsResult, currentOrdersResult, previousOrdersResult] = await Promise.all([
     cashiersQuery,
     productsQuery,
     // Aggregate the stock ledger in Postgres instead of shipping up to 10,000
     // raw movement rows to the browser on every sales-page load.
     supabase.rpc("current_stock", { p_org_id: profile.org_id }),
-    // Items join straight to the current window's orders so this runs in the
-    // same round trip as the batch instead of a second sequential .in() query.
-    itemsQuery,
+    // Top sellers are aggregated in Postgres; receipt line items are fetched
+    // separately for only the visible/selected receipts below.
+    supabase.rpc("admin_sales_top_items", {
+      p_org_id: profile.org_id,
+      p_from: window.currentStart.toISOString(),
+      p_to: window.currentEnd.toISOString(),
+      p_store_id: branchFilter || null,
+      p_limit: 5,
+    }),
     currentOrdersQuery,
     previousOrdersQuery,
   ]);
@@ -374,14 +387,11 @@ export default async function SalesPage({
   const cashiers = (cashiersResult.data ?? []) as CashierRecord[];
   const products = ((productsResult.data ?? []) as ProductRecord[]).filter((product) => !branchFilter || product.store_id === branchFilter);
   const stock = ((stockResult.data ?? []) as StockRow[]).filter((row) => !branchFilter || row.store_id === branchFilter);
-  const currentOrders = ((currentOrdersResult.data ?? []) as SalesOrder[]).filter((order) => !branchFilter || order.store_id === branchFilter);
-  const previousOrders = ((previousOrdersResult.data ?? []) as SalesOrder[]).filter((order) => !branchFilter || order.store_id === branchFilter);
+  const currentOrders = ((currentOrdersResult.data ?? []) as SalesOrderSummary[]).filter((order) => !branchFilter || order.store_id === branchFilter);
+  const previousOrders = ((previousOrdersResult.data ?? []) as SalesOrderSummary[]).filter((order) => !branchFilter || order.store_id === branchFilter);
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
   const cashierById = new Map(cashiers.map((cashier) => [cashier.id, cashier]));
   const productById = new Map(products.map((product) => [product.id, product]));
-
-  const orderItems = (itemsResult.data ?? []) as OrderItemRecord[];
-  const orderItemsError = Boolean(itemsResult.error);
 
   const reversalLookup = await loadReversedOrderIds(
     supabase,
@@ -420,26 +430,17 @@ export default async function SalesPage({
     if (order.status === "refunded" && bucket) bucket.refunds += Number(order.total);
   }
 
-  const bestItemsByKey = new Map<string, BestSellingItem>();
-  const itemCountByOrder = new Map<string, number>();
-  for (const item of orderItems) {
-    itemCountByOrder.set(item.order_id, (itemCountByOrder.get(item.order_id) ?? 0) + salesQuantity(item));
-    if (!completedOrderIds.has(item.order_id)) continue;
+  const bestSellingItems: BestSellingItem[] = ((topItemsResult.data ?? []) as TopSellingItemRecord[]).map((item) => {
     const product = item.product_id ? productById.get(item.product_id) : undefined;
-    const key = item.product_id ?? `name:${item.name_snapshot}`;
-    const existing = bestItemsByKey.get(key) ?? {
-      key,
-      name: product?.name ?? item.name_snapshot,
-      qty: 0,
-      total: 0,
+    return {
+      key: item.product_id ?? `name:${item.name}`,
+      name: product?.name ?? item.name,
+      qty: Number(item.qty),
+      total: Number(item.total),
       imageUrl: productImage(product),
-      unit: product?.unit ?? "pcs",
+      unit: product?.unit ?? item.unit,
     };
-    existing.qty += salesQuantity(item);
-    existing.total += Number(item.line_total);
-    bestItemsByKey.set(key, existing);
-  }
-  const bestSellingItems = [...bestItemsByKey.values()].sort((left, right) => right.total - left.total || right.qty - left.qty).slice(0, 5);
+  });
 
   const stockByKey = new Map<string, number>();
   for (const row of stock) {
@@ -468,7 +469,6 @@ export default async function SalesPage({
   }
   const peakShare = peakHour && currentSummary.sales > 0 ? Math.round((peakHour.total / currentSummary.sales) * 100) : 0;
 
-  const queryWarning = Boolean(branchesResult.error || cashiersResult.error || productsResult.error || stockResult.error || currentOrdersResult.error || previousOrdersResult.error || orderItemsError || reversalLookup.failed);
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
   const branchLabel = branchFilter ? branchById.get(branchFilter)?.name ?? "Selected branch" : "All branches";
   const totalPages = Math.max(1, Math.ceil(currentOrders.length / pageSize));
@@ -477,9 +477,39 @@ export default async function SalesPage({
   const comparisonLabel = range === "7d" ? "previous 7 days" : range === "30d" ? "previous 30 days" : "previous 90 days";
   const exportHref = `/admin/report?range=${range}${branchFilter ? `&branch=${encodeURIComponent(branchFilter)}` : ""}`;
   const selectedOrder = selectedOrderId ? currentOrders.find((order) => order.id === selectedOrderId) ?? null : null;
-  const receiptOrders = selectedOrder && !visibleOrders.some((order) => order.id === selectedOrder.id)
+  const receiptSummaryOrders = selectedOrder && !visibleOrders.some((order) => order.id === selectedOrder.id)
     ? [selectedOrder, ...visibleOrders]
     : visibleOrders;
+  const receiptOrderIds = [...new Set(receiptSummaryOrders.map((order) => order.id))];
+  const receiptDetailsPromise = receiptOrderIds.length > 0
+    ? supabase
+        .from("orders")
+        .select(ORDER_LIST_FIELDS)
+        .eq("org_id", profile.org_id)
+        .in("id", receiptOrderIds)
+    : { data: [] as SalesOrder[], error: null };
+  const receiptItemsPromise = receiptOrderIds.length > 0
+    ? supabase
+        .from("order_items")
+        .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total")
+        .in("order_id", receiptOrderIds)
+        .limit(1000)
+    : Promise.resolve({ data: [] as OrderItemRecord[], error: null });
+  const [receiptDetailsResult, receiptItemsResult] = await Promise.all([receiptDetailsPromise, receiptItemsPromise]);
+  const receiptDetailsById = new Map(
+    ((receiptDetailsResult.data ?? []) as SalesOrder[]).map((order) => [order.id, order]),
+  );
+  const receiptOrders = receiptSummaryOrders.flatMap((order) => {
+    const detail = receiptDetailsById.get(order.id);
+    return detail ? [detail] : [];
+  });
+  const orderItems = (receiptItemsResult.data ?? []) as OrderItemRecord[];
+  const orderItemsError = Boolean(receiptItemsResult.error);
+  const queryWarning = Boolean(branchesResult.error || cashiersResult.error || productsResult.error || stockResult.error || topItemsResult.error || currentOrdersResult.error || previousOrdersResult.error || receiptDetailsResult.error || orderItemsError || reversalLookup.failed);
+  const itemCountByOrder = new Map<string, number>();
+  for (const item of orderItems) {
+    itemCountByOrder.set(item.order_id, (itemCountByOrder.get(item.order_id) ?? 0) + salesQuantity(item));
+  }
   const itemsByOrder = new Map<string, OrderItemRecord[]>();
   for (const item of orderItems) {
     const items = itemsByOrder.get(item.order_id) ?? [];
@@ -658,7 +688,7 @@ function SummaryPanel({ summary }: { summary: ReturnType<typeof summarizeOrders>
   return <section aria-labelledby="sales-summary-heading" className="admin-panel min-w-0 p-5"><div className="admin-panel__header"><div><h2 id="sales-summary-heading" className="admin-panel__title">Sales summary</h2><p className="admin-panel__subtitle">Key summary for the selected period</p></div></div><div className="mt-4 divide-y divide-line/70 rounded-btn bg-surface-raised px-3">{rows.map(([label, value]) => <div key={label} className="flex items-center justify-between gap-3 py-2.5 text-[10px]"><span className="text-ink-muted">{label}</span><strong className="tnums text-right font-extrabold text-ink">{value}</strong></div>)}</div></section>;
 }
 
-function RecentTransactions({ orders, totalOrders, page, pageSize, totalPages, range, branch, branchById, cashierById, itemCountByOrder }: { orders: SalesOrder[]; totalOrders: number; page: number; pageSize: number; totalPages: number; range: SalesRange; branch: string; branchById: Map<string, BranchRecord>; cashierById: Map<string, CashierRecord>; itemCountByOrder: Map<string, number> }) {
+function RecentTransactions({ orders, totalOrders, page, pageSize, totalPages, range, branch, branchById, cashierById, itemCountByOrder }: { orders: SalesOrderSummary[]; totalOrders: number; page: number; pageSize: number; totalPages: number; range: SalesRange; branch: string; branchById: Map<string, BranchRecord>; cashierById: Map<string, CashierRecord>; itemCountByOrder: Map<string, number> }) {
   const firstRow = totalOrders === 0 ? 0 : (page - 1) * pageSize + 1;
   const lastRow = Math.min(page * pageSize, totalOrders);
   return <section aria-labelledby="recent-sales-heading" className="admin-panel mt-4 min-w-0 p-5"><div className="admin-panel__header"><div><h2 id="recent-sales-heading" className="admin-panel__title">Recent sales transactions</h2><p className="admin-panel__subtitle">Latest transactions in the selected period</p></div><Link href={`/admin/orders?range=${range}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}`} className="text-xs font-extrabold text-primary hover:underline">View all</Link></div>{orders.length === 0 ? <EmptyPanelState title="No transactions in this period" detail="Completed POS activity will appear here once orders are recorded." /> : <><div className="mt-4 overflow-x-auto"><table className="admin-list-table min-w-[900px]"><thead><tr><th>Invoice no.</th><th>Date &amp; time</th><th>Branch</th><th>Cashier</th><th>Items</th><th>Total</th><th>Status</th><th>Action</th></tr></thead><tbody>{orders.map((order) => { const receiptHref = salesHref({ range, branch, order: order.id }); return <tr key={order.id}><td><Link href={receiptHref} prefetch={false} data-order-trigger={order.id} aria-haspopup="dialog" className="font-extrabold text-primary hover:underline">{order.order_no}</Link></td><td className="whitespace-nowrap text-ink-muted">{formatDateTime(order.created_at)}</td><td className="whitespace-nowrap">{branchById.get(order.store_id)?.name ?? "Unknown branch"}</td><td className="whitespace-nowrap">{cashierById.get(order.cashier_id)?.full_name ?? "Unknown cashier"}</td><td className="tnums whitespace-nowrap">{formatQuantity(itemCountByOrder.get(order.id) ?? 0)}</td><td className="tnums whitespace-nowrap font-extrabold">{displayPeso(order.total)}</td><td><span className={`inline-flex rounded-pill px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${statusClass(order.status)}`}>{statusLabel(order.status)}</span></td><td><Link href={receiptHref} prefetch={false} data-order-trigger={order.id} aria-haspopup="dialog" aria-label={`View order ${order.order_no}`} className="inline-flex items-center gap-1 font-extrabold text-primary hover:underline">View <AdminIcon name="arrow" size={12} /></Link></td></tr>; })}</tbody></table></div><div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4"><span className="text-[10px] font-semibold text-ink-muted">Showing {firstRow} to {lastRow} of {totalOrders} transactions</span><div className="flex items-center gap-1"><PaginationLink href={page > 1 ? salesHref({ range, branch, page: page - 1, pageSize }) : undefined} label="Previous" symbol="‹" />{Array.from({ length: Math.min(totalPages, 5) }, (_, index) => index + 1).map((pageNumber) => <Link key={pageNumber} href={salesHref({ range, branch, page: pageNumber, pageSize })} className={`grid h-8 min-w-8 place-items-center rounded-btn px-2 text-[10px] font-extrabold ${pageNumber === page ? "bg-primary text-primary-fg" : "border border-line bg-surface text-primary hover:bg-primary-soft"}`}>{pageNumber}</Link>)}{totalPages > 5 && <span className="grid h-8 min-w-8 place-items-center text-[10px] text-ink-muted">…</span>}<PaginationLink href={page < totalPages ? salesHref({ range, branch, page: page + 1, pageSize }) : undefined} label="Next" symbol="›" /></div><PageSizeForm range={range} branch={branch} pageSize={pageSize} /></div></>}</section>;

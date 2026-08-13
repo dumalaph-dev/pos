@@ -91,6 +91,11 @@ type OrderRecord = {
   reversal_of: string | null;
 };
 
+type OrderSummaryRecord = Pick<
+  OrderRecord,
+  "id" | "order_no" | "store_id" | "cashier_id" | "status" | "subtotal" | "discount_amount" | "vat_amount" | "total" | "payment_method" | "created_at" | "reversal_of"
+>;
+
 type OrderItemRecord = {
   order_id: string;
   product_id: string | null;
@@ -116,6 +121,9 @@ type TrialOrganizationRecord = {
   subscription_trial_ends_at?: string | null;
   subscription_current_period_end?: string | null;
 };
+
+const ORDER_LIST_FIELDS = "id, order_no, store_id, cashier_id, status, subtotal, discount_amount, discount_ref, vatable_sale, vat_amount, vat_exempt_sale, total, payment_method, payment_ref, amount_tendered, change_due, note, created_at, created_at_device, reversal_of";
+const ORDER_SUMMARY_FIELDS = "id, order_no, store_id, cashier_id, status, subtotal, discount_amount, vat_amount, total, payment_method, created_at, reversal_of";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SINGAPORE_DAY_FORMATTER = new Intl.DateTimeFormat("en-CA", {
@@ -247,7 +255,7 @@ export default async function AdminPage({
     .eq("org_id", profile.org_id);
   let ordersQuery = supabase
     .from("orders")
-    .select("id, order_no, store_id, cashier_id, status, subtotal, discount_amount, discount_ref, vatable_sale, vat_amount, vat_exempt_sale, total, payment_method, payment_ref, amount_tendered, change_due, note, created_at, created_at_device, reversal_of")
+    .select(ORDER_SUMMARY_FIELDS)
     .eq("org_id", profile.org_id);
   let itemsQuery = supabase
     .from("order_items")
@@ -336,7 +344,7 @@ export default async function AdminPage({
   const products = ((productsResult.data ?? []) as ProductRecord[]).filter((product) => !selectedBranchId || product.store_id === selectedBranchId);
   const categories = ((categoriesResult.data ?? []) as CategoryRecord[]).filter((category) => !selectedBranchId || category.store_id === selectedBranchId);
   const isLechonHouseBusinessSelected = isLechonHouseBusiness(profile.organizations?.settings);
-  const allOrders = ((ordersResult.data ?? []) as OrderRecord[]).filter((order) => !selectedBranchId || order.store_id === selectedBranchId);
+  const allOrders = ((ordersResult.data ?? []) as OrderSummaryRecord[]).filter((order) => !selectedBranchId || order.store_id === selectedBranchId);
   const stock = ((stockResult.data ?? []) as StockRow[]).filter((row) => !selectedBranchId || row.store_id === selectedBranchId);
   const devices = (devicesResult.data ?? []) as DeviceRecord[];
   const cashiers = (cashiersResult.data ?? []) as CashierRecord[];
@@ -371,9 +379,6 @@ export default async function AdminPage({
   );
   const reversedIds = reversalLookup.reversedIds;
 
-  const queryWarning = Boolean(
-    branchesResult.error || productsResult.error || categoriesResult.error || ordersResult.error || stockResult.error || devicesResult.error || cashiersResult.error || orderItemsError || reversalLookup.failed,
-  );
   const categoryById = new Map(categories.map((category) => [category.id, category]));
   const productById = new Map(products.map((product) => [product.id, product]));
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
@@ -511,6 +516,14 @@ export default async function AdminPage({
   const dashboardReceiptOrders = selectedOrder && !completedOrders.slice(0, 5).some((order) => order.id === selectedOrder.id)
     ? [selectedOrder, ...completedOrders.slice(0, 5)]
     : completedOrders.slice(0, 5);
+  const dashboardReceiptIds = [...new Set(dashboardReceiptOrders.map((order) => order.id))];
+  const dashboardReceiptDetailsPromise = dashboardReceiptIds.length > 0
+    ? supabase
+        .from("orders")
+        .select(ORDER_LIST_FIELDS)
+        .eq("org_id", profile.org_id)
+        .in("id", dashboardReceiptIds)
+    : Promise.resolve({ data: [] as OrderRecord[], error: null });
   const itemsByOrder = new Map<string, OrderItemRecord[]>();
   for (const item of orderItems) {
     const items = itemsByOrder.get(item.order_id) ?? [];
@@ -522,7 +535,18 @@ export default async function AdminPage({
       .filter((order) => order.reversal_of)
       .map((order) => [order.reversal_of as string, { status: order.status, order_no: order.order_no, created_at: order.created_at }]),
   );
-  const dashboardReceipts: OrderReceiptData[] = dashboardReceiptOrders.map((order) => {
+  const dashboardReceiptDetailsResult = await dashboardReceiptDetailsPromise;
+  const dashboardReceiptDetails = new Map(
+    ((dashboardReceiptDetailsResult.data ?? []) as OrderRecord[]).map((order) => [order.id, order]),
+  );
+  const dashboardReceiptDetailOrders = dashboardReceiptOrders.flatMap((order) => {
+    const detail = dashboardReceiptDetails.get(order.id);
+    return detail ? [detail] : [];
+  });
+  const queryWarning = Boolean(
+    branchesResult.error || productsResult.error || categoriesResult.error || ordersResult.error || dashboardReceiptDetailsResult.error || stockResult.error || devicesResult.error || cashiersResult.error || orderItemsError || reversalLookup.failed,
+  );
+  const dashboardReceipts: OrderReceiptData[] = dashboardReceiptDetailOrders.map((order) => {
     const branch = branchById.get(order.store_id);
     return {
       order: {
