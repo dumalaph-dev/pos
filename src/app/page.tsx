@@ -15,7 +15,7 @@ import { readPlatformBillingCatalog } from "@/lib/platform-operations-server";
 export const metadata: Metadata = {
   title: "Dumala POS | POS for Cafes, Restaurants & Food Businesses",
   description:
-    "An offline-first POS and business workspace for Philippine cafes, restaurants, coffee shops, bakeshops, and other food businesses. Personalize your POS theme, install it easily, sync to the cloud when online, and set up your business in about 3-5 minutes.",
+    "A practical POS and owner workspace for Philippine cafes, restaurants, coffee shops, bakeshops, and other counter-service businesses.",
 };
 
 type FeatureIconName = "bag" | "chart" | "spark" | "bolt";
@@ -245,7 +245,9 @@ function formatDiscount(value: number) {
 }
 
 const marqueeItems = [
-  "16 POS themes",
+  "16 themes today",
+  "More themes on the way",
+  "Regular updates & support",
   "Offline-first by default",
   "Cloud sync when online",
   "3-5 minute setup",
@@ -262,16 +264,6 @@ function ArrowIcon() {
     <svg aria-hidden="true" viewBox="0 0 20 20" className="lp-arrow h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
       <path d="M3 10h13M11 4l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#dfe7dc] text-[#16392b]">
-      <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.4">
-        <path d="m3.2 8.3 3 3 6.6-6.7" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </span>
   );
 }
 
@@ -432,6 +424,54 @@ function AdminDashboardMock() {
   );
 }
 
+/** Schematic of the passive customer-facing display that mirrors the live order. */
+function CustomerDisplayMock() {
+  const lines = [
+    ["Iced latte", "× 1", "₱140"],
+    ["Lechon meal combo", "× 1", "₱280"],
+    ["Extra garlic rice", "× 1", "₱65"],
+  ];
+
+  return (
+    <div aria-hidden="true" className="rounded-[20px] border-[6px] border-[#25302a] bg-[#25302a] shadow-[0_18px_40px_rgba(18,43,32,0.22)]">
+      <div className="overflow-hidden rounded-[13px] bg-[#f6f0e4]">
+        <div className="flex items-center justify-between gap-3 bg-[#173a2b] px-4 py-2.5">
+          <span className="text-[8px] font-black tracking-[0.16em] text-[#fffaf1]">DUMALA DISPLAY</span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#0e2a20] px-2 py-1 text-[7px] font-bold uppercase tracking-[0.12em] text-[#a9c4ae]">
+            <span className="h-1 w-1 rounded-full bg-[#7fb185]" /> Live order
+          </span>
+        </div>
+        <div className="grid gap-3 p-3 sm:grid-cols-[1.1fr_0.9fr] sm:p-4">
+          <div className="rounded-xl border border-[#e3e0d5] bg-[#fffdf8] p-3">
+            <div className="flex items-center justify-between gap-2 border-b border-[#e9e5db] pb-2">
+              <span className="text-[9px] font-black uppercase tracking-[0.14em] text-[#173a2b]">Your order</span>
+              <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-[#8b968b]">3 items</span>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {lines.map(([name, quantity, price]) => (
+                <div key={name} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1 text-[9px]">
+                  <span className="truncate font-bold text-[#526157]">{name}</span>
+                  <span className="font-black tabular-nums text-[#173a2b]">{price}</span>
+                  <span className="text-[8px] text-[#8b968b]">{quantity}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex min-h-[142px] flex-col justify-between rounded-xl bg-[#15382a] p-4 text-[#fffaf1]">
+            <span className="text-[9px] font-black uppercase tracking-[0.16em] text-[#c39756]">Total</span>
+            <strong className="text-3xl font-black tracking-[-0.06em] tabular-nums">₱485</strong>
+            <span className="text-[9px] leading-4 text-[#c8d4c9]">Please review your order before paying.</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 border-t border-[#e4ded1] px-4 py-2.5 text-[8px] font-bold uppercase tracking-[0.12em] text-[#6c7a6f]">
+          <span className="h-1.5 w-1.5 rounded-full bg-[#4e7f57]" />
+          Customer view · paired to the POS
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * The device render is a transparent PNG, so it gets a built stage to sit on:
  * a warm gradient panel, a dot grid, gold arcs, and a horizon band that reads
@@ -556,7 +596,7 @@ export default async function LandingPage() {
               style={{ "--lp-delay": "60ms" } as React.CSSProperties}
             >
               <span className="lp-dot-pulse h-1.5 w-1.5 rounded-full bg-[#d1a05b]" />
-              Offline-first POS for Philippine food businesses
+              POS for busy Philippine food businesses
             </p>
 
             <h1
@@ -584,11 +624,8 @@ export default async function LandingPage() {
               className="lp-in mt-7 max-w-[490px] text-base leading-7 text-[#526157] sm:text-lg sm:leading-8"
               style={{ "--lp-delay": "260ms" } as React.CSSProperties}
             >
-              Built for owners of cafes, restaurants, coffee shops, bakeshops, and other counter-service businesses, Dumala gives
-              cashiers one focused place to sell and gives you one practical workspace for everything behind each sale. Choose a
-              theme, adjust the colors and controls, and make the POS feel like your brand. It is offline-first: sales save on the
-              device first, then sync to the cloud whenever internet is available. Install it on a tablet or desktop and set up
-              your business in about 3-5 minutes.
+              Fast checkout for your team. Clear records for you. Dumala brings the counter POS and owner workspace together in one
+              practical system.
             </p>
 
             <div className="lp-in mt-8 flex flex-wrap items-center gap-5" style={{ "--lp-delay": "340ms" } as React.CSSProperties}>
@@ -599,20 +636,11 @@ export default async function LandingPage() {
                 Start with a 14-day trial <ArrowIcon />
               </Link>
               <a
-                href="#how-it-works"
+                href="#playground"
                 className="group inline-flex items-center gap-3 text-sm font-bold text-[#173a2b] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#bc9657]"
               >
-                <PlayIcon /> See the product
+                <PlayIcon /> Try the POS
               </a>
-            </div>
-
-            <div
-              className="lp-in mt-8 flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold text-[#667269]"
-              style={{ "--lp-delay": "420ms" } as React.CSSProperties}
-            >
-              <span className="inline-flex items-center gap-2"><CheckIcon /> 14 days free · no card</span>
-              <span className="inline-flex items-center gap-2"><CheckIcon /> Cloud sync when online</span>
-              <span className="inline-flex items-center gap-2"><CheckIcon /> Themes, colors &amp; controls you can personalize</span>
             </div>
           </div>
 
@@ -692,9 +720,16 @@ export default async function LandingPage() {
               See the POS. Make it yours.
             </h2>
             <p className="mt-4 text-sm leading-6 text-[#657168] sm:text-base">
-              Explore a tablet-style POS that mirrors the cashier workspace. Add a sample order, then open Customize theme to compare
-              all 16 styles and choose your accent without taking the counter screen apart.
+              Explore the tablet-style POS that mirrors the cashier workspace. Add a sample order, compare the current 16 themes, and
+              try an accent color before you sign up. The web app keeps improving with regular updates and ongoing support, with more
+              theme options on the way.
             </p>
+            <div className="mt-5 flex flex-wrap justify-center gap-2 text-[10px] font-black uppercase tracking-[0.12em] text-[#657168]">
+              <span className="rounded-full border border-[#d8d0c1] bg-[#fbf8f1] px-3 py-2">16 themes today</span>
+              <span className="rounded-full border border-[#d8d0c1] bg-[#fbf8f1] px-3 py-2">Regular updates</span>
+              <span className="rounded-full border border-[#d8d0c1] bg-[#fbf8f1] px-3 py-2">Ongoing support</span>
+              <span className="rounded-full border border-[#d8d0c1] bg-[#fbf8f1] px-3 py-2">More themes on the way</span>
+            </div>
           </div>
 
           <div className="mt-10" data-lp-reveal="scale">
@@ -709,11 +744,11 @@ export default async function LandingPage() {
           <div className="mx-auto max-w-2xl text-center" data-lp-reveal>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">Built for the counter and the owner</p>
             <h2 className="mt-3 text-3xl font-black tracking-[-0.05em] text-[#173a2b] sm:text-[2.6rem] sm:leading-[1.05]">
-              One business. Two focused workspaces.
+              One business. Three connected experiences.
             </h2>
             <p className="mt-4 text-sm leading-6 text-[#657168] sm:text-base">
-              Cashiers get a clear sell screen while owners get the context behind each sale. Both work from the same records, so the
-              counter and the backoffice stay connected without forcing the cashier into a backoffice.
+              Cashiers get a clear sell screen, owners get the context behind each sale, and customers can follow the order as it
+              happens. All three stay connected to the same sale without forcing the cashier into a backoffice.
             </p>
           </div>
 
@@ -845,6 +880,46 @@ export default async function LandingPage() {
                 </li>
               ))}
             </ol>
+          </div>
+
+          <div className="mt-6" data-lp-reveal="right">
+            <article className="lp-detail rounded-[24px] border border-[#e2dbca] bg-[#fdfaf3] p-6 sm:p-8">
+              <div className="grid gap-8 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:items-center">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <span className="lp-detail__mark grid h-11 w-11 shrink-0 place-items-center rounded-[14px] bg-[#15382a] text-[#d2a15c]">
+                      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3.4" y="5.4" width="17.2" height="11.2" rx="1.8" />
+                        <path d="M8.6 19.3h6.8M12 16.6v2.7" />
+                      </svg>
+                    </span>
+                    <span className="rounded-full border border-[#dfd6c3] bg-[#f4efe4] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-[#5c6b60]">
+                      For customers
+                    </span>
+                  </div>
+                  <h3 className="mt-5 text-xl font-black tracking-[-0.03em] text-[#173a2b]">Let customers follow along.</h3>
+                  <p className="mt-3 text-sm leading-6 text-[#68736a]">
+                    Pair a passive second screen at the counter so customers can see each line, discounts, the running total, and
+                    change due as the cashier works. Give it your branding for idle and thank-you moments; if it disconnects, the sale
+                    still completes on the POS.
+                  </p>
+                  <ul className="mt-6 grid gap-2.5 border-t border-[#eae3d5] pt-5 text-[13px] leading-5 text-[#5f6c62]">
+                    {[
+                      "Live line items, quantities, discounts, and running total",
+                      "Large payment and change-due states",
+                      "Branded welcome, promotion, and thank-you moments",
+                      "Paired to the POS, but never in the critical path",
+                    ].map((point) => (
+                      <li key={point} className="lp-spec flex gap-2.5">
+                        <BulletIcon />
+                        {point}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <CustomerDisplayMock />
+              </div>
+            </article>
           </div>
         </div>
       </section>
