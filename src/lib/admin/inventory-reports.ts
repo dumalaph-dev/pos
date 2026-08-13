@@ -1,5 +1,6 @@
 import type { createClient } from "@/lib/supabase/server";
 import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
+import { getAdminBranchOptions } from "@/lib/admin/branches";
 import { dashboardLowStockThreshold } from "@/lib/admin/inventory-settings";
 import { formatStockQuantity, stockMovementDelta, type StockMovementType } from "@/lib/inventory";
 
@@ -314,12 +315,8 @@ export async function loadInventoryReport(
   requestedFilters: InventoryReportFilters,
   defaultLowStockThreshold: number,
 ): Promise<InventoryReportData> {
-  const branchesResult = await supabase
-    .from("stores")
-    .select("id, name, is_active")
-    .eq("org_id", profile.org_id)
-    .order("name");
-  const branches = (branchesResult.data ?? []) as InventoryReportBranch[];
+  const branchesResult = await getAdminBranchOptions(profile.org_id);
+  const branches = branchesResult.data as InventoryReportBranch[];
   const workspaceBranchId = profile.role === "admin"
     ? await getSelectedAdminBranchId(branches, profile.store_id)
     : profile.store_id;

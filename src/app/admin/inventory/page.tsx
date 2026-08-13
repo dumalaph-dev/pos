@@ -19,6 +19,7 @@ import {
   type StockMovementType,
 } from "@/lib/inventory";
 import { getAdminProfile } from "@/lib/admin/profile";
+import { getAdminBranchOptions } from "@/lib/admin/branches";
 import { isLechonHouseBusiness, readBusinessPresetId } from "@/lib/admin/business";
 import { readAdminBranding } from "@/lib/admin/branding";
 import { dashboardLowStockThreshold, readAdminInventorySettings } from "@/lib/admin/inventory-settings";
@@ -344,12 +345,8 @@ export default async function InventoryPage({
   const inventorySettings = readAdminInventorySettings(profile.organizations?.settings);
 
   const { start: todayStart, end: todayEnd } = getSingaporeDayBounds();
-  const branchesResult = await supabase
-    .from("stores")
-    .select("id, name, is_active")
-    .eq("org_id", profile.org_id)
-    .order("name");
-  const branches = (branchesResult.data ?? []) as BranchRecord[];
+  const branchesResult = await getAdminBranchOptions(profile.org_id);
+  const branches = branchesResult.data as BranchRecord[];
   const selectedBranchId = profile.role === "admin"
     ? await getSelectedAdminBranchId(branches, profile.store_id)
     : profile.store_id;

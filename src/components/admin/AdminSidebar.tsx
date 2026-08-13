@@ -29,7 +29,6 @@ type AdminNavGroup = {
 };
 
 export type AdminSidebarConnection = {
-  connected: boolean;
   lastSyncedLabel: string | null;
 };
 

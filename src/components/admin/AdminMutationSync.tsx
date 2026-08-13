@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   createAdminCacheScopeKey,
+  adminMutationErrorMessage,
   flushAdminMutationOutbox,
   getAdminMutationStatus,
   type AdminCacheScope,
@@ -60,7 +61,7 @@ export function AdminMutationSync({ scope }: { scope: AdminCacheScope }) {
         pending: Math.max(1, current.pending),
         failed: Math.max(1, current.failed),
         conflicts: current.conflicts,
-        message: error instanceof Error ? error.message : "Offline changes are waiting for a secure connection.",
+        message: adminMutationErrorMessage(error),
       }));
     }
   }, [router, scope]);
@@ -84,7 +85,7 @@ export function AdminMutationSync({ scope }: { scope: AdminCacheScope }) {
 
   if (state.phase === "idle") return null;
 
-  const tone = state.phase === "error" ? "border-danger/25 bg-danger-soft text-danger"
+  const tone = state.phase === "error" && state.conflicts > 0 ? "border-danger/25 bg-danger-soft text-danger"
     : state.phase === "synced" ? "border-success/25 bg-success/10 text-success"
       : "border-warning/30 bg-warning/10 text-ink";
   const label = state.phase === "syncing"
@@ -100,7 +101,7 @@ export function AdminMutationSync({ scope }: { scope: AdminCacheScope }) {
   return (
     <div role="status" aria-live="polite" data-admin-mutation-sync className={`mx-4 mt-3 rounded-card border px-3 py-2 text-xs font-semibold lg:mx-0 ${tone}`}>
       {label}
-      {state.message && <span className="ml-1 font-normal">{state.message}</span>}
+      {state.message && <span className="ml-1 font-normal">· {state.message}</span>}
     </div>
   );
 }

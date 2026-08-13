@@ -6,6 +6,7 @@ import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { DeleteSupplierButton } from "@/components/admin/DeleteSupplierButton";
 import { SignOutButton } from "@/components/SignOutButton";
 import { getAdminProfile } from "@/lib/admin/profile";
+import { getAdminBranchOptions } from "@/lib/admin/branches";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { createSupplier, updateSupplier } from "./actions";
 import { OwnerGuidance } from "@/components/admin/OwnerOnboardingPanel";
@@ -83,7 +84,7 @@ export default async function SuppliersPage({
   if (!profile) return <SuppliersProfileMissing />;
 
   const [branchesResult, suppliersResult] = await Promise.all([
-    supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name"),
+    getAdminBranchOptions(profile.org_id),
     supabase
       .from("suppliers")
       .select("id, store_id, name, contact_name, phone, email, address, notes, is_active, created_at, updated_at")

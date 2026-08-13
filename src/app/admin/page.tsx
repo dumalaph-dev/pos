@@ -10,6 +10,7 @@ import { formatPeso } from "@/lib/money";
 import { formatStockQuantity, salesQuantity, stockStatus } from "@/lib/inventory";
 import { isProductImageUrl } from "@/lib/product-images";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
+import { getAdminBranches } from "@/lib/admin/branches";
 import { isLechonHouseBusiness } from "@/lib/admin/business";
 import { getAdminProfile } from "@/lib/admin/profile";
 import type { OrderReceiptData } from "@/lib/admin/order-receipts";
@@ -227,12 +228,8 @@ export default async function AdminPage({
   const selectedOrderId = readParam(params.order);
   const inventorySettings = readAdminInventorySettings(profile.organizations?.settings);
 
-  const branchesResult = await supabase
-    .from("stores")
-    .select("id, name, address, tin, vat_registered, vat_rate, is_active")
-    .eq("org_id", profile.org_id)
-    .order("name");
-  const branches = (branchesResult.data ?? []) as BranchRecord[];
+  const branchesResult = await getAdminBranches(profile.org_id);
+  const branches = branchesResult.data as BranchRecord[];
   const selectedBranchId = profile.role === "admin"
     ? await getSelectedAdminBranchId(branches, profile.store_id)
     : profile.store_id;

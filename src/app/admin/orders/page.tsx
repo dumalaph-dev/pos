@@ -9,6 +9,7 @@ import { salesQuantity } from "@/lib/inventory";
 import { formatPeso } from "@/lib/money";
 import { isProductImageUrl } from "@/lib/product-images";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
+import { getAdminBranches } from "@/lib/admin/branches";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { loadReversedOrderIds, selectNetSales } from "@/lib/admin/sales-reports";
 import type { OrderReceiptData } from "@/lib/admin/order-receipts";
@@ -346,8 +347,8 @@ export default async function OrdersPage({
   const previousStart = startDate && rangeDays(range) ? new Date(startDate.getTime() - DAY_MS * rangeDays(range)!) : null;
   const previousEnd = startDate;
 
-  const branchesResult = await supabase.from("stores").select("id, name, address, tin, vat_registered, vat_rate, is_active").eq("org_id", profile.org_id).order("name");
-  const branches = (branchesResult.data ?? []) as BranchRecord[];
+  const branchesResult = await getAdminBranches(profile.org_id);
+  const branches = branchesResult.data as BranchRecord[];
   const selectedBranchId = profile.role === "admin"
     ? await getSelectedAdminBranchId(branches, profile.store_id)
     : profile.store_id;

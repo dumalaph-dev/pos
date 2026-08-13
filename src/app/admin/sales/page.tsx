@@ -9,6 +9,7 @@ import { formatPeso } from "@/lib/money";
 import { isProductImageUrl } from "@/lib/product-images";
 import { salesQuantity, stockStatus } from "@/lib/inventory";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
+import { getAdminBranches } from "@/lib/admin/branches";
 import { getAdminProfile } from "@/lib/admin/profile";
 import type { OrderReceiptData } from "@/lib/admin/order-receipts";
 import { loadReversedOrderIds, selectNetSales } from "@/lib/admin/sales-reports";
@@ -312,8 +313,8 @@ export default async function SalesPage({
 
   const { start: todayStart } = getSingaporeDayBounds();
   const window = rangeWindow(range, todayStart);
-  const branchesResult = await supabase.from("stores").select("id, name, address, tin, vat_registered, vat_rate, is_active").eq("org_id", profile.org_id).order("name");
-  const branches = (branchesResult.data ?? []) as BranchRecord[];
+  const branchesResult = await getAdminBranches(profile.org_id);
+  const branches = branchesResult.data as BranchRecord[];
   const selectedBranchId = profile.role === "admin"
     ? await getSelectedAdminBranchId(branches, profile.store_id)
     : profile.store_id;

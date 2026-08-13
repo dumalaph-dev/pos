@@ -14,6 +14,7 @@
  */
 import type { createClient } from "@/lib/supabase/server";
 import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
+import { getAdminBranchOptions } from "@/lib/admin/branches";
 import { salesQuantity } from "@/lib/inventory";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -333,12 +334,8 @@ export async function loadSalesReport(
   profile: SalesReportProfile,
   requestedFilters: SalesReportFilters,
 ): Promise<SalesReportData> {
-  const branchesResult = await supabase
-    .from("stores")
-    .select("id, name, is_active")
-    .eq("org_id", profile.org_id)
-    .order("name");
-  const branches = (branchesResult.data ?? []) as AdminBranchOption[];
+  const branchesResult = await getAdminBranchOptions(profile.org_id);
+  const branches = branchesResult.data as AdminBranchOption[];
   const workspaceBranchId = profile.role === "admin"
     ? await getSelectedAdminBranchId(branches, profile.store_id)
     : profile.store_id;

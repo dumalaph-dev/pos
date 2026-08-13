@@ -4,9 +4,11 @@ import { headers } from "next/headers";
 import type { ReactNode } from "react";
 import { AdminShell } from "./AdminShell";
 import { REQUEST_PATH_HEADER } from "@/lib/auth/identity-headers";
-import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
+import { getAuthenticatedUser } from "@/lib/supabase/server";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
+import { getAdminBranchOptions, getAdminBranches } from "@/lib/admin/branches";
+import { getAdminConnection } from "@/lib/admin/connection";
 import { readAdminBranding } from "@/lib/admin/branding";
 import { isSubscriptionAccessCurrent } from "@/lib/trial";
 import type { OfflineProfileSnapshot } from "@/lib/offline";
@@ -32,46 +34,12 @@ type ShellProfile = {
 
 const DEFAULT_STORE_NAME = "Your Store";
 
-function formatLastSynced(value: string | null) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat("en-PH", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "Asia/Singapore",
-  }).format(date);
-}
-
-async function readConnection(orgId: string, storeId: string | null) {
-  try {
-    const supabase = await createClient();
-    let query = supabase
-      .from("devices")
-      .select("is_active, last_seen_at")
-      .eq("org_id", orgId)
-      .eq("is_active", true)
-      .order("last_seen_at", { ascending: false, nullsFirst: false })
-      .limit(1);
-    if (storeId) query = query.eq("store_id", storeId);
-    const { data } = await query.maybeSingle();
-    const lastSeenAt = typeof data?.last_seen_at === "string" ? data.last_seen_at : null;
-    const lastSeenMs = lastSeenAt ? new Date(lastSeenAt).getTime() : NaN;
-    const connected = Boolean(data?.is_active && Number.isFinite(lastSeenMs) && Date.now() - lastSeenMs <= 5 * 60 * 1000);
-    return { connected, lastSyncedLabel: formatLastSynced(lastSeenAt) };
-  } catch {
-    return { connected: false, lastSyncedLabel: null };
-  }
-}
-
-async function readBranchOptions(orgId: string, storeId: string | null, canSwitch: boolean) {
-  const supabase = await createClient();
-  let query = supabase.from("stores").select("id, name, is_active").eq("org_id", orgId).eq("is_active", true).order("name");
-  if (!canSwitch && storeId) query = query.eq("id", storeId);
-  const { data } = await query;
-  return (data ?? []) as AdminBranchOption[];
+async function readBranchOptions(orgId: string, storeId: string | null, canSwitch: boolean, includeReceiptFields: boolean) {
+  const { data } = includeReceiptFields
+    ? await getAdminBranches(orgId)
+    : await getAdminBranchOptions(orgId);
+  const visibleBranches = data.filter((branch) => branch.is_active && (canSwitch || !storeId || branch.id === storeId));
+  return visibleBranches.map(({ id, name, is_active }) => ({ id, name, is_active })) as AdminBranchOption[];
 }
 
 export default async function AdminRouteLayout({ children }: { children: ReactNode }) {
@@ -103,10 +71,11 @@ export default async function AdminRouteLayout({ children }: { children: ReactNo
   if (!profile) return children;
 
   const canSwitchBranches = profile.role === "admin";
-  const branches = await readBranchOptions(profile.org_id, profile.store_id, canSwitchBranches);
+  const receiptRoute = !requestPath || requestPath === "/admin" || requestPath === "/admin/" || requestPath === "/admin/orders" || requestPath === "/admin/sales" || requestPath === "/admin/promotions";
+  const branches = await readBranchOptions(profile.org_id, profile.store_id, canSwitchBranches, receiptRoute);
   const selectedBranchId = canSwitchBranches ? await getSelectedAdminBranchId(branches, profile.store_id) : profile.store_id;
   const branchName = selectedBranchId ? branches.find((branch) => branch.id === selectedBranchId)?.name ?? profile.stores?.name ?? DEFAULT_STORE_NAME : "All branches";
-  const connection = await readConnection(profile.org_id, selectedBranchId);
+  const connection = await getAdminConnection(user.id, profile.org_id, selectedBranchId);
   const branding = readAdminBranding(profile.organizations?.settings);
   const offlineProfile: OfflineProfileSnapshot = {
     id: user.id,
