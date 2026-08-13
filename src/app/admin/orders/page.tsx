@@ -1,9 +1,9 @@
 import Image from "next/image";
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import { AdminOrderActions } from "@/components/admin/AdminOrderActions";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
+import { OrderDialogController, type OrderReceiptData } from "@/components/admin/OrderDialogController";
 import { SignOutButton } from "@/components/SignOutButton";
 import { salesQuantity } from "@/lib/inventory";
 import { formatPeso } from "@/lib/money";
@@ -115,8 +115,7 @@ const paymentOptions: Array<{ value: PaymentFilter; label: string }> = [
   { value: "maya", label: "Maya" },
   { value: "card", label: "Card" },
 ];
-const ORDER_LIST_FIELDS = "id, order_no, store_id, cashier_id, status, discount_amount, vatable_sale, vat_amount, vat_exempt_sale, total, payment_method, created_at, reversal_of";
-const ORDER_DETAIL_FIELDS = "id, order_no, store_id, cashier_id, status, subtotal, discount_type, discount_amount, discount_ref, vatable_sale, vat_amount, vat_exempt_sale, total, payment_method, payment_ref, amount_tendered, change_due, note, created_at, created_at_device, reversal_of";
+const ORDER_LIST_FIELDS = "id, order_no, store_id, cashier_id, status, subtotal, discount_type, discount_amount, discount_ref, vatable_sale, vat_amount, vat_exempt_sale, total, payment_method, payment_ref, amount_tendered, change_due, note, created_at, created_at_device, reversal_of";
 const singaporeDateFormatter = new Intl.DateTimeFormat("en-US", {
   day: "2-digit",
   month: "2-digit",
@@ -381,26 +380,6 @@ export default async function OrdersPage({
   }
   const previousOrdersPromise = startDate ? previousOrdersQuery : null;
 
-  // Items are joined straight to the filtered orders so they run in the same
-  // round trip as the batch. range=all has no date bound, so that range keeps
-  // the bounded two-step .in() fetch below.
-  let itemsQuery = startDate
-    ? supabase
-        .from("order_items")
-        .select("order_id, product_id, name_snapshot, qty, weight_kg, unit_price_snapshot, line_total, orders!inner(status)")
-        .eq("orders.org_id", profile.org_id)
-        .gte("orders.created_at", startDate.toISOString())
-        .lt("orders.created_at", todayEnd.toISOString())
-    : null;
-  if (itemsQuery && status !== "all") itemsQuery = itemsQuery.eq("orders.status", status);
-  if (itemsQuery && payment !== "all") itemsQuery = itemsQuery.eq("orders.payment_method", payment);
-  if (itemsQuery && branchFilter) itemsQuery = itemsQuery.eq("orders.store_id", branchFilter);
-  let selectedOrderBaseQuery = selectedOrderId
-    ? supabase.from("orders").select(ORDER_DETAIL_FIELDS).eq("org_id", profile.org_id).eq("id", selectedOrderId)
-    : null;
-  if (selectedOrderBaseQuery && branchFilter) selectedOrderBaseQuery = selectedOrderBaseQuery.eq("store_id", branchFilter);
-  const selectedOrderQuery = selectedOrderBaseQuery ? selectedOrderBaseQuery.maybeSingle() : null;
-
   let productsQuery = supabase.from("products").select("id, image_url, unit").eq("org_id", profile.org_id);
   if (branchFilter) productsQuery = productsQuery.eq("store_id", branchFilter);
   productsQuery = productsQuery.limit(1000);
@@ -408,13 +387,11 @@ export default async function OrdersPage({
   if (branchFilter) cashiersQuery = cashiersQuery.eq("store_id", branchFilter);
   cashiersQuery = cashiersQuery.order("full_name").limit(200);
 
-  const [cashiersResult, productsResult, ordersResult, previousOrdersResult, itemsResult, selectedOrderResult] = await Promise.all([
+  const [cashiersResult, productsResult, ordersResult, previousOrdersResult] = await Promise.all([
     cashiersQuery,
     productsQuery,
     ordersQuery,
     previousOrdersPromise,
-    itemsQuery,
-    selectedOrderQuery,
   ]);
 
   const cashiers = (cashiersResult.data ?? []) as CashierRecord[];
@@ -433,37 +410,47 @@ export default async function OrdersPage({
     return [order.order_no, branchName, cashierName].some((value) => value.toLowerCase().includes(normalizedQuery));
   });
   const selectedOrderFromList = selectedOrderId ? filteredOrders.find((order) => order.id === selectedOrderId) ?? null : null;
-  const selectedOrderDetails = selectedOrderResult?.data as OrderRecord | null;
-  const selectedOrder = selectedOrderFromList ? selectedOrderDetails ?? selectedOrderFromList : null;
+  const selectedOrder = selectedOrderFromList;
 
   const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
   const page = Math.min(requestedPage, totalPages);
   const visibleOrderIds = new Set(filteredOrders.slice((page - 1) * pageSize, page * pageSize).map((order) => order.id));
   if (selectedOrder?.id) visibleOrderIds.add(selectedOrder.id);
 
-  const reversalResult = visibleOrderIds.size > 0
-    ? await supabase
+  // The table only needs line items and reversal badges for the rows on the
+  // current page (plus a deep-linked selected order). Fetching the whole date
+  // range here made every Orders navigation pay for unrelated receipts.
+  const reversalPromise = visibleOrderIds.size > 0
+    ? supabase
         .from("orders")
         .select("id, reversal_of, status, order_no, created_at")
         .eq("org_id", profile.org_id)
         .in("reversal_of", [...visibleOrderIds])
-    : { data: [] as ReversalRecord[], error: null };
+    : Promise.resolve({ data: [] as ReversalRecord[], error: null });
+  const orderItemsPromise = visibleOrderIds.size > 0
+    ? supabase
+        .from("order_items")
+        .select("order_id, product_id, name_snapshot, qty, weight_kg, unit_price_snapshot, line_total")
+        .in("order_id", [...visibleOrderIds])
+        .limit(2000)
+    : Promise.resolve({ data: [] as OrderItemRecord[], error: null });
+  const metricsReversalLookupPromise = loadReversedOrderIds(
+    supabase,
+    profile.org_id,
+    [...filteredOrders, ...previousOrders]
+      .filter((order) => order.status === "completed" && !order.reversal_of)
+      .map((order) => order.id),
+  );
+  const [reversalResult, orderItemsResult, metricsReversalLookup] = await Promise.all([
+    reversalPromise,
+    orderItemsPromise,
+    metricsReversalLookupPromise,
+  ]);
   const reversals = (reversalResult.data ?? []) as unknown as ReversalRecord[];
   const reversalByOrderId = new Map(reversals.map((reversal) => [reversal.reversal_of, reversal]));
 
-  let orderItems: OrderItemRecord[] = [];
-  let orderItemsError = false;
-  if (itemsResult) {
-    orderItems = (itemsResult.data ?? []) as OrderItemRecord[];
-    orderItemsError = Boolean(itemsResult.error);
-  } else if (visibleOrderIds.size > 0) {
-    const { data, error } = await supabase
-      .from("order_items")
-      .select("order_id, product_id, name_snapshot, qty, weight_kg, unit_price_snapshot, line_total")
-      .in("order_id", [...visibleOrderIds]);
-    orderItems = (data ?? []) as OrderItemRecord[];
-    orderItemsError = Boolean(error);
-  }
+  const orderItems = (orderItemsResult.data ?? []) as OrderItemRecord[];
+  const orderItemsError = Boolean(orderItemsResult.error);
 
   const itemCountByOrder = new Map<string, number>();
   const itemsByOrder = new Map<string, OrderItemRecord[]>();
@@ -474,16 +461,6 @@ export default async function OrdersPage({
     itemsByOrder.set(item.order_id, items);
   }
 
-  // The `reversals` lookup above only covers the visible page, because it feeds
-  // the per-row badges. The summary and trend span every filtered order, so
-  // they need their own reversal scope.
-  const metricsReversalLookup = await loadReversedOrderIds(
-    supabase,
-    profile.org_id,
-    [...filteredOrders, ...previousOrders]
-      .filter((order) => order.status === "completed" && !order.reversal_of)
-      .map((order) => order.id),
-  );
   const metricsReversedIds = metricsReversalLookup.reversedIds;
   const summary = orderSummary(filteredOrders, metricsReversedIds);
   const previousSummary = orderSummary(previousOrders, metricsReversedIds);
@@ -494,8 +471,56 @@ export default async function OrdersPage({
   const canManageOrders = profile.role === "admin";
   const canReprintOrders = profile.role === "admin" || profile.role === "manager";
   const returnHref = buildOrderHref({ range, status, payment, branch: branchFilter, query: searchQuery, page, pageSize });
-  const queryWarning = Boolean(branchesResult.error || cashiersResult.error || productsResult.error || ordersResult.error || previousOrdersResult?.error || orderItemsError || selectedOrderResult?.error || reversalResult.error || metricsReversalLookup.failed);
+  const queryWarning = Boolean(branchesResult.error || cashiersResult.error || productsResult.error || ordersResult.error || previousOrdersResult?.error || orderItemsError || reversalResult.error || metricsReversalLookup.failed);
   const visibleOrders = filteredOrders.slice((page - 1) * pageSize, page * pageSize);
+  const receiptOrders = selectedOrder && !visibleOrders.some((order) => order.id === selectedOrder.id)
+    ? [selectedOrder, ...visibleOrders]
+    : visibleOrders;
+  const orderReceipts: OrderReceiptData[] = receiptOrders.map((order) => {
+    const branch = branchById.get(order.store_id);
+    return {
+      order: {
+        id: order.id,
+        order_no: order.order_no,
+        status: order.status,
+        subtotal: Number(order.subtotal),
+        discount_amount: Number(order.discount_amount),
+        discount_ref: order.discount_ref,
+        vatable_sale: Number(order.vatable_sale ?? 0),
+        vat_amount: Number(order.vat_amount),
+        vat_exempt_sale: Number(order.vat_exempt_sale ?? 0),
+        total: Number(order.total),
+        payment_method: order.payment_method,
+        payment_ref: order.payment_ref,
+        amount_tendered: order.amount_tendered == null ? null : Number(order.amount_tendered),
+        change_due: order.change_due == null ? null : Number(order.change_due),
+        note: order.note,
+        created_at: order.created_at,
+        created_at_device: order.created_at_device || order.created_at,
+      },
+      items: (itemsByOrder.get(order.id) ?? []).map((item) => ({
+        order_id: item.order_id,
+        product_id: item.product_id,
+        name_snapshot: item.name_snapshot,
+        qty: Number(item.qty),
+        weight_kg: item.weight_kg == null ? null : Number(item.weight_kg),
+        unit: productById.get(item.product_id ?? "")?.unit ?? (item.weight_kg ? "kg" : "item"),
+        line_total: Number(item.line_total),
+      })),
+      branch: {
+        name: branch?.name ?? "Unknown branch",
+        address: branch?.address ?? null,
+        tin: branch?.tin ?? null,
+        vatRegistered: Boolean(branch?.vat_registered),
+        vatRate: Number(branch?.vat_rate ?? 0.12),
+      },
+      cashierName: cashierById.get(order.cashier_id)?.full_name ?? "Unknown cashier",
+      returnTo: returnHref,
+      canManage: canManageOrders,
+      canReprint: canReprintOrders,
+      reversal: reversalByOrderId.get(order.id) ?? null,
+    };
+  });
   const exportParams = new URLSearchParams({ range });
   if (branchFilter) exportParams.set("branch", branchFilter);
   if (status !== "all") exportParams.set("status", status);
@@ -550,7 +575,11 @@ export default async function OrdersPage({
 
           <section aria-labelledby="orders-table-heading" className="admin-panel mt-4 min-w-0 p-5">
             <div className="admin-panel__header"><div><p className="admin-panel__eyebrow">Live order register</p><h2 id="orders-table-heading" className="admin-panel__title">All orders</h2><p className="admin-panel__subtitle">{filteredOrders.length} matching order{filteredOrders.length === 1 ? "" : "s"} · {formatDateRange(startDate, todayEnd)}</p></div><span className="rounded-pill bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary">RLS-scoped records</span></div>
-            {filteredOrders.length === 0 ? <EmptyOrders /> : selectedOrder ? <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.42fr)]"><OrdersTable orders={visibleOrders} selectedOrderId={selectedOrder.id} range={range} status={status} payment={payment} branch={branchFilter} query={searchQuery} page={page} pageSize={pageSize} branchById={branchById} cashierById={cashierById} itemCountByOrder={itemCountByOrder} itemsByOrder={itemsByOrder} productById={productById} totalOrders={filteredOrders.length} totalPages={totalPages} /><OrderDetail order={selectedOrder} items={itemsByOrder.get(selectedOrder.id) ?? []} productById={productById} branchName={branchById.get(selectedOrder.store_id)?.name ?? "Unknown branch"} branchAddress={branchById.get(selectedOrder.store_id)?.address ?? null} branchTin={branchById.get(selectedOrder.store_id)?.tin ?? null} branchVatRegistered={Boolean(branchById.get(selectedOrder.store_id)?.vat_registered)} branchVatRate={Number(branchById.get(selectedOrder.store_id)?.vat_rate ?? 0.12)} cashierName={cashierById.get(selectedOrder.cashier_id)?.full_name ?? "Unknown cashier"} clearHref={returnHref} returnTo={returnHref} canManage={canManageOrders} canReprint={canReprintOrders} reversal={reversalByOrderId.get(selectedOrder.id) ?? null} /></div> : <OrdersTable orders={visibleOrders} selectedOrderId={null} range={range} status={status} payment={payment} branch={branchFilter} query={searchQuery} page={page} pageSize={pageSize} branchById={branchById} cashierById={cashierById} itemCountByOrder={itemCountByOrder} itemsByOrder={itemsByOrder} productById={productById} totalOrders={filteredOrders.length} totalPages={totalPages} />}
+             {filteredOrders.length === 0 ? <EmptyOrders /> : (
+               <OrderDialogController key={selectedOrder?.id ?? "orders-list"} initialOrderId={selectedOrder?.id ?? null} receipts={orderReceipts}>
+                 <OrdersTable orders={visibleOrders} selectedOrderId={selectedOrder?.id ?? null} range={range} status={status} payment={payment} branch={branchFilter} query={searchQuery} page={page} pageSize={pageSize} branchById={branchById} cashierById={cashierById} itemCountByOrder={itemCountByOrder} itemsByOrder={itemsByOrder} productById={productById} totalOrders={filteredOrders.length} totalPages={totalPages} />
+               </OrderDialogController>
+             )}
           </section>
       </div>
     </main>
@@ -565,7 +594,7 @@ function OrderMetric({ label, value, trend, comparisonLabel, values, tone, icon,
 function OrdersTable({ orders, selectedOrderId, range, status, payment, branch, query, page, pageSize, branchById, cashierById, itemCountByOrder, itemsByOrder, productById, totalOrders, totalPages }: { orders: OrderRecord[]; selectedOrderId: string | null; range: OrderRange; status: OrderStatusFilter; payment: PaymentFilter; branch: string; query: string; page: number; pageSize: number; branchById: Map<string, BranchRecord>; cashierById: Map<string, CashierRecord>; itemCountByOrder: Map<string, number>; itemsByOrder: Map<string, OrderItemRecord[]>; productById: Map<string, ProductRecord>; totalOrders: number; totalPages: number }) {
   const firstRow = totalOrders === 0 ? 0 : (page - 1) * pageSize + 1;
   const lastRow = Math.min(page * pageSize, totalOrders);
-  return <div className="min-w-0"><div className="overflow-x-auto"><table className="admin-list-table min-w-[1050px]"><thead><tr><th>Order no.</th><th>Date &amp; time</th><th>Cashier</th><th>Branch</th><th>Order items</th><th>Amount</th><th>Status</th><th>Payment</th><th>Actions</th></tr></thead><tbody>{orders.map((order) => { const items = itemsByOrder.get(order.id) ?? []; const firstItem = items[0]; const itemCount = itemCountByOrder.get(order.id) ?? 0; const href = buildOrderHref({ range, status, payment, branch, query, page, pageSize, order: order.id }); return <tr key={order.id} className={selectedOrderId === order.id ? "bg-primary-soft/55" : undefined}><td><Link href={href} className="font-extrabold text-primary hover:underline">{order.order_no}</Link><small className="mt-1 block text-[10px] text-ink-muted">{cashierById.get(order.cashier_id)?.full_name ?? "Cashier unavailable"}</small></td><td className="whitespace-nowrap text-ink-muted">{formatDateTime(order.created_at)}</td><td className="whitespace-nowrap">{cashierById.get(order.cashier_id)?.full_name ?? "Unknown cashier"}</td><td className="whitespace-nowrap">{branchById.get(order.store_id)?.name ?? "Unknown branch"}</td><td><OrderItemPreview item={firstItem} itemCount={itemCount} productById={productById} /></td><td className="tnums whitespace-nowrap font-extrabold">{displayPeso(order.total)}</td><td><span className={`inline-flex rounded-pill px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${statusClass(order.status)}`}>{statusLabel(order.status)}</span></td><td className="whitespace-nowrap">{paymentLabel(order.payment_method)}</td><td><Link href={href} aria-label={`View order ${order.order_no}`} className="grid h-8 w-8 place-items-center rounded-btn border border-line bg-surface text-primary transition hover:bg-primary-soft"><AdminIcon name="eye" size={15} /></Link></td></tr>; })}</tbody></table></div><div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4"><span className="text-[10px] font-semibold text-ink-muted">Showing {firstRow} to {lastRow} of {totalOrders} orders</span><div className="flex items-center gap-1"><PaginationLink href={page > 1 ? buildOrderHref({ range, status, payment, branch, query, page: page - 1, pageSize }) : undefined} label="Previous" symbol="‹" />{Array.from({ length: Math.min(totalPages, 5) }, (_, index) => index + 1).map((pageNumber) => <Link key={pageNumber} href={buildOrderHref({ range, status, payment, branch, query, page: pageNumber, pageSize })} className={`grid h-8 min-w-8 place-items-center rounded-btn px-2 text-[10px] font-extrabold ${pageNumber === page ? "bg-primary text-primary-fg" : "border border-line bg-surface text-primary hover:bg-primary-soft"}`}>{pageNumber}</Link>)}{totalPages > 5 && <span className="grid h-8 min-w-8 place-items-center text-[10px] text-ink-muted">…</span>}<PaginationLink href={page < totalPages ? buildOrderHref({ range, status, payment, branch, query, page: page + 1, pageSize }) : undefined} label="Next" symbol="›" /></div><OrderPageSizeForm range={range} status={status} payment={payment} branch={branch} query={query} pageSize={pageSize} /></div></div>;
+  return <div className="min-w-0"><div className="overflow-x-auto"><table className="admin-list-table min-w-[1050px]"><thead><tr><th>Order no.</th><th>Date &amp; time</th><th>Cashier</th><th>Branch</th><th>Order items</th><th>Amount</th><th>Status</th><th>Payment</th><th>Actions</th></tr></thead><tbody>{orders.map((order) => { const items = itemsByOrder.get(order.id) ?? []; const firstItem = items[0]; const itemCount = itemCountByOrder.get(order.id) ?? 0; const href = buildOrderHref({ range, status, payment, branch, query, page, pageSize, order: order.id }); return <tr key={order.id} className={selectedOrderId === order.id ? "bg-primary-soft/55" : undefined}><td><Link href={href} prefetch={false} data-order-trigger={order.id} aria-haspopup="dialog" className="font-extrabold text-primary hover:underline">{order.order_no}</Link><small className="mt-1 block text-[10px] text-ink-muted">{cashierById.get(order.cashier_id)?.full_name ?? "Cashier unavailable"}</small></td><td className="whitespace-nowrap text-ink-muted">{formatDateTime(order.created_at)}</td><td className="whitespace-nowrap">{cashierById.get(order.cashier_id)?.full_name ?? "Unknown cashier"}</td><td className="whitespace-nowrap">{branchById.get(order.store_id)?.name ?? "Unknown branch"}</td><td><OrderItemPreview item={firstItem} itemCount={itemCount} productById={productById} /></td><td className="tnums whitespace-nowrap font-extrabold">{displayPeso(order.total)}</td><td><span className={`inline-flex rounded-pill px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${statusClass(order.status)}`}>{statusLabel(order.status)}</span></td><td className="whitespace-nowrap">{paymentLabel(order.payment_method)}</td><td><Link href={href} prefetch={false} data-order-trigger={order.id} aria-haspopup="dialog" aria-label={`View order ${order.order_no}`} className="grid h-8 w-8 place-items-center rounded-btn border border-line bg-surface text-primary transition hover:bg-primary-soft"><AdminIcon name="eye" size={15} /></Link></td></tr>; })}</tbody></table></div><div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4"><span className="text-[10px] font-semibold text-ink-muted">Showing {firstRow} to {lastRow} of {totalOrders} orders</span><div className="flex items-center gap-1"><PaginationLink href={page > 1 ? buildOrderHref({ range, status, payment, branch, query, page: page - 1, pageSize }) : undefined} label="Previous" symbol="‹" />{Array.from({ length: Math.min(totalPages, 5) }, (_, index) => index + 1).map((pageNumber) => <Link key={pageNumber} href={buildOrderHref({ range, status, payment, branch, query, page: pageNumber, pageSize })} className={`grid h-8 min-w-8 place-items-center rounded-btn px-2 text-[10px] font-extrabold ${pageNumber === page ? "bg-primary text-primary-fg" : "border border-line bg-surface text-primary hover:bg-primary-soft"}`}>{pageNumber}</Link>)}{totalPages > 5 && <span className="grid h-8 min-w-8 place-items-center text-[10px] text-ink-muted">…</span>}<PaginationLink href={page < totalPages ? buildOrderHref({ range, status, payment, branch, query, page: page + 1, pageSize }) : undefined} label="Next" symbol="›" /></div><OrderPageSizeForm range={range} status={status} payment={payment} branch={branch} query={query} pageSize={pageSize} /></div></div>;
 }
 
 function OrderItemPreview({ item, itemCount, productById }: { item: OrderItemRecord | undefined; itemCount: number; productById: Map<string, ProductRecord> }) {
@@ -580,131 +609,6 @@ function PaginationLink({ href, label, symbol }: { href?: string; label: string;
 
 function OrderPageSizeForm({ range, status, payment, branch, query, pageSize }: { range: OrderRange; status: OrderStatusFilter; payment: PaymentFilter; branch: string; query: string; pageSize: number }) {
   return <form action="/admin/orders" method="get" className="flex items-center gap-2"><input type="hidden" name="range" value={range} /><input type="hidden" name="status" value={status} /><input type="hidden" name="payment" value={payment} /><input type="hidden" name="branch" value={branch} /><input type="hidden" name="q" value={query} /><label htmlFor="orders-page-size" className="text-[10px] font-semibold text-ink-muted">Rows per page</label><select id="orders-page-size" name="pageSize" defaultValue={String(pageSize)} className="inventory-input min-h-8 w-auto py-1 text-[10px]"><option value="10">10</option><option value="25">25</option><option value="50">50</option></select><button type="submit" className="rounded-btn border border-line bg-surface px-2 py-1.5 text-[10px] font-extrabold text-primary hover:bg-primary-soft">Apply</button></form>;
-}
-
-function OrderDetail({
-  order,
-  items,
-  productById,
-  branchName,
-  branchAddress,
-  branchTin,
-  branchVatRegistered,
-  branchVatRate,
-  cashierName,
-  clearHref,
-  returnTo,
-  canManage,
-  canReprint,
-  reversal,
-}: {
-  order: OrderRecord;
-  items: OrderItemRecord[];
-  productById: Map<string, ProductRecord>;
-  branchName: string;
-  branchAddress: string | null;
-  branchTin: string | null;
-  branchVatRegistered: boolean;
-  branchVatRate: number;
-  cashierName: string;
-  clearHref: string;
-  returnTo: string;
-  canManage: boolean;
-  canReprint: boolean;
-  reversal: ReversalRecord | null;
-}) {
-  return (
-    <aside id="order-detail" aria-labelledby="order-detail-heading" className="admin-panel min-w-0 self-start p-5 xl:sticky xl:top-4">
-      <div className="admin-panel__header">
-        <div>
-          <p className="admin-panel__eyebrow">Receipt view</p>
-          <h2 id="order-detail-heading" className="admin-panel__title">{order.order_no}</h2>
-          <p className="admin-panel__subtitle">{formatDateTime(order.created_at)}</p>
-        </div>
-        <Link href={clearHref} className="grid h-8 w-8 place-items-center rounded-full bg-secondary text-primary transition hover:bg-secondary-hover" aria-label="Close order detail">&times;</Link>
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-b border-line pb-4">
-        <span className={`inline-flex rounded-pill px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${statusClass(order.status)}`}>{statusLabel(order.status)}</span>
-        <span className="text-xs font-extrabold text-ink">{paymentLabel(order.payment_method)}</span>
-      </div>
-
-      {reversal && (
-        <div className="mt-4 rounded-btn border border-warning/30 bg-warning/10 px-3 py-2.5 text-xs leading-5 text-ink">
-          <strong className="block text-[10px] uppercase tracking-[0.1em] text-warning">Reversal recorded</strong>
-          <span className="mt-1 block">{statusLabel(reversal.status)} as {reversal.order_no} on {formatDateTime(reversal.created_at)}.</span>
-        </div>
-      )}
-
-      <div className="mt-4 grid gap-2 rounded-btn bg-surface-raised p-3 text-xs">
-        <ReceiptMeta label="Branch" value={branchName} />
-        <ReceiptMeta label="Cashier" value={cashierName} />
-        {order.payment_ref && <ReceiptMeta label="Payment ref" value={order.payment_ref} />}
-      </div>
-
-      <div className="mt-5">
-        <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted">Items</p>
-        {items.length === 0 ? <p className="mt-3 rounded-btn border border-dashed border-line-strong px-3 py-4 text-center text-xs text-ink-muted">Item details are unavailable for this order.</p> : <div className="mt-2 divide-y divide-line/70">{items.map((item, index) => <div key={`${item.order_id}-${index}`} className="flex items-start justify-between gap-3 py-3"><span className="min-w-0"><strong className="block truncate text-xs font-extrabold text-ink">{item.name_snapshot}</strong><small className="mt-1 block text-[10px] text-ink-muted">{formatQuantity(salesQuantity(item))} {productById.get(item.product_id ?? "")?.unit ?? (item.weight_kg ? "kg" : "item")}</small></span><strong className="tnums whitespace-nowrap text-xs font-extrabold text-ink">{displayPeso(item.line_total)}</strong></div>)}</div>}
-      </div>
-
-      <div className="mt-4 border-t border-line pt-4">
-        <ReceiptTotal label="Subtotal" value={displayPeso(order.subtotal)} />
-        <ReceiptTotal label="Discount" value={displayPeso(order.discount_amount)} muted />
-        <ReceiptTotal label="VAT" value={displayPeso(order.vat_amount)} muted />
-        <div className="mt-3 flex items-center justify-between border-t border-line pt-3"><span className="text-sm font-extrabold text-ink">Total</span><strong className="tnums text-xl font-extrabold text-primary">{displayPeso(order.total)}</strong></div>
-      </div>
-
-      {(order.amount_tendered != null || order.change_due != null || order.note) && <div className="mt-4 border-t border-line pt-4">
-        {order.amount_tendered != null && <ReceiptTotal label="Amount tendered" value={displayPeso(order.amount_tendered)} />}
-        {order.change_due != null && <ReceiptTotal label="Change due" value={displayPeso(order.change_due)} />}
-        {order.note && <div className="mt-3 rounded-btn bg-secondary/60 px-3 py-2.5 text-xs leading-5 text-ink"><strong className="block text-[10px] uppercase tracking-[0.1em] text-ink-muted">Order note</strong><span className="mt-1 block">{order.note}</span></div>}
-      </div>}
-
-      <AdminOrderActions
-        order={{
-          id: order.id,
-          order_no: order.order_no,
-          status: order.status,
-          subtotal: Number(order.subtotal),
-          discount_amount: Number(order.discount_amount),
-          discount_ref: order.discount_ref,
-          vatable_sale: Number(order.vatable_sale ?? 0),
-          vat_amount: Number(order.vat_amount),
-          vat_exempt_sale: Number(order.vat_exempt_sale ?? 0),
-          total: Number(order.total),
-          payment_method: order.payment_method,
-          payment_ref: order.payment_ref,
-          amount_tendered: order.amount_tendered,
-          change_due: order.change_due,
-          created_at_device: order.created_at_device || order.created_at,
-        }}
-        items={items.map((item) => ({
-          name_snapshot: item.name_snapshot,
-          qty: Number(item.qty),
-          weight_kg: item.weight_kg === null ? null : Number(item.weight_kg),
-          line_total: Number(item.line_total),
-        }))}
-        branchName={branchName}
-        branchAddress={branchAddress}
-        branchTin={branchTin}
-        branchVatRegistered={branchVatRegistered}
-        branchVatRate={branchVatRate}
-        cashierName={cashierName}
-        returnTo={returnTo}
-        canManage={canManage}
-        canReprint={canReprint}
-        hasReversal={Boolean(reversal)}
-      />
-    </aside>
-  );
-}
-
-function ReceiptMeta({ label, value }: { label: string; value: string }) {
-  return <div className="flex items-start justify-between gap-3"><span className="text-ink-muted">{label}</span><strong className="max-w-[62%] text-right font-extrabold text-ink">{value}</strong></div>;
-}
-
-function ReceiptTotal({ label, value, muted = false }: { label: string; value: string; muted?: boolean }) {
-  return <div className={`flex items-center justify-between py-1 text-xs ${muted ? "text-ink-muted" : "text-ink"}`}><span>{label}</span><strong className="tnums font-extrabold">{value}</strong></div>;
 }
 
 function OrderFilterField({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
+import { ShiftDialog } from "@/components/admin/ShiftDialog";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
@@ -284,13 +285,13 @@ export default async function ShiftsPage({
           </form>
         </section>
 
-        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+        <div className="mt-4 space-y-4">
           <section aria-labelledby="shift-list-heading" className="admin-panel min-w-0 p-5">
             <div className="admin-panel__header">
               <div>
                 <p className="admin-panel__eyebrow">Till register</p>
                 <h2 id="shift-list-heading" className="admin-panel__title">Shifts</h2>
-                <p className="admin-panel__subtitle">{readings.length} matching shift{readings.length === 1 ? "" : "s"}. Select one to read it.</p>
+                <p className="admin-panel__subtitle">{readings.length} matching shift{readings.length === 1 ? "" : "s"}. Select one to open its reading.</p>
               </div>
             </div>
             {readings.length === 0 ? (
@@ -310,7 +311,14 @@ export default async function ShiftsPage({
                       return (
                         <tr key={reading.shiftId}>
                           <td>
-                            <Link href={shiftsHref({ from, to, status, shift: reading.shiftId })} className="font-extrabold text-primary hover:underline">{shiftLabel(reading)}</Link>
+                            <Link
+                              href={shiftsHref({ from, to, status, shift: reading.shiftId })}
+                              className="font-extrabold text-primary hover:underline"
+                              aria-haspopup="dialog"
+                              aria-label={`Open ${reading.isOpen ? "live X-reading" : "closed shift"} ${shiftLabel(reading)}`}
+                            >
+                              {shiftLabel(reading)}
+                            </Link>
                             <small className="mt-1 block text-[10px] text-ink-muted">{reading.isOpen ? "Open" : "Closed"}</small>
                           </td>
                           <td className="whitespace-nowrap">{staffById.get(reading.cashierId)?.full_name ?? "Unknown"}</td>
@@ -342,58 +350,54 @@ export default async function ShiftsPage({
             )}
           </section>
 
-          <div className="min-w-0 space-y-4">
-            {selectedReading ? (
-              <ShiftDetail
-                reading={selectedReading}
-                zReading={selectedZReading}
-                cashierName={staffById.get(selectedReading.cashierId)?.full_name ?? "Unknown"}
-                branchName={branchById.get(selectedReading.storeId)?.name ?? "Unknown branch"}
-                canWrite={canWrite}
-                returnTo={returnTo}
-                closeHref={shiftsHref({ from, to, status })}
-              />
-            ) : (
-              <section className="admin-panel self-start p-5">
-                <p className="admin-panel__eyebrow">Reading</p>
-                <h2 className="admin-panel__title">Select a shift</h2>
-                <p className="admin-panel__subtitle mt-2">
-                  Open a shift from the register to see its full reading: sales, tender mix, reversals, and the cash drawer reconciliation. A closed shift can then be sealed as a Z-reading.
-                </p>
-              </section>
-            )}
-
-            <section aria-labelledby="z-archive-heading" className="admin-panel min-w-0 p-5">
-              <div className="admin-panel__header">
-                <div>
-                  <p className="admin-panel__eyebrow">Sealed archive</p>
-                  <h2 id="z-archive-heading" className="admin-panel__title">Z-readings</h2>
-                  <p className="admin-panel__subtitle">Append-only. A Z is a snapshot and never changes after it is taken.</p>
-                </div>
+          <section aria-labelledby="z-archive-heading" className="admin-panel min-w-0 p-5">
+            <div className="admin-panel__header">
+              <div>
+                <p className="admin-panel__eyebrow">Sealed archive</p>
+                <h2 id="z-archive-heading" className="admin-panel__title">Z-readings</h2>
+                <p className="admin-panel__subtitle">Append-only. A Z is a snapshot and never changes after it is taken.</p>
               </div>
-              {zReadings.length === 0 ? (
-                <ShiftsEmpty label="No Z-readings yet" detail="Close a shift, then generate its Z-reading to start the archive." />
-              ) : (
-                <ul className="mt-4 divide-y divide-line/70">
-                  {zReadings.slice(0, 12).map((reading) => (
-                    <li key={reading.id} className="flex items-center justify-between gap-3 py-3">
-                      <span className="min-w-0">
-                        <Link href={shiftsHref({ from, to, status, shift: reading.shift_id })} className="block text-xs font-extrabold text-primary hover:underline">
-                          Z #{reading.z_number} · {branchById.get(reading.store_id)?.name ?? "Unknown branch"}
-                        </Link>
-                        <small className="mt-1 block text-[10px] text-ink-muted">{formatBusinessDate(reading.business_date)} · grand total {displayPeso(reading.grand_total_after)}</small>
-                      </span>
-                      <span className="text-right">
-                        <strong className="tnums block text-xs font-extrabold text-ink">{displayPeso(reading.net_sales)}</strong>
-                        <small className={`tnums mt-1 block text-[10px] ${reading.cash_variance === 0 ? "text-ink-muted" : "text-danger"}`}>{varianceLabel(reading.cash_variance, displayPeso)}</small>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-          </div>
+            </div>
+            {zReadings.length === 0 ? (
+              <ShiftsEmpty label="No Z-readings yet" detail="Close a shift, then generate its Z-reading to start the archive." />
+            ) : (
+              <ul className="mt-4 divide-y divide-line/70">
+                {zReadings.slice(0, 12).map((reading) => (
+                  <li key={reading.id} className="flex items-center justify-between gap-3 py-3">
+                    <span className="min-w-0">
+                      <Link
+                        href={shiftsHref({ from, to, status, shift: reading.shift_id })}
+                        className="block text-xs font-extrabold text-primary hover:underline"
+                        aria-haspopup="dialog"
+                      >
+                        Z #{reading.z_number} · {branchById.get(reading.store_id)?.name ?? "Unknown branch"}
+                      </Link>
+                      <small className="mt-1 block text-[10px] text-ink-muted">{formatBusinessDate(reading.business_date)} · grand total {displayPeso(reading.grand_total_after)}</small>
+                    </span>
+                    <span className="text-right">
+                      <strong className="tnums block text-xs font-extrabold text-ink">{displayPeso(reading.net_sales)}</strong>
+                      <small className={`tnums mt-1 block text-[10px] ${reading.cash_variance === 0 ? "text-ink-muted" : "text-danger"}`}>{varianceLabel(reading.cash_variance, displayPeso)}</small>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </div>
+
+        {selectedReading ? (
+          <ShiftDialog closeHref={returnTo} titleId="shift-detail-heading">
+            <ShiftDetail
+              reading={selectedReading}
+              zReading={selectedZReading}
+              cashierName={staffById.get(selectedReading.cashierId)?.full_name ?? "Unknown"}
+              branchName={branchById.get(selectedReading.storeId)?.name ?? "Unknown branch"}
+              canWrite={canWrite}
+              returnTo={returnTo}
+              closeHref={returnTo}
+            />
+          </ShiftDialog>
+        ) : null}
       </div>
     </main>
   );
@@ -447,17 +451,19 @@ function ShiftDetail({
   const sealedDrift = zReading ? zReading.net_sales !== reading.netSales : false;
 
   return (
-    <section aria-labelledby="shift-detail-heading" className="admin-panel self-start p-5">
+    <section aria-labelledby="shift-detail-heading" className="admin-panel p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="admin-panel__eyebrow">{reading.isOpen ? "X-reading · live" : zReading ? `Z-reading #${zReading.z_number}` : "Closed shift"}</p>
+          <p className={`admin-panel__eyebrow ${reading.isOpen ? "text-warning" : "text-success"}`}>
+            {reading.isOpen ? "X-reading · live" : "Closed shift"}
+          </p>
           <h2 id="shift-detail-heading" className="admin-panel__title truncate">{shiftLabel(reading)}</h2>
           <p className="admin-panel__subtitle">{cashierName} · {branchName}</p>
         </div>
-        <Link href={closeHref} className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-secondary text-primary transition hover:bg-secondary-hover" aria-label="Close shift reading">&times;</Link>
+        <Link replace href={closeHref} data-shift-dialog-autofocus className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-secondary text-primary transition hover:bg-secondary-hover" aria-label="Close shift reading">&times;</Link>
       </div>
 
-      <p className="mt-3 text-xs text-ink-muted">
+      <p id="shift-detail-meta" className="mt-3 text-xs text-ink-muted">
         {formatShiftTime(reading.openedAt)} → {reading.closedAt ? formatShiftTime(reading.closedAt) : "still open"} · {formatShiftDuration(reading.openedAt, reading.closedAt)}
       </p>
 
