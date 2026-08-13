@@ -6,6 +6,7 @@ import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import { getAdminProfile } from "@/lib/admin/profile";
+import { getAdminBranchOptions } from "@/lib/admin/branches";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { createExpense, updateExpense } from "./actions";
 
@@ -143,7 +144,7 @@ export default async function ExpensesPage({
   if (categoryFilter) expensesQuery = expensesQuery.eq("category", categoryFilter);
 
   const [branchesResult, expensesResult] = await Promise.all([
-    supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name"),
+    getAdminBranchOptions(profile.org_id),
     expensesQuery,
   ]);
 

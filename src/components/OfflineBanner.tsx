@@ -25,13 +25,17 @@ export default function OfflineBanner() {
   if (typeof window !== "undefined" && window.location.pathname === "/display") return null;
   if (!frameworkOffline && !browserOffline) return null;
 
+  const message = browserOffline
+    ? "Offline mode · sales save on this device and sync when the connection returns."
+    : "Connection unavailable · local changes stay on this device and sync when the connection returns.";
+
   return (
     <div
       role="status"
       aria-live="polite"
       className="fixed bottom-4 left-4 z-[55] max-w-[min(22rem,calc(100vw-2rem))] rounded-card border border-warning/35 bg-surface px-4 py-3 text-xs font-semibold text-ink shadow-[var(--shadow-pop)]"
     >
-      Offline mode · sales save on this device and sync when the connection returns.
+      {message}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
 import { getAdminProfile } from "@/lib/admin/profile";
+import { getAdminBranchOptions } from "@/lib/admin/branches";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { createCustomer, updateCustomer } from "./actions";
 
@@ -89,7 +90,7 @@ export default async function CustomersPage({
   if (!profile) return <CustomersProfileMissing />;
 
   const [branchesResult, customersResult] = await Promise.all([
-    supabase.from("stores").select("id, name, is_active").eq("org_id", profile.org_id).order("name"),
+    getAdminBranchOptions(profile.org_id),
     supabase
       .from("customers")
       .select("id, store_id, name, phone, email, address, notes, is_active, created_at, updated_at")

@@ -7,6 +7,7 @@ import { ShiftDialogController, type ShiftDialogRecord, type ShiftZReadingRecord
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
+import { getAdminBranchOptions } from "@/lib/admin/branches";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import {
@@ -136,12 +137,8 @@ export default async function ShiftsPage({
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile) return <ShiftsProfileMissing />;
 
-  const { data: branchRows } = await supabase
-    .from("stores")
-    .select("id, name, is_active")
-    .eq("org_id", profile.org_id)
-    .order("name");
-  const branches = (branchRows ?? []) as BranchRecord[];
+  const branchesResult = await getAdminBranchOptions(profile.org_id);
+  const branches = branchesResult.data as BranchRecord[];
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
   const canSwitchBranches = profile.role === "admin";
   const selectedBranchId = canSwitchBranches

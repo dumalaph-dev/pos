@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent, ReactNode } from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toCentavos } from "@/lib/money";
 import {
   createAdminCacheScopeKey,
@@ -78,18 +78,30 @@ export function AdminMutationForm({
   className?: string;
 }) {
   const [state, setState] = useState<MutationFormState>({ phase: "idle" });
+  const submitLockRef = useRef(false);
+  const queuedSignatureRef = useRef<string | null>(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (state.phase === "saving") return;
+    if (submitLockRef.current || state.phase === "saving") return;
 
+    submitLockRef.current = true;
     setState({ phase: "saving" });
     try {
       const payload = readPayload(kind, new FormData(event.currentTarget));
       if (payload.storeId !== scope.storeId) {
         throw new Error("The selected branch changed. Refresh the page before saving this change.");
       }
+      const payloadSignature = JSON.stringify(payload);
+      if (queuedSignatureRef.current === payloadSignature) {
+        setState({
+          phase: "queued",
+          message: "This exact change was already submitted from this form. Edit a value before saving it again.",
+        });
+        return;
+      }
       await enqueueAdminMutation(scope, kind, payload);
+      queuedSignatureRef.current = payloadSignature;
       const online = typeof navigator === "undefined" || navigator.onLine;
       setState({
         phase: "queued",
@@ -105,12 +117,24 @@ export function AdminMutationForm({
         phase: "error",
         message: error instanceof Error ? error.message : "The change could not be saved on this device.",
       });
+    } finally {
+      submitLockRef.current = false;
     }
   }
 
   return (
     <form
       onSubmit={handleSubmit}
+      onClickCapture={(event) => {
+        if (!submitLockRef.current) return;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onChangeCapture={() => {
+        if (submitLockRef.current) return;
+        queuedSignatureRef.current = null;
+        setState((current) => current.phase === "queued" ? { phase: "idle" } : current);
+      }}
       data-admin-mutation-form={kind}
       aria-busy={state.phase === "saving"}
       className={className}

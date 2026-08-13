@@ -4,6 +4,7 @@ import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { SignOutButton } from "@/components/SignOutButton";
 import { getAdminProfile } from "@/lib/admin/profile";
+import { getAdminBranchOptions } from "@/lib/admin/branches";
 import { formatBillingDate, getBillingPlan, isBillingPeriodCurrent, normalizeSubscriptionStatus, subscriptionStatusLabel, type BillingPlan, type SubscriptionStatus } from "@/lib/billing";
 import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
@@ -79,8 +80,8 @@ export default async function BillingPage() {
     }
   }
 
-  const branchesResult = await supabase.from("stores").select("id, is_active").eq("org_id", profile.org_id);
-  const branches = (branchesResult.data ?? []) as BranchRecord[];
+  const branchesResult = await getAdminBranchOptions(profile.org_id);
+  const branches = branchesResult.data as BranchRecord[];
   const activeBranches = branches.filter((branch) => branch.is_active).length;
   const status = subscriptionFieldsAvailable ? normalizeSubscriptionStatus(organization?.subscription_status) : null;
   const currentPeriodEnd = organization?.subscription_current_period_end ?? null;

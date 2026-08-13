@@ -7,6 +7,7 @@ import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
 import type { OrderReceiptData } from "@/lib/admin/order-receipts";
 import { getAdminProfile } from "@/lib/admin/profile";
+import { getAdminBranches } from "@/lib/admin/branches";
 import { loadReversedOrderIds, selectNetSales } from "@/lib/admin/sales-reports";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 
@@ -178,36 +179,20 @@ export default async function PromotionsPage({
     .limit(5000);
   if (startDate) ordersQuery = ordersQuery.gte("created_at", startDate.toISOString()).lt("created_at", todayEnd.toISOString());
 
-  const itemsQuery = supabase
-    .from("order_items")
-    .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status, reversal_of, org_id, created_at)")
-    .eq("orders.org_id", profile.org_id)
-    .eq("orders.status", "completed")
-    .is("orders.reversal_of", null)
-    .limit(10000);
-  if (startDate) itemsQuery.gte("orders.created_at", startDate.toISOString()).lt("orders.created_at", todayEnd.toISOString());
-
-  const branchesQuery = supabase.from("stores").select("id, name, address, tin, vat_registered, vat_rate, is_active").eq("org_id", profile.org_id).order("name");
   const productsQuery = supabase.from("products").select("id, unit").eq("org_id", profile.org_id).limit(3000);
   const cashiersQuery = supabase.from("profiles").select("id, full_name, role").eq("org_id", profile.org_id).order("full_name").limit(300);
-  const [branchesResult, ordersResult, itemsResult, productsResult, cashiersResult] = await Promise.all([
-    branchesQuery,
+  const [branchesResult, ordersResult, productsResult, cashiersResult] = await Promise.all([
+    getAdminBranches(profile.org_id),
     ordersQuery,
-    itemsQuery,
     productsQuery,
     cashiersQuery,
   ]);
-  const branches = (branchesResult.data ?? []) as BranchRecord[];
+  const branches = branchesResult.data as BranchRecord[];
   const orders = (ordersResult.data ?? []) as OrderRecord[];
+  const queryWarning = Boolean(branchesResult.error || ordersResult.error || productsResult.error || cashiersResult.error);
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
   const productById = new Map(((productsResult.data ?? []) as ProductRecord[]).map((product) => [product.id, product]));
   const cashierById = new Map(((cashiersResult.data ?? []) as CashierRecord[]).map((cashier) => [cashier.id, cashier]));
-  const itemsByOrder = new Map<string, OrderItemRecord[]>();
-  for (const item of (itemsResult.data ?? []) as OrderItemRecord[]) {
-    const items = itemsByOrder.get(item.order_id) ?? [];
-    items.push(item);
-    itemsByOrder.set(item.order_id, items);
-  }
   // A discount on a sale that was later voided was never actually given, so the
   // reversed originals are dropped before any total is computed (0020).
   const reversalLookup = await loadReversedOrderIds(supabase, profile.org_id, orders.map((order) => order.id));
@@ -251,13 +236,29 @@ export default async function PromotionsPage({
   });
   const maxDiscountDay = Math.max(...discountSeries.map((point) => point.value), 0);
   const recentDiscounts = discountedOrders.slice(0, 8);
-  const queryWarning = Boolean(branchesResult.error || ordersResult.error || itemsResult.error || productsResult.error || cashiersResult.error || reversalLookup.failed);
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
   const rangeLabel = rangeOptions.find((option) => option.value === range)?.label ?? "Last 30 days";
   const selectedOrder = selectedOrderId ? completedOrders.find((order) => order.id === selectedOrderId) ?? null : null;
   const receiptOrders = selectedOrder && !recentDiscounts.some((order) => order.id === selectedOrder.id)
     ? [selectedOrder, ...recentDiscounts]
     : recentDiscounts;
+  const receiptOrderIds = [...new Set(receiptOrders.map((order) => order.id))];
+  // Promotions only renders a small receipt subset. Fetching every line item
+  // in the reporting window made this page carry an unrelated 10k-row payload.
+  const itemsResult = receiptOrderIds.length > 0
+    ? await supabase
+      .from("order_items")
+      .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total")
+      .in("order_id", receiptOrderIds)
+      .limit(2000)
+    : { data: [], error: null };
+  const itemsByOrder = new Map<string, OrderItemRecord[]>();
+  for (const item of (itemsResult.data ?? []) as OrderItemRecord[]) {
+    const items = itemsByOrder.get(item.order_id) ?? [];
+    items.push(item);
+    itemsByOrder.set(item.order_id, items);
+  }
+  const finalQueryWarning = Boolean(queryWarning || itemsResult.error || reversalLookup.failed);
   const receiptReturnTo = `/admin/promotions?range=${range}`;
   const promotionReceipts: OrderReceiptData[] = receiptOrders.map((order) => {
     const branch = branchById.get(order.store_id);
@@ -316,7 +317,7 @@ export default async function PromotionsPage({
 
           <div className="mt-6 flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Discount performance &middot; {rangeLabel}</p><h2 className="mt-2 text-3xl font-extrabold tracking-[-0.04em] text-ink sm:text-4xl">Make every offer earn its place.</h2><p className="mt-2 max-w-2xl text-sm text-ink-muted">See how much revenue your POS discounts create, protect, and give away, {firstName}.</p></div><div className="flex items-center gap-2">{rangeOptions.map((option) => <Link key={option.value} href={`/admin/promotions?range=${option.value}`} className={`rounded-btn border px-3 py-2 text-xs font-extrabold transition ${range === option.value ? "border-primary bg-primary text-primary-fg" : "border-line bg-surface text-primary hover:bg-primary-soft"}`}>{option.label}</Link>)}</div></div>
 
-          {queryWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink">Some promotion data could not refresh. The panels are showing the data that was available.</div>}
+          {finalQueryWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink">Some promotion data could not refresh. The panels are showing the data that was available.</div>}
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><PromotionMetric label="Discounts given" value={displayPeso(discountsGiven)} detail={`${discountedOrders.length} orders used a discount`} tone="bg-primary text-primary-fg" icon="promotions" /><PromotionMetric label="Discounted orders" value={`${discountRate}%`} detail={`${discountedOrders.length} of ${completedOrders.length} completed`} tone="bg-success text-white" icon="orders" /><PromotionMetric label="Average discount" value={displayPeso(averageDiscount)} detail="Per discounted order" tone="bg-warning/15 text-warning" icon="chart" /><PromotionMetric label="Net sales" value={displayPeso(netSales)} detail={`Gross before discount ${displayPeso(grossSales)}`} tone="bg-secondary text-primary" icon="wallet" /></div>
 

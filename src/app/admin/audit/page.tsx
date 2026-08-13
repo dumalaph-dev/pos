@@ -5,6 +5,7 @@ import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { AdminReadModelHydrator, type AdminReadModelBatch } from "@/components/admin/AdminReadModelHydrator";
 import { SignOutButton } from "@/components/SignOutButton";
 import { getAdminProfile } from "@/lib/admin/profile";
+import { getAdminBranchOptions } from "@/lib/admin/branches";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import type { AuditEventReadModel } from "@/lib/admin/audit-read-models";
@@ -203,12 +204,8 @@ export default async function AuditPage({
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile) return <AuditProfileMissing />;
 
-  const branchesResult = await supabase
-    .from("stores")
-    .select("id, name, is_active")
-    .eq("org_id", profile.org_id)
-    .order("name");
-  const branches = (branchesResult.data ?? []) as BranchRecord[];
+  const branchesResult = await getAdminBranchOptions(profile.org_id);
+  const branches = branchesResult.data as BranchRecord[];
   const selectedBranchId = profile.role === "admin"
     ? await getSelectedAdminBranchId(branches, profile.store_id)
     : profile.store_id;

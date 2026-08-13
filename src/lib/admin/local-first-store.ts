@@ -104,6 +104,10 @@ type AdminMutationSyncClient = {
   rpc: (fn: string, args: Record<string, unknown>) => PromiseLike<{ error: unknown; data?: unknown }>;
 };
 
+type AdminMutationLockManager = {
+  request<T>(name: string, options: { mode: "exclusive" }, callback: () => Promise<T>): Promise<T>;
+};
+
 type StoredAdminRecord = {
   key: string;
   scopeKey: string;
@@ -290,12 +294,16 @@ function createAdminMutationId(): string {
   return `${random()}-${random().slice(0, 4)}-4${random().slice(0, 3)}-8${random().slice(0, 3)}-${random()}${random().slice(0, 4)}`;
 }
 
-function mutationErrorMessage(reason: unknown): string {
-  if (reason instanceof Error && reason.message) return reason.message.slice(0, 240);
-  if (typeof reason === "object" && reason !== null && "message" in reason && typeof reason.message === "string") {
-    return reason.message.slice(0, 240);
+export function adminMutationErrorMessage(reason: unknown): string {
+  const rawMessage = reason instanceof Error && reason.message
+    ? reason.message
+    : typeof reason === "object" && reason !== null && "message" in reason && typeof reason.message === "string"
+      ? reason.message
+      : "The offline change could not be synced.";
+  if (/failed to fetch|networkerror|network request failed|load failed|offline/i.test(rawMessage)) {
+    return "Connection unavailable; queued changes will retry automatically.";
   }
-  return "The offline change could not be synced.";
+  return rawMessage.slice(0, 240);
 }
 
 function retryDelayMs(attempts: number): number {
@@ -303,7 +311,7 @@ function retryDelayMs(attempts: number): number {
 }
 
 function isPermanentMutationError(reason: unknown): boolean {
-  const message = mutationErrorMessage(reason).toLowerCase();
+  const message = adminMutationErrorMessage(reason).toLowerCase();
   return [
     "only admins",
     "organization context",
@@ -424,7 +432,7 @@ async function sendAdminMutation(client: AdminMutationSyncClient, record: AdminM
       p_reason: payload.reason,
       p_client_mutation_id: record.id,
     });
-    if (error) throw new Error(mutationErrorMessage(error));
+    if (error) throw new Error(adminMutationErrorMessage(error));
     return;
   }
 
@@ -435,10 +443,10 @@ async function sendAdminMutation(client: AdminMutationSyncClient, record: AdminM
     p_counts: payload.counts,
     p_client_mutation_id: record.id,
   });
-  if (error) throw new Error(mutationErrorMessage(error));
+  if (error) throw new Error(adminMutationErrorMessage(error));
 }
 
-export async function flushAdminMutationOutbox(
+async function flushAdminMutationOutboxUnlocked(
   client: AdminMutationSyncClient,
   scope: AdminCacheScope,
 ): Promise<AdminMutationSyncResult> {
@@ -465,7 +473,7 @@ export async function flushAdminMutationOutbox(
       await db.mutations.delete(record.id);
       synced += 1;
     } catch (error) {
-      const message = mutationErrorMessage(error);
+      const message = adminMutationErrorMessage(error);
       const attempts = record.attempts + 1;
       const conflict = isPermanentMutationError(error);
       await db.mutations.update(record.id, {
@@ -482,6 +490,33 @@ export async function flushAdminMutationOutbox(
 
   const pending = await db.mutations.where("scopeKey").equals(mutationScopeKey(scope)).count();
   return { synced, failed, conflicts, lastError, pending };
+}
+
+const activeMutationFlushes = new Map<string, Promise<AdminMutationSyncResult>>();
+
+async function withAdminMutationLock<T>(scopeKey: string, callback: () => Promise<T>): Promise<T> {
+  const lockManager = typeof navigator !== "undefined"
+    ? (navigator as Navigator & { locks?: AdminMutationLockManager }).locks
+    : undefined;
+  if (!lockManager) return callback();
+  return lockManager.request(`dumala-admin-mutation-sync:${scopeKey}`, { mode: "exclusive" }, callback);
+}
+
+export async function flushAdminMutationOutbox(
+  client: AdminMutationSyncClient,
+  scope: AdminCacheScope,
+): Promise<AdminMutationSyncResult> {
+  const scopeKey = mutationScopeKey(scope);
+  const active = activeMutationFlushes.get(scopeKey);
+  if (active) return active;
+
+  const flush = withAdminMutationLock(scopeKey, () => flushAdminMutationOutboxUnlocked(client, scope));
+  activeMutationFlushes.set(scopeKey, flush);
+  try {
+    return await flush;
+  } finally {
+    if (activeMutationFlushes.get(scopeKey) === flush) activeMutationFlushes.delete(scopeKey);
+  }
 }
 
 export async function clearAdminLocalFirstScope(scope: AdminCacheScope): Promise<void> {
