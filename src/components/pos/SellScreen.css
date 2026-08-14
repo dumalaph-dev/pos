@@ -2845,8 +2845,8 @@
 
 /* Evergreen Planner ------------------------------------------------------- */
 
-:is(.pos-app--planner, .pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi, .pos-app--deco) .order-panel::before,
-:is(.pos-app--planner, .pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi, .pos-app--deco) .order-panel::after {
+:is(.pos-app--planner, .pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi, .pos-app--deco, .pos-app--paper, .pos-app--icecream, .pos-app--candy, .pos-app--christmas) .order-panel::before,
+:is(.pos-app--planner, .pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi, .pos-app--deco, .pos-app--paper, .pos-app--icecream, .pos-app--candy, .pos-app--christmas) .order-panel::after {
   display: none;
 }
 
@@ -3562,53 +3562,49 @@
 
 .pos-app--deco {
   color-scheme: dark;
-  background-size: 72px 42px, 72px 42px, auto;
+  background-size: 54px 54px, 54px 54px, auto;
 }
 
 .pos-app--deco .pos-topbar {
-  border-bottom: 1px solid #d2aa5c;
-  background:
-    linear-gradient(135deg, transparent 42%, #d2aa5c 43% 47%, transparent 48%) left bottom / 28px 8px repeat-x,
-    linear-gradient(100deg, #050807 0%, #111916 62%, #22231c 100%);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  border-bottom: 1px solid #c8a86b;
+  background: linear-gradient(105deg, #0b0e10 0%, #171b1e 68%, #252522 100%);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.24);
 }
 
 .pos-app--deco .category-rail {
-  border-color: #695d43;
-  background:
-    linear-gradient(150deg, rgba(210, 170, 92, 0.035) 12%, transparent 12.5% 87%, rgba(210, 170, 92, 0.035) 87.5%) 0 0 / 52px 52px,
-    #111816;
+  border-color: #353c41;
+  background: linear-gradient(180deg, #171b1e 0%, #121618 100%);
+  box-shadow: inset -1px 0 0 rgba(200, 168, 107, 0.10);
 }
 
 .pos-app--deco .category-item {
   border: 1px solid transparent;
-  border-radius: 0;
-  color: #d8d0c0;
-  font-family: "Century Gothic", "Segoe UI", sans-serif;
+  border-radius: 8px;
+  color: #cfc9be;
+  font-family: Inter, "Segoe UI", sans-serif;
   font-weight: 700;
-  letter-spacing: 0.10em;
-  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .pos-app--deco .category-item:not(.is-active) svg {
-  color: #d2aa5c;
+  color: #c8a86b;
 }
 
 .pos-app--deco .category-item:hover:not(.is-active) {
-  border-color: #796b4d;
-  color: #fff6de;
-  background: #202925;
+  border-color: #4f5559;
+  color: #fdf8ed;
+  background: #242a2e;
 }
 
 .pos-app--deco .category-item.is-active {
-  border: 1px solid #d2aa5c;
-  color: #fff6de;
-  background: #1c2421;
-  box-shadow: inset 4px 0 0 #d2aa5c, inset -4px 0 0 #d2aa5c;
+  border-color: #c8a86b;
+  color: #fdf8ed;
+  background: #292f30;
+  box-shadow: inset 3px 0 0 #c8a86b, 0 5px 14px rgba(0, 0, 0, 0.18);
 }
 
 .pos-app--deco .category-item.is-active svg {
-  color: #d2aa5c;
+  color: #c8a86b;
 }
 
 .pos-app--deco .catalog-search,
@@ -3619,104 +3615,322 @@
 .pos-app--deco .icon-button--soft,
 .pos-app--deco .view-toggle,
 .pos-app--deco .pos-mode-tabs {
-  border-color: #796b4d;
-  border-radius: 0;
-  color: #efe6d5;
-  box-shadow: inset 0 0 0 1px rgba(210, 170, 92, 0.06);
+  border-color: #555d61;
+  border-radius: 8px;
+  color: #efe9df;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .pos-app--deco .catalog-search:focus-within {
-  border-color: #d2aa5c;
-  box-shadow: 0 0 0 3px rgba(210, 170, 92, 0.12);
+  border-color: #c8a86b;
+  box-shadow: 0 0 0 3px rgba(200, 168, 107, 0.16);
 }
 
 .pos-app--deco .product-card {
   position: relative;
-  border: 1px solid #796b4d;
-  border-radius: 0;
+  border: 1px solid #485157;
+  border-radius: 14px;
   background: var(--pos-theme-card-gradient);
 }
 
 .pos-app--deco .product-card::before {
   position: absolute;
   z-index: 3;
-  top: 5px;
-  right: 5px;
-  bottom: 5px;
-  left: 5px;
-  border: 1px solid rgba(210, 170, 92, 0.24);
+  inset: 7px;
+  border: 1px solid rgba(200, 168, 107, 0.16);
+  border-radius: 9px;
   content: "";
   pointer-events: none;
 }
 
 .pos-app--deco .product-card:hover {
-  border-color: #d2aa5c;
-  box-shadow: 0 0 0 1px rgba(210, 170, 92, 0.22), var(--pos-theme-shadow-pop);
+  border-color: #c8a86b;
+  box-shadow: 0 0 0 1px rgba(200, 168, 107, 0.18), var(--pos-theme-shadow-pop);
 }
 
 .pos-app--deco .product-card__image {
-  margin: 6px 6px 0;
-  border-bottom: 1px solid #796b4d;
+  margin: 7px 7px 0;
+  border-bottom: 1px solid #485157;
+  border-radius: 8px 8px 0 0;
 }
 
 .pos-app--deco .product-card__image-media {
-  filter: saturate(0.72) contrast(1.07) sepia(0.16) brightness(0.82);
+  filter: saturate(0.78) contrast(1.05) brightness(0.88);
 }
 
 .pos-app--deco .product-card:hover .product-card__image-media {
-  filter: saturate(0.86) contrast(1.08) sepia(0.12) brightness(0.9);
+  filter: saturate(0.92) contrast(1.06) brightness(0.96);
 }
 
 .pos-app--deco .product-card__body strong,
 .pos-app--deco .order-header h1,
 .pos-app--deco .order-summary__total span {
-  font-family: Copperplate, "Century Gothic", Georgia, serif;
-  font-weight: 700;
-  letter-spacing: 0.105em;
-  text-transform: uppercase;
+  font-family: Inter, "Segoe UI", sans-serif;
+  font-weight: 750;
+  letter-spacing: 0.018em;
+  text-transform: none;
 }
 
 .pos-app--deco .product-card__body span,
 .pos-app--deco .order-summary__total strong {
-  color: #e2bd70 !important;
+  color: #dfbd78 !important;
 }
 
 .pos-app--deco .product-card__stock,
 .pos-app--deco .sync-pill {
-  border: 1px solid #584f3b;
-  border-radius: 0;
-  color: #d0c6b5;
-  background: #202925;
+  border: 1px solid #414a4f;
+  border-radius: 999px;
+  color: #c6c0b7;
+  background: #242a2e;
 }
 
 .pos-app--deco .order-panel {
-  border: 3px double #796b4d;
-  border-radius: 0;
+  border: 1px solid #485157;
+  border-radius: 14px;
   background: var(--pos-theme-panel-gradient);
-  box-shadow: 0 0 0 1px rgba(210, 170, 92, 0.10), var(--pos-theme-shadow-pop);
+  box-shadow: var(--pos-theme-shadow-pop);
 }
 
 .pos-app--deco .order-header {
   padding-bottom: 12px;
-  border-bottom: 1px solid #796b4d;
+  border-bottom: 1px solid #41494e;
 }
 
 .pos-app--deco .order-summary__total {
-  border-top: 3px double #d2aa5c;
+  border-top: 1px solid #c8a86b;
 }
 
 .pos-app--deco .button--save {
-  border: 1px solid #d2aa5c;
-  color: #e2bd70;
-  background: #171e1b;
+  border: 1px solid #c8a86b;
+  color: #e4c98d;
+  background: #1a2023;
 }
 
 .pos-app--deco .button--charge {
-  border: 1px solid #f1d69a;
-  color: #111816;
-  background: linear-gradient(105deg, #b98b3e 0%, #e5c77f 52%, #b88b40 100%);
-  box-shadow: 0 8px 18px rgba(210, 170, 92, 0.16);
+  border: 1px solid #e5c98d;
+  border-radius: 8px;
+  color: #17201d;
+  background: linear-gradient(105deg, #b99558 0%, #d6b979 52%, #b89150 100%);
+  box-shadow: 0 8px 18px rgba(200, 168, 107, 0.14);
 }
+
+/* Paper & Press ----------------------------------------------------------- */
+
+.pos-app--paper {
+  background-size: 5px 5px, auto, auto;
+}
+
+.pos-app--paper .pos-topbar {
+  border-bottom: 3px double #b44335;
+  background:
+    repeating-linear-gradient(90deg, #fbf7ed 0 26px, #d9d0bf 26px 27px) left bottom / auto 5px repeat-x,
+    linear-gradient(105deg, #343a34 0%, #4b5047 100%);
+}
+
+.pos-app--paper .category-rail {
+  border-color: #c7b9a3;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 27px, rgba(91, 70, 46, 0.035) 27px 28px),
+    #d9d0bf;
+}
+
+.pos-app--paper .category-item {
+  border-bottom: 1px solid transparent;
+  color: #50473f;
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 700;
+}
+
+.pos-app--paper .category-item:hover:not(.is-active) {
+  border-color: #b44335;
+  color: #2e2925;
+  background: #f8f0e4;
+}
+
+.pos-app--paper .category-item.is-active {
+  border-color: #b44335;
+  color: #fffaf0;
+  background: #3f443c;
+  box-shadow: inset 5px 0 0 #b44335, 0 4px 12px rgba(79, 63, 45, 0.12);
+}
+
+.pos-app--paper .category-item.is-active svg {
+  color: #f0c15d;
+}
+
+.pos-app--paper .catalog-search,
+.pos-app--paper .category-toggle,
+.pos-app--paper .order-type-select,
+.pos-app--paper .order-discount-button,
+.pos-app--paper .stepper,
+.pos-app--paper .icon-button--soft {
+  border-color: #c7b9a3;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(79, 63, 45, 0.06);
+}
+
+.pos-app--paper .product-card {
+  position: relative;
+  border-color: #c7b9a3;
+  border-left: 4px solid #b44335;
+  border-radius: 4px 10px 10px 4px;
+}
+
+.pos-app--paper .product-card:nth-child(3n + 2) { border-left-color: #6b7d62; }
+.pos-app--paper .product-card:nth-child(3n) { border-left-color: #b58a48; }
+.pos-app--paper .product-card:hover { border-color: #8f7c62; border-left-color: #b44335; }
+.pos-app--paper .product-card__image { border-bottom: 1px solid #d8ccba; }
+.pos-app--paper .product-card__image-media { filter: saturate(0.82) sepia(0.10) contrast(1.03); }
+
+.pos-app--paper .product-card__body strong,
+.pos-app--paper .order-header h1,
+.pos-app--paper .order-summary__total span {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 750;
+}
+
+.pos-app--paper .product-card__body span { color: #9c3d32; }
+.pos-app--paper .order-panel { border: 2px solid #c7b9a3; border-left: 5px solid #b44335; border-radius: 5px 12px 12px 5px; background: var(--pos-theme-panel-gradient); }
+.pos-app--paper .order-header { padding-bottom: 12px; border-bottom: 1px solid #d4c8b7; }
+.pos-app--paper .order-summary__total { border-top: 2px solid #b44335; }
+.pos-app--paper .button--save { border: 1px solid #8f7c62; color: #3f443c; background: #e9dfd1; }
+.pos-app--paper .button--charge { border: 1px solid #8f2e28; color: #fffaf0; background: #b44335; box-shadow: 0 6px 14px rgba(180, 67, 53, 0.18); }
+
+/* Scoops & Sprinkles ------------------------------------------------------ */
+
+.pos-app--icecream {
+  background-size: 28px 28px, 28px 28px, auto;
+}
+
+.pos-app--icecream .pos-topbar {
+  border-bottom: 3px solid #583a67;
+  background:
+    radial-gradient(circle at 18px 6px, #ffe3a6 0 3px, transparent 3.5px) left bottom / 36px 8px repeat-x,
+    linear-gradient(105deg, #583a67 0%, #795477 62%, #df638b 100%);
+}
+
+.pos-app--icecream .category-rail {
+  border-color: #b4dcd7;
+  background:
+    radial-gradient(circle at 10px 10px, rgba(223, 99, 139, 0.12) 0 3px, transparent 3.5px) 0 0 / 24px 24px,
+    #ccebe6;
+}
+
+.pos-app--icecream .category-item {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  color: #4d3b50;
+  font-family: "Trebuchet MS", "Arial Rounded MT Bold", Arial, sans-serif;
+  font-weight: 800;
+}
+
+.pos-app--icecream .category-item:not(.is-active) svg { color: #df638b; }
+.pos-app--icecream .category-item:hover:not(.is-active) { border-color: #df638b; background: #fff4ee; }
+.pos-app--icecream .category-item.is-active { border-color: #583a67; color: #2b1931; background: #df638b; box-shadow: 4px 4px 0 #583a67; }
+.pos-app--icecream .category-item.is-active svg { color: #ffe3a6; }
+
+.pos-app--icecream .catalog-search,
+.pos-app--icecream .category-toggle,
+.pos-app--icecream .order-type-select,
+.pos-app--icecream .order-discount-button,
+.pos-app--icecream .stepper,
+.pos-app--icecream .icon-button--soft,
+.pos-app--icecream .view-toggle,
+.pos-app--icecream .pos-mode-tabs {
+  border: 2px solid #8d637e;
+  border-radius: 999px;
+  box-shadow: 3px 3px 0 rgba(88, 58, 103, 0.24);
+}
+
+.pos-app--icecream .catalog-search:focus-within { border-color: #df638b; box-shadow: 3px 3px 0 rgba(88, 58, 103, 0.24), 0 0 0 4px rgba(223, 99, 139, 0.14); }
+.pos-app--icecream .product-card { --icecream-accent: #df638b; border: 2px solid #e2c4c4; border-top: 8px solid var(--icecream-accent); border-radius: 20px 8px 20px 8px; box-shadow: var(--pos-theme-shadow-card); }
+.pos-app--icecream .product-card:nth-child(3n + 2) { --icecream-accent: #5eb5ad; }
+.pos-app--icecream .product-card:nth-child(3n) { --icecream-accent: #f0b553; }
+.pos-app--icecream .product-card:hover { border-color: #8d637e; border-top-color: var(--icecream-accent); transform: translateY(-3px) rotate(-0.3deg); box-shadow: var(--pos-theme-shadow-pop); }
+.pos-app--icecream .product-card__image { border-bottom: 2px solid #f6d2d8; }
+.pos-app--icecream .product-card__image-media { filter: saturate(1.08) contrast(1.02) brightness(1.03); }
+
+.pos-app--icecream .product-card__body strong,
+.pos-app--icecream .order-header h1,
+.pos-app--icecream .order-summary__total span { font-family: "Trebuchet MS", "Arial Rounded MT Bold", Arial, sans-serif; font-weight: 850; }
+.pos-app--icecream .product-card__body span { color: #b04e78; }
+.pos-app--icecream .order-panel { border: 3px solid #8d637e; border-top: 9px solid #df638b; border-radius: 9px 9px 20px 20px; background: var(--pos-theme-panel-gradient); }
+.pos-app--icecream .order-summary__total { padding: 13px 12px; border: 2px solid #583a67; color: #fffdf8 !important; background: #583a67; box-shadow: 4px 4px 0 #f0b553; }
+.pos-app--icecream .order-summary__total span { color: #fffdf8; }
+.pos-app--icecream .order-summary__total strong { color: #ffe3a6 !important; }
+.pos-app--icecream .button--save { border: 2px solid #8d637e; color: #583a67; background: #ffe3a6; box-shadow: 4px 4px 0 #8d637e; }
+.pos-app--icecream .button--charge { border: 2px solid #583a67; color: #2b1931; background: #df638b; box-shadow: 4px 5px 0 #583a67; }
+
+/* Candy Counter ----------------------------------------------------------- */
+
+.pos-app--candy { background-size: 36px 36px, 36px 36px, auto; }
+.pos-app--candy .pos-topbar { border-bottom: 3px solid #2e193d; background: repeating-linear-gradient(135deg, #ffe1f0 0 10px, #d84287 10px 20px, #b9e8e8 20px 30px) left bottom / auto 7px repeat-x, linear-gradient(105deg, #3a214c 0%, #613060 65%, #a83c78 100%); }
+.pos-app--candy .category-rail { border-color: #70466f; background: radial-gradient(circle at 10px 10px, rgba(216, 66, 135, 0.14) 0 3px, transparent 3.5px) 0 0 / 24px 24px, #b9e8e8; }
+.pos-app--candy .category-item { border: 2px solid transparent; border-radius: 999px; color: #3c2340; font-family: Verdana, "Trebuchet MS", Arial, sans-serif; font-weight: 800; }
+.pos-app--candy .category-item:not(.is-active) svg { color: #d84287; }
+.pos-app--candy .category-item:hover:not(.is-active) { border-color: #70466f; background: #fff7fc; box-shadow: 3px 3px 0 rgba(58, 33, 76, 0.18); }
+.pos-app--candy .category-item.is-active { border-color: #3a214c; color: #160b18; background: #d84287; box-shadow: 4px 4px 0 #3a214c; }
+.pos-app--candy .category-item.is-active svg { color: #ffe1f0; }
+.pos-app--candy .catalog-search,
+.pos-app--candy .category-toggle,
+.pos-app--candy .order-type-select,
+.pos-app--candy .order-discount-button,
+.pos-app--candy .stepper,
+.pos-app--candy .icon-button--soft,
+.pos-app--candy .view-toggle,
+.pos-app--candy .pos-mode-tabs { border: 2px solid #70466f; border-radius: 999px; box-shadow: 3px 3px 0 rgba(58, 33, 76, 0.20); }
+.pos-app--candy .catalog-search:focus-within { border-color: #d84287; box-shadow: 3px 3px 0 rgba(58, 33, 76, 0.20), 0 0 0 4px rgba(216, 66, 135, 0.14); }
+.pos-app--candy .product-card { --candy-accent: #d84287; border: 2px solid #d28db4; border-top: 8px solid var(--candy-accent); border-radius: 14px; box-shadow: var(--pos-theme-shadow-card); }
+.pos-app--candy .product-card:nth-child(3n + 2) { --candy-accent: #39abb2; }
+.pos-app--candy .product-card:nth-child(3n) { --candy-accent: #f0b83f; }
+.pos-app--candy .product-card:hover { border-color: #3a214c; border-top-color: var(--candy-accent); transform: translate(-2px, -3px) rotate(0.3deg); box-shadow: var(--pos-theme-shadow-pop); }
+.pos-app--candy .product-card__image { border-bottom: 2px solid #eab6cf; }
+.pos-app--candy .product-card__image-media { filter: saturate(1.14) contrast(1.04); }
+.pos-app--candy .product-card__body strong,
+.pos-app--candy .order-header h1,
+.pos-app--candy .order-summary__total span { font-family: Verdana, "Trebuchet MS", Arial, sans-serif; font-weight: 850; letter-spacing: 0.02em; }
+.pos-app--candy .product-card__body span { color: #a62f70; }
+.pos-app--candy .order-panel { border: 3px solid #70466f; border-top: 9px solid #39abb2; border-radius: 10px 10px 16px 16px; background: var(--pos-theme-panel-gradient); }
+.pos-app--candy .order-summary__total { padding: 13px 12px; border: 2px solid #3a214c; color: #fff7ff !important; background: #3a214c; box-shadow: 4px 4px 0 #f0b83f; }
+.pos-app--candy .order-summary__total span { color: #fff7ff; }
+.pos-app--candy .order-summary__total strong { color: #ffe1f0 !important; }
+.pos-app--candy .button--save { border: 2px solid #3a214c; color: #3a214c; background: #f0b83f; box-shadow: 4px 4px 0 #3a214c; }
+.pos-app--candy .button--charge { border: 2px solid #3a214c; color: #160b18; background: #d84287; box-shadow: 4px 5px 0 #3a214c; }
+
+/* Noel Market ------------------------------------------------------------- */
+
+.pos-app--christmas { background-size: 44px 44px, 44px 44px, auto; }
+.pos-app--christmas .pos-topbar { border-bottom: 3px solid #c44740; background: repeating-linear-gradient(90deg, #fff8ed 0 18px, #c44740 18px 27px, #123c32 27px 36px) left bottom / auto 7px repeat-x, linear-gradient(105deg, #0d342b 0%, #174a3d 66%, #24604d 100%); }
+.pos-app--christmas .category-rail { border-color: #aabdac; background: repeating-linear-gradient(45deg, rgba(18, 60, 50, 0.04) 0 1px, transparent 1px 11px), #d6e3d5; }
+.pos-app--christmas .category-item { border: 1px solid transparent; border-radius: 7px; color: #344b3b; font-family: Georgia, "Times New Roman", serif; font-weight: 750; }
+.pos-app--christmas .category-item:not(.is-active) svg { color: #c44740; }
+.pos-app--christmas .category-item:hover:not(.is-active) { border-color: #c44740; color: #25332c; background: #fffaf0; }
+.pos-app--christmas .category-item.is-active { border-color: #123c32; color: #fff8ed; background: #123c32; box-shadow: inset 5px 0 0 #c44740, 3px 3px 0 rgba(18, 60, 50, 0.18); }
+.pos-app--christmas .category-item.is-active svg { color: #f0c768; }
+.pos-app--christmas .catalog-search,
+.pos-app--christmas .category-toggle,
+.pos-app--christmas .order-type-select,
+.pos-app--christmas .order-discount-button,
+.pos-app--christmas .stepper,
+.pos-app--christmas .icon-button--soft,
+.pos-app--christmas .view-toggle,
+.pos-app--christmas .pos-mode-tabs { border-color: #8fa98f; border-radius: 7px; box-shadow: 0 3px 10px rgba(52, 72, 54, 0.07); }
+.pos-app--christmas .catalog-search:focus-within { border-color: #c44740; box-shadow: 0 0 0 4px rgba(196, 71, 64, 0.13); }
+.pos-app--christmas .product-card { --christmas-accent: #c44740; border: 1px solid #b9c6b4; border-top: 7px solid var(--christmas-accent); border-radius: 9px 9px 14px 14px; box-shadow: var(--pos-theme-shadow-card); }
+.pos-app--christmas .product-card:nth-child(3n + 2) { --christmas-accent: #2b7157; }
+.pos-app--christmas .product-card:nth-child(3n) { --christmas-accent: #c59a45; }
+.pos-app--christmas .product-card:hover { border-color: #536957; border-top-color: var(--christmas-accent); transform: translateY(-2px); box-shadow: var(--pos-theme-shadow-pop); }
+.pos-app--christmas .product-card__image { border-bottom: 1px solid #cbd6c6; }
+.pos-app--christmas .product-card__image-media { filter: saturate(0.92) contrast(1.04); }
+.pos-app--christmas .product-card__body strong,
+.pos-app--christmas .order-header h1,
+.pos-app--christmas .order-summary__total span { font-family: Georgia, "Times New Roman", serif; font-weight: 760; }
+.pos-app--christmas .product-card__body span { color: #a43c37; }
+.pos-app--christmas .order-panel { border: 2px solid #8fa98f; border-top: 9px solid #c44740; border-radius: 8px 8px 14px 14px; background: var(--pos-theme-panel-gradient); }
+.pos-app--christmas .order-header { padding-bottom: 12px; border-bottom: 1px solid #cbd6c6; }
+.pos-app--christmas .order-summary__total { border-top: 2px solid #c44740; }
+.pos-app--christmas .button--save { border: 1px solid #536957; color: #123c32; background: #e8d3ad; }
+.pos-app--christmas .button--charge { border: 1px solid #8f2d2d; color: #fff8ed; background: #c44740; box-shadow: 0 7px 16px rgba(196, 71, 64, 0.16); }
 
 @media (max-width: 1240px) {
   .pos-topbar__expanded {
@@ -5507,12 +5721,12 @@
     grid-row: 2;
   }
 
-  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi) .pos-body.category-rail-open {
+  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi, .pos-app--icecream, .pos-app--candy, .pos-app--christmas) .pos-body.category-rail-open {
     grid-template-columns: minmax(0, 1fr) minmax(410px, 34vw);
     grid-template-rows: 76px minmax(0, 1fr);
   }
 
-  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi) .pos-body.category-rail-open .category-rail {
+  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi, .pos-app--icecream, .pos-app--candy, .pos-app--christmas) .pos-body.category-rail-open .category-rail {
     grid-column: 1 / -1;
     grid-row: 1;
     align-items: center;
@@ -5523,7 +5737,7 @@
     border-bottom: 2px solid var(--pos-theme-border-strong, var(--border-strong));
   }
 
-  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi) .pos-body.category-rail-open .category-rail__items {
+  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi, .pos-app--icecream, .pos-app--candy, .pos-app--christmas) .pos-body.category-rail-open .category-rail__items {
     display: flex;
     width: 100%;
     gap: 8px;
@@ -5532,7 +5746,7 @@
     padding: 0 0 3px;
   }
 
-  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi) .pos-body.category-rail-open .category-item {
+  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi, .pos-app--icecream, .pos-app--candy, .pos-app--christmas) .pos-body.category-rail-open .category-item {
     width: auto;
     min-width: max-content;
     min-height: 48px;
@@ -5540,20 +5754,20 @@
     padding: 7px 16px;
   }
 
-  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi) .pos-body.category-rail-open .category-item + .category-item {
+  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi, .pos-app--icecream, .pos-app--candy, .pos-app--christmas) .pos-body.category-rail-open .category-item + .category-item {
     margin-top: 0;
   }
 
-  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi) .pos-body.category-rail-open .category-item:hover {
+  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi, .pos-app--icecream, .pos-app--candy, .pos-app--christmas) .pos-body.category-rail-open .category-item:hover {
     transform: translateY(-1px);
   }
 
-  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi) .pos-body.category-rail-open .catalog-panel {
+  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi, .pos-app--icecream, .pos-app--candy, .pos-app--christmas) .pos-body.category-rail-open .catalog-panel {
     grid-column: 1;
     grid-row: 2;
   }
 
-  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi) .pos-body.category-rail-open .order-panel {
+  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi, .pos-app--icecream, .pos-app--candy, .pos-app--christmas) .pos-body.category-rail-open .order-panel {
     grid-column: 2;
     grid-row: 2;
   }
@@ -5567,7 +5781,7 @@
     grid-template-columns: minmax(0, 1fr) minmax(380px, 35vw);
   }
 
-  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi) .pos-body.category-rail-open {
+  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi, .pos-app--icecream, .pos-app--candy, .pos-app--christmas) .pos-body.category-rail-open {
     grid-template-columns: minmax(0, 1fr) minmax(380px, 35vw);
   }
 }
