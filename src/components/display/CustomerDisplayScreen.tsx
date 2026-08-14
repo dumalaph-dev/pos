@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import Image from "next/image";
 import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { createClient } from "@/lib/supabase/client";
-import { getPosTheme, type PosThemeId } from "@/lib/pos-theme";
+import { getPosTheme, getPosThemeDisplayColors, type PosThemeId } from "@/lib/pos-theme";
 import {
   createDisplayLink,
   isDisplayState,
@@ -80,18 +80,20 @@ function lineQuantity(line: DisplayCartLine) {
 
 function displayThemeStyle(themeId: PosThemeId) {
   const theme = getPosTheme(themeId).variables;
+  const displayColors = getPosThemeDisplayColors(themeId);
   return {
     "--display-bg": theme["--pos-theme-bg"],
     "--display-surface": theme["--pos-theme-surface"],
     "--display-surface-panel": theme["--pos-theme-surface-panel"],
     "--display-surface-raised": theme["--pos-theme-surface-raised"],
     "--display-ink": theme["--pos-theme-text"],
-    "--display-heading": themeId === "dark" ? theme["--pos-theme-text"] : theme["--pos-theme-topbar"],
+    "--display-heading": displayColors.heading,
     "--display-muted": theme["--pos-theme-text-muted"],
     "--display-subtle": theme["--pos-theme-text-subtle"],
     "--display-primary": theme["--pos-theme-topbar"],
     "--display-topbar-text": theme["--pos-theme-topbar-text"],
     "--display-accent": theme["--pos-theme-highlight"],
+    "--display-accent-ink": displayColors.accentInk,
     "--display-accent-soft": theme["--pos-theme-highlight-soft"],
     "--display-border": theme["--pos-theme-border"],
     "--display-border-strong": theme["--pos-theme-border-strong"],

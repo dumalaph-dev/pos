@@ -1,6 +1,6 @@
-export type PosThemeId = "modern" | "classic" | "soft" | "dark" | "bold" | "system" | "coastal" | "sunset" | "botanical" | "ledger" | "lechon" | "restaurant" | "cafe" | "coffee" | "latte" | "bakery";
+export const POS_THEME_IDS = ["modern", "classic", "soft", "dark", "bold", "system", "coastal", "sunset", "botanical", "ledger", "lechon", "restaurant", "cafe", "coffee", "latte", "bakery", "planner", "chicken", "ramen", "taqueria", "sushi", "deco"] as const;
 
-export const POS_THEME_IDS = ["modern", "classic", "soft", "dark", "bold", "system", "coastal", "sunset", "botanical", "ledger", "lechon", "restaurant", "cafe", "coffee", "latte", "bakery"] as const;
+export type PosThemeId = (typeof POS_THEME_IDS)[number];
 
 export type PosThemeVariableName =
   | "--pos-theme-bg"
@@ -139,7 +139,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
       "--pos-theme-border": "#e1d9eb",
       "--pos-theme-border-strong": "#c6b6d9",
       "--pos-theme-text": "#332b42",
-      "--pos-theme-text-muted": "#7d718a",
+      "--pos-theme-text-muted": "#786b85",
       "--pos-theme-text-subtle": "#aa9fb5",
       "--pos-theme-primary-soft": "#eee5f6",
       "--pos-theme-secondary": "#f4edf8",
@@ -251,7 +251,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
       "--pos-theme-border": "#8b8e89",
       "--pos-theme-border-strong": "#4f5457",
       "--pos-theme-text": "#202326",
-      "--pos-theme-text-muted": "#5d6264",
+      "--pos-theme-text-muted": "#575c5e",
       "--pos-theme-text-subtle": "#7b807f",
       "--pos-theme-primary-soft": "#c3cfe0",
       "--pos-theme-secondary": "#c9cac4",
@@ -289,7 +289,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
       "--pos-theme-border": "#c5dfe1",
       "--pos-theme-border-strong": "#79aeb4",
       "--pos-theme-text": "#12313a",
-      "--pos-theme-text-muted": "#5b7d83",
+      "--pos-theme-text-muted": "#57777d",
       "--pos-theme-text-subtle": "#8ba8ad",
       "--pos-theme-primary-soft": "#d6eeed",
       "--pos-theme-secondary": "#eaf6f7",
@@ -361,7 +361,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
       "--pos-theme-border": "#cbdabd",
       "--pos-theme-border-strong": "#94a986",
       "--pos-theme-text": "#20372a",
-      "--pos-theme-text-muted": "#677d69",
+      "--pos-theme-text-muted": "#617763",
       "--pos-theme-text-subtle": "#91a191",
       "--pos-theme-primary-soft": "#dcead7",
       "--pos-theme-secondary": "#edf5e9",
@@ -647,9 +647,237 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
       "--pos-theme-control-gradient": "linear-gradient(180deg, #ffffff 0%, #fff0df 100%)",
     },
   },
+  planner: {
+    id: "planner",
+    label: "Evergreen Planner",
+    shortLabel: "Planner",
+    description: "Notebook lines, tabbed navigation, and deep evergreen details for a calm, modern café counter.",
+    mood: "Minimal · tactile · organized",
+    variables: {
+      ...shared,
+      "--pos-theme-bg": "#e9ece4",
+      "--pos-theme-surface": "#fbfaf4",
+      "--pos-theme-surface-panel": "#f1f1e8",
+      "--pos-theme-surface-raised": "#fffef9",
+      "--pos-theme-sidebar": "#dfe6dd",
+      "--pos-theme-border": "#cbd2c6",
+      "--pos-theme-border-strong": "#8fa092",
+      "--pos-theme-text": "#19342d",
+      "--pos-theme-text-muted": "#586b64",
+      "--pos-theme-text-subtle": "#7b8983",
+      "--pos-theme-primary-soft": "#dce8df",
+      "--pos-theme-secondary": "#edf1ea",
+      "--pos-theme-secondary-hover": "#dfe7de",
+      "--pos-theme-highlight": "#b88746",
+      "--pos-theme-highlight-soft": "#eadcc5",
+      "--pos-theme-topbar": "#15372f",
+      "--pos-theme-topbar-text": "#fffdf5",
+      "--pos-theme-radius-card": "14px",
+      "--pos-theme-radius-btn": "999px",
+      "--pos-theme-shadow-card": "0 1px 2px rgba(28, 52, 44, 0.06), 0 8px 22px rgba(28, 52, 44, 0.07)",
+      "--pos-theme-shadow-pop": "0 20px 44px rgba(25, 52, 45, 0.16)",
+      "--pos-theme-font": "'Avenir Next', 'Segoe UI', var(--font-ui), sans-serif",
+      "--pos-theme-weight": "620",
+      "--pos-theme-letter-spacing": "0.002em",
+      "--pos-theme-app-pattern": "linear-gradient(rgba(21, 55, 47, 0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(21, 55, 47, 0.018) 1px, transparent 1px)",
+      "--pos-theme-panel-gradient": "repeating-linear-gradient(0deg, rgba(21, 55, 47, 0.035) 0 1px, transparent 1px 29px), linear-gradient(145deg, #fffef9 0%, #eef1e8 100%)",
+      "--pos-theme-card-gradient": "linear-gradient(180deg, #fffef9 0%, #f5f5ee 100%)",
+      "--pos-theme-control-gradient": "linear-gradient(180deg, #fffef9 0%, #edf1ea 100%)",
+    },
+  },
+  chicken: {
+    id: "chicken",
+    label: "Golden Crunch Chicken",
+    shortLabel: "Crispy Chicken",
+    description: "Ketchup red, golden fry-box yellow, checkerboard details, and bold quick-service controls.",
+    mood: "Crispy · playful · high-energy",
+    variables: {
+      ...shared,
+      "--pos-theme-bg": "#ffe8b4",
+      "--pos-theme-surface": "#fff8e6",
+      "--pos-theme-surface-panel": "#ffd66f",
+      "--pos-theme-surface-raised": "#fffdf5",
+      "--pos-theme-sidebar": "#f5ba25",
+      "--pos-theme-border": "#d59a22",
+      "--pos-theme-border-strong": "#2d2118",
+      "--pos-theme-text": "#251b14",
+      "--pos-theme-text-muted": "#6b5140",
+      "--pos-theme-text-subtle": "#92745b",
+      "--pos-theme-primary-soft": "#ffe08a",
+      "--pos-theme-secondary": "#fff1cf",
+      "--pos-theme-secondary-hover": "#ffdf91",
+      "--pos-theme-highlight": "#d9432f",
+      "--pos-theme-highlight-soft": "#ffc934",
+      "--pos-theme-topbar": "#b92723",
+      "--pos-theme-topbar-text": "#fff8df",
+      "--pos-theme-radius-card": "7px",
+      "--pos-theme-radius-btn": "6px",
+      "--pos-theme-shadow-card": "4px 5px 0 rgba(45, 33, 24, 0.90), 0 12px 22px rgba(156, 52, 30, 0.12)",
+      "--pos-theme-shadow-pop": "7px 8px 0 rgba(45, 33, 24, 0.94), 0 22px 38px rgba(102, 37, 24, 0.20)",
+      "--pos-theme-font": "'Trebuchet MS', Arial, var(--font-ui), sans-serif",
+      "--pos-theme-weight": "760",
+      "--pos-theme-letter-spacing": "0.006em",
+      "--pos-theme-app-pattern": "linear-gradient(45deg, rgba(185, 39, 35, 0.045) 25%, transparent 25% 75%, rgba(185, 39, 35, 0.045) 75%), linear-gradient(45deg, rgba(185, 39, 35, 0.045) 25%, transparent 25% 75%, rgba(185, 39, 35, 0.045) 75%)",
+      "--pos-theme-panel-gradient": "linear-gradient(150deg, #fffdf5 0%, #ffe09a 100%)",
+      "--pos-theme-card-gradient": "linear-gradient(180deg, #fffdf5 0%, #fff0c9 100%)",
+      "--pos-theme-control-gradient": "linear-gradient(180deg, #fffef8 0%, #ffe5a5 100%)",
+    },
+  },
+  ramen: {
+    id: "ramen",
+    label: "Neon Noodle Alley",
+    shortLabel: "Ramen Alley",
+    description: "Midnight indigo, neon signage, and glowing ticket rails for high-tempo ramen and night-market service.",
+    mood: "Electric · nocturnal · kinetic",
+    variables: {
+      ...shared,
+      "--pos-theme-bg": "#080c20",
+      "--pos-theme-surface": "#10162d",
+      "--pos-theme-surface-panel": "#151c36",
+      "--pos-theme-surface-raised": "#1b2443",
+      "--pos-theme-sidebar": "#0b1129",
+      "--pos-theme-border": "#2b3563",
+      "--pos-theme-border-strong": "#5965a0",
+      "--pos-theme-text": "#f7f2ea",
+      "--pos-theme-text-muted": "#b5b3ca",
+      "--pos-theme-text-subtle": "#8583a4",
+      "--pos-theme-primary-soft": "#173044",
+      "--pos-theme-secondary": "#141d3b",
+      "--pos-theme-secondary-hover": "#222d55",
+      "--pos-theme-highlight": "#ff4f7d",
+      "--pos-theme-highlight-soft": "#47213c",
+      "--pos-theme-topbar": "#070918",
+      "--pos-theme-topbar-text": "#fff7ee",
+      "--pos-theme-radius-card": "10px",
+      "--pos-theme-radius-btn": "8px",
+      "--pos-theme-shadow-card": "0 0 0 1px rgba(45, 227, 219, 0.08), 0 14px 30px rgba(0, 0, 0, 0.38)",
+      "--pos-theme-shadow-pop": "0 0 0 1px rgba(255, 79, 125, 0.38), 0 0 26px rgba(255, 79, 125, 0.16), 0 24px 52px rgba(0, 0, 0, 0.52)",
+      "--pos-theme-font": "'Arial Narrow', 'Segoe UI', var(--font-ui), sans-serif",
+      "--pos-theme-weight": "680",
+      "--pos-theme-letter-spacing": "0.018em",
+      "--pos-theme-app-pattern": "repeating-linear-gradient(90deg, transparent 0 47px, rgba(45, 227, 219, 0.025) 47px 48px), repeating-linear-gradient(0deg, transparent 0 47px, rgba(255, 79, 125, 0.022) 47px 48px), radial-gradient(circle at 82% 4%, rgba(255, 79, 125, 0.16), transparent 25%)",
+      "--pos-theme-panel-gradient": "linear-gradient(145deg, rgba(27, 36, 67, 0.99), rgba(10, 15, 37, 0.99))",
+      "--pos-theme-card-gradient": "linear-gradient(155deg, #1a2344 0%, #0f1630 100%)",
+      "--pos-theme-control-gradient": "linear-gradient(180deg, #202b50 0%, #121a37 100%)",
+    },
+  },
+  taqueria: {
+    id: "taqueria",
+    label: "Papel Picado Taqueria",
+    shortLabel: "Taqueria",
+    description: "Cut-paper color, corn-tortilla warmth, and hand-painted menu shapes for lively street-food counters.",
+    mood: "Festive · handmade · generous",
+    variables: {
+      ...shared,
+      "--pos-theme-bg": "#f7e0b0",
+      "--pos-theme-surface": "#fff8e7",
+      "--pos-theme-surface-panel": "#f4cb76",
+      "--pos-theme-surface-raised": "#fffdf3",
+      "--pos-theme-sidebar": "#0b7b76",
+      "--pos-theme-border": "#c87d43",
+      "--pos-theme-border-strong": "#3d281f",
+      "--pos-theme-text": "#2e1d16",
+      "--pos-theme-text-muted": "#705242",
+      "--pos-theme-text-subtle": "#95745c",
+      "--pos-theme-primary-soft": "#d0e7dd",
+      "--pos-theme-secondary": "#fff0c8",
+      "--pos-theme-secondary-hover": "#f5d98f",
+      "--pos-theme-highlight": "#e24a2f",
+      "--pos-theme-highlight-soft": "#ffcf4e",
+      "--pos-theme-topbar": "#075f5c",
+      "--pos-theme-topbar-text": "#fff8e9",
+      "--pos-theme-radius-card": "12px",
+      "--pos-theme-radius-btn": "9px",
+      "--pos-theme-shadow-card": "4px 5px 0 rgba(61, 40, 31, 0.80), 0 10px 20px rgba(113, 62, 35, 0.10)",
+      "--pos-theme-shadow-pop": "7px 8px 0 rgba(61, 40, 31, 0.88), 0 22px 38px rgba(88, 45, 30, 0.18)",
+      "--pos-theme-font": "'Trebuchet MS', 'Arial Rounded MT Bold', Arial, sans-serif",
+      "--pos-theme-weight": "720",
+      "--pos-theme-letter-spacing": "0.008em",
+      "--pos-theme-app-pattern": "radial-gradient(circle at 10px 10px, rgba(11, 123, 118, 0.05) 0 3px, transparent 3.5px), radial-gradient(circle at 30px 30px, rgba(226, 74, 47, 0.045) 0 3px, transparent 3.5px)",
+      "--pos-theme-panel-gradient": "linear-gradient(145deg, #fffdf3 0%, #f6d890 100%)",
+      "--pos-theme-card-gradient": "linear-gradient(180deg, #fffdf3 0%, #ffedc2 100%)",
+      "--pos-theme-control-gradient": "linear-gradient(180deg, #fffef7 0%, #f7dda2 100%)",
+    },
+  },
+  sushi: {
+    id: "sushi",
+    label: "Ink & Nori Sushi",
+    shortLabel: "Sushi Bar",
+    description: "Washi paper, indigo ink, and vermilion stamp details for a quiet, precise sushi counter.",
+    mood: "Precise · serene · crafted",
+    variables: {
+      ...shared,
+      "--pos-theme-bg": "#e9e4da",
+      "--pos-theme-surface": "#faf8f1",
+      "--pos-theme-surface-panel": "#eeebe2",
+      "--pos-theme-surface-raised": "#fffdfa",
+      "--pos-theme-sidebar": "#deded7",
+      "--pos-theme-border": "#c9c1b4",
+      "--pos-theme-border-strong": "#626569",
+      "--pos-theme-text": "#1d2529",
+      "--pos-theme-text-muted": "#60696c",
+      "--pos-theme-text-subtle": "#858d8d",
+      "--pos-theme-primary-soft": "#dfe6e4",
+      "--pos-theme-secondary": "#eeede8",
+      "--pos-theme-secondary-hover": "#deded8",
+      "--pos-theme-highlight": "#c94735",
+      "--pos-theme-highlight-soft": "#eed5cf",
+      "--pos-theme-topbar": "#152d36",
+      "--pos-theme-topbar-text": "#fffdf7",
+      "--pos-theme-radius-card": "4px",
+      "--pos-theme-radius-btn": "4px",
+      "--pos-theme-shadow-card": "0 2px 0 rgba(29, 37, 41, 0.08), 0 9px 22px rgba(29, 37, 41, 0.07)",
+      "--pos-theme-shadow-pop": "0 18px 38px rgba(24, 36, 42, 0.17)",
+      "--pos-theme-font": "'Yu Gothic UI', 'Hiragino Sans', 'Segoe UI', var(--font-ui), sans-serif",
+      "--pos-theme-weight": "620",
+      "--pos-theme-letter-spacing": "0.012em",
+      "--pos-theme-app-pattern": "repeating-linear-gradient(112deg, rgba(21, 45, 54, 0.022) 0 1px, transparent 1px 8px), radial-gradient(circle at 88% 12%, rgba(201, 71, 53, 0.08), transparent 20%)",
+      "--pos-theme-panel-gradient": "repeating-linear-gradient(0deg, rgba(21, 45, 54, 0.028) 0 1px, transparent 1px 31px), linear-gradient(145deg, #fffdfa 0%, #ebe9e1 100%)",
+      "--pos-theme-card-gradient": "linear-gradient(180deg, #fffdfa 0%, #f2f0e9 100%)",
+      "--pos-theme-control-gradient": "linear-gradient(180deg, #fffdfa 0%, #e9e8e2 100%)",
+    },
+  },
+  deco: {
+    id: "deco",
+    label: "Deco Supper Club",
+    shortLabel: "Supper Club",
+    description: "Black lacquer, champagne gold, and geometric framing for an elegant late-night dining room.",
+    mood: "Glamorous · cinematic · composed",
+    variables: {
+      ...shared,
+      "--pos-theme-bg": "#0d1110",
+      "--pos-theme-surface": "#151b19",
+      "--pos-theme-surface-panel": "#1a2220",
+      "--pos-theme-surface-raised": "#202a27",
+      "--pos-theme-sidebar": "#111816",
+      "--pos-theme-border": "#354640",
+      "--pos-theme-border-strong": "#796b4d",
+      "--pos-theme-text": "#f5eedf",
+      "--pos-theme-text-muted": "#c0b7a7",
+      "--pos-theme-text-subtle": "#8f8a7f",
+      "--pos-theme-primary-soft": "#28342f",
+      "--pos-theme-secondary": "#202925",
+      "--pos-theme-secondary-hover": "#2c3732",
+      "--pos-theme-highlight": "#d2aa5c",
+      "--pos-theme-highlight-soft": "#4c4029",
+      "--pos-theme-topbar": "#070b0a",
+      "--pos-theme-topbar-text": "#fff6de",
+      "--pos-theme-radius-card": "2px",
+      "--pos-theme-radius-btn": "2px",
+      "--pos-theme-shadow-card": "0 0 0 1px rgba(210, 170, 92, 0.10), 0 14px 30px rgba(0, 0, 0, 0.32)",
+      "--pos-theme-shadow-pop": "0 0 0 1px rgba(210, 170, 92, 0.34), 0 28px 56px rgba(0, 0, 0, 0.52)",
+      "--pos-theme-font": "Copperplate, 'Century Gothic', Georgia, serif",
+      "--pos-theme-weight": "620",
+      "--pos-theme-letter-spacing": "0.025em",
+      "--pos-theme-app-pattern": "linear-gradient(30deg, rgba(210, 170, 92, 0.028) 12%, transparent 12.5% 87%, rgba(210, 170, 92, 0.028) 87.5%), linear-gradient(150deg, rgba(210, 170, 92, 0.022) 12%, transparent 12.5% 87%, rgba(210, 170, 92, 0.022) 87.5%)",
+      "--pos-theme-panel-gradient": "linear-gradient(145deg, #202a27 0%, #101614 100%)",
+      "--pos-theme-card-gradient": "linear-gradient(155deg, #202925 0%, #121816 100%)",
+      "--pos-theme-control-gradient": "linear-gradient(180deg, #29332f 0%, #18201d 100%)",
+    },
+  },
 };
 
-export const POS_THEME_OPTIONS = Object.values(POS_THEME_DEFINITIONS);
+export const POS_THEME_OPTIONS = POS_THEME_IDS.map((id) => POS_THEME_DEFINITIONS[id]);
 
 export function isPosThemeId(value: unknown): value is PosThemeId {
   return typeof value === "string" && POS_THEME_IDS.includes(value as PosThemeId);
@@ -660,4 +888,52 @@ export function getPosTheme(value: string | null | undefined): PosThemeDefinitio
     return POS_THEME_DEFINITIONS[value as PosThemeId];
   }
   return POS_THEME_DEFINITIONS.modern;
+}
+
+type PosThemeDisplayColors = {
+  heading: string;
+  accentInk: string;
+};
+
+const MINIMUM_TEXT_CONTRAST = 4.5;
+
+function hexLuminance(value: string) {
+  const match = /^#([\da-f]{6})$/i.exec(value);
+  if (!match) return null;
+  const channels = match[1].match(/[\da-f]{2}/gi)?.map((channel) => Number.parseInt(channel, 16) / 255);
+  if (!channels || channels.length !== 3) return null;
+  const [red, green, blue] = channels.map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+  return (0.2126 * red) + (0.7152 * green) + (0.0722 * blue);
+}
+
+function contrastRatio(foreground: string, background: string) {
+  const foregroundLuminance = hexLuminance(foreground);
+  const backgroundLuminance = hexLuminance(background);
+  if (foregroundLuminance === null || backgroundLuminance === null) return 0;
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+  const darker = Math.min(foregroundLuminance, backgroundLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function pickReadableColor(background: string, candidates: string[]) {
+  const scoredCandidates = candidates.map((candidate) => ({
+    candidate,
+    contrast: contrastRatio(candidate, background),
+  }));
+  return scoredCandidates.find(({ contrast }) => contrast >= MINIMUM_TEXT_CONTRAST)?.candidate
+    ?? scoredCandidates.reduce((best, current) => current.contrast > best.contrast ? current : best).candidate;
+}
+
+export function getPosThemeDisplayColors(value: string | null | undefined): PosThemeDisplayColors {
+  const theme = getPosTheme(value).variables;
+  const background = theme["--pos-theme-bg"];
+  const text = theme["--pos-theme-text"];
+  const brandHeading = theme["--pos-theme-topbar"];
+  const accent = theme["--pos-theme-highlight"];
+  const topbarText = theme["--pos-theme-topbar-text"];
+
+  return {
+    heading: pickReadableColor(background, [brandHeading, text]),
+    accentInk: pickReadableColor(accent, [text, topbarText, "#000000", "#ffffff"]),
+  };
 }

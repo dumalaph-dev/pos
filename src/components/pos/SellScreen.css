@@ -2843,6 +2843,881 @@
   border-top: 4px double #bf8e86;
 }
 
+/* Evergreen Planner ------------------------------------------------------- */
+
+:is(.pos-app--planner, .pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi, .pos-app--deco) .order-panel::before,
+:is(.pos-app--planner, .pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi, .pos-app--deco) .order-panel::after {
+  display: none;
+}
+
+.pos-app--planner {
+  background-size: 30px 30px, 30px 30px, auto;
+}
+
+.pos-app--planner .pos-topbar {
+  border-bottom: 1px solid #b88746;
+  background: linear-gradient(104deg, #102e27 0%, #193e34 68%, #315545 100%);
+  box-shadow: inset 0 -4px 0 rgba(234, 220, 197, 0.16);
+}
+
+.pos-app--planner .category-rail {
+  border-right: 1px solid #aebbae;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 27px, rgba(21, 55, 47, 0.035) 27px 28px),
+    #dfe6dd;
+}
+
+.pos-app--planner .category-item {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-weight: 720;
+}
+
+.pos-app--planner .category-item:hover:not(.is-active) {
+  border-color: #b9c7bb;
+  color: #19342d;
+  background: #f4f5ef;
+}
+
+.pos-app--planner .category-item.is-active {
+  border-color: #15372f;
+  color: #fffdf5;
+  background: #15372f;
+  box-shadow: inset 5px 0 0 #b88746, 0 5px 14px rgba(21, 55, 47, 0.12);
+}
+
+.pos-app--planner .catalog-search,
+.pos-app--planner .category-toggle,
+.pos-app--planner .order-type-select,
+.pos-app--planner .order-discount-button,
+.pos-app--planner .stepper,
+.pos-app--planner .icon-button--soft {
+  border-color: #aebbae;
+  box-shadow: 0 4px 14px rgba(28, 52, 44, 0.055);
+}
+
+.pos-app--planner .product-card {
+  position: relative;
+  border-color: #cbd2c6;
+  border-left: 4px solid #15372f;
+  border-radius: 4px 14px 14px 4px;
+}
+
+.pos-app--planner .product-card:nth-child(3n + 2) {
+  border-left-color: #b88746;
+}
+
+.pos-app--planner .product-card:nth-child(3n) {
+  border-left-color: #6c8a78;
+}
+
+.pos-app--planner .product-card:hover {
+  border-color: #879d8d;
+  border-left-color: #b88746;
+}
+
+.pos-app--planner .product-card__image {
+  border-bottom: 1px solid #d9ded5;
+}
+
+.pos-app--planner .product-card__image-media {
+  filter: saturate(0.9) contrast(1.02);
+}
+
+.pos-app--planner .product-card__body strong,
+.pos-app--planner .order-header h1,
+.pos-app--planner .order-summary__total span {
+  font-weight: 760;
+  letter-spacing: 0.01em;
+}
+
+.pos-app--planner .product-card__stock,
+.pos-app--planner .sync-pill {
+  border-radius: 999px;
+}
+
+.pos-app--planner .order-panel {
+  border: 1px solid #aebbae;
+  border-left: 5px solid #b88746;
+  border-radius: 3px 16px 16px 3px;
+  background: var(--pos-theme-panel-gradient);
+}
+
+.pos-app--planner .order-header {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #cbd2c6;
+}
+
+.pos-app--planner .order-summary__total {
+  border-top: 2px solid #b88746;
+}
+
+.pos-app--planner .button--save,
+.pos-app--planner .button--charge {
+  border-radius: 999px;
+}
+
+.pos-app--planner .button--save {
+  color: #15372f;
+  background: #e4ebe3;
+}
+
+/* Golden Crunch Chicken --------------------------------------------------- */
+
+.pos-app--chicken {
+  background-size: 28px 28px, 28px 28px, auto;
+  background-position: 0 0, 14px 14px, center;
+}
+
+.pos-app--chicken .pos-topbar {
+  border-bottom: 3px solid #2d2118;
+  background:
+    repeating-linear-gradient(90deg, #fff8df 0 18px, #ffc934 18px 36px) left bottom / auto 7px repeat-x,
+    linear-gradient(105deg, #9f211f 0%, #c93229 62%, #c34128 100%);
+  box-shadow: none;
+}
+
+.pos-app--chicken .category-rail {
+  border-color: #2d2118;
+  background:
+    linear-gradient(45deg, rgba(45, 33, 24, 0.10) 25%, transparent 25% 75%, rgba(45, 33, 24, 0.10) 75%) 0 0 / 18px 18px,
+    linear-gradient(45deg, rgba(45, 33, 24, 0.10) 25%, transparent 25% 75%, rgba(45, 33, 24, 0.10) 75%) 9px 9px / 18px 18px,
+    #f5ba25;
+}
+
+.pos-app--chicken .category-item {
+  border: 2px solid transparent;
+  color: #2d2118;
+  font-family: "Arial Black", Impact, sans-serif;
+  font-weight: 850;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+}
+
+.pos-app--chicken .category-item:not(.is-active) svg {
+  color: #b92723;
+}
+
+.pos-app--chicken .category-item:hover:not(.is-active) {
+  border-color: #2d2118;
+  color: #2d2118;
+  background: #fff4d5;
+  box-shadow: 3px 3px 0 #2d2118;
+}
+
+.pos-app--chicken .category-item.is-active {
+  border-color: #2d2118;
+  color: #fff8df;
+  background: #c93229;
+  box-shadow: 4px 4px 0 #2d2118;
+}
+
+.pos-app--chicken .category-item.is-active svg {
+  color: #ffc934;
+}
+
+.pos-app--chicken .catalog-search,
+.pos-app--chicken .category-toggle,
+.pos-app--chicken .order-type-select,
+.pos-app--chicken .order-discount-button,
+.pos-app--chicken .stepper,
+.pos-app--chicken .icon-button--soft,
+.pos-app--chicken .view-toggle,
+.pos-app--chicken .pos-mode-tabs {
+  border: 2px solid #2d2118;
+  border-radius: 6px;
+  box-shadow: 3px 3px 0 #2d2118;
+}
+
+.pos-app--chicken .catalog-search:focus-within {
+  border-color: #c93229;
+  box-shadow: 3px 3px 0 #2d2118, 0 0 0 4px rgba(201, 50, 41, 0.16);
+}
+
+.pos-app--chicken .product-card {
+  --chicken-card-accent: #c93229;
+  border: 2px solid #2d2118;
+  border-top: 8px solid var(--chicken-card-accent);
+  border-radius: 18px 5px 18px 5px;
+  box-shadow: var(--pos-theme-shadow-card);
+}
+
+.pos-app--chicken .product-card:nth-child(3n + 2) {
+  --chicken-card-accent: #ee7d25;
+}
+
+.pos-app--chicken .product-card:nth-child(3n) {
+  --chicken-card-accent: #e9aa13;
+}
+
+.pos-app--chicken .product-card:hover {
+  border-color: #2d2118;
+  border-top-color: var(--chicken-card-accent);
+  transform: translate(-2px, -3px) rotate(-0.35deg);
+  box-shadow: var(--pos-theme-shadow-pop);
+}
+
+.pos-app--chicken .product-card__image {
+  border-bottom: 2px solid #2d2118;
+}
+
+.pos-app--chicken .product-card__image-media {
+  filter: saturate(1.12) contrast(1.06) brightness(1.02);
+}
+
+.pos-app--chicken .product-card__body strong,
+.pos-app--chicken .order-header h1,
+.pos-app--chicken .order-summary__total span {
+  font-family: "Arial Black", Impact, sans-serif;
+  font-weight: 850;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.pos-app--chicken .product-card__body span {
+  color: #b92723;
+}
+
+.pos-app--chicken .order-panel {
+  border: 3px solid #2d2118;
+  border-top: 10px solid #c93229;
+  border-radius: 5px 5px 18px 18px;
+  background:
+    linear-gradient(45deg, rgba(45, 33, 24, 0.045) 25%, transparent 25% 75%, rgba(45, 33, 24, 0.045) 75%) 0 0 / 20px 20px,
+    var(--pos-theme-panel-gradient);
+}
+
+.pos-app--chicken .order-summary__total {
+  margin: 8px 0 5px;
+  padding: 14px 12px;
+  border: 2px solid #2d2118;
+  color: #fff8df !important;
+  background: #2d2118;
+  box-shadow: 4px 4px 0 #ffc934;
+}
+
+.pos-app--chicken .order-summary__total span {
+  color: #fff8df;
+}
+
+.pos-app--chicken .order-summary__total strong {
+  color: #ffc934 !important;
+}
+
+.pos-app--chicken .button--save {
+  border: 2px solid #2d2118;
+  color: #2d2118;
+  background: #ffc934;
+  box-shadow: 4px 4px 0 #2d2118;
+}
+
+.pos-app--chicken .button--charge {
+  border: 2px solid #2d2118;
+  color: #fff8df;
+  background: #c93229;
+  box-shadow: 4px 5px 0 #2d2118;
+}
+
+.pos-app--chicken .button--charge:hover:not(:disabled) {
+  background: #a82421;
+  box-shadow: 5px 6px 0 #2d2118;
+}
+
+/* Neon Noodle Alley ------------------------------------------------------- */
+
+.pos-app--ramen {
+  color-scheme: dark;
+  background-size: 48px 48px, 48px 48px, auto, auto;
+}
+
+.pos-app--ramen .pos-topbar {
+  border-bottom: 1px solid #2de3db;
+  background:
+    linear-gradient(90deg, #ff4f7d 0 33%, #ffd166 33% 66%, #2de3db 66%) left bottom / 210px 4px no-repeat,
+    linear-gradient(108deg, #050713 0%, #111536 64%, #281443 100%);
+  box-shadow: 0 5px 22px rgba(45, 227, 219, 0.10);
+}
+
+.pos-app--ramen .category-rail {
+  border-color: #374171;
+  background: linear-gradient(180deg, #090e27 0%, #111735 100%);
+  box-shadow: inset -1px 0 0 rgba(45, 227, 219, 0.14);
+}
+
+.pos-app--ramen .category-item {
+  border: 1px solid transparent;
+  color: #d8d7e5;
+  font-weight: 760;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pos-app--ramen .category-item:not(.is-active) svg {
+  color: #2de3db;
+  filter: drop-shadow(0 0 5px rgba(45, 227, 219, 0.28));
+}
+
+.pos-app--ramen .category-item:hover:not(.is-active) {
+  border-color: #45518b;
+  color: #fff;
+  background: #182043;
+}
+
+.pos-app--ramen .category-item.is-active {
+  border-color: #ff4f7d;
+  color: #fff;
+  background: #27204a;
+  box-shadow: inset 4px 0 0 #2de3db, 0 0 18px rgba(255, 79, 125, 0.20);
+}
+
+.pos-app--ramen .category-item.is-active svg {
+  color: #ffd166;
+}
+
+.pos-app--ramen .catalog-search,
+.pos-app--ramen .category-toggle,
+.pos-app--ramen .order-type-select,
+.pos-app--ramen .order-discount-button,
+.pos-app--ramen .stepper,
+.pos-app--ramen .icon-button--soft,
+.pos-app--ramen .view-toggle,
+.pos-app--ramen .pos-mode-tabs {
+  border-color: #4b568f;
+  color: #e4e2ef;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 0 0 1px rgba(45, 227, 219, 0.04);
+}
+
+.pos-app--ramen .catalog-search:focus-within {
+  border-color: #2de3db;
+  box-shadow: 0 0 0 3px rgba(45, 227, 219, 0.14), 0 0 22px rgba(45, 227, 219, 0.12);
+}
+
+.pos-app--ramen .product-card {
+  --ramen-neon: #ff4f7d;
+  position: relative;
+  border: 1px solid #374171;
+  border-top: 4px solid var(--ramen-neon);
+  box-shadow: var(--pos-theme-shadow-card);
+}
+
+.pos-app--ramen .product-card:nth-child(3n + 2) {
+  --ramen-neon: #2de3db;
+}
+
+.pos-app--ramen .product-card:nth-child(3n) {
+  --ramen-neon: #ffd166;
+}
+
+.pos-app--ramen .product-card::before {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-top: 17px solid var(--ramen-neon);
+  border-left: 17px solid transparent;
+  content: "";
+  opacity: 0.92;
+  pointer-events: none;
+}
+
+.pos-app--ramen .product-card:hover {
+  border-color: var(--ramen-neon);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ramen-neon) 45%, transparent), 0 0 24px color-mix(in srgb, var(--ramen-neon) 17%, transparent), var(--pos-theme-shadow-pop);
+}
+
+.pos-app--ramen .product-card__image {
+  border-bottom: 1px solid #465084;
+}
+
+.pos-app--ramen .product-card__image-media {
+  filter: saturate(1.08) contrast(1.08) brightness(0.84);
+}
+
+.pos-app--ramen .product-card:hover .product-card__image-media {
+  filter: saturate(1.18) contrast(1.08) brightness(0.93);
+}
+
+.pos-app--ramen .product-card__body strong,
+.pos-app--ramen .order-header h1,
+.pos-app--ramen .order-summary__total span {
+  font-weight: 820;
+  letter-spacing: 0.065em;
+  text-transform: uppercase;
+}
+
+.pos-app--ramen .product-card__body span,
+.pos-app--ramen .order-summary__total strong {
+  color: #2de3db !important;
+  text-shadow: 0 0 12px rgba(45, 227, 219, 0.20);
+}
+
+.pos-app--ramen .product-card__stock,
+.pos-app--ramen .sync-pill {
+  color: #e7e2ed;
+  background: #252648;
+}
+
+.pos-app--ramen .order-panel {
+  border: 1px solid #5965a0;
+  border-right: 4px solid #ff4f7d;
+  border-left: 4px solid #2de3db;
+  border-radius: 10px;
+  background: var(--pos-theme-panel-gradient);
+  box-shadow: 0 0 25px rgba(45, 227, 219, 0.09), var(--pos-theme-shadow-pop);
+}
+
+.pos-app--ramen .order-summary__total {
+  padding: 14px 12px;
+  border: 1px solid #2de3db;
+  border-radius: 6px;
+  background: #080d20;
+  box-shadow: inset 0 0 18px rgba(45, 227, 219, 0.07);
+}
+
+.pos-app--ramen .button--save {
+  border: 1px solid #2de3db;
+  color: #2de3db;
+  background: #111a35;
+}
+
+.pos-app--ramen .button--charge {
+  border: 1px solid #ff88a6;
+  color: #fff;
+  background: linear-gradient(110deg, #cf3263 0%, #9a3ea2 58%, #247f9a 100%);
+  box-shadow: 0 0 22px rgba(255, 79, 125, 0.22);
+}
+
+/* Papel Picado Taqueria --------------------------------------------------- */
+
+.pos-app--taqueria {
+  background-size: 40px 40px, 40px 40px, auto;
+}
+
+.pos-app--taqueria .pos-topbar {
+  border-bottom: 3px solid #3d281f;
+  background:
+    repeating-linear-gradient(135deg, #ffcf4e 0 10px, #e24a2f 10px 20px, #fff8e9 20px 30px, #148b84 30px 40px) left bottom / auto 7px repeat-x,
+    linear-gradient(105deg, #064c4b 0%, #08726d 66%, #0b706c 100%);
+  box-shadow: none;
+}
+
+.pos-app--taqueria .category-rail {
+  border-color: #3d281f;
+  background:
+    radial-gradient(circle at 10px 10px, rgba(255, 248, 233, 0.14) 0 3px, transparent 3.5px) 0 0 / 24px 24px,
+    #0b7b76;
+}
+
+.pos-app--taqueria .category-item {
+  border: 2px solid transparent;
+  color: #fff8e9;
+  font-weight: 800;
+}
+
+.pos-app--taqueria .category-item:not(.is-active) svg {
+  color: #ffcf4e;
+}
+
+.pos-app--taqueria .category-item:hover:not(.is-active) {
+  border-color: #ffcf4e;
+  color: #fff;
+  background: #096661;
+}
+
+.pos-app--taqueria .category-item.is-active {
+  border-color: #3d281f;
+  color: #2e1d16;
+  background: #ffcf4e;
+  box-shadow: 4px 4px 0 #3d281f;
+}
+
+.pos-app--taqueria .category-item.is-active svg {
+  color: #e24a2f;
+}
+
+.pos-app--taqueria .catalog-search,
+.pos-app--taqueria .category-toggle,
+.pos-app--taqueria .order-type-select,
+.pos-app--taqueria .order-discount-button,
+.pos-app--taqueria .stepper,
+.pos-app--taqueria .icon-button--soft,
+.pos-app--taqueria .view-toggle,
+.pos-app--taqueria .pos-mode-tabs {
+  border: 2px solid #3d281f;
+  box-shadow: 3px 3px 0 rgba(61, 40, 31, 0.78);
+}
+
+.pos-app--taqueria .catalog-search:focus-within {
+  border-color: #0b7b76;
+  box-shadow: 3px 3px 0 #3d281f, 0 0 0 4px rgba(11, 123, 118, 0.15);
+}
+
+.pos-app--taqueria .product-card {
+  --taqueria-accent: #e24a2f;
+  border: 2px solid #3d281f;
+  border-top: 7px solid var(--taqueria-accent);
+  border-radius: 4px 18px 4px 18px;
+  box-shadow: var(--pos-theme-shadow-card);
+}
+
+.pos-app--taqueria .product-card:nth-child(3n + 2) {
+  --taqueria-accent: #0b7b76;
+  border-radius: 18px 4px 18px 4px;
+}
+
+.pos-app--taqueria .product-card:nth-child(3n) {
+  --taqueria-accent: #d89d13;
+}
+
+.pos-app--taqueria .product-card:hover {
+  border-color: #3d281f;
+  border-top-color: var(--taqueria-accent);
+  transform: translate(-2px, -3px) rotate(0.25deg);
+  box-shadow: var(--pos-theme-shadow-pop);
+}
+
+.pos-app--taqueria .product-card__image {
+  border-bottom: 2px dashed #c87d43;
+}
+
+.pos-app--taqueria .product-card__image-media {
+  filter: saturate(1.12) contrast(1.03);
+}
+
+.pos-app--taqueria .product-card__body strong,
+.pos-app--taqueria .order-header h1,
+.pos-app--taqueria .order-summary__total span {
+  font-family: "Arial Rounded MT Bold", "Trebuchet MS", Arial, sans-serif;
+  font-weight: 850;
+  letter-spacing: 0.025em;
+}
+
+.pos-app--taqueria .product-card__body span {
+  color: #b93625;
+}
+
+.pos-app--taqueria .order-panel {
+  border: 3px dashed #3d281f;
+  border-top: 9px solid #0b7b76;
+  border-radius: 5px 16px 5px 16px;
+  background: var(--pos-theme-panel-gradient);
+}
+
+.pos-app--taqueria .order-summary__total {
+  padding: 13px 12px;
+  border: 2px solid #3d281f;
+  color: #fff8e9 !important;
+  background: #0b7b76;
+  box-shadow: 4px 4px 0 #ffcf4e;
+}
+
+.pos-app--taqueria .order-summary__total span,
+.pos-app--taqueria .order-summary__total strong {
+  color: #fff8e9 !important;
+}
+
+.pos-app--taqueria .button--save {
+  border: 2px solid #3d281f;
+  color: #2e1d16;
+  background: #ffcf4e;
+  box-shadow: 4px 4px 0 #3d281f;
+}
+
+.pos-app--taqueria .button--charge {
+  border: 2px solid #3d281f;
+  color: #fff8e9;
+  background: #c83c2a;
+  box-shadow: 4px 5px 0 #3d281f;
+}
+
+/* Ink & Nori Sushi -------------------------------------------------------- */
+
+.pos-app--sushi .pos-topbar {
+  border-bottom: 1px solid #c94735;
+  background:
+    linear-gradient(90deg, #c94735 0 34px, transparent 34px) left bottom / 160px 3px no-repeat,
+    linear-gradient(104deg, #10242c 0%, #193943 72%, #254852 100%);
+  box-shadow: inset 0 -4px 0 rgba(255, 253, 247, 0.06);
+}
+
+.pos-app--sushi .category-rail {
+  border-color: #b6b1a8;
+  background:
+    repeating-linear-gradient(112deg, rgba(21, 45, 54, 0.02) 0 1px, transparent 1px 8px),
+    #deded7;
+}
+
+.pos-app--sushi .category-item {
+  border: 1px solid transparent;
+  border-radius: 2px;
+  font-weight: 720;
+  letter-spacing: 0.035em;
+}
+
+.pos-app--sushi .category-item:hover:not(.is-active) {
+  border-color: #b6b1a8;
+  color: #152d36;
+  background: #f6f4ed;
+}
+
+.pos-app--sushi .category-item.is-active {
+  border-color: #152d36;
+  color: #152d36;
+  background: #fffdfa;
+  box-shadow: inset 5px 0 0 #c94735, 3px 3px 0 rgba(21, 45, 54, 0.16);
+}
+
+.pos-app--sushi .category-item.is-active svg {
+  color: #c94735;
+}
+
+.pos-app--sushi .catalog-search,
+.pos-app--sushi .category-toggle,
+.pos-app--sushi .order-type-select,
+.pos-app--sushi .order-discount-button,
+.pos-app--sushi .stepper,
+.pos-app--sushi .icon-button--soft,
+.pos-app--sushi .view-toggle,
+.pos-app--sushi .pos-mode-tabs {
+  border-color: #8f9292;
+  border-radius: 3px;
+  box-shadow: 0 2px 0 rgba(29, 37, 41, 0.09);
+}
+
+.pos-app--sushi .product-card {
+  position: relative;
+  border: 1px solid #9fa19e;
+  border-left: 4px solid #152d36;
+  border-radius: 2px;
+}
+
+.pos-app--sushi .product-card::before {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  right: 0;
+  width: 18px;
+  height: 18px;
+  background: linear-gradient(135deg, transparent 48%, #c94735 49%);
+  content: "";
+  pointer-events: none;
+}
+
+.pos-app--sushi .product-card:hover {
+  border-color: #152d36;
+  border-left-color: #c94735;
+  transform: translateY(-2px);
+}
+
+.pos-app--sushi .product-card__image {
+  border-bottom: 1px solid #b6b1a8;
+}
+
+.pos-app--sushi .product-card__image-media {
+  filter: saturate(0.88) contrast(1.05);
+}
+
+.pos-app--sushi .product-card__body strong,
+.pos-app--sushi .order-header h1,
+.pos-app--sushi .order-summary__total span {
+  font-weight: 760;
+  letter-spacing: 0.055em;
+}
+
+.pos-app--sushi .product-card__body span {
+  color: #b63d2f;
+}
+
+.pos-app--sushi .order-panel {
+  border: 1px solid #8f9292;
+  border-left: 6px solid #c94735;
+  border-radius: 2px;
+  background: var(--pos-theme-panel-gradient);
+}
+
+.pos-app--sushi .order-header {
+  padding-bottom: 11px;
+  border-bottom: 1px solid #9fa19e;
+}
+
+.pos-app--sushi .order-summary__total {
+  border-top: 3px double #626569;
+}
+
+.pos-app--sushi .button--save {
+  border: 1px solid #626569;
+  color: #152d36;
+  background: #e3e6e3;
+}
+
+.pos-app--sushi .button--charge {
+  border: 1px solid #8c2f25;
+  color: #fff;
+  background: #c94735;
+}
+
+/* Deco Supper Club -------------------------------------------------------- */
+
+.pos-app--deco {
+  color-scheme: dark;
+  background-size: 72px 42px, 72px 42px, auto;
+}
+
+.pos-app--deco .pos-topbar {
+  border-bottom: 1px solid #d2aa5c;
+  background:
+    linear-gradient(135deg, transparent 42%, #d2aa5c 43% 47%, transparent 48%) left bottom / 28px 8px repeat-x,
+    linear-gradient(100deg, #050807 0%, #111916 62%, #22231c 100%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.pos-app--deco .category-rail {
+  border-color: #695d43;
+  background:
+    linear-gradient(150deg, rgba(210, 170, 92, 0.035) 12%, transparent 12.5% 87%, rgba(210, 170, 92, 0.035) 87.5%) 0 0 / 52px 52px,
+    #111816;
+}
+
+.pos-app--deco .category-item {
+  border: 1px solid transparent;
+  border-radius: 0;
+  color: #d8d0c0;
+  font-family: "Century Gothic", "Segoe UI", sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+}
+
+.pos-app--deco .category-item:not(.is-active) svg {
+  color: #d2aa5c;
+}
+
+.pos-app--deco .category-item:hover:not(.is-active) {
+  border-color: #796b4d;
+  color: #fff6de;
+  background: #202925;
+}
+
+.pos-app--deco .category-item.is-active {
+  border: 1px solid #d2aa5c;
+  color: #fff6de;
+  background: #1c2421;
+  box-shadow: inset 4px 0 0 #d2aa5c, inset -4px 0 0 #d2aa5c;
+}
+
+.pos-app--deco .category-item.is-active svg {
+  color: #d2aa5c;
+}
+
+.pos-app--deco .catalog-search,
+.pos-app--deco .category-toggle,
+.pos-app--deco .order-type-select,
+.pos-app--deco .order-discount-button,
+.pos-app--deco .stepper,
+.pos-app--deco .icon-button--soft,
+.pos-app--deco .view-toggle,
+.pos-app--deco .pos-mode-tabs {
+  border-color: #796b4d;
+  border-radius: 0;
+  color: #efe6d5;
+  box-shadow: inset 0 0 0 1px rgba(210, 170, 92, 0.06);
+}
+
+.pos-app--deco .catalog-search:focus-within {
+  border-color: #d2aa5c;
+  box-shadow: 0 0 0 3px rgba(210, 170, 92, 0.12);
+}
+
+.pos-app--deco .product-card {
+  position: relative;
+  border: 1px solid #796b4d;
+  border-radius: 0;
+  background: var(--pos-theme-card-gradient);
+}
+
+.pos-app--deco .product-card::before {
+  position: absolute;
+  z-index: 3;
+  top: 5px;
+  right: 5px;
+  bottom: 5px;
+  left: 5px;
+  border: 1px solid rgba(210, 170, 92, 0.24);
+  content: "";
+  pointer-events: none;
+}
+
+.pos-app--deco .product-card:hover {
+  border-color: #d2aa5c;
+  box-shadow: 0 0 0 1px rgba(210, 170, 92, 0.22), var(--pos-theme-shadow-pop);
+}
+
+.pos-app--deco .product-card__image {
+  margin: 6px 6px 0;
+  border-bottom: 1px solid #796b4d;
+}
+
+.pos-app--deco .product-card__image-media {
+  filter: saturate(0.72) contrast(1.07) sepia(0.16) brightness(0.82);
+}
+
+.pos-app--deco .product-card:hover .product-card__image-media {
+  filter: saturate(0.86) contrast(1.08) sepia(0.12) brightness(0.9);
+}
+
+.pos-app--deco .product-card__body strong,
+.pos-app--deco .order-header h1,
+.pos-app--deco .order-summary__total span {
+  font-family: Copperplate, "Century Gothic", Georgia, serif;
+  font-weight: 700;
+  letter-spacing: 0.105em;
+  text-transform: uppercase;
+}
+
+.pos-app--deco .product-card__body span,
+.pos-app--deco .order-summary__total strong {
+  color: #e2bd70 !important;
+}
+
+.pos-app--deco .product-card__stock,
+.pos-app--deco .sync-pill {
+  border: 1px solid #584f3b;
+  border-radius: 0;
+  color: #d0c6b5;
+  background: #202925;
+}
+
+.pos-app--deco .order-panel {
+  border: 3px double #796b4d;
+  border-radius: 0;
+  background: var(--pos-theme-panel-gradient);
+  box-shadow: 0 0 0 1px rgba(210, 170, 92, 0.10), var(--pos-theme-shadow-pop);
+}
+
+.pos-app--deco .order-header {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #796b4d;
+}
+
+.pos-app--deco .order-summary__total {
+  border-top: 3px double #d2aa5c;
+}
+
+.pos-app--deco .button--save {
+  border: 1px solid #d2aa5c;
+  color: #e2bd70;
+  background: #171e1b;
+}
+
+.pos-app--deco .button--charge {
+  border: 1px solid #f1d69a;
+  color: #111816;
+  background: linear-gradient(105deg, #b98b3e 0%, #e5c77f 52%, #b88b40 100%);
+  box-shadow: 0 8px 18px rgba(210, 170, 92, 0.16);
+}
+
 @media (max-width: 1240px) {
   .pos-topbar__expanded {
     padding-right: 16px;
@@ -4631,6 +5506,57 @@
     grid-column: 2;
     grid-row: 2;
   }
+
+  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi) .pos-body.category-rail-open {
+    grid-template-columns: minmax(0, 1fr) minmax(410px, 34vw);
+    grid-template-rows: 76px minmax(0, 1fr);
+  }
+
+  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi) .pos-body.category-rail-open .category-rail {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    align-items: center;
+    flex-direction: row;
+    padding: 10px 18px;
+    overflow: hidden;
+    border-right: 0;
+    border-bottom: 2px solid var(--pos-theme-border-strong, var(--border-strong));
+  }
+
+  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi) .pos-body.category-rail-open .category-rail__items {
+    display: flex;
+    width: 100%;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0 0 3px;
+  }
+
+  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi) .pos-body.category-rail-open .category-item {
+    width: auto;
+    min-width: max-content;
+    min-height: 48px;
+    gap: 9px;
+    padding: 7px 16px;
+  }
+
+  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi) .pos-body.category-rail-open .category-item + .category-item {
+    margin-top: 0;
+  }
+
+  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi) .pos-body.category-rail-open .category-item:hover {
+    transform: translateY(-1px);
+  }
+
+  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi) .pos-body.category-rail-open .catalog-panel {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi) .pos-body.category-rail-open .order-panel {
+    grid-column: 2;
+    grid-row: 2;
+  }
 }
 
 @media (min-width: 981px) and (max-width: 1240px) {
@@ -4638,6 +5564,10 @@
   .pos-app--cafe .pos-body.category-rail-open,
   .pos-app--latte .pos-body.category-rail-open,
   .pos-app--bold .pos-body.category-rail-open {
+    grid-template-columns: minmax(0, 1fr) minmax(380px, 35vw);
+  }
+
+  :is(.pos-app--chicken, .pos-app--ramen, .pos-app--taqueria, .pos-app--sushi) .pos-body.category-rail-open {
     grid-template-columns: minmax(0, 1fr) minmax(380px, 35vw);
   }
 }

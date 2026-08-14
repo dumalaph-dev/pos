@@ -12,6 +12,7 @@ import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
 import { DEFAULT_BILLING_VARIANTS, DEFAULT_MONTHLY_PRICE_CENTAVOS, type BillingCatalog, type BillingVariant } from "@/lib/platform-operations";
 import { readPlatformBillingCatalog } from "@/lib/platform-operations-server";
+import { POS_THEME_OPTIONS } from "@/lib/pos-theme";
 
 export const metadata: Metadata = {
   title: "Dumala POS | POS for Cafes, Restaurants & Food Businesses",
@@ -37,7 +38,7 @@ const featureCards: Array<{
     icon: "spark",
     title: "Make the POS feel like yours",
     description: "Start with a ready-made interface, then shape the colors, type, and controls around your brand.",
-    points: ["16 interface themes to choose from", "Your own accent color", "Personalize before the team signs in"],
+    points: [`${POS_THEME_OPTIONS.length} interface themes to choose from`, "Your own accent color", "Personalize before the team signs in"],
   },
   {
     icon: "chart",
@@ -246,7 +247,7 @@ function formatDiscount(value: number) {
 }
 
 const marqueeItems = [
-  "16 themes today",
+  `${POS_THEME_OPTIONS.length} themes today`,
   "More themes on the way",
   "Regular updates & support",
   "Offline-first by default",
@@ -723,12 +724,12 @@ export default async function LandingPage() {
               See the POS. Make it yours.
             </h2>
             <p className="mt-4 text-sm leading-6 text-[#657168] sm:text-base">
-              Explore the tablet-style POS that mirrors the cashier workspace. Add a sample order, compare the current 16 themes, and
+              Explore the tablet-style POS that mirrors the cashier workspace. Add a sample order, compare the current {POS_THEME_OPTIONS.length} themes, and
               try an accent color before you sign up. The web app keeps improving with regular updates and ongoing support, with more
               theme options on the way.
             </p>
             <div className="mt-5 flex flex-wrap justify-center gap-2 text-[10px] font-black uppercase tracking-[0.12em] text-[#657168]">
-              <span className="rounded-full border border-[#d8d0c1] bg-[#fbf8f1] px-3 py-2">16 themes today</span>
+              <span className="rounded-full border border-[#d8d0c1] bg-[#fbf8f1] px-3 py-2">{POS_THEME_OPTIONS.length} themes today</span>
               <span className="rounded-full border border-[#d8d0c1] bg-[#fbf8f1] px-3 py-2">Regular updates</span>
               <span className="rounded-full border border-[#d8d0c1] bg-[#fbf8f1] px-3 py-2">Ongoing support</span>
               <span className="rounded-full border border-[#d8d0c1] bg-[#fbf8f1] px-3 py-2">More themes on the way</span>

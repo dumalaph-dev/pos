@@ -10,6 +10,7 @@
   --display-primary: #173a2b;
   --display-topbar-text: #fffaf1;
   --display-accent: #bc9657;
+  --display-accent-ink: #102d21;
   --display-accent-soft: rgba(188, 150, 87, 0.17);
   --display-border: rgba(23, 58, 43, 0.13);
   --display-border-strong: rgba(23, 58, 43, 0.25);
@@ -42,12 +43,14 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Sunset, Bold, Dark, and Ledger keep their backgrounds intentionally quiet; their
+/* High-energy and low-light themes keep their backgrounds intentionally quiet; their
    repeated tile patterns compete with product imagery and the standby message. */
 .display[data-display-theme="sunset"],
 .display[data-display-theme="bold"],
 .display[data-display-theme="dark"],
-.display[data-display-theme="ledger"] {
+.display[data-display-theme="ledger"],
+.display[data-display-theme="ramen"],
+.display[data-display-theme="deco"] {
   background: var(--display-bg);
 }
 
@@ -58,7 +61,11 @@
 .display[data-display-theme="dark"]::before,
 .display[data-display-theme="dark"]::after,
 .display[data-display-theme="ledger"]::before,
-.display[data-display-theme="ledger"]::after {
+.display[data-display-theme="ledger"]::after,
+.display[data-display-theme="ramen"]::before,
+.display[data-display-theme="ramen"]::after,
+.display[data-display-theme="deco"]::before,
+.display[data-display-theme="deco"]::after {
   display: none;
 }
 
@@ -819,7 +826,7 @@
   aspect-ratio: 1;
   place-items: center;
   border-radius: 50%;
-  color: var(--display-topbar-text);
+  color: var(--display-accent-ink);
   background: var(--display-accent);
   font-size: clamp(2rem, 5vw, 4rem);
   font-weight: 800;
