@@ -37,12 +37,21 @@ export default function PosHealthPanel({
   onSync: () => void;
 }) {
   const hasAttention = terminalStatus === "attention" || pending > 0 || syncState.status === "failed" || failedPrintCount > 0;
+  const indicatorStatus = terminalStatus === "attention" || syncState.status === "failed" || failedPrintCount > 0
+    ? "attention"
+    : terminalStatus === "offline" || pending > 0
+      ? "offline"
+      : terminalStatus;
+  const terminalLabel = labelForTerminal(terminalStatus);
   return (
     <details className="pos-health-panel">
-      <summary className={`pos-health-panel__summary${hasAttention ? " is-attention" : ""}`} aria-label="Open operational health panel">
-        <span className={`pos-health-panel__dot is-${terminalStatus}`} aria-hidden="true" />
+      <summary
+        className={`pos-health-panel__summary${hasAttention ? " is-attention" : ""}`}
+        aria-label={`Open operational health panel. Current status: ${terminalLabel}`}
+        title={`System health: ${terminalLabel}`}
+      >
         <span>System health</span>
-        <strong>{labelForTerminal(terminalStatus)}</strong>
+        <span className={`pos-health-panel__dot is-${indicatorStatus}`} aria-hidden="true" />
       </summary>
       <div className="pos-health-panel__body">
         <div className="pos-health-panel__heading">

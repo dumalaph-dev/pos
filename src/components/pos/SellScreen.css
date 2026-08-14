@@ -4654,3 +4654,456 @@
     aspect-ratio: 1.7;
   }
 }
+
+/* POS navbar hierarchy ----------------------------------------------------- */
+/* Keep the branch identity and workspace switcher together. Secondary
+   cashier actions live behind More so the topbar has one clear primary
+   navigation group and one compact utility group. */
+.pos-app .pos-topbar.is-open {
+  min-height: 72px;
+  height: 72px;
+  flex-basis: 72px;
+}
+
+.pos-app .pos-topbar__expanded {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 18px;
+}
+
+.pos-app .pos-topbar__identity {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.pos-app .pos-topbar__brand {
+  width: auto;
+  max-width: 228px;
+  flex: 0 1 228px;
+  align-self: center;
+}
+
+.pos-app .pos-topbar__brand .brand-lockup {
+  gap: 9px;
+}
+
+.pos-app .pos-topbar__brand .brand-lockup__mark {
+  width: 44px;
+  height: 44px;
+  flex-basis: 44px;
+}
+
+.pos-app .pos-mode-tabs {
+  position: static;
+  top: auto;
+  left: auto;
+  width: 190px;
+  height: 40px;
+  flex: 0 0 190px;
+  margin: 0;
+  transform: none;
+  border-radius: 10px;
+}
+
+.pos-app .pos-mode-tab {
+  border-radius: 9px;
+  font-size: 13px;
+}
+
+.pos-app .pos-toolbar {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 3px;
+  overflow: visible;
+}
+
+.pos-app .pos-toolbar > .admin-menu {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.pos-app .pos-toolbar .pos-tool {
+  min-width: 68px;
+  min-height: 44px;
+  padding: 5px 8px 4px;
+  font-size: 10px;
+}
+
+.pos-app .pos-toolbar .pos-tool--shift {
+  min-width: 94px;
+}
+
+.pos-app .pos-toolbar .pos-tool--more {
+  min-width: 68px;
+}
+
+.pos-app .pos-toolbar .pos-tool[aria-expanded="true"] {
+  color: var(--pos-topbar-foreground, var(--pos-theme-topbar-text, var(--text)));
+  background: var(--pos-topbar-active-surface);
+}
+
+.pos-app .pos-more-menu__panel {
+  min-width: 214px;
+  gap: 2px;
+  padding: 7px;
+  border-radius: 12px;
+  background: var(--pos-theme-surface-raised, var(--surface-raised));
+  box-shadow: var(--pos-theme-shadow-pop, var(--shadow-pop));
+}
+
+.pos-app .pos-more-menu__item {
+  width: 100%;
+  min-height: 40px;
+  cursor: pointer;
+}
+
+.pos-app .pos-more-menu__item svg {
+  flex: 0 0 auto;
+  color: var(--pos-theme-highlight, var(--primary));
+}
+
+.pos-app .pos-more-menu__item-label {
+  flex: 1;
+}
+
+.pos-app .pos-more-menu__item-count {
+  display: inline-grid;
+  min-width: 20px;
+  height: 20px;
+  place-items: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  color: var(--accent-fg);
+  background: var(--accent);
+  font-size: 10px;
+}
+
+.pos-app .pos-more-menu__item.is-active {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.pos-app .pos-toolbar .hold-popover {
+  top: calc(100% + 9px);
+  right: 0;
+  width: min(330px, calc(100vw - 24px));
+}
+
+.pos-app .pos-health-panel {
+  margin-left: 4px;
+}
+
+.pos-app .pos-health-panel__summary {
+  min-height: 34px;
+  gap: 7px;
+  padding: 0 4px;
+  border: 0;
+  color: var(--pos-topbar-foreground, var(--pos-theme-topbar-text, var(--text)));
+  background: transparent;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.pos-app .pos-health-panel__summary > span:not(.pos-health-panel__dot) {
+  display: inline;
+  color: var(--pos-topbar-foreground-muted, var(--pos-theme-text-muted, var(--text-muted)));
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+
+.pos-app .pos-health-panel__summary:hover {
+  color: var(--pos-topbar-foreground, var(--pos-theme-topbar-text, var(--text)));
+}
+
+.pos-app .pos-health-panel__summary:focus-visible {
+  outline: 2px solid var(--pos-topbar-foreground, var(--pos-theme-topbar-text, var(--primary)));
+  outline-offset: 3px;
+}
+
+.pos-app .pos-health-panel__dot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 13%, transparent);
+}
+
+.pos-app .pos-health-panel__dot.is-ready {
+  color: var(--success);
+  background: var(--success);
+}
+
+.pos-app .pos-health-panel__dot.is-syncing {
+  color: #d9a326;
+  background: #d9a326;
+}
+
+.pos-app .pos-health-panel__dot.is-offline {
+  color: #df7f2d;
+  background: #df7f2d;
+}
+
+.pos-app .pos-health-panel__dot.is-attention {
+  color: var(--danger, #b84b3d);
+  background: var(--danger, #b84b3d);
+}
+
+.pos-app .pos-health-panel__summary.is-attention {
+  border-color: transparent;
+}
+
+.pos-app .pos-topbar__expanded > .admin-menu {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  margin-left: 4px;
+  padding-left: 10px;
+  border-left-color: color-mix(in srgb, var(--pos-topbar-foreground, var(--pos-theme-topbar-text, #fff)) 22%, transparent);
+}
+
+.pos-app .pos-account-trigger {
+  min-height: 38px;
+  gap: 7px;
+  padding: 0 0 0 4px;
+  font-size: 12px;
+}
+
+.pos-app .profile-avatar {
+  width: 34px;
+  height: 34px;
+  font-size: 13px;
+}
+
+.pos-app .pos-topbar__collapse {
+  height: 32px;
+  min-height: 32px;
+  padding: 0 7px;
+}
+
+@media (max-width: 1240px) {
+  .pos-app .pos-topbar__expanded {
+    gap: 8px;
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .pos-app .pos-topbar__identity {
+    gap: 8px;
+  }
+
+  .pos-app .pos-topbar__brand {
+    max-width: 190px;
+    flex-basis: 190px;
+  }
+
+  .pos-app .pos-mode-tabs {
+    width: 170px;
+    flex-basis: 170px;
+  }
+
+  .pos-app .pos-toolbar .pos-tool--shift {
+    min-width: 86px;
+  }
+
+  .pos-app .profile-name {
+    display: none;
+  }
+}
+
+@media (max-width: 1080px) {
+  .pos-app .pos-health-panel__summary > span:not(.pos-health-panel__dot) {
+    display: none;
+  }
+}
+
+@media (max-width: 980px) {
+  .pos-app .pos-topbar.is-open {
+    min-height: 112px;
+    height: 112px;
+    flex-basis: 112px;
+  }
+
+  .pos-app .pos-topbar__expanded {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-rows: 44px 46px;
+    align-content: center;
+    gap: 6px 10px;
+    padding: 8px 14px 10px;
+  }
+
+  .pos-app .pos-topbar__identity {
+    grid-column: 1;
+    grid-row: 1;
+    width: 100%;
+  }
+
+  .pos-app .pos-topbar__brand {
+    width: auto;
+    max-width: none;
+    flex: 1 1 auto;
+  }
+
+  .pos-app .pos-mode-tabs {
+    width: 170px;
+    flex-basis: 170px;
+  }
+
+  .pos-app .pos-toolbar {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: end;
+    margin-left: 0;
+  }
+
+  .pos-app .pos-health-panel {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+    margin-left: 0;
+  }
+
+  .pos-app .pos-topbar__expanded > .admin-menu {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+    margin-left: 0;
+    padding-left: 0;
+    padding-right: 42px;
+    border-left: 0;
+  }
+
+  .pos-app .pos-topbar__collapse {
+    position: absolute;
+    top: 8px;
+    right: 14px;
+    width: 32px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .pos-app .pos-topbar__collapse span {
+    display: none;
+  }
+
+  .pos-app .hold-popover {
+    max-width: calc(100vw - 24px);
+  }
+}
+
+@media (max-width: 640px) {
+  .pos-app .pos-topbar.is-open {
+    min-height: 104px;
+    height: 104px;
+    flex-basis: 104px;
+  }
+
+  .pos-app .pos-topbar__expanded {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: 42px 46px;
+    gap: 6px 8px;
+    padding: 7px 12px 9px;
+  }
+
+  .pos-app .pos-topbar__identity {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    gap: 6px;
+    padding-right: 74px;
+  }
+
+  .pos-app .pos-topbar__brand {
+    min-width: 0;
+  }
+
+  .pos-app .pos-topbar__brand .brand-lockup {
+    gap: 7px;
+  }
+
+  .pos-app .pos-topbar__brand .brand-lockup__mark {
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
+  }
+
+  .pos-app .pos-topbar__brand .brand-lockup__copy strong {
+    font-size: 11px;
+  }
+
+  .pos-app .pos-topbar__brand .brand-lockup__copy small {
+    display: none;
+  }
+
+  .pos-app .pos-mode-tabs {
+    width: 148px;
+    height: 36px;
+    flex-basis: 148px;
+  }
+
+  .pos-app .pos-mode-tab {
+    font-size: 12px;
+  }
+
+  .pos-app .pos-toolbar {
+    grid-column: 1;
+    grid-row: 2;
+    width: auto;
+    justify-self: start;
+  }
+
+  .pos-app .pos-toolbar .pos-tool {
+    min-height: 42px;
+    padding-right: 6px;
+    padding-left: 6px;
+    font-size: 9px;
+  }
+
+  .pos-app .pos-toolbar .pos-tool--shift {
+    min-width: 78px;
+  }
+
+  .pos-app .pos-toolbar .pos-tool--more {
+    min-width: 60px;
+  }
+
+  .pos-app .pos-health-panel {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .pos-app .pos-health-panel__summary {
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  .pos-app .pos-topbar__expanded > .admin-menu {
+    grid-column: 2;
+    grid-row: 1;
+    padding-right: 36px;
+  }
+
+  .pos-app .pos-account-trigger {
+    min-height: 32px;
+  }
+
+  .pos-app .profile-avatar {
+    width: 30px;
+    height: 30px;
+  }
+
+  .pos-app .pos-topbar__collapse {
+    top: 7px;
+    right: 12px;
+  }
+}
