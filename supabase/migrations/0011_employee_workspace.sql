@@ -110,7 +110,8 @@ cross join (
   values
     ('Admin', 'admin', 'Full access to the backoffice and employee workspace.', 'brown', '["dashboard.view","sales.view","pos.use","orders.manage","inventory.manage","products.manage","employees.manage","reports.view","settings.manage"]'::jsonb),
     ('Manager', 'manager', 'Operational access to review sales, stock, and staff activity.', 'amber', '["dashboard.view","sales.view","orders.manage","inventory.manage","products.manage","employees.view","reports.view"]'::jsonb),
-    ('Cashier', 'cashier', 'POS access for recording sales at the assigned branch.', 'green', '["pos.use","orders.create","products.view"]'::jsonb)
+    ('Cashier', 'cashier', 'POS access for recording sales at the assigned branch.', 'green', '["pos.use","orders.create","products.view"]'::jsonb),
+    ('Staff', 'staff', 'Basic store access for staff who do not manage the business.', 'blue', '["products.view"]'::jsonb)
 ) as seed(name, slug, description, color, permissions)
 on conflict (org_id, slug) do nothing;
 

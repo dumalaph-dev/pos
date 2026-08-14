@@ -252,6 +252,10 @@ $$;
 | **manager** | own `store_id` | own `store_id` (no staff/branch admin) |
 | **cashier** | own `store_id`, own shift's orders | INSERT orders/items/shift in own `store_id`; no update/delete |
 
+### Employee workspace role presets
+
+The Employees workspace seeds four organization-scoped permission presets: **Admin**, **Manager**, **Cashier**, and **Staff**. These are stored in `employee_roles` and can be adjusted by an organization admin. They are separate from `profiles.role`, which remains the server-enforced system access tier (`admin`, `manager`, or `cashier`) used by route guards and RLS. A Staff preset therefore does not grant admin or POS access by itself; choose the appropriate system access tier when creating the employee account.
+
 ### Policy pattern (applied per table)
 ```sql
 alter table products enable row level security;

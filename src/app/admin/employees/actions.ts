@@ -16,6 +16,17 @@ type AccessRole = "admin" | "manager" | "cashier";
 type AttendanceStatus = "present" | "absent" | "late" | "on_leave";
 type PayrollStatus = "draft" | "processed" | "paid";
 type LeaveStatus = "pending" | "approved" | "rejected";
+type ProvisionableEmployee = {
+  id: string;
+  org_id: string;
+  profile_id: string | null;
+  store_id: string | null;
+  employee_code: string;
+  full_name: string;
+  role: AccessRole;
+  is_active: boolean;
+};
+type AdminClient = NonNullable<ReturnType<typeof createAdminClient>>;
 
 type Actor = {
   id: string;
@@ -184,16 +195,36 @@ export async function provisionEmployeeLogin(formData: FormData) {
   if (!employeeId) employeesRedirect("Choose an employee before setting up login access.");
   if (!initialPassword || !admin) employeesRedirect("Employee login is not configured. Add the server-only Supabase service key and EMPLOYEE_INITIAL_PASSWORD first.");
 
-  const { data: employee, error: employeeError } = await supabase
+  const { data: employeeData, error: employeeError } = await supabase
     .from("employee_records")
     .select("id, org_id, profile_id, store_id, employee_code, full_name, role, is_active")
     .eq("id", employeeId)
     .eq("org_id", actor.org_id)
     .maybeSingle();
+  const employee = employeeData as ProvisionableEmployee | null;
   if (employeeError || !employee) employeesRedirect("That employee record is not available.");
   if (!employee.is_active) employeesRedirect("Activate the employee before setting up login access.");
 
-  let profileId = employee.profile_id as string | null;
+  await provisionEmployeeLoginForRecord({ admin, actor, userId, employee, initialPassword });
+
+  revalidateEmployees();
+  employeesSaved("list", "login-provisioned", readReturnValues(formData));
+}
+
+async function provisionEmployeeLoginForRecord({
+  admin,
+  actor,
+  userId,
+  employee,
+  initialPassword,
+}: {
+  admin: AdminClient;
+  actor: Actor;
+  userId: string;
+  employee: ProvisionableEmployee;
+  initialPassword: string;
+}) {
+  let profileId = employee.profile_id;
   let createdAuthUserId: string | null = null;
   if (!profileId) {
     const { data: createdUser, error: createUserError } = await admin.auth.admin.createUser({
@@ -276,8 +307,44 @@ export async function provisionEmployeeLogin(formData: FormData) {
     after: { employee_code: employee.employee_code, profile_id: profileId, reset_to_initial_password: true },
   });
 
+  return profileId;
+}
+
+export async function provisionEmployeeAccess(formData: FormData) {
+  const { supabase, userId, actor } = await getActor();
+  if (actor.role !== "admin") employeesRedirect("Only organization admins can set up employee access.");
+
+  const employeeId = readText(formData, "employee_id");
+  const initialPassword = configuredEmployeeInitialPassword();
+  const admin = createAdminClient();
+  const pin = readText(formData, "pin");
+  const confirmation = readText(formData, "pin_confirmation");
+  if (!employeeId) employeesRedirect("Choose an employee before setting up access.");
+  if (!initialPassword || !admin) employeesRedirect("Employee login is not configured. Add the server-only Supabase service key and EMPLOYEE_INITIAL_PASSWORD first.");
+
+  const { data: employeeData, error: employeeError } = await supabase
+    .from("employee_records")
+    .select("id, org_id, profile_id, store_id, employee_code, full_name, role, is_active")
+    .eq("id", employeeId)
+    .eq("org_id", actor.org_id)
+    .maybeSingle();
+  const employee = employeeData as ProvisionableEmployee | null;
+  if (employeeError || !employee) employeesRedirect("That employee record is not available.");
+  if (!employee.is_active) employeesRedirect("Activate the employee before setting up access.");
+  if (employee.role === "manager" && !employee.store_id) employeesRedirect("Assign the manager to a branch before setting an approval PIN.");
+
+  const needsApprovalPin = employee.role === "admin" || employee.role === "manager";
+  if (needsApprovalPin && !/^\d{4,6}$/.test(pin)) employeesRedirect("Approval PIN must be 4 to 6 digits.");
+  if (needsApprovalPin && pin !== confirmation) employeesRedirect("The approval PIN entries do not match.");
+
+  const profileId = await provisionEmployeeLoginForRecord({ admin, actor, userId, employee, initialPassword });
+  if (needsApprovalPin) {
+    const { error: pinError } = await supabase.rpc("set_profile_pin", { p_profile_id: profileId, p_pin: pin });
+    if (pinError) employeesRedirect(pinError.message || "The approval PIN could not be saved.");
+  }
+
   revalidateEmployees();
-  employeesSaved("list", "login-provisioned", readReturnValues(formData));
+  employeesSaved("list", needsApprovalPin ? "access-provisioned" : "login-provisioned", readReturnValues(formData));
 }
 
 export async function setEmployeePin(formData: FormData) {

@@ -3,6 +3,7 @@ import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import StaffLinkCopy from "@/components/admin/StaffLinkCopy";
 import { SignOutButton } from "@/components/SignOutButton";
+import { EmployeeAccessPanel } from "@/components/admin/EmployeeAccessPanel";
 import { EmployeeDialogController } from "@/components/admin/EmployeeDialogController";
 import { EmployeeListClient } from "@/components/admin/EmployeeListClient";
 import { readAdminBranding } from "@/lib/admin/branding";
@@ -13,7 +14,6 @@ import { legacyStaffLoginPath, staffLoginPath } from "@/lib/store-access";
 import {
   createEmployee,
   createLeaveRequest,
-  setEmployeePin,
   saveAttendance,
   savePayroll,
   saveRole,
@@ -109,6 +109,7 @@ const PERMISSIONS = [
   ["reports.view", "View reports"],
   ["settings.manage", "Manage settings"],
 ] as const;
+const DEFAULT_ROLE_SLUGS = new Set(["admin", "manager", "cashier", "staff"]);
 const TABS: Array<{ key: WorkspaceTab; label: string }> = [
   { key: "list", label: "Employee List" },
   { key: "roles", label: "Roles & Permissions" },
@@ -196,9 +197,10 @@ function roleLabel(role: AccessRole) {
 }
 
 function roleTone(value: string) {
-  if (value === "green" || value === "cashier") return "employee-role--green";
-  if (value === "amber" || value === "manager") return "employee-role--amber";
-  if (value === "blue") return "employee-role--blue";
+  const normalized = value.toLowerCase();
+  if (normalized === "green" || normalized === "cashier") return "employee-role--green";
+  if (normalized === "amber" || normalized === "manager") return "employee-role--amber";
+  if (normalized === "blue" || normalized === "staff") return "employee-role--blue";
   return "employee-role--brown";
 }
 
@@ -239,6 +241,7 @@ function savedMessage(value: string) {
     "leave-approved": "Leave request approved.",
     "leave-rejected": "Leave request rejected.",
     "login-provisioned": "Employee login is ready. Give the employee the common initial password; they will be required to create a new one on first sign-in.",
+    "access-provisioned": "Employee login and approval PIN are ready. Give the employee the common initial password privately; it must be changed on first sign-in.",
     "pin-updated": "Approval PIN saved. The raw PIN was not stored in the browser or audit log.",
   };
   return messages[value] ?? "Changes saved.";
@@ -373,7 +376,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   const staffLinksUnavailable = canWrite && Boolean(staffLinksResult.error);
 
   return (
-    <EmployeeDialogController employees={employees} branches={branches} roles={roles} initialEmployeeId={readParam(params, "edit") || null} today={today} canWrite={canWrite}>
+    <EmployeeDialogController employees={employees} branches={branches} roles={roles} initialEmployeeId={readParam(params, "edit") || null} today={today} canWrite={canWrite} returnState={employeeListState}>
     <main data-admin-theme={branding.theme} className="admin-page employee-page text-ink">
       <div className="min-w-0 px-4 pb-10 sm:px-6 lg:px-8">
           <header className="employee-topbar">
@@ -504,7 +507,7 @@ function DateRangeMenu({ tab, range, searchQuery, requestedRole, requestedStatus
 
 function RolesTab({ roles, employees, roleById, canWrite, showCreate }: { roles: RoleRecord[]; employees: EmployeeRecord[]; roleById: Map<string, RoleRecord>; canWrite: boolean; showCreate: boolean }) {
   return <div className="employee-tab-content">
-    <div className="employee-tab-heading"><div><p className="employee-section-kicker">Access control</p><h2>Roles & Permissions</h2><p>Control which areas each role can access. These permissions are stored per organization.</p></div><Link href={employeeHref({ tab: "roles", create: showCreate ? undefined : "role" })} className="employee-outline-button"><AdminIcon name="plus" size={15} /> {showCreate ? "Close" : "Add Role"}</Link></div>
+    <div className="employee-tab-heading"><div><p className="employee-section-kicker">Access control</p><h2>Roles &amp; Permissions</h2><p>Admin, Manager, Cashier, and Staff are ready as default permission presets. You can adjust their permissions or add a custom role if the business needs one.</p></div><Link href={employeeHref({ tab: "roles", create: showCreate ? undefined : "role" })} className="employee-outline-button"><AdminIcon name="plus" size={15} /> {showCreate ? "Close" : "Add custom role"}</Link></div>
     {showCreate && <RoleEditor canWrite={canWrite} />}
     <div className="employee-role-grid">{roles.length === 0 ? <EmptyState icon="settings" title="No roles configured" detail="Create a role to define employee permissions." /> : roles.map((role) => <RoleEditor key={role.id} role={role} employeeCount={employees.filter((employee) => employee.role_id === role.id).length} canWrite={canWrite} />)}</div>
     <section className="employee-assignment-panel"><div className="employee-tab-heading"><div><p className="employee-section-kicker">Current assignments</p><h2>Who has each role</h2></div></div><div className="employee-assignment-list">{employees.length === 0 ? <p className="employee-muted">No employee records yet.</p> : employees.map((employee) => { const role = employee.role_id ? roleById.get(employee.role_id) : null; return <div key={employee.id} className="employee-assignment-row"><span className="employee-avatar employee-avatar--small">{initials(employee.full_name)}</span><span><strong>{employee.full_name}</strong><small>{employee.employee_code}</small></span><span className={`employee-role ${roleTone(role?.color ?? employee.role)}`}>{role?.name ?? roleLabel(employee.role)}</span></div>; })}</div></section>
@@ -514,9 +517,10 @@ function RolesTab({ roles, employees, roleById, canWrite, showCreate }: { roles:
 function RoleEditor({ role, employeeCount = 0, canWrite }: { role?: RoleRecord; employeeCount?: number; canWrite: boolean }) {
   const selected = new Set(role?.permissions ?? []);
   const permissionOptions = Array.from(new Set([...PERMISSIONS.map(([key]) => key), ...selected]));
+  const isDefaultRole = Boolean(role && DEFAULT_ROLE_SLUGS.has(role.slug));
   return <form action={saveRole} className="employee-role-card">
     {role && <input type="hidden" name="role_id" value={role.id} />}
-    <div className="employee-role-card__head"><span className={`employee-role-mark ${roleTone(role?.color ?? "brown")}`}>{(role?.name ?? "New role").charAt(0).toUpperCase()}</span><div><strong>{role?.name ?? "New role"}</strong><small>{role ? `${employeeCount} employee${employeeCount === 1 ? "" : "s"} assigned` : "Create a reusable access profile"}</small></div></div>
+    <div className="employee-role-card__head"><span className={`employee-role-mark ${roleTone(role?.color ?? "brown")}`}>{(role?.name ?? "New role").charAt(0).toUpperCase()}</span><div><strong>{role?.name ?? "New role"}</strong><small>{role ? `${isDefaultRole ? "Default role · " : "Custom role · "}${employeeCount} employee${employeeCount === 1 ? "" : "s"} assigned` : "Create a reusable access profile"}</small></div></div>
     <label><span>Name</span><input name="name" defaultValue={role?.name ?? ""} placeholder="e.g. Kitchen Staff" required disabled={!canWrite} /></label>
     <label><span>Description</span><textarea name="description" defaultValue={role?.description ?? ""} rows={2} placeholder="What this role is responsible for" disabled={!canWrite} /></label>
     <label><span>Accent</span><select name="color" defaultValue={role?.color ?? "brown"} disabled={!canWrite}><option value="brown">Brown</option><option value="amber">Amber</option><option value="green">Green</option><option value="blue">Blue</option></select></label>
@@ -571,7 +575,7 @@ function EmployeeEditor({ employee, branches, roles, today, canWrite, returnStat
       <div>
         <p className="employee-section-kicker">{employee ? "Edit record" : "Directory action"}</p>
         <h2>{employee ? `Edit ${employee.full_name}` : "Add employee"}</h2>
-        <p>{employee ? "Update the employee directory and linked sign-in access." : "Create a staff record now; login access can be linked separately."}</p>
+        <p>{employee ? "Update the employee directory, account, and POS approval access." : "Create a staff record, then set up its account and approval access from the same screen."}</p>
       </div>
       <Link href={returnHref} className="employee-icon-button" aria-label="Close employee form">×</Link>
     </div>
@@ -583,8 +587,8 @@ function EmployeeEditor({ employee, branches, roles, today, canWrite, returnStat
         <label><span>Email</span><input name="email" type="email" defaultValue={employee?.email ?? ""} placeholder="employee@email.com" disabled={!canWrite} /></label>
         <label><span>Phone</span><input name="phone" defaultValue={employee?.phone ?? ""} placeholder="0917 123 4567" disabled={!canWrite} /></label>
         <label><span>Job title</span><input name="job_title" defaultValue={employee?.job_title ?? ""} placeholder="Cashier" disabled={!canWrite} /></label>
-        <label><span>Workspace role</span><select name="role_id" defaultValue={defaultRoleId} disabled={!canWrite}><option value="">No role selected</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label>
-        <label><span>Sign-in access</span><select name="access_role" defaultValue={employee?.role ?? "cashier"} disabled={!canWrite}><option value="admin">Admin</option><option value="manager">Manager</option><option value="cashier">Cashier</option></select></label>
+        <label><span>Permission preset</span><select name="role_id" defaultValue={defaultRoleId} disabled={!canWrite}><option value="">No preset selected</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select><small className="employee-field-help">Choose one of the default permission presets: Admin, Manager, Cashier, or Staff.</small></label>
+        <label><span>System access</span><select name="access_role" defaultValue={employee?.role ?? "cashier"} disabled={!canWrite}><option value="admin">Admin</option><option value="manager">Manager</option><option value="cashier">Cashier</option></select><small className="employee-field-help">This controls sign-in routing and server authorization. Staff uses the basic system access tier.</small></label>
         <label><span>Home branch</span><select name="store_id" defaultValue={employee?.store_id ?? ""} disabled={!canWrite}><option value="">All branches / unassigned</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.is_active ? "" : " (inactive)"}</option>)}</select></label>
         <label><span>Date hired</span><input name="hired_on" type="date" defaultValue={employee?.hired_on ?? today} required disabled={!canWrite} /></label>
         <label><span>Schedule start</span><input name="schedule_start" type="time" defaultValue={employee?.schedule_start?.slice(0, 5) ?? "09:00"} required disabled={!canWrite} /></label>
@@ -597,19 +601,7 @@ function EmployeeEditor({ employee, branches, roles, today, canWrite, returnStat
       {employee && <label className="employee-checkbox"><input type="checkbox" name="is_active" defaultChecked={employee.is_active} disabled={!canWrite} /><span>Employee is active</span></label>}
       <button type="submit" disabled={!canWrite} className="employee-primary-button">{employee ? "Save employee" : "Add employee"}</button>
     </form>
-    {employee?.profile_id && (employee.role === "admin" || employee.role === "manager") && (
-      <form action={setEmployeePin} className="employee-entry-form mt-4 border-t border-line pt-5">
-        <input type="hidden" name="employee_id" value={employee.id} />
-        {Object.entries(returnState).map(([key, value]) => value ? <input key={key} type="hidden" name={`return_${key}`} value={value} /> : null)}
-        <div className="employee-entry-form__heading"><div><p className="employee-section-kicker">Sensitive approval</p><h3>{employee.role === "manager" ? "Manager approval PIN" : "Admin approval PIN"}</h3><p>Used for sensitive POS actions such as completed-order voids. Store a 4–6 digit PIN for this {employee.role} profile.</p></div></div>
-        <div className="employee-entry-grid">
-          <label><span>New PIN</span><input name="pin" type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{4,6}" minLength={4} maxLength={6} required disabled={!canWrite} /></label>
-          <label><span>Confirm PIN</span><input name="pin_confirmation" type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{4,6}" minLength={4} maxLength={6} required disabled={!canWrite} /></label>
-        </div>
-        <button type="submit" disabled={!canWrite || !employee.is_active} className="employee-primary-button">Save Approval PIN</button>
-      </form>
-    )}
-    {employee && (employee.role === "admin" || employee.role === "manager") && !employee.profile_id && <p className="employee-muted mt-4 border-t border-line pt-4">Set up this employee&apos;s login before assigning an approval PIN.</p>}
+    {employee && <EmployeeAccessPanel employee={employee} canWrite={canWrite} returnState={returnState} />}
   </section>;
 }
 
