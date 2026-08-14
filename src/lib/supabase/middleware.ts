@@ -35,7 +35,7 @@ function tokenKey(accessToken: string) {
  * headers are rebuilt from `request.headers` at the end of the pass so any
  * cookie refresh performed above is reflected downstream.
  */
-function forwardHeaders(request: NextRequest, user: VerifiedUser | null) {
+function forwardHeaders(request: NextRequest, user: VerifiedUser | null, additionalHeaders?: HeadersInit) {
   const headers = new Headers(request.headers);
   headers.delete(VERIFIED_USER_ID_HEADER);
   headers.delete(VERIFIED_USER_EMAIL_HEADER);
@@ -45,6 +45,10 @@ function forwardHeaders(request: NextRequest, user: VerifiedUser | null) {
   if (user) {
     headers.set(VERIFIED_USER_ID_HEADER, user.id);
     if (user.email) headers.set(VERIFIED_USER_EMAIL_HEADER, user.email);
+  }
+
+  if (additionalHeaders) {
+    new Headers(additionalHeaders).forEach((value, key) => headers.set(key, value));
   }
 
   return headers;
@@ -57,13 +61,13 @@ function forwardHeaders(request: NextRequest, user: VerifiedUser | null) {
  * once a profile exists. No-ops when Supabase env is absent so the app runs
  * pre-setup. See docs/ARCHITECTURE.md §2 and docs/POS_PRD.md §6.1.
  */
-export async function updateSession(request: NextRequest) {
+export async function updateSession(request: NextRequest, additionalHeaders?: HeadersInit) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   // Not configured yet — still strip the identity headers so they can never be
   // client-supplied.
   if (!url || !anon) {
-    return NextResponse.next({ request: { headers: forwardHeaders(request, null) } });
+    return NextResponse.next({ request: { headers: forwardHeaders(request, null, additionalHeaders) } });
   }
 
   // Collected rather than applied inline so the final response (whether a pass
@@ -167,6 +171,6 @@ export async function updateSession(request: NextRequest) {
   // cashiers.
 
   return withRefreshedCookies(
-    NextResponse.next({ request: { headers: forwardHeaders(request, checked ? user : null) } }),
+    NextResponse.next({ request: { headers: forwardHeaders(request, checked ? user : null, additionalHeaders) } }),
   );
 }

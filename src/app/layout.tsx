@@ -35,6 +35,10 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
+// Nonce-based CSP requires request-time rendering so Next can attach the
+// request nonce to its framework scripts and inline styles.
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({
   children,
 }: Readonly<{

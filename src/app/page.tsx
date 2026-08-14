@@ -1,6 +1,7 @@
 import "@/components/admin/PosSettingsScreen.css";
 import "./LandingPage.css";
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Image from "next/image";
 import Link from "next/link";
 import LandingHeader from "@/components/landing/LandingHeader";
@@ -549,6 +550,7 @@ function HeroVisual() {
 export const dynamic = "force-dynamic";
 
 export default async function LandingPage() {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   const admin = createAdminClient();
   const catalog = admin ? await readPlatformBillingCatalog(admin) : null;
   const billingCatalog: BillingCatalog = catalog ?? {
@@ -567,6 +569,7 @@ export default async function LandingPage() {
         <style>{`.lp [data-lp-reveal]{opacity:1;transform:none}`}</style>
       </noscript>
       <script
+        nonce={nonce}
         type="application/ld+json"
         // Same source array as the rendered FAQ, so the two cannot drift apart.
         dangerouslySetInnerHTML={{
