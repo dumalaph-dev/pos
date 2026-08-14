@@ -5162,6 +5162,14 @@
   margin-left: auto;
 }
 
+/* Keep the health label readable across account-menu themes. */
+.pos-app .pos-account-menu__panel .pos-account-menu__health .pos-health-panel__summary,
+.pos-app .pos-account-menu__panel .pos-account-menu__health .pos-health-panel__summary > span:not(.pos-health-panel__dot),
+.pos-app .pos-account-menu__panel .pos-account-menu__health .pos-health-panel__summary:hover,
+.pos-app .pos-account-menu__panel .pos-account-menu__health .pos-health-panel[open] .pos-health-panel__summary {
+  color: var(--pos-theme-text, var(--text));
+}
+
 .pos-app .pos-account-menu__health .pos-health-panel__body {
   position: static;
   width: auto;
