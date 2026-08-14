@@ -13,6 +13,7 @@ import {
 } from "@/lib/printer";
 import { buildReceipt } from "@/lib/receipt";
 import { PAPER_WIDTH_OPTIONS } from "@/lib/paper-width";
+import { OverlayDialog } from "@/components/ui/OverlayLayer";
 
 export default function PrinterSettingsModal({
   initial,
@@ -80,15 +81,13 @@ export default function PrinterSettingsModal({
     "w-full rounded-btn border border-line-strong bg-raised px-3 py-2 text-sm text-ink outline-none focus:border-primary";
 
   return (
-    <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-ink/40 p-4"
-      onClick={onClose}
+    <OverlayDialog
+      onClose={onClose}
+      titleId="pos-printer-settings-title"
+      backdropClassName="fixed inset-0 flex items-center justify-center bg-ink/40 p-4"
+      dialogClassName="w-full max-w-sm rounded-card bg-raised p-4 shadow-[var(--shadow-pop)]"
     >
-      <div
-        className="w-full max-w-sm rounded-card bg-raised p-4 shadow-[var(--shadow-pop)]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <p className="text-sm font-bold uppercase tracking-wide text-ink-muted">Printer settings</p>
+        <p id="pos-printer-settings-title" className="text-sm font-bold uppercase tracking-wide text-ink-muted">Printer settings</p>
 
         <label className="mt-3 block text-sm font-medium text-ink">
           Transport
@@ -196,7 +195,6 @@ export default function PrinterSettingsModal({
             {saving ? "Saving…" : "Save"}
           </button>
         </div>
-      </div>
-    </div>
+    </OverlayDialog>
   );
 }

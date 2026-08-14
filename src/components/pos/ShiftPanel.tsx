@@ -17,6 +17,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatPeso, toCentavos } from "@/lib/money";
 import { buildReadingSlip } from "@/lib/receipt";
 import type { PaperWidth } from "@/lib/paper-width";
+import { OverlayDialog } from "@/components/ui/OverlayLayer";
 import {
   formatShiftDuration,
   formatShiftTime,
@@ -276,14 +277,15 @@ export default function ShiftPanel({
     reading && countedCash.trim() !== "" ? toCentavos(Number(countedCash || "0")) - reading.expectedCash : null;
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink/40 p-4" onClick={onClose}>
-      <div
-        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-card bg-raised p-4 shadow-[var(--shadow-pop)]"
-        onClick={(event) => event.stopPropagation()}
-      >
+    <OverlayDialog
+      onClose={onClose}
+      titleId="pos-shift-panel-title"
+      backdropClassName="fixed inset-0 flex items-center justify-center bg-ink/40 p-4"
+      dialogClassName="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-card bg-raised p-4 shadow-[var(--shadow-pop)]"
+    >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-bold uppercase tracking-wide text-ink-muted">Cashier shift</p>
+            <p id="pos-shift-panel-title" className="text-sm font-bold uppercase tracking-wide text-ink-muted">Cashier shift</p>
             <p className="mt-0.5 text-xs text-ink-muted">{profile.store_name ?? "Your branch"}</p>
           </div>
           <button
@@ -434,8 +436,7 @@ export default function ShiftPanel({
             )}
           </div>
         )}
-      </div>
-    </div>
+    </OverlayDialog>
   );
 }
 

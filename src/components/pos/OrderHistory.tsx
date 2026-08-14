@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { recordPosOrderVoid } from "@/app/admin/orders/actions";
 import { createClient } from "@/lib/supabase/client";
 import { formatPeso } from "@/lib/money";
@@ -11,6 +11,7 @@ import {
 } from "@/lib/offline";
 import { buildReceipt } from "@/lib/receipt";
 import type { PaperWidth } from "@/lib/paper-width";
+import { OverlayDialog } from "@/components/ui/OverlayLayer";
 
 type OrderStatus = "completed" | "voided" | "refunded";
 type PaymentMethod = "cash" | "gcash" | "maya" | "card";
@@ -360,7 +361,6 @@ export default function OrderHistory({
   onToast,
 }: OrderHistoryProps) {
   const supabase = useMemo(() => createClient(), []);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [orders, setOrders] = useState<OrderHistoryRecord[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<HistoryFilter>("all");
@@ -443,15 +443,6 @@ export default function OrderHistory({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- history hydration is the external Dexie/Supabase boundary.
     void loadOrders();
   }, [loadOrders, pendingCount]);
-
-  useEffect(() => {
-    closeButtonRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
 
   const filteredOrders = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -574,16 +565,13 @@ export default function OrderHistory({
   const pendingVisible = orders.filter((order) => order.status === "pending").length;
 
   return (
-    <div
-      className="order-history-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="order-history-title"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+    <OverlayDialog
+      onClose={onClose}
+      titleId="order-history-title"
+      backdropClassName="order-history-overlay"
+      dialogClassName="order-history-shell"
+      initialFocusSelector="[data-order-dialog-autofocus]"
     >
-      <section className="order-history-shell">
         <header className="order-history-header">
           <div className="order-history-header__brand">
             <div className="order-history-header__mark"><HistoryIcon name="receipt" size={20} /></div>
@@ -605,7 +593,7 @@ export default function OrderHistory({
               <HistoryIcon name="refresh" size={16} />
               Refresh
             </button>
-            <button type="button" ref={closeButtonRef} className="order-history-button order-history-button--close" onClick={onClose}>
+            <button type="button" data-order-dialog-autofocus className="order-history-button order-history-button--close" onClick={onClose}>
               Back to POS
               <HistoryIcon name="arrow" size={16} />
             </button>
@@ -809,7 +797,6 @@ export default function OrderHistory({
             )}
           </section>
         </div>
-      </section>
-    </div>
+    </OverlayDialog>
   );
 }

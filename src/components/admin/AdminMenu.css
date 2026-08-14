@@ -8,7 +8,7 @@
 
 .admin-menu__panel {
   position: absolute;
-  z-index: 40;
+  z-index: var(--z-dropdown, 900);
   top: calc(100% + 8px);
   right: 0;
   display: grid;
@@ -25,7 +25,7 @@
 
 .admin-menu__panel--portal {
   position: fixed;
-  z-index: 100;
+  z-index: var(--z-dropdown, 900);
   top: auto;
   right: auto;
   max-height: calc(100dvh - 24px);

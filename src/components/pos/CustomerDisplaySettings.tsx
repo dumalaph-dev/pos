@@ -6,6 +6,7 @@ import {
   generateDisplayPairingToken,
   normalizeDisplayPairingToken,
 } from "@/lib/display";
+import { OverlayDialog } from "@/components/ui/OverlayLayer";
 
 export default function CustomerDisplaySettings({
   initialToken,
@@ -62,12 +63,16 @@ export default function CustomerDisplaySettings({
   const input = "w-full rounded-btn border border-line-strong bg-raised px-3 py-2 text-sm text-ink outline-none focus:border-primary";
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-card bg-raised p-5 shadow-[var(--shadow-pop)]" onClick={(event) => event.stopPropagation()}>
+    <OverlayDialog
+      onClose={onClose}
+      titleId="pos-display-settings-title"
+      backdropClassName="fixed inset-0 flex items-center justify-center bg-ink/40 p-4"
+      dialogClassName="w-full max-w-lg rounded-card bg-raised p-5 shadow-[var(--shadow-pop)]"
+    >
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm font-bold uppercase tracking-wide text-ink-muted">Customer display</p>
-            <h2 className="mt-1 text-xl font-extrabold text-primary">Pair a second screen</h2>
+            <h2 id="pos-display-settings-title" className="mt-1 text-xl font-extrabold text-primary">Pair a second screen</h2>
             <p className="mt-2 text-sm leading-6 text-ink-muted">Open the link on the customer-facing tablet or monitor. The display mirrors this terminal’s order and never interrupts a sale.</p>
           </div>
           <span className="rounded-pill bg-primary-soft px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-primary">P5</span>
@@ -98,7 +103,6 @@ export default function CustomerDisplaySettings({
           <button type="button" onClick={onClose} className="rounded-btn bg-secondary py-3 font-bold text-ink">Cancel</button>
           <button type="button" onClick={() => void save()} disabled={saving || !normalizeDisplayPairingToken(token)} className="rounded-btn bg-accent py-3 font-bold text-accent-fg disabled:opacity-40">{saving ? "Saving…" : "Save pairing"}</button>
         </div>
-      </div>
-    </div>
+    </OverlayDialog>
   );
 }

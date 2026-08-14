@@ -40,6 +40,11 @@ export type SyncBatchResult = {
   lastError: string | null;
 };
 
+export type PendingQueueStatus = {
+  pending: number;
+  oldestQueuedSaleAt: string | null;
+};
+
 export type OfflineProfileSnapshot = {
   id: string;
   org_id: string;
@@ -308,15 +313,25 @@ export async function enqueueOrder(
 }
 
 export async function pendingCount(scope: OfflineSyncScope): Promise<number> {
+  return (await getPendingQueueStatus(scope)).pending;
+}
+
+/** Read the queue metrics needed by the POS operational health panel. */
+export async function getPendingQueueStatus(scope: OfflineSyncScope): Promise<PendingQueueStatus> {
   const db = getDb();
   const [pendingOrders, pendingAudits] = await Promise.all([
     db.outbox.toArray(),
     db.auditOutbox.toArray(),
   ]);
-  return (
-    pendingOrders.filter((item) => matchesOrderScope(item.p_order, scope)).length +
-    pendingAudits.filter((item) => matchesAuditScope(item.payload, scope)).length
-  );
+  const scopedOrders = pendingOrders.filter((item) => matchesOrderScope(item.p_order, scope));
+  const scopedAudits = pendingAudits.filter((item) => matchesAuditScope(item.payload, scope));
+  return {
+    pending: scopedOrders.length + scopedAudits.length,
+    oldestQueuedSaleAt: scopedOrders.reduce<string | null>((oldest, item) => {
+      if (!oldest) return item.created_at;
+      return item.created_at < oldest ? item.created_at : oldest;
+    }, null),
+  };
 }
 
 /**
@@ -651,16 +666,13 @@ async function linkPendingAudits(localUuid: string, entityId: unknown, scope: Of
 
 /** Subscribe to outbox size changes; returns an unsubscribe fn. */
 export function watchPending(cb: (n: number) => void, scope: OfflineSyncScope): () => void {
+  return watchPendingStatus((status) => cb(status.pending), scope);
+}
+
+/** Subscribe to scoped queue metrics without exposing private order payloads. */
+export function watchPendingStatus(cb: (status: PendingQueueStatus) => void, scope: OfflineSyncScope): () => void {
   const subscription = liveQuery(async () => {
-    const db = getDb();
-    const [pendingOrders, pendingAudits] = await Promise.all([
-      db.outbox.toArray(),
-      db.auditOutbox.toArray(),
-    ]);
-    return (
-      pendingOrders.filter((item) => matchesOrderScope(item.p_order, scope)).length +
-      pendingAudits.filter((item) => matchesAuditScope(item.payload, scope)).length
-    );
+    return getPendingQueueStatus(scope);
   }).subscribe({
     next: cb,
     error: (error) => reportError(error, { area: "offline-sync", queue: "watch" }),

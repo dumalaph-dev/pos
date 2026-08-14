@@ -8,10 +8,9 @@ import "./SellScreen.css";
  * Orders are written to the local outbox FIRST (offline.ts), then synced via
  * the idempotent `place_order` RPC — the UI never awaits the network.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
-import { reportError } from "@/lib/monitoring";
 import { formatPeso, weightLineTotal } from "@/lib/money";
 import { formatStockQuantity, stockMovementDelta, stockStatus } from "@/lib/inventory";
 import { resolveProductImage } from "@/lib/product-images";
@@ -22,29 +21,30 @@ import { AdminMenu } from "@/components/admin/AdminMenu";
 import { SignOutButton } from "@/components/SignOutButton";
 import OfflinePinSetup from "@/components/OfflinePinSetup";
 import OfflinePinUnlock from "@/components/OfflinePinUnlock";
+import ChargeModal from "@/components/pos/ChargeModal";
 import PrinterSettingsModal from "@/components/pos/PrinterSettings";
 import CustomerDisplaySettings from "@/components/pos/CustomerDisplaySettings";
 import OrderHistory from "@/components/pos/OrderHistory";
 import ShiftPanel, { useActiveShift } from "@/components/pos/ShiftPanel";
+import { OverlayDialog } from "@/components/ui/OverlayLayer";
+import PosHealthPanel from "@/components/pos/PosHealthPanel";
+import { useCartState } from "@/components/pos/useCartState";
+import { usePosHardwareStatus } from "@/components/pos/usePosHardwareStatus";
+import { usePosPrinting } from "@/components/pos/usePosPrinting";
+import { usePosSync } from "@/components/pos/usePosSync";
 import {
   buildOrderNo,
   enqueueAuditLog,
   enqueueOrder,
-  flushAuditOutbox,
-  flushOutbox,
   getDeviceId,
   getOfflineCredential,
   loadCachedCatalog,
-  OFFLINE_PARKED_ORDER_KEY,
-  pendingCount,
   saveCatalogCache,
-  watchPending,
   type OfflineCredential,
   type OfflineProfileSnapshot,
 } from "@/lib/offline";
 import { POS_DEVICE_BINDING_KEY, type PosDeviceBinding } from "@/lib/device-binding";
 import {
-  getPrinter,
   loadPrinterSettings,
   openCashDrawer,
   savePrinterSettings,
@@ -69,18 +69,13 @@ import {
 } from "@/lib/display";
 import { DEFAULT_DISPLAY_SETTINGS, normalizeDisplayGalleryRows, normalizeDisplayPromotionRows, normalizeDisplaySettings } from "@/lib/display-config";
 import { buildDisplayMenuItems, displayMenuItemsToGalleryItems } from "@/lib/display-gallery";
+import { applySaleToStock } from "@/lib/pos/inventory-movements";
+import { paymentPreview as buildPaymentPreview } from "@/lib/pos/payment";
+import { discountRequiresApproval, saleTotals } from "@/lib/pos/pricing";
+import { orderReducer } from "@/lib/pos/state-machines";
+import { NO_DISCOUNT, type DiscountState, type PaymentPreview, type PosProduct, type RuntimePaymentMethod } from "@/lib/pos/types";
 
-type Product = {
-  id: string;
-  name: string;
-  pricing_mode: "fixed" | "per_kg";
-  price: number; // centavos
-  unit: string;
-  category_id: string | null;
-  image_url?: string | null;
-  track_stock?: boolean;
-  min_stock?: number | null;
-};
+type Product = PosProduct;
 type Category = { id: string; name: string; icon: string | null };
 type StockRow = { store_id: string; product_id: string; qty: number };
 
@@ -94,39 +89,10 @@ function withCatalogGallery<T extends { display_gallery?: DisplayGalleryItem[] }
     display_gallery: [...marketingItems, ...displayMenuItemsToGalleryItems(menuItems)],
   };
 }
-
-type CartLine = {
-  key: string; // product id — one line per product
-  product: Product;
-  qty: number;
-  weightKg: number | null; // set for per_kg lines
-  lineTotal: number; // centavos
-};
-
-type DiscountState = {
-  type: "none" | "senior" | "pwd" | "custom";
-  pct: number;
-  name: string;
-  id: string;
-  approval_id?: string | null;
-};
-const NO_DISCOUNT: DiscountState = { type: "none", pct: 0, name: "", id: "" };
-
-type ParkedOrder = {
-  at: number;
-  lines: CartLine[];
-  note: string;
-  discount: DiscountState;
-};
-
-const PARK_KEY = OFFLINE_PARKED_ORDER_KEY;
-const MAX_PARKED = 10;
 const DEFAULT_STORE_NAME = "Your Store";
 
-const round = (n: number) => Math.round(n);
 const displayPeso = (cents: number) => formatPeso(cents).replace(/\.00$/, "");
 
-type RuntimePaymentMethod = "cash" | "gcash" | "maya" | "card";
 type PosRuntimeConfig = {
   palette: PosPaletteId;
   customColor: string;
@@ -150,12 +116,6 @@ type PosRuntimeConfig = {
 
 type ProfileData = Omit<OfflineProfileSnapshot, "pos_config"> & {
   pos_config?: PosRuntimeConfig;
-};
-
-type PaymentPreview = {
-  method: RuntimePaymentMethod;
-  tendered: number | null;
-  changeDue: number | null;
 };
 
 const DEFAULT_POS_RUNTIME_CONFIG: PosRuntimeConfig = {
@@ -385,17 +345,11 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [posConfig, setPosConfig] = useState<PosRuntimeConfig>(DEFAULT_POS_RUNTIME_CONFIG);
   const [orderType, setOrderType] = useState(DEFAULT_POS_RUNTIME_CONFIG.defaultOrderType);
-  const [cart, setCart] = useState<CartLine[]>([]);
-  const [note, setNote] = useState("");
-  const [discount, setDiscount] = useState<DiscountState>(NO_DISCOUNT);
   const [discountOpen, setDiscountOpen] = useState(false);
 
   const [keypad, setKeypad] = useState<{ product: Product; lineKey?: string } | null>(null);
-  const [payOpen, setPayOpen] = useState(false);
   const [paymentPreview, setPaymentPreview] = useState<PaymentPreview | null>(null);
-  const [parked, setParked] = useState<ParkedOrder[]>([]);
   const [trayOpen, setTrayOpen] = useState(false);
-  const [success, setSuccess] = useState<{ orderNo: string; change: number | null } | null>(null);
   const [displayOverride, setDisplayOverride] = useState<DisplayState | null>(null);
   const [toast, setToast] = useState<{ msg: string; retry?: boolean } | null>(null);
   const [offline, setOffline] = useState(false);
@@ -403,11 +357,13 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
   const [unlockedOfflineProfile, setUnlockedOfflineProfile] = useState<OfflineProfileSnapshot | null>(null);
   const [offlineCredential, setOfflineCredential] = useState<OfflineCredential | null>(null);
   const [offlineCatalogReady, setOfflineCatalogReady] = useState(false);
-  const [pending, setPending] = useState(0);
-  const [syncFailure, setSyncFailure] = useState<string | null>(null);
   const [printerSettings, setPrinterSettings] = useState<PrinterSettings>(() =>
     loadPrinterSettings(),
   );
+  const printing = usePosPrinting(printerSettings, (message, label) => {
+    setToast({ msg: `Couldn't print ${label} — ${message}`, retry: true });
+  });
+  const { doPrint, lastReceipt, hasReceipt, failedCount: failedPrintCount, state: printState } = printing;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [displaySettingsOpen, setDisplaySettingsOpen] = useState(false);
   const [displayPairingToken, setDisplayPairingToken] = useState<string | null>(() => loadDisplayPairingToken());
@@ -419,15 +375,48 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
   const collapsedNavRef = useRef<HTMLButtonElement>(null);
   const collapseNavRef = useRef<HTMLButtonElement>(null);
   const navWasOpen = useRef(false);
-  const lastReceipt = useRef<Uint8Array | null>(null);
   const displayLinkRef = useRef<DisplayLink | null>(null);
-  const [hasReceipt, setHasReceipt] = useState(false);
+  const [displayLink, setDisplayLink] = useState<DisplayLink | null>(null);
+  const [orderState, dispatchOrder] = useReducer(orderReducer, { status: "empty" } as const);
+  const payOpen = orderState.status === "paying";
+  const success = useMemo(
+    () => orderState.status === "saved" ? { orderNo: orderState.orderNo, change: orderState.change } : null,
+    [orderState],
+  );
   const orderTypeScope = useRef<string | null>(null);
   const offlineProfile = initialOfflineProfile ?? unlockedOfflineProfile;
   const syncProfile = offlineProfile ?? profile;
   const syncUserId = syncProfile?.id ?? null;
   const syncOrgId = syncProfile?.org_id ?? null;
   const syncStoreId = syncProfile?.store_id ?? null;
+
+  const stockNotice = useCallback((product: Product, available: number | undefined) => {
+    const status = stockStatus(available, product.min_stock);
+    if (status === "out") {
+      setToast({ msg: `${product.name} is out of recorded stock. The sale can still continue.` });
+    } else if (status === "low") {
+      setToast({ msg: `${product.name} is low: ${formatStockQuantity(available ?? 0)} ${product.unit} recorded.` });
+    }
+  }, []);
+  const cartState = useCartState({ stockByProductId, onStockNotice: stockNotice });
+  const {
+    cart,
+    note,
+    setNote,
+    discount,
+    setDiscount,
+    parked,
+    maxParked: MAX_PARKED,
+    chooseProduct: chooseProductFromCart,
+    addFixed,
+    bump,
+    applyWeight,
+    removeLine,
+    clearCart,
+    holdOrder: holdCart,
+    resumeOrder: resumeCart,
+    removeParked,
+  } = cartState;
 
   // P8: the till this terminal is ringing into. Cached on the device so an
   // offline sale still carries its shift through the outbox.
@@ -787,130 +776,41 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
   // snapshot internally and never participates in the sale's critical path.
   useEffect(() => {
     const token = normalizeDisplayPairingToken(displayPairingToken);
-    displayLinkRef.current = null;
     if (!token) return;
 
     const link = createDisplayLink({ token, role: "publisher", supabase });
     displayLinkRef.current = link;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- expose the external display subscription to the hardware-status hook.
+    setDisplayLink(link);
     return () => {
-      if (displayLinkRef.current === link) displayLinkRef.current = null;
+      if (displayLinkRef.current === link) {
+        displayLinkRef.current = null;
+        setDisplayLink(null);
+      }
       void link.disconnect();
     };
   }, [displayPairingToken, supabase]);
 
-  // ── Offline sync: pending counter, retry with backoff (P2) ───────────
-  useEffect(() => {
-    if (!syncUserId || !syncOrgId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the previous cashier's scoped counter.
-      setPending(0);
-      return;
-    }
-    return watchPending(setPending, {
-      userId: syncUserId,
-      orgId: syncOrgId,
-      storeId: syncStoreId,
-    });
-  }, [syncOrgId, syncStoreId, syncUserId]);
-
-  const retryMs = useRef(2000);
-  const flush = useCallback(async () => {
-    if (requiresOfflineUnlock || !navigator.onLine) return;
-    if (!syncUserId || !syncOrgId) return;
-    const scope = { userId: syncUserId, orgId: syncOrgId, storeId: syncStoreId };
-    if (offlineProfile) {
-      let sessionUserId: string | null = null;
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        sessionUserId = session?.user.id ?? null;
-      } catch {
-        return;
-      }
-      // Offline PIN unlock is device-local. Only replay queued sales when the
-      // matching authenticated user is available again.
-      if (sessionUserId !== syncUserId) return;
-    }
-    try {
-      const orderResult = await flushOutbox(supabase, scope);
-      const auditResult = await flushAuditOutbox(supabase, scope);
-      const synced = orderResult.synced + auditResult.synced;
-      const failed = orderResult.failed + auditResult.failed;
-
-      if (failed > 0) {
-        const outstanding = await pendingCount(scope);
-        setSyncFailure(`Sync issue — ${outstanding} item${outstanding === 1 ? "" : "s"} waiting. Retrying automatically.`);
-        retryMs.current = Math.min(60000, retryMs.current * 2);
-        return;
-      }
-
-      // A normal session can refresh its catalog. Offline PIN sessions keep
-      // serving their device-local catalog until the cashier re-authenticates.
-      retryMs.current = 2000;
-      setSyncFailure(null);
-      if (synced > 0 && !offlineProfile) setOffline(false);
-      if (synced > 0 && !offlineProfile) void refreshCatalog();
-      if (synced === 0 && (await pendingCount(scope)) > 0) {
-        retryMs.current = Math.min(60000, retryMs.current * 2);
-      }
-    } catch (error) {
-      reportError(error, { area: "offline-sync", queue: "flush" });
-      setSyncFailure("Sync could not run — queued work is safe and will retry automatically.");
-      retryMs.current = Math.min(60000, retryMs.current * 2);
-    }
-  }, [offlineProfile, requiresOfflineUnlock, supabase, refreshCatalog, syncOrgId, syncStoreId, syncUserId]);
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const tick = () => {
-      void flush().then(
-        () => {
-          timer = setTimeout(tick, retryMs.current);
-        },
-        () => {
-          // Keep retrying after an IndexedDB/storage failure; a transient
-          // local failure must not permanently stop outbox synchronization.
-          timer = setTimeout(tick, retryMs.current);
-        },
-      );
-    };
-    tick();
-    const onOnline = () => {
-      retryMs.current = 2000;
-      setSyncFailure(null);
-      if (!offlineProfile) {
-        setOffline(false);
-        void refreshCatalog();
-      }
-      void flush();
-    };
-    const onOffline = () => setOffline(true);
-    window.addEventListener("online", onOnline);
-    window.addEventListener("offline", onOffline);
-    return () => {
-      if (timer) clearTimeout(timer);
-      window.removeEventListener("online", onOnline);
-      window.removeEventListener("offline", onOffline);
-    };
-  }, [flush, offlineProfile, refreshCatalog]);
-
-  // ── Park tray persistence ─────────────────────────────────────────────
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(PARK_KEY);
-      if (raw) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate the browser-owned hold tray once.
-        setParked(JSON.parse(raw));
-      }
-    } catch {
-      /* ignore corrupt tray */
-    }
-  }, []);
-  useEffect(() => {
-    try {
-      localStorage.setItem(PARK_KEY, JSON.stringify(parked));
-    } catch {
-      /* storage full/blocked — tray is best-effort */
-    }
-  }, [parked]);
+  const syncScope = useMemo(() => (
+    syncUserId && syncOrgId
+      ? { userId: syncUserId, orgId: syncOrgId, storeId: syncStoreId }
+      : null
+  ), [syncOrgId, syncStoreId, syncUserId]);
+  const handleSyncRecovered = useCallback(() => {
+    if (!offlineProfile) setOffline(false);
+  }, [offlineProfile]);
+  const handleSyncOffline = useCallback(() => setOffline(true), []);
+  const sync = usePosSync({
+    supabase,
+    offlineProfile,
+    requiresOfflineUnlock,
+    scope: syncScope,
+    refreshCatalog,
+    onRecovered: handleSyncRecovered,
+    onOffline: handleSyncOffline,
+  });
+  const { pending, oldestQueuedSaleAt, syncFailure, flush, state: syncState } = sync;
+  const hardware = usePosHardwareStatus({ displayLink, offline, printState, syncState });
 
   useEffect(() => {
     if (!toast) return;
@@ -920,14 +820,13 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
   }, [toast]);
 
   // ── Derived totals (centavos) ─────────────────────────────────────────
-  const subtotal = cart.reduce((s, l) => s + l.lineTotal, 0);
-  const discountAmount =
-    discount.type === "none" ? 0 : round((subtotal * discount.pct) / 100);
-  const total = subtotal - discountAmount;
+  const vatExemptByDiscount = discount.type === "senior" || discount.type === "pwd";
+  const { subtotal, discountAmount, total, vatAmount, vatableSale, vatExemptSale } = saleTotals(cart, discount, {
+    showVat: posConfig.showVat,
+    vatRate: posConfig.vatRate,
+    vatExempt: vatExemptByDiscount,
+  });
   const adminPinThreshold = normalizeAdminDiscountThreshold(profile?.discount_threshold);
-  const vatAmount = posConfig.showVat && posConfig.vatRate > 0
-    ? round((total * posConfig.vatRate) / (1 + posConfig.vatRate))
-    : 0;
   const availablePaymentMethods = (['cash', 'gcash', 'maya', 'card'] as RuntimePaymentMethod[]).filter((method) => posConfig.paymentMethods[method]);
   const displayBranding = useMemo(() => ({
     storeName,
@@ -991,111 +890,46 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     );
   }, [products, activeCat, search]);
 
-  // ── Cart ops ──────────────────────────────────────────────────────────
-  const notifyStock = useCallback((product: Product) => {
-    if (!product.track_stock) return;
-    const available = stockByProductId[product.id];
-    const status = stockStatus(available, product.min_stock);
-    if (status === "out") {
-      setToast({ msg: `${product.name} is out of recorded stock. The sale can still continue.` });
-    } else if (status === "low") {
-      setToast({ msg: `${product.name} is low: ${formatStockQuantity(available ?? 0)} ${product.unit} recorded.` });
-    }
-  }, [stockByProductId]);
-
-  const addFixed = useCallback((product: Product) => {
-    setCart((prev) => {
-      const hit = prev.find((l) => l.key === product.id);
-      if (hit) {
-        return prev.map((l) =>
-          l.key === product.id
-            ? { ...l, qty: l.qty + 1, lineTotal: l.lineTotal + product.price }
-            : l,
-        );
-      }
-      return [
-        ...prev,
-        { key: product.id, product, qty: 1, weightKg: null, lineTotal: product.price },
-      ];
-    });
-  }, []);
-
+  // ── Cart and hold actions are owned by useCartState ────────────────────
   const chooseProduct = useCallback((product: Product) => {
-    notifyStock(product);
+    chooseProductFromCart(product);
     if (product.pricing_mode === "per_kg") setKeypad({ product });
-    else addFixed(product);
-  }, [addFixed, notifyStock]);
-
-  const bump = (key: string, delta: number) => {
-    setCart((prev) =>
-      prev.map((l) =>
-        l.key === key && l.product.pricing_mode === "fixed"
-          ? {
-              ...l,
-              qty: Math.max(1, l.qty + delta),
-              lineTotal: Math.max(1, l.qty + delta) * l.product.price,
-            }
-          : l,
-      ),
-    );
-  };
-
-  const applyWeight = (product: Product, kg: number, lineKey?: string) => {
-    const lineTotal = weightLineTotal(product.price, kg);
-    setCart((prev) => {
-      if (lineKey) {
-        return prev.map((l) =>
-          l.key === lineKey ? { ...l, weightKg: kg, lineTotal } : l,
-        );
-      }
-      const hit = prev.find((l) => l.key === product.id);
-      if (hit) return prev.map((l) => (l.key === product.id ? { ...l, weightKg: kg, lineTotal } : l));
-      return [
-        ...prev,
-        { key: product.id, product, qty: 1, weightKg: kg, lineTotal },
-      ];
-    });
-  };
-
-  const removeLine = (key: string) => setCart((prev) => prev.filter((l) => l.key !== key));
-
-  // ── Park / hold ───────────────────────────────────────────────────────
-  const holdOrder = () => {
-    if (cart.length === 0) return;
-    if (parked.length >= MAX_PARKED) {
+  }, [chooseProductFromCart]);
+  const holdOrder = useCallback(() => {
+    if (cart.length > 0 && parked.length >= MAX_PARKED) {
       setToast({ msg: `Hold tray full (${MAX_PARKED}) — resume or clear one first.` });
       return;
     }
-    setParked((prev) => [...prev, { at: Date.now(), lines: cart, note, discount }]);
-    setCart([]);
-    setNote("");
-    setDiscount(NO_DISCOUNT);
-    setTrayOpen(false);
-  };
-  const resumeOrder = (i: number) => {
-    const p = parked[i];
-    setCart(p.lines);
-    setNote(p.note);
-    setDiscount(p.discount);
-    setParked((prev) => prev.filter((_, idx) => idx !== i));
-    setTrayOpen(false);
-  };
+    if (holdCart()) setTrayOpen(false);
+  }, [MAX_PARKED, cart.length, holdCart, parked.length]);
+  const resumeOrder = useCallback((index: number) => {
+    if (resumeCart(index)) setTrayOpen(false);
+  }, [resumeCart]);
+  const startPayment = useCallback(() => {
+    const preview = buildPaymentPreview(total, availablePaymentMethods[0] ?? "cash", null);
+    setPaymentPreview(preview);
+    dispatchOrder({ type: "start_payment", preview });
+  }, [availablePaymentMethods, total]);
+  const closePayment = useCallback(() => {
+    dispatchOrder({ type: "cancel_payment" });
+    setPaymentPreview(null);
+  }, []);
+  const updatePaymentPreview = useCallback((preview: PaymentPreview) => {
+    setPaymentPreview(preview);
+    dispatchOrder({ type: "update_payment", preview });
+  }, []);
 
   // ── Order placement: local-first, sync in background (P2) ────────────
-  const placeOrder = async (method: string, tendered: number | null, payRef: string) => {
+  const placeOrder = async (method: RuntimePaymentMethod, tendered: number | null, payRef: string) => {
     if (!profile || cart.length === 0) return;
     const now = new Date();
     const orderNo = buildOrderNo(branchPrefix(profile.store_name));
     const isScPwd = discount.type === "senior" || discount.type === "pwd";
-    const discountRequiresApproval = discount.type === "custom" && discount.pct > adminPinThreshold;
+    const requiresApproval = discountRequiresApproval(discount, adminPinThreshold);
 
     // VAT split (P3): prices are VAT-inclusive; SC/PWD sales are VAT-exempt.
-    const vatExempt = isScPwd;
-    const orderVatAmount = vatExempt ? 0 : vatAmount;
-    const vatableSale = vatExempt ? 0 : total - orderVatAmount;
-    const changeDue = method === "cash" && tendered !== null && tendered - total >= 0
-      ? tendered - total
-      : null;
+    const orderVatAmount = vatAmount;
+    const changeDue = buildPaymentPreview(total, method, tendered).changeDue;
 
     displayLinkRef.current?.push({
       kind: "payment",
@@ -1133,7 +967,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
       discount_ref: isScPwd ? `${discount.name} — ${discount.id}` : null,
       vatable_sale: vatableSale,
       vat_amount: orderVatAmount,
-      vat_exempt_sale: vatExempt ? total : 0,
+      vat_exempt_sale: vatExemptSale,
       total,
       payment_method: method,
       payment_ref: payRef || null,
@@ -1169,32 +1003,18 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
             discount_type: discount.type,
             discount_amount: discountAmount,
             discount_percent: discount.pct,
-            admin_pin_required: discountRequiresApproval,
+            admin_pin_required: requiresApproval,
           },
         });
       } catch {
         setToast({ msg: "Sale saved; the discount audit could not be queued for sync." });
       }
     }
-    setStockByProductId((previous) => {
-      const next = { ...previous };
-      for (const line of cart) {
-        if (!line.product.track_stock || typeof next[line.product.id] !== "number") continue;
-        next[line.product.id] -= line.weightKg ?? line.qty;
-      }
-      return next;
-    });
-    setPayOpen(false);
+    setStockByProductId((previous) => applySaleToStock(previous, cart));
+    dispatchOrder({ type: "saved", orderNo, change: changeDue });
     setPaymentPreview(null);
-    setSuccess({
-      orderNo,
-      change: changeDue,
-    });
     setDisplayOverride({ kind: "thankyou", branding: displayBranding, ...displayPresentation, orderNo, changeDue });
-    setCart([]);
-    setNote("");
-    setDiscount(NO_DISCOUNT);
-    retryMs.current = 2000; // sync immediately; back off only on failures
+    clearCart();
     void flush();
 
     // Print the receipt (fire-and-forget; failure shows a retry toast).
@@ -1216,7 +1036,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
       discountRef: isScPwd ? `${discount.name} — ${discount.id}` : null,
       vatableSale,
       vatAmount: orderVatAmount,
-      vatExemptSale: vatExempt ? total : 0,
+      vatExemptSale: vatExemptSale,
       total,
       paymentMethod: method,
       paymentRef: payRef || null,
@@ -1231,27 +1051,6 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     });
     void doPrint(receipt);
   };
-
-  // ── Printing (P3) ────────────────────────────────────────────────────
-  const doPrint = useCallback(
-    async (bytes: Uint8Array, label = "receipt") => {
-      lastReceipt.current = bytes;
-      setHasReceipt(true);
-      try {
-        const printer = await getPrinter(printerSettings);
-        await printer.print(bytes);
-        setToast((current) => (current?.retry ? null : current));
-        return true;
-      } catch (e) {
-        setToast({
-          msg: `Couldn't print ${label} — ${(e as Error).message ?? e}`,
-          retry: true,
-        });
-        return false;
-      }
-    },
-    [printerSettings],
-  );
 
   const saveDisplayPairing = async (value: string | null) => {
     const token = normalizeDisplayPairingToken(value);
@@ -1308,7 +1107,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
   useEffect(() => {
     if (!success) return;
     const t = setTimeout(() => {
-      setSuccess(null);
+      dispatchOrder({ type: "dismiss_saved" });
       setDisplayOverride(null);
     }, 3000);
     return () => clearTimeout(t);
@@ -1525,6 +1324,16 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                 </button>
               </div>
 
+              <PosHealthPanel
+                pending={pending}
+                oldestQueuedSaleAt={oldestQueuedSaleAt}
+                failedPrintCount={failedPrintCount}
+                displayStatus={hardware.displayStatus}
+                terminalStatus={hardware.terminalStatus}
+                syncState={syncState}
+                onSync={() => void flush()}
+              />
+
               <AdminMenu
                 triggerLabel="Open account menu"
                 triggerClassName="pos-account-trigger"
@@ -1587,7 +1396,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                         <span>{new Date(parkedOrder.at).toLocaleTimeString()}</span>
                       </div>
                       <button type="button" onClick={() => resumeOrder(index)} className="button button--primary button--small">Resume</button>
-                      <button type="button" onClick={() => setParked((prev) => prev.filter((_, itemIndex) => itemIndex !== index))} className="icon-button icon-button--danger" aria-label="Remove held order">
+                      <button type="button" onClick={() => removeParked(index)} className="icon-button icon-button--danger" aria-label="Remove held order">
                         <Icon name="close" size={16} />
                       </button>
                     </div>
@@ -1735,7 +1544,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                     <span>Discount</span>
                     {discount.type !== "none" && <small>{discountLabel}</small>}
                   </button>
-                  <button type="button" className="icon-button icon-button--soft" onClick={() => setCart([])} disabled={cart.length === 0} aria-label="Clear current order">
+                  <button type="button" className="icon-button icon-button--soft" onClick={clearCart} disabled={cart.length === 0} aria-label="Clear current order">
                     <Icon name="trash" size={20} />
                   </button>
                 </div>
@@ -1791,7 +1600,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
 
               <div className="order-actions">
                 <button type="button" className="button button--save" onClick={holdOrder} disabled={cart.length === 0 || parked.length >= MAX_PARKED}>SAVE</button>
-                <button type="button" className="button button--charge" onClick={() => { setPaymentPreview({ method: availablePaymentMethods[0] ?? "cash", tendered: null, changeDue: null }); setPayOpen(true); }} disabled={cart.length === 0 || total <= 0}>CHARGE</button>
+                <button type="button" className="button button--charge" onClick={startPayment} disabled={cart.length === 0 || total <= 0}>CHARGE</button>
               </div>
             </div>
           </aside>
@@ -1850,8 +1659,8 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
             total={total}
             availablePaymentMethods={availablePaymentMethods}
             onConfirm={placeOrder}
-            onPaymentState={setPaymentPreview}
-            onClose={() => { setPayOpen(false); setPaymentPreview(null); }}
+            onPaymentState={updatePaymentPreview}
+            onClose={closePayment}
           />
         )}
 
@@ -2002,7 +1811,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                   Resume
                 </button>
                 <button
-                  onClick={() => setParked((prev) => prev.filter((_, idx) => idx !== i))}
+                onClick={() => removeParked(i)}
                   className="rounded-btn bg-danger-soft px-2 py-1 text-xs font-bold text-danger"
                 >
                   ✕
@@ -2148,7 +1957,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                 Hold
               </button>
               <button
-                onClick={() => setPayOpen(true)}
+                onClick={startPayment}
                 disabled={cart.length === 0 || total <= 0}
                 className="rounded-btn bg-accent py-3 font-bold uppercase text-accent-fg disabled:opacity-40"
               >
@@ -2193,7 +2002,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
           total={total}
           availablePaymentMethods={availablePaymentMethods}
           onConfirm={placeOrder}
-          onClose={() => setPayOpen(false)}
+          onClose={closePayment}
         />
       )}
 
@@ -2290,9 +2099,13 @@ function KeypadModal({
   const display = kg === 0 ? "0.00" : kg.toFixed(2);
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-xs rounded-card bg-raised p-4 shadow-[var(--shadow-pop)]" onClick={(e) => e.stopPropagation()}>
-        <p className="text-center text-sm font-bold text-ink">{product.name}</p>
+    <OverlayDialog
+      onClose={onClose}
+      titleId="pos-weight-dialog-title"
+      backdropClassName="fixed inset-0 flex items-center justify-center bg-ink/40 p-4"
+      dialogClassName="w-full max-w-xs rounded-card bg-raised p-4 shadow-[var(--shadow-pop)]"
+    >
+        <p id="pos-weight-dialog-title" className="text-center text-sm font-bold text-ink">{product.name}</p>
         <p className="tnums mt-1 text-center text-xs text-ink-muted">{formatPeso(product.price)} / kg</p>
         <p className="tnums mt-3 text-center text-5xl font-extrabold text-ink">{display}</p>
         <p className="tnums mt-1 text-center text-lg font-bold text-accent">{formatPeso(lineTotal)}</p>
@@ -2319,8 +2132,7 @@ function KeypadModal({
             Confirm
           </button>
         </div>
-      </div>
-    </div>
+    </OverlayDialog>
   );
 }
 
@@ -2411,9 +2223,13 @@ function DiscountModal({
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-sm rounded-card bg-raised p-4 shadow-[var(--shadow-pop)]" onClick={(e) => e.stopPropagation()}>
-        <p className="text-sm font-bold uppercase tracking-wide text-ink-muted">Discount</p>
+    <OverlayDialog
+      onClose={onClose}
+      titleId="pos-discount-dialog-title"
+      backdropClassName="fixed inset-0 flex items-center justify-center bg-ink/40 p-4"
+      dialogClassName="w-full max-w-sm rounded-card bg-raised p-4 shadow-[var(--shadow-pop)]"
+    >
+        <p id="pos-discount-dialog-title" className="text-sm font-bold uppercase tracking-wide text-ink-muted">Discount</p>
         <div className="mt-3 grid grid-cols-2 gap-2">
           {(
             [
@@ -2530,115 +2346,6 @@ function DiscountModal({
             Apply
           </button>
         </div>}
-      </div>
-    </div>
-  );
-}
-
-/* ── Payment / charge modal ────────────────────────────────────────────── */
-function ChargeModal({
-  total,
-  availablePaymentMethods,
-  onConfirm,
-  onPaymentState,
-  onClose,
-}: {
-  total: number;
-  availablePaymentMethods: RuntimePaymentMethod[];
-  onConfirm: (method: string, tendered: number | null, payRef: string) => void;
-  onPaymentState?: (preview: PaymentPreview) => void;
-  onClose: () => void;
-}) {
-  const methods = availablePaymentMethods.length ? availablePaymentMethods : ["cash" as const];
-  const [method, setMethod] = useState<RuntimePaymentMethod>(methods[0]);
-  const [tendered, setTendered] = useState("");
-  const [ref, setRef] = useState("");
-
-  const tenderedPesos = Number(tendered) || 0;
-  const tenderedCents = round(tenderedPesos * 100);
-  const change = tenderedCents - total;
-  const cashOk = method !== "cash" || (tenderedCents >= total && tenderedPesos > 0);
-  const refOk = method === "cash" || (method === "card" ? /^\d{4}$/.test(ref) : ref.trim().length >= 4);
-  const canConfirm = cashOk && refOk;
-
-  useEffect(() => {
-    onPaymentState?.({
-      method,
-      tendered: method === "cash" ? tenderedCents : null,
-      changeDue: method === "cash" && change >= 0 ? change : null,
-    });
-  }, [change, method, onPaymentState, tenderedCents]);
-
-  return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-sm rounded-card bg-raised p-4 shadow-[var(--shadow-pop)]" onClick={(e) => e.stopPropagation()}>
-        <p className="text-sm font-bold uppercase tracking-wide text-ink-muted">Charge</p>
-        <p className="tnums mt-1 text-3xl font-extrabold text-accent">{formatPeso(total)}</p>
-
-        <div className="mt-3 grid grid-cols-4 gap-1.5">
-          {methods.map((m) => (
-            <button
-              key={m}
-              onClick={() => setMethod(m)}
-              className={`rounded-btn py-2 text-sm font-bold capitalize ${method === m ? "bg-primary text-primary-fg" : "bg-secondary text-ink"}`}
-            >
-              {m === "gcash" ? "GCash" : m[0].toUpperCase() + m.slice(1)}
-            </button>
-          ))}
-        </div>
-
-        {method === "cash" ? (
-          <div className="mt-3">
-            <div className="flex flex-wrap gap-1.5">
-              {[
-                ["Exact", String(total / 100)],
-                ["₱500", "500"],
-                ["₱1000", "1000"],
-              ].map(([label, v]) => (
-                <button
-                  key={label}
-                  onClick={() => setTendered(v)}
-                  className="rounded-pill bg-secondary px-3 py-1.5 text-sm font-bold text-ink"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <input
-              value={tendered}
-              onChange={(e) => setTendered(e.target.value)}
-              inputMode="decimal"
-              placeholder="Amount tendered"
-              className="tnums mt-2 w-full rounded-btn border border-line-strong bg-raised px-3 py-2 text-right text-xl font-bold text-ink outline-none focus:border-primary"
-            />
-            <p className={`tnums mt-2 text-right text-2xl font-extrabold ${change >= 0 ? "text-success" : "text-warning"}`}>
-              {change >= 0 ? formatPeso(change) : "Insufficient"}
-            </p>
-            {change >= 0 && <p className="text-right text-xs text-ink-muted">Change due</p>}
-          </div>
-        ) : (
-          <input
-            value={ref}
-            onChange={(e) => setRef(e.target.value)}
-            placeholder={method === "card" ? "Card last 4 digits" : "Reference number"}
-            inputMode={method === "card" ? "numeric" : "text"}
-            className="tnums mt-3 w-full rounded-btn border border-line-strong bg-raised px-3 py-2 text-sm text-ink outline-none focus:border-primary"
-          />
-        )}
-
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <button onClick={onClose} className="rounded-btn bg-secondary py-3 font-bold text-ink">
-            Cancel
-          </button>
-          <button
-            onClick={() => onConfirm(method, method === "cash" ? tenderedCents : null, ref.trim())}
-            disabled={!canConfirm}
-            className="rounded-btn bg-accent py-3 font-bold text-accent-fg disabled:opacity-40"
-          >
-            Confirm
-          </button>
-        </div>
-      </div>
-    </div>
+    </OverlayDialog>
   );
 }

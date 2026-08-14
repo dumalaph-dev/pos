@@ -50,6 +50,11 @@
   /* elevation */
   --shadow-card: 0 1px 2px rgba(16, 45, 33, 0.06);
   --shadow-pop: 0 8px 24px rgba(16, 45, 33, 0.13);
+  /* Shared overlay stack: content < navigation < dropdown < dialog < toast. */
+  --z-navigation: 20;
+  --z-dropdown: 900;
+  --z-dialog: 1000;
+  --z-toast: 1100;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -98,6 +103,10 @@
 }
 
 @layer components {
+
+.overlay-dialog-open {
+  overflow: hidden;
+}
 
 /* Money, quantities, and any figure that must not jitter as it changes. */
 .tnums {

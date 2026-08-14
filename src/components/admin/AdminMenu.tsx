@@ -1,8 +1,8 @@
 "use client";
 
 import "./AdminMenu.css";
-import { createPortal } from "react-dom";
 import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { OVERLAY_Z_INDEX, OverlayPortal } from "@/components/ui/OverlayLayer";
 
 type PortalPosition = {
   top: number;
@@ -114,6 +114,7 @@ export function AdminMenu({
         left: portalPosition.left,
         maxHeight: portalPosition.maxHeight,
         transform: portalPosition.openAbove ? "translateY(-100%)" : undefined,
+        zIndex: OVERLAY_Z_INDEX.dropdown,
       }
     : undefined;
 
@@ -156,7 +157,7 @@ export function AdminMenu({
         {trigger}
       </button>
 
-      {portal && panel && typeof document !== "undefined" ? createPortal(panel, document.body) : panel}
+      {portal && panel ? <OverlayPortal>{panel}</OverlayPortal> : panel}
     </div>
   );
 }
