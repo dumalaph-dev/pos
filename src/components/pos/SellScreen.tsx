@@ -1530,6 +1530,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                 triggerClassName="pos-account-trigger"
                 panelTitle={displayName}
                 panelClassName="pos-account-menu__panel"
+                portal
                 trigger={
                   <>
                     <span className="profile-avatar" aria-hidden="true">{initials}</span>

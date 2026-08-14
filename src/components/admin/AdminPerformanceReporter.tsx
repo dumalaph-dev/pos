@@ -45,6 +45,12 @@ function routeSurface(pathname: string): AdminPerformanceSurface {
   if (pathname.startsWith("/admin/inventory")) return "inventory";
   if (pathname.startsWith("/admin/promotions")) return "promotions";
   if (pathname.startsWith("/admin/audit")) return "audit";
+  if (pathname.startsWith("/admin/customers")) return "customers";
+  if (pathname.startsWith("/admin/suppliers")) return "suppliers";
+  if (pathname.startsWith("/admin/expenses")) return "expenses";
+  if (pathname.startsWith("/admin/branches")) return "branches";
+  if (pathname.startsWith("/admin/employees")) return "employees";
+  if (pathname === "/products" || pathname.startsWith("/products/")) return "products";
   if (pathname === "/admin" || pathname === "/admin/") return "dashboard";
   return "admin";
 }

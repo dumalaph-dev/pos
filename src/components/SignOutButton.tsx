@@ -68,9 +68,14 @@ export function SignOutButton({
       // in the menu's own stack directly.
       className={variant === "menu" ? "contents" : undefined}
       action={async () => {
-        await clearOfflineSession();
-        await clearAdminLocalFirstCache();
-        await clearOfflineCaches();
+        try {
+          await clearOfflineSession();
+          await clearAdminLocalFirstCache();
+          await clearOfflineCaches();
+        } catch {
+          // Cache cleanup is best effort. It must never prevent the auth
+          // session from being ended on a shared terminal.
+        }
         try {
           await signOut();
         } catch {

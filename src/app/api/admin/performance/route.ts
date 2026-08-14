@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 
 const MAX_BODY_LENGTH = 8_192;
-const surfaces = new Set(["dashboard", "sales", "orders", "shifts", "inventory", "promotions", "variance", "audit", "admin"]);
+const surfaces = new Set(["dashboard", "sales", "orders", "shifts", "inventory", "promotions", "variance", "audit", "customers", "suppliers", "expenses", "branches", "employees", "products", "admin"]);
 const interactions = new Set(["open", "close", "back", "navigation"]);
 const modes = new Set(["online", "offline"]);
 const sampleTypes = new Set(["initial_document", "soft_navigation"]);

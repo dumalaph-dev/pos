@@ -3,6 +3,8 @@ import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import StaffLinkCopy from "@/components/admin/StaffLinkCopy";
 import { SignOutButton } from "@/components/SignOutButton";
+import { EmployeeDialogController } from "@/components/admin/EmployeeDialogController";
+import { EmployeeListClient } from "@/components/admin/EmployeeListClient";
 import { readAdminBranding } from "@/lib/admin/branding";
 import { formatPeso } from "@/lib/money";
 import { getAdminProfile } from "@/lib/admin/profile";
@@ -11,7 +13,6 @@ import { legacyStaffLoginPath, staffLoginPath } from "@/lib/store-access";
 import {
   createEmployee,
   createLeaveRequest,
-  provisionEmployeeLogin,
   setEmployeePin,
   saveAttendance,
   savePayroll,
@@ -85,7 +86,6 @@ type CurrentProfile = { full_name: string | null; role: AccessRole | null; org_i
 type SearchParams = Record<string, string | string[] | undefined>;
 
 const DEFAULT_STORE_NAME = "Your Store";
-const PAGE_SIZE = 10;
 const DAYS = [
   ["mon", "Mon"],
   ["tue", "Tue"],
@@ -180,13 +180,6 @@ function formatDateRange(start: string, end: string) {
   return `${formatter.format(new Date(`${start}T12:00:00Z`))} – ${formatter.format(new Date(`${end}T12:00:00Z`))}`;
 }
 
-function formatTime(value: string | null | undefined) {
-  if (!value) return "—";
-  const parts = value.slice(0, 5).split(":").map(Number);
-  if (parts.length !== 2 || parts.some((part) => Number.isNaN(part))) return value;
-  return new Intl.DateTimeFormat("en-PH", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Singapore" }).format(new Date(Date.UTC(2020, 0, 1, parts[0], parts[1])));
-}
-
 function formatTimestampInput(value: string | null) {
   if (!value) return "";
   const date = new Date(value);
@@ -219,12 +212,6 @@ function statusTone(status: string) {
 function statusLabel(status: string) {
   if (status === "on_leave") return "On Leave";
   return status.charAt(0).toUpperCase() + status.slice(1);
-}
-
-function scheduleLabel(employee: EmployeeRecord) {
-  const days = employee.schedule_days ?? [];
-  const dayText = days.length === 7 ? "Mon – Sun" : days.map((day) => DAYS.find(([key]) => key === day)?.[1] ?? day).join(" – ");
-  return `${dayText} · ${formatTime(employee.schedule_start)} – ${formatTime(employee.schedule_end)}`;
 }
 
 function initials(name: string) {
@@ -273,7 +260,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   const fallbackRange = weekRange(today);
   const range = selectedRange(params, fallbackRange);
   const tab = readTab(readParam(params, "tab"));
-  const employeeFormOpen = readParam(params, "create") === "employee" || Boolean(readParam(params, "edit"));
+  const employeeFormOpen = readParam(params, "create") === "employee";
   const attendanceDate = dateIsValid(readParam(params, "date")) ? readParam(params, "date") : today;
   const attendanceFetchStart = attendanceDate < range.start ? attendanceDate : range.start;
   const attendanceFetchEnd = attendanceDate > range.end ? attendanceDate : range.end;
@@ -345,15 +332,6 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   const requestedStatus = readParam(params, "status");
   const branchFilter = readParam(params, "branch");
   const searchQuery = readParam(params, "q").trim().toLowerCase();
-  const filteredEmployees = employees.filter((employee) => {
-    const status = approvedLeaveToday.has(employee.id) ? "on_leave" : employee.is_active ? "active" : "inactive";
-    if (requestedRole && requestedRole !== "all" && employee.role_id !== requestedRole && employee.role !== requestedRole) return false;
-    if (requestedStatus && requestedStatus !== "all" && status !== requestedStatus) return false;
-    if (branchFilter === "unassigned" && employee.store_id) return false;
-    if (branchFilter && branchFilter !== "unassigned" && employee.store_id !== branchFilter) return false;
-    if (searchQuery && ![employee.full_name, employee.email ?? "", employee.phone ?? "", employee.employee_code].some((value) => value.toLowerCase().includes(searchQuery))) return false;
-    return true;
-  });
   const activeCount = employees.filter((employee) => employee.is_active && !approvedLeaveToday.has(employee.id)).length;
   const onLeaveCount = employees.filter((employee) => approvedLeaveToday.has(employee.id)).length;
   const inactiveCount = employees.filter((employee) => !employee.is_active).length;
@@ -374,14 +352,9 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   for (const log of attendanceForDate.values()) {
     if (!selectedAttendanceEmployeeId || log.employee_id === selectedAttendanceEmployeeId) selectedAttendanceBreakdown[log.status] += 1;
   }
-  const totalPages = Math.max(1, Math.ceil(filteredEmployees.length / PAGE_SIZE));
-  const requestedPage = Number.parseInt(readParam(params, "page") || "1", 10);
-  const currentPage = Number.isFinite(requestedPage) ? Math.min(Math.max(requestedPage, 1), totalPages) : 1;
-  const visibleEmployees = filteredEmployees.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const canWrite = profile.role === "admin";
   const currentBranchName = profile.store_id ? branchById.get(profile.store_id)?.name ?? DEFAULT_STORE_NAME : "All branches";
   const firstName = profile.full_name?.trim().split(/\s+/)[0] || user.email?.split("@")[0] || "Admin";
-  const editingEmployee = employeeById.get(readParam(params, "edit"));
   const editingPayroll = payrollRecords.find((record) => record.id === readParam(params, "edit_payroll"));
   const filtersOpen = readParam(params, "filters") === "1";
   const queryWarning = Boolean(
@@ -400,6 +373,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   const staffLinksUnavailable = canWrite && Boolean(staffLinksResult.error);
 
   return (
+    <EmployeeDialogController employees={employees} branches={branches} roles={roles} initialEmployeeId={readParam(params, "edit") || null} today={today} canWrite={canWrite}>
     <main data-admin-theme={branding.theme} className="admin-page employee-page text-ink">
       <div className="min-w-0 px-4 pb-10 sm:px-6 lg:px-8">
           <header className="employee-topbar">
@@ -445,7 +419,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
                 {!employeeFormOpen && <EmployeeMetric label={`Total Payroll (${periodLabel})`} value={formatPeso(payrollTotalThisWeek)} detail={formatDateRange(range.start, range.end)} icon="wallet" tone="employee-kpi-icon--blue" />}
               </section>
 
-              {(readParam(params, "create") === "employee" || editingEmployee) && <EmployeeEditor employee={editingEmployee} branches={branches} roles={roles} today={today} canWrite={canWrite} returnState={employeeListState} />}
+              {readParam(params, "create") === "employee" && <EmployeeEditor branches={branches} roles={roles} today={today} canWrite={canWrite} returnState={employeeListState} />}
 
               <section className="employee-workspace-panel" aria-labelledby="employee-workspace-heading">
                 <div className="sr-only" id="employee-workspace-heading">Employee workspace</div>
@@ -453,7 +427,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
                   {TABS.map((item) => <Link key={item.key} href={employeeHref({ tab: item.key, q: readParam(params, "q"), role: requestedRole, status: requestedStatus, branch: branchFilter, start: range.start, end: range.end })} aria-current={tab === item.key ? "page" : undefined} className={tab === item.key ? "is-active" : ""}>{item.label}</Link>)}
                 </nav>
 
-                {tab === "list" && <EmployeeListTab employees={visibleEmployees} filteredCount={filteredEmployees.length} totalCount={employees.length} currentPage={currentPage} totalPages={totalPages} branches={branches} roleById={roleById} approvedLeaveToday={approvedLeaveToday} requestedRole={requestedRole} requestedStatus={requestedStatus} branchFilter={branchFilter} searchQuery={searchQuery} filtersOpen={filtersOpen} range={range} today={today} canWrite={canWrite} />}
+                {tab === "list" && <EmployeeListClient employees={employees} branches={branches} roles={roles} approvedLeaveIds={[...approvedLeaveToday]} initialQuery={searchQuery} initialRole={requestedRole} initialStatus={requestedStatus} initialBranch={branchFilter} initialPage={Number.parseInt(readParam(params, "page") || "1", 10) || 1} filtersOpen={filtersOpen} range={range} today={today} canWrite={canWrite} />}
                 {tab === "roles" && <RolesTab roles={roles} employees={employees} roleById={roleById} canWrite={canWrite} showCreate={readParam(params, "create") === "role"} />}
                  {tab === "attendance" && <AttendanceTab employees={employees} logs={attendanceForDate} date={attendanceDate} selectedEmployeeId={selectedAttendanceEmployeeId} range={range} breakdown={selectedAttendanceBreakdown} canWrite={canWrite} />}
                 {tab === "payroll" && <PayrollTab employees={employees} records={payrollRecords} range={range} editing={editingPayroll} canWrite={canWrite} />}
@@ -472,6 +446,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
           {canWrite && <StaffAccessPanel branches={staffLinkBranches} migrationMissing={staffLinksUnavailable} />}
       </div>
     </main>
+    </EmployeeDialogController>
   );
 }
 
@@ -525,50 +500,6 @@ function DateRangeMenu({ tab, range, searchQuery, requestedRole, requestedStatus
       <button type="submit" className="employee-primary-button">Apply dates</button>
     </form>
   </details>;
-}
-
-function EmployeeListTab({ employees, filteredCount, totalCount, currentPage, totalPages, branches, roleById, approvedLeaveToday, requestedRole, requestedStatus, branchFilter, searchQuery, filtersOpen, range, today, canWrite }: { employees: EmployeeRecord[]; filteredCount: number; totalCount: number; currentPage: number; totalPages: number; branches: BranchRecord[]; roleById: Map<string, RoleRecord>; approvedLeaveToday: Set<string>; requestedRole: string; requestedStatus: string; branchFilter: string; searchQuery: string; filtersOpen: boolean; range: { start: string; end: string }; today: string; canWrite: boolean }) {
-  const exportHref = `/admin/employees/export?${new URLSearchParams({ ...(searchQuery ? { q: searchQuery } : {}), ...(requestedRole ? { role: requestedRole } : {}), ...(requestedStatus ? { status: requestedStatus } : {}), ...(branchFilter ? { branch: branchFilter } : {}) }).toString()}`;
-  const listState = { q: searchQuery, role: requestedRole, status: requestedStatus, branch: branchFilter, start: range.start, end: range.end, filters: filtersOpen ? "1" : undefined };
-  return <div className="employee-tab-content">
-    <div className="employee-filter-bar">
-      <form action="/admin/employees" method="get" className="employee-filter-form">
-        <input type="hidden" name="tab" value="list" />
-        <input type="hidden" name="start" value={range.start} />
-        <input type="hidden" name="end" value={range.end} />
-        {filtersOpen && <input type="hidden" name="filters" value="1" />}
-        {!filtersOpen && branchFilter && <input type="hidden" name="branch" value={branchFilter} />}
-        <label className="employee-search-field"><AdminIcon name="search" size={17} /><span className="sr-only">Search employees</span><input name="q" defaultValue={searchQuery} placeholder="Search by name, email or phone..." /></label>
-        <label><span className="sr-only">Role</span><select name="role" defaultValue={requestedRole || "all"}><option value="all">All Roles</option>{[...roleById.values()].map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label>
-        <label><span className="sr-only">Status</span><select name="status" defaultValue={requestedStatus || "all"}><option value="all">All Status</option><option value="active">Active</option><option value="on_leave">On Leave</option><option value="inactive">Inactive</option></select></label>
-        {filtersOpen && <label><span className="sr-only">Branch</span><select name="branch" defaultValue={branchFilter}><option value="">All Branches</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.is_active ? "" : " (inactive)"}</option>)}<option value="unassigned">Unassigned</option></select></label>}
-        <button type="submit" className="employee-filter-apply">Apply</button>
-      </form>
-      <a href={exportHref} className="employee-export-button"><AdminIcon name="upload" size={16} /> Export</a>
-    </div>
-    <div className="employee-table-wrap">
-      <table className="employee-table">
-        <thead><tr><th>Employee</th><th>Role</th><th>Schedule</th><th>Status</th><th>Contact</th><th>Date Hired</th><th>Actions</th></tr></thead>
-        <tbody>
-          {employees.length === 0 ? <tr><td colSpan={7}><EmptyState icon="employees" title="No employees found" detail="Add an employee record or clear the filters to see your team." /></td></tr> : employees.map((employee) => {
-            const role = employee.role_id ? roleById.get(employee.role_id) : null;
-            const onLeave = approvedLeaveToday.has(employee.id);
-            const status = onLeave ? "on_leave" : employee.is_active ? "active" : "inactive";
-            return <tr key={employee.id}>
-              <td><div className="employee-person-cell"><span className="employee-avatar">{initials(employee.full_name)}</span><div><strong>{employee.full_name}</strong><small>{employee.employee_code}{employee.job_title ? ` · ${employee.job_title}` : ""}</small></div></div></td>
-              <td><span className={`employee-role ${roleTone(role?.color ?? employee.role)}`}>{role?.name ?? roleLabel(employee.role)}</span></td>
-              <td><span className="employee-schedule">{scheduleLabel(employee)}</span></td>
-              <td><span className={`employee-status ${statusTone(status)}`}>{statusLabel(status)}</span></td>
-              <td><div className="employee-contact"><strong>{employee.phone || "No phone"}</strong><small>{employee.email || "No email"}</small></div></td>
-              <td className="tnums whitespace-nowrap">{formatDate(employee.hired_on)}</td>
-               <td><div className="employee-row-actions"><Link href={employeeHref({ ...listState, tab: "list", edit: employee.id })} className="employee-icon-button" aria-label={`Edit ${employee.full_name}`}><AdminIcon name="edit" size={15} /></Link><Link href={employeeHref({ ...listState, tab: "attendance", employee: employee.id, date: today })} className="employee-icon-button" aria-label={`Open attendance for ${employee.full_name}`}><AdminIcon name="more" size={16} /></Link>{canWrite && <form action={provisionEmployeeLogin} className="employee-login-action"><input type="hidden" name="employee_id" value={employee.id} />{Object.entries(listState).map(([key, value]) => value ? <input key={key} type="hidden" name={`return_${key}`} value={value} /> : null)}<button type="submit" className={`employee-login-button ${employee.profile_id ? "employee-login-button--ready" : ""}`}>{employee.profile_id ? "Reset login" : "Set up login"}</button></form>}</div></td>
-            </tr>;
-          })}
-        </tbody>
-      </table>
-    </div>
-    <div className="employee-table-footer"><span>Showing {filteredCount === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1} to {Math.min(currentPage * PAGE_SIZE, filteredCount)} of {filteredCount} employees <small>({totalCount} total)</small></span><div className="employee-pagination">{currentPage > 1 && <Link href={employeeHref({ tab: "list", page: String(currentPage - 1), q: searchQuery, role: requestedRole, status: requestedStatus, branch: branchFilter, start: range.start, end: range.end, filters: filtersOpen ? "1" : undefined })} aria-label="Previous page">‹</Link>}{Array.from({ length: totalPages }, (_, index) => index + 1).slice(Math.max(0, currentPage - 2), Math.min(totalPages, currentPage + 1)).map((page) => <Link key={page} href={employeeHref({ tab: "list", page: String(page), q: searchQuery, role: requestedRole, status: requestedStatus, branch: branchFilter, start: range.start, end: range.end, filters: filtersOpen ? "1" : undefined })} className={page === currentPage ? "is-active" : ""}>{page}</Link>)}{currentPage < totalPages && <Link href={employeeHref({ tab: "list", page: String(currentPage + 1), q: searchQuery, role: requestedRole, status: requestedStatus, branch: branchFilter, start: range.start, end: range.end, filters: filtersOpen ? "1" : undefined })} aria-label="Next page">›</Link>}</div></div>
-  </div>;
 }
 
 function RolesTab({ roles, employees, roleById, canWrite, showCreate }: { roles: RoleRecord[]; employees: EmployeeRecord[]; roleById: Map<string, RoleRecord>; canWrite: boolean; showCreate: boolean }) {

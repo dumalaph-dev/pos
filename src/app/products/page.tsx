@@ -5,7 +5,8 @@ import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { ProductCreateDialog } from "@/components/admin/ProductCreateDialog";
-import { ProductEditDialog } from "@/components/admin/ProductEditDialog";
+import { ProductEditDialogController } from "@/components/admin/ProductEditDialogController";
+import { ProductsTableClient } from "@/components/admin/ProductsTableClient";
 import { MultiProductModal } from "@/components/admin/MultiProductModal";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatStockQuantity, salesQuantity, stockMovementDelta, stockStatus, type StockMovementType } from "@/lib/inventory";
@@ -578,12 +579,12 @@ export default async function ProductsPage({
     branchesResult.error || categoriesResult.error || Boolean(productsResult.error && !productsSchemaWarning) || fallbackProductsError || (suppliersResult.error && !suppliersSchemaWarning) || stockFallbackError || currentOrdersResult.error || previousOrdersResult.error || orderItemsError,
   );
   const canWrite = profile.role === "admin";
-  const selectedProduct = selectedProductId ? productById.get(selectedProductId) : undefined;
   const formBranches = visibleBranches.filter((branch) => branch.is_active);
   const formDefaultBranch = selectedBranchId ?? formBranches[0]?.id ?? "";
   const baseHref = { q: searchQuery, category: categoryFilter, status, posOnly, range, pageSize, columns };
 
   return (
+    <ProductEditDialogController products={products} branches={visibleBranches} categories={categories} suppliers={suppliers} canWrite={canWrite} initialProductId={selectedProductId || null}>
     <main data-admin-theme={branding.theme} className="admin-page products-page text-ink">
       <div className="min-w-0 px-4 pb-10 sm:px-6 lg:px-8">
           <header className="admin-topbar products-topbar">
@@ -634,7 +635,6 @@ export default async function ProductsPage({
           {(productsSchemaWarning || suppliersSchemaWarning) && <div role="status" className="products-alert products-alert--warning"><strong>Some product fields are unavailable.</strong> Ensure <code>0009_admin_business_records.sql</code> is applied before <code>0010_inventory_catalog_fields.sql</code> in Supabase to enable suppliers and advanced inventory fields.</div>}
           {dataWarning && <div role="status" className="products-alert products-alert--warning">Some product insights could not refresh. The page is showing the data that was available; product edits remain protected by your admin role.</div>}
 
-          {action === "edit" && selectedProduct && <ProductEditDialog key={selectedProduct.id} product={selectedProduct} branches={visibleBranches} categories={categories} suppliers={suppliers} canWrite={canWrite} initialOpen />}
           {action === "category" && <CategoryActionPanel branches={formBranches} categories={categories} defaultBranch={formDefaultBranch} canWrite={canWrite} branchById={branchById} />}
           {action === "import" && <ImportPanel branches={formBranches} defaultBranch={formDefaultBranch} canWrite={canWrite} />}
           {action === "bulk" && <BulkUpdatePanel canWrite={canWrite} />}
@@ -651,6 +651,7 @@ export default async function ProductsPage({
           <div className="products-content-grid">
             <div className="min-w-0">
               <section className="products-table-card" aria-labelledby="products-table-heading">
+                {false ? <div className="hidden">
                 <nav className="products-category-tabs" aria-label="Product categories">
                   {categoryTabs.map((tab) => <Link key={tab.id} href={buildProductsHref({ ...baseHref, category: tab.id, page: 1 })} className={`products-category-tab ${categoryFilter === tab.id ? "is-active" : ""}`}><span className="products-category-tab__icon"><AdminIcon name={categoryIconName(tab.icon, tab.name)} size={14} /></span><strong>{tab.name}</strong><small>{tab.count}</small></Link>)}
                 </nav>
@@ -690,7 +691,7 @@ export default async function ProductsPage({
                             {columns.has("status") && <td><span className={`products-status-pill ${product.is_active ? "is-active" : "is-inactive"}`}>{product.is_active ? "Active" : "Inactive"}</span></td>}
                             {columns.has("pos") && <td><form action={toggleProductVisibility}><input type="hidden" name="product_id" value={product.id} /><input type="hidden" name="is_active" value={String(!product.is_active)} /><button type="submit" role="switch" aria-checked={product.is_active} aria-label={`${product.is_active ? "Hide" : "Show"} ${product.name} in POS`} disabled={!canWrite} className={`products-switch ${product.is_active ? "is-on" : ""}`}><span /></button></form></td>}
                             {columns.has("stock") && <td><div className="products-stock-cell">{row.onHand === null ? <strong>—</strong> : <strong className="tnums">{formatStockQuantity(row.onHand)} {product.unit}</strong>}<small className={stockStatusClass(row.stockStatus)}>{stockStatusLabel(row.stockStatus)}</small></div></td>}
-                            <td><div className="products-row-actions"><Link href={`/products?edit=${product.id}#product-edit`} className="products-icon-button" aria-label={`Edit ${product.name}`}><AdminIcon name="edit" size={14} /></Link><details className="products-row-menu"><summary className="products-icon-button" aria-label={`More actions for ${product.name}`}><AdminIcon name="more" size={15} /></summary><div className="products-popover products-row-popover"><Link href={`/products?edit=${product.id}#product-edit`} className="products-menu-link">Edit product</Link><Link href={`/admin/inventory?product=${product.id}&movement=receive#stock-movement`} className="products-menu-link">Record stock movement</Link><Link href={`/admin/sales?range=${range}`} className="products-menu-link">View sales report</Link></div></details></div></td>
+                            <td><div className="products-row-actions"><Link data-product-trigger={product.id} href={`/products?edit=${product.id}#product-edit`} className="products-icon-button" aria-label={`Edit ${product.name}`}><AdminIcon name="edit" size={14} /></Link><details className="products-row-menu"><summary className="products-icon-button" aria-label={`More actions for ${product.name}`}><AdminIcon name="more" size={15} /></summary><div className="products-popover products-row-popover"><Link data-product-trigger={product.id} href={`/products?edit=${product.id}#product-edit`} className="products-menu-link">Edit product</Link><Link href={`/admin/inventory?product=${product.id}&movement=receive#stock-movement`} className="products-menu-link">Record stock movement</Link><Link href={`/admin/sales?range=${range}`} className="products-menu-link">View sales report</Link></div></details></div></td>
                           </tr>;
                         })}
                       </tbody>
@@ -699,6 +700,8 @@ export default async function ProductsPage({
                 )}
 
                 <div className="products-table-footer"><span>Showing {firstRow} to {lastRow} of {filteredRows.length} products</span><div className="products-pagination"><Link href={page > 1 ? buildProductsHref({ ...baseHref, page: page - 1 }) : buildProductsHref({ ...baseHref, page: 1 })} aria-label="Previous page" className={page > 1 ? "" : "is-disabled"}>‹</Link>{Array.from({ length: Math.min(totalPages, 5) }, (_, index) => index + 1).map((pageNumber) => <Link key={pageNumber} href={buildProductsHref({ ...baseHref, page: pageNumber })} className={pageNumber === page ? "is-active" : ""}>{pageNumber}</Link>)}{page < totalPages && <Link href={buildProductsHref({ ...baseHref, page: page + 1 })} aria-label="Next page">›</Link>}</div><form action="/products" method="get" className="products-page-size"><input type="hidden" name="q" value={searchQuery} /><input type="hidden" name="category" value={categoryFilter} /><input type="hidden" name="status" value={status} /><input type="hidden" name="range" value={range} />{posOnly && <input type="hidden" name="pos" value="1" />}<input type="hidden" name="columns" value={[...columns].join(",")} /><label htmlFor="products-page-size">Rows per page:</label><select id="products-page-size" name="pageSize" defaultValue={String(pageSize)}><option value="10">10</option><option value="25">25</option><option value="50">50</option></select><button type="submit" aria-label="Apply rows per page">⌄</button></form></div>
+                </div> : null}
+                <ProductsTableClient rows={productRows} suppliers={suppliers} categoryTabs={categoryTabs} initialQuery={searchQuery} initialCategory={categoryFilter} initialStatus={status} initialPosOnly={posOnly} initialPage={page} initialPageSize={pageSize} initialColumns={[...columns]} currentBranchName={currentBranchName} canWrite={canWrite} showBulk={showBulk} selectedProductId={selectedProductId} />
               </section>
             </div>
 
@@ -710,6 +713,7 @@ export default async function ProductsPage({
           </div>
       </div>
     </main>
+    </ProductEditDialogController>
   );
 }
 

@@ -2,7 +2,7 @@
 
 **Project:** Dumala POS
 **Created:** 2026-08-13
-**Status:** Phase 5 initial inventory slice complete; Phase 6 in progress; two production optimization batches deployed; durable production telemetry rollout in progress
+**Status:** Phase 6 implementation complete for local dialogs, client URL state, background refresh, and current payload slices; Phase 7 acceptance in progress; durable production telemetry rollout in progress
 **Owner:** Product and engineering
 
 ## Purpose
@@ -124,17 +124,17 @@ This document is the working plan for the entire initiative. Update the checkbox
 
 ### Phase 6 — Remaining dialogs and server-navigation optimization
 
-**Status:** In progress — Sales/Orders and Inventory payload slices deployed; durable p50/p95 collection rollout in progress
+**Status:** Implementation complete for the current admin directory scope — local dialogs, client URL filters/pagination, background refresh, and payload slices deployed; Phase 7 acceptance remains
 
-- [ ] Convert suitable product, customer, supplier, expense, employee, and branch detail flows to local dialogs.
-- [ ] Move filter/search/pagination state to client state with URL synchronization where appropriate.
+- [x] Convert suitable product, customer, supplier, expense, employee, and branch detail flows to local dialogs.
+- [x] Move filter/search/pagination state to client state with URL synchronization where appropriate.
 - [x] Reduce repeated admin branch queries between the shared layout and active page through request-scoped deduplication.
 - [x] Reduce repeated admin connection/device-heartbeat queries with a short user/organization/branch-scoped advisory TTL.
 - [x] Reduce branch fields in non-receipt server-rendered routes through a shared `id/name/is_active` projection; receipt routes retain the tax/address fields required to render receipts.
-- [ ] Reduce repeated admin profile queries.
+- [x] Reduce repeated admin profile queries through request-scoped React caching plus a short user-scoped server TTL in `src/lib/admin/profile.ts`.
 - [x] Reduce large server payloads and use focused summaries/pagination for Orders, Sales, and Dashboard receipt data; Inventory remains the next large-payload target.
 - [x] Add bounded deployment-level request/payload telemetry for online soft navigations without sending private URLs or record identifiers.
-- [ ] Add background refresh instead of blocking every interaction on a full server render.
+- [x] Add background refresh on foreground focus, reconnect, and stale-tab intervals instead of blocking every interaction on a full server render.
 
 ### Phase 7 — Acceptance, rollout, and monitoring
 
@@ -352,6 +352,15 @@ Do not record order numbers, customer names, employee names, receipt payloads, o
 - This preserves server-side filtering, stock calculations, offline inventory snapshots, and inventory mutation payloads while avoiding a full catalog-shaped client hydration batch on every Inventory navigation. Migration `0047_inventory_tracked_products_idx.sql` adds the matching `(org_id, store_id, track_stock, sort_order, name)` index.
 - The signed-in browser session was unavailable during this post-deploy window and Vercel deployment-log access is not connected, so authoritative server p50/p95 and compressed-byte deltas remain pending. No server percentile is inferred from the browser HTML proxies.
 - The application changes were deployed from `codex/phase6-inventory-summary` through PR #21 at production merge commit `a449e1091cd0c8b0411e4f80a06244c85388a8ea`. Post-merge CI, Vercel, and remote production preflight passed.
+
+### 2026-08-14 — Phase 6 local dialog and client URL-state completion
+
+- Added `AdminBackgroundRefresh` to the authenticated admin shell. It refreshes only when the tab is visible, online, and stale or reconnecting; it does not cache private HTML or interrupt local modal state.
+- Converted customer, supplier, expense, branch, employee, and product edit flows to use the shared URL-aware local dialog controller. Existing links remain deep-linkable when JavaScript is unavailable, while hydrated records open without route/RSC navigation.
+- Added browser-owned URL-synchronized filtering and pagination for customers, suppliers, expenses, employees, and products. Filter changes use History API updates, preserve browser back/forward behavior, and operate on the bounded server-provided read model.
+- Reused the existing request-scoped and short-lived profile cache to avoid duplicate profile reads, and expanded non-sensitive performance surface vocabulary for the new admin directories.
+- Validation passed: `npm run typecheck`, `npm run lint`, `npm run build`, and `git diff --check`.
+- Phase 7 remains responsible for authenticated browser acceptance across online, slow, offline, reconnect, multiple-tab, role-isolation, and sign-out/cache-cleanup scenarios.
 
 ### 2026-08-14 — Phase 7 telemetry persistence rollout
 

@@ -26,21 +26,23 @@ function ProductUpdateButton({ canWrite }: { canWrite: boolean }) {
   return <button type="submit" disabled={!canWrite || pending} className="products-primary-button products-edit-dialog__save"><AdminIcon name="check" size={14} />{pending ? "Saving..." : "Save changes"}</button>;
 }
 
-export function ProductEditDialog({ product, branches, categories, suppliers, canWrite, initialOpen }: {
+export function ProductEditDialog({ product, branches, categories, suppliers, canWrite, initialOpen, onClose }: {
   product: ProductRecord;
   branches: BranchRecord[];
   categories: CategoryRecord[];
   suppliers: SupplierRecord[];
   canWrite: boolean;
   initialOpen: boolean;
+  onClose?: () => void;
 }) {
   const [open, setOpen] = useState(initialOpen);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   const closeDialog = useCallback(() => {
     setOpen(false);
-    clearEditUrl();
-  }, []);
+    if (onClose) onClose();
+    else clearEditUrl();
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;

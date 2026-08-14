@@ -1,5 +1,6 @@
 "use client";
 
+import "./AdminMenu.css";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
@@ -126,7 +127,14 @@ export function AdminMenu({
       // Close once the user commits to something, but leave plain clicks
       // inside the panel (selecting text, scrolling) alone.
       onClick={(event) => {
-        if ((event.target as HTMLElement).closest("a, button")) setOpen(false);
+        const interactive = (event.target as HTMLElement).closest<HTMLElement>("a, button");
+        if (!interactive) return;
+
+        // Keep submit forms mounted until the browser hands the submission to
+        // React. Unmounting a menu form during the click can cancel the action,
+        // which is especially visible on the shared-terminal sign-out button.
+        if (interactive.tagName === "BUTTON" && (interactive as HTMLButtonElement).type === "submit") return;
+        setOpen(false);
       }}
     >
       {panelTitle && <p className="admin-menu__title">{panelTitle}</p>}

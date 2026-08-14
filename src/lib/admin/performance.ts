@@ -1,4 +1,4 @@
-export type AdminPerformanceSurface = "dashboard" | "sales" | "orders" | "shifts" | "inventory" | "promotions" | "variance" | "audit" | "admin";
+export type AdminPerformanceSurface = "dashboard" | "sales" | "orders" | "shifts" | "inventory" | "promotions" | "variance" | "audit" | "customers" | "suppliers" | "expenses" | "branches" | "employees" | "products" | "admin";
 export type AdminPerformanceInteraction = "open" | "close" | "back" | "navigation";
 export type AdminPerformanceMode = "online" | "offline";
 
