@@ -12,7 +12,7 @@ import {
 
 const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
-const RECENT_THEME_IDS = ["planner", "chicken", "ramen", "taqueria", "sushi", "deco"] satisfies PosThemeId[];
+const RECENT_THEME_IDS = ["planner", "chicken", "ramen", "taqueria", "sushi", "deco", "paper", "icecream", "candy", "christmas"] satisfies PosThemeId[];
 
 function colorLuminance(hex: string) {
   assert.match(hex, /^#[\da-f]{6}$/i, `Expected a six-digit hex color, received ${hex}`);
@@ -36,7 +36,7 @@ function assertTextContrast(label: string, foreground: string, background: strin
 }
 
 test("POS theme registry keeps every theme ordered and fully integrated", () => {
-  assert.equal(POS_THEME_IDS.length, 22);
+  assert.equal(POS_THEME_IDS.length, 26);
   assert.equal(new Set(POS_THEME_IDS).size, POS_THEME_IDS.length);
   assert.deepEqual(POS_THEME_OPTIONS.map(({ id }) => id), [...POS_THEME_IDS]);
 
@@ -76,6 +76,10 @@ test("recent restaurant theme gradients keep readable action text", () => {
     ["ramen charge edge", "#ffffff", "#cf3263"],
     ["taqueria topbar edge", "#fff8e9", "#0b706c"],
     ["taqueria charge", "#fff8e9", "#c83c2a"],
+    ["paper charge", "#fffaf0", "#b44335"],
+    ["ice cream charge", "#2b1931", "#df638b"],
+    ["candy charge", "#160b18", "#d84287"],
+    ["christmas charge", "#fff8ed", "#c44740"],
   ] as const;
   for (const [label, foreground, background] of contrastPairs) {
     assertTextContrast(label, foreground, background);
