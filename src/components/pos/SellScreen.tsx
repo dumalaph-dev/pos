@@ -1254,56 +1254,40 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
             </button>
           ) : (
             <nav className="pos-topbar__expanded" id="pos-header-nav" aria-label="POS navigation">
-              <div className="pos-topbar__brand">
-                <div className="brand-lockup" aria-label={storeName}>
-                  <AdminBrandLogo logoUrl={profile?.brand_logo_url} className="brand-lockup__mark" iconSize={30} label="Brand logo" />
-                  <span className="brand-lockup__copy">
-                    <strong>{storeName}</strong>
-                    <small>POS TERMINAL</small>
-                  </span>
+              <div className="pos-topbar__identity">
+                <div className="pos-topbar__brand">
+                  <div className="brand-lockup" aria-label={storeName}>
+                    <AdminBrandLogo logoUrl={profile?.brand_logo_url} className="brand-lockup__mark" iconSize={30} label="Brand logo" />
+                    <span className="brand-lockup__copy">
+                      <strong>{storeName}</strong>
+                      <small>POS TERMINAL</small>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pos-mode-tabs" role="tablist" aria-label="Main navigation">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={!orderHistoryOpen}
+                    className={"pos-mode-tab" + (!orderHistoryOpen ? " is-active" : "")}
+                    onClick={() => setOrderHistoryOpen(false)}
+                  >
+                    POS
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={orderHistoryOpen}
+                    className={"pos-mode-tab" + (orderHistoryOpen ? " is-active" : "")}
+                    onClick={() => setOrderHistoryOpen(true)}
+                  >
+                    ORDERS
+                  </button>
                 </div>
               </div>
 
-              <div className="pos-mode-tabs" role="tablist" aria-label="Main navigation">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={!orderHistoryOpen}
-                  className={"pos-mode-tab" + (!orderHistoryOpen ? " is-active" : "")}
-                  onClick={() => setOrderHistoryOpen(false)}
-                >
-                  POS
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={orderHistoryOpen}
-                  className={"pos-mode-tab" + (orderHistoryOpen ? " is-active" : "")}
-                  onClick={() => setOrderHistoryOpen(true)}
-                >
-                  ORDERS
-                </button>
-              </div>
-
               <div className="pos-toolbar" role="group" aria-label="POS tools">
-                <button type="button" className="pos-tool" onClick={() => searchInputRef.current?.focus()} aria-label="Search products" title="Search products">
-                  <Icon name="search" size={24} />
-                  <span>Search</span>
-                </button>
-                <button
-                  type="button"
-                  className={"pos-tool" + (trayOpen ? " is-active" : "")}
-                  onClick={() => setTrayOpen((value) => !value)}
-                  aria-label={parked.length > 0 ? `View ${parked.length} held orders` : "View held orders"}
-                  title="Held orders"
-                >
-                  <span className="pos-tool__icon-wrap"><Icon name="hold" size={24} />{parked.length > 0 && <b>{parked.length}</b>}</span>
-                  <span>Hold</span>
-                </button>
-                <button type="button" className="pos-tool" onClick={() => setOrderHistoryOpen(true)} aria-label="View receipts" title="Receipts">
-                  <Icon name="receipt" size={24} />
-                  <span>Receipts</span>
-                </button>
                 <button
                   type="button"
                   className={"pos-tool pos-tool--shift" + (activeShift ? " is-active" : "")}
@@ -1314,14 +1298,77 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                   <Icon name="cash" size={24} />
                   <span>{shiftButtonLabel}</span>
                 </button>
-                <button type="button" className={"pos-tool" + (displayPairingToken ? " is-active" : "")} onClick={() => setDisplaySettingsOpen(true)} aria-label="Customer display settings" title="Customer display settings">
-                  <Icon name="display" size={24} />
-                  <span>Display</span>
-                </button>
-                <button type="button" className="pos-tool" onClick={() => setSettingsOpen(true)} aria-label="More POS options" title="More POS options">
-                  <Icon name="more" size={24} />
-                  <span>More</span>
-                </button>
+                <AdminMenu
+                  triggerLabel="Open more POS tools"
+                  triggerClassName="pos-tool pos-tool--more"
+                  panelTitle="More tools"
+                  panelClassName="pos-more-menu__panel"
+                  trigger={
+                    <>
+                      <Icon name="more" size={24} />
+                      <span>More</span>
+                    </>
+                  }
+                >
+                  <button
+                    type="button"
+                    className={`admin-menu__item pos-more-menu__item${trayOpen ? " is-active" : ""}`}
+                    onClick={() => setTrayOpen((value) => !value)}
+                    aria-label={parked.length > 0 ? `View ${parked.length} held orders` : "View held orders"}
+                  >
+                    <Icon name="hold" size={18} />
+                    <span className="pos-more-menu__item-label">Hold</span>
+                    {parked.length > 0 && <b className="pos-more-menu__item-count">{parked.length}</b>}
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-menu__item pos-more-menu__item"
+                    onClick={() => setOrderHistoryOpen(true)}
+                    aria-label="View receipts"
+                  >
+                    <Icon name="receipt" size={18} />
+                    <span className="pos-more-menu__item-label">Receipts</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`admin-menu__item pos-more-menu__item${displayPairingToken ? " is-active" : ""}`}
+                    onClick={() => setDisplaySettingsOpen(true)}
+                    aria-label="Customer display settings"
+                  >
+                    <Icon name="display" size={18} />
+                    <span className="pos-more-menu__item-label">Display</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-menu__item pos-more-menu__item"
+                    onClick={() => setSettingsOpen(true)}
+                    aria-label="Printer settings"
+                  >
+                    <Icon name="printer" size={18} />
+                    <span className="pos-more-menu__item-label">Printer Settings</span>
+                  </button>
+                </AdminMenu>
+                {trayOpen && (
+                  <div className="hold-popover">
+                    <div className="hold-popover__header">
+                      <strong>Held orders</strong>
+                      <span>{parked.length}/{MAX_PARKED}</span>
+                    </div>
+                    {parked.length === 0 && <p className="hold-popover__empty">No parked orders yet.</p>}
+                    {parked.map((parkedOrder, index) => (
+                      <div key={parkedOrder.at} className="hold-popover__row">
+                        <div>
+                          <strong>{parkedOrder.lines.length} item{parkedOrder.lines.length === 1 ? "" : "s"} · {displayPeso(parkedOrder.lines.reduce((sum, line) => sum + line.lineTotal, 0))}</strong>
+                          <span>{new Date(parkedOrder.at).toLocaleTimeString()}</span>
+                        </div>
+                        <button type="button" onClick={() => resumeOrder(index)} className="button button--primary button--small">Resume</button>
+                        <button type="button" onClick={() => removeParked(index)} className="icon-button icon-button--danger" aria-label="Remove held order">
+                          <Icon name="close" size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <PosHealthPanel
@@ -1382,27 +1429,6 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                 </div>
               )}
 
-              {trayOpen && (
-                <div className="hold-popover">
-                  <div className="hold-popover__header">
-                    <strong>Held orders</strong>
-                    <span>{parked.length}/{MAX_PARKED}</span>
-                  </div>
-                  {parked.length === 0 && <p className="hold-popover__empty">No parked orders yet.</p>}
-                  {parked.map((parkedOrder, index) => (
-                    <div key={parkedOrder.at} className="hold-popover__row">
-                      <div>
-                        <strong>{parkedOrder.lines.length} item{parkedOrder.lines.length === 1 ? "" : "s"} · {displayPeso(parkedOrder.lines.reduce((sum, line) => sum + line.lineTotal, 0))}</strong>
-                        <span>{new Date(parkedOrder.at).toLocaleTimeString()}</span>
-                      </div>
-                      <button type="button" onClick={() => resumeOrder(index)} className="button button--primary button--small">Resume</button>
-                      <button type="button" onClick={() => removeParked(index)} className="icon-button icon-button--danger" aria-label="Remove held order">
-                        <Icon name="close" size={16} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
             </nav>
           )}
         </header>
