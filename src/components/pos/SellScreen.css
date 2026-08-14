@@ -5107,3 +5107,94 @@
     right: 12px;
   }
 }
+
+/* Account menu health ----------------------------------------------------- */
+/* The health disclosure is now part of the account panel. Keep the compact
+   status row aligned with the account actions and expand its diagnostics
+   inline so the portal menu owns the full interaction. */
+.pos-app .pos-account-menu__health {
+  margin: 0 0 4px;
+  padding: 0 0 4px;
+  border-bottom: 1px solid var(--pos-theme-border, var(--border));
+}
+
+.pos-app .pos-account-menu__health .pos-health-panel {
+  position: relative;
+  z-index: auto;
+  width: 100%;
+  margin: 0;
+}
+
+.pos-app .pos-account-menu__health .pos-health-panel__summary {
+  display: flex;
+  width: 100%;
+  min-height: 38px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  color: var(--pos-theme-text, var(--text));
+  background: transparent;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.pos-app .pos-account-menu__health .pos-health-panel__summary > span:not(.pos-health-panel__dot) {
+  display: inline;
+  color: var(--pos-theme-text, var(--text));
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.pos-app .pos-account-menu__health .pos-health-panel__summary:hover,
+.pos-app .pos-account-menu__health .pos-health-panel[open] .pos-health-panel__summary {
+  color: var(--primary);
+  background: var(--pos-theme-primary-soft, var(--primary-soft));
+}
+
+.pos-app .pos-account-menu__health .pos-health-panel__summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.pos-app .pos-account-menu__health .pos-health-panel__dot {
+  margin-left: auto;
+}
+
+.pos-app .pos-account-menu__health .pos-health-panel__body {
+  position: static;
+  width: auto;
+  margin: 0 0 2px;
+  padding: 10px;
+  border: 1px solid var(--pos-theme-border, var(--border));
+  border-radius: 10px;
+  background: var(--pos-theme-surface-panel, var(--surface-panel));
+  box-shadow: none;
+  color: var(--pos-theme-text, var(--text));
+}
+
+.pos-app .pos-account-menu__health .pos-health-panel__heading p {
+  color: var(--pos-theme-text-muted, var(--text-muted));
+}
+
+.pos-app .pos-account-menu__health .pos-health-panel__metrics {
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top-color: var(--pos-theme-border, var(--border));
+}
+
+.pos-app .pos-account-menu__health .pos-health-panel__metrics dt {
+  color: var(--pos-theme-text-muted, var(--text-muted));
+}
+
+.pos-app .pos-account-menu__health .pos-health-panel__metrics dd {
+  color: var(--pos-theme-text, var(--text));
+}
+
+.pos-app .pos-account-menu__health .pos-health-panel__sync {
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: 8px;
+}

@@ -1371,16 +1371,6 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                 )}
               </div>
 
-              <PosHealthPanel
-                pending={pending}
-                oldestQueuedSaleAt={oldestQueuedSaleAt}
-                failedPrintCount={failedPrintCount}
-                displayStatus={hardware.displayStatus}
-                terminalStatus={hardware.terminalStatus}
-                syncState={syncState}
-                onSync={() => void flush()}
-              />
-
               <AdminMenu
                 triggerLabel="Open account menu"
                 triggerClassName="pos-account-trigger"
@@ -1398,6 +1388,17 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                 <div className="pos-account-menu__meta">
                   <span>{profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1) : "POS user"}</span>
                   <small>{storeName}</small>
+                </div>
+                <div className="pos-account-menu__health">
+                  <PosHealthPanel
+                    pending={pending}
+                    oldestQueuedSaleAt={oldestQueuedSaleAt}
+                    failedPrintCount={failedPrintCount}
+                    displayStatus={hardware.displayStatus}
+                    terminalStatus={hardware.terminalStatus}
+                    syncState={syncState}
+                    onSync={() => void flush()}
+                  />
                 </div>
                 <a className="admin-menu__item pos-account-menu__item" href="/account">
                   <Icon name="settings" size={16} />
