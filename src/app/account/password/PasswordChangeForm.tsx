@@ -4,13 +4,14 @@ import { useActionState } from "react";
 import { changePassword, type PasswordState } from "./actions";
 
 const initialState: PasswordState = { message: "", success: false };
+const DEFAULT_FORM_CLASS = "w-full max-w-md rounded-card border border-line bg-surface p-8 shadow-[var(--shadow-card)]";
 
-export function PasswordChangeForm({ displayName, mode = "required" }: { displayName: string; mode?: "required" | "settings" }) {
+export function PasswordChangeForm({ displayName, mode = "required", className = DEFAULT_FORM_CLASS }: { displayName: string; mode?: "required" | "settings"; className?: string }) {
   const [state, formAction, pending] = useActionState(changePassword, initialState);
   const isSettingsMode = mode === "settings";
 
   return (
-    <form action={formAction} className="w-full max-w-md rounded-card border border-line bg-surface p-8 shadow-[var(--shadow-card)]">
+    <form action={formAction} className={className}>
       <input type="hidden" name="mode" value={mode} />
       <p className="text-sm font-semibold uppercase tracking-wide text-accent">{isSettingsMode ? "Account security" : "First sign-in setup"}</p>
       <h1 className="mt-1 text-2xl font-extrabold text-ink">{isSettingsMode ? "Change your password" : "Create your password"}</h1>

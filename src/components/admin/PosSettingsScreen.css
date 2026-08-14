@@ -3030,13 +3030,13 @@
 }
 
 .pos-appearance-card--expanded .pos-style-options {
-  height: 482px;
+  height: 580px;
   min-height: 0;
-  flex: 0 0 482px;
+  flex: 0 0 580px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-auto-rows: 90px;
   align-content: start;
-  max-height: 482px;
+  max-height: 580px;
   gap: 8px;
   padding-right: 10px;
 }

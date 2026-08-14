@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { PasswordChangeForm } from "@/app/account/password/PasswordChangeForm";
 import { redirect } from "next/navigation";
 import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
@@ -27,6 +28,7 @@ type CurrentProfile = {
   org_id: string;
   store_id: string | null;
   password_change_required: boolean;
+  stores: { name?: string } | null;
 };
 
 type OrganizationRecord = {
@@ -66,6 +68,9 @@ export default async function SettingsPage({
   const inventorySettings = readAdminInventorySettings(organization?.settings);
   const discountSettings = readAdminDiscountSettings(organization?.settings);
   const canWrite = profile.role === "admin";
+  const displayName = profile.full_name?.trim() || "Team member";
+  const branchName = profile.stores?.name ?? "All branches";
+  const usesEmployeeId = user.email?.endsWith("@staff.internal") ?? false;
   const saved = readParam(params.saved);
   const savedMessage = saved === "organization" ? "Dashboard settings saved." : "";
   const errorMessage = readParam(params.error);
@@ -143,6 +148,24 @@ export default async function SettingsPage({
           <DashboardPreview branding={branding} organizationName={organization?.name ?? DEFAULT_ORGANIZATION_NAME} />
         </section>
 
+        <section id="account-settings" aria-labelledby="account-settings-heading" className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,0.8fr)_minmax(300px,1.2fr)]">
+          <section className="admin-panel p-5 sm:p-6" aria-labelledby="account-settings-heading">
+            <div className="admin-panel__header">
+              <div><p className="admin-panel__eyebrow">Profile</p><h2 id="account-settings-heading" className="admin-panel__title">Access details</h2><p className="admin-panel__subtitle">Review the account and sign-in details for your current admin session.</p></div>
+              <span className="admin-settings-theme-pill">Personal</span>
+            </div>
+            <dl className="mt-6 divide-y divide-line">
+              <div className="flex items-start justify-between gap-4 py-3 first:pt-0"><dt className="text-xs font-semibold text-ink-muted">Name</dt><dd className="text-right text-sm font-extrabold text-ink">{displayName}</dd></div>
+              <div className="flex items-start justify-between gap-4 py-3"><dt className="text-xs font-semibold text-ink-muted">Access role</dt><dd className="text-right text-sm font-extrabold text-ink">{labelRole(profile.role)}</dd></div>
+              <div className="flex items-start justify-between gap-4 py-3"><dt className="text-xs font-semibold text-ink-muted">Branch</dt><dd className="text-right text-sm font-extrabold text-ink">{branchName}</dd></div>
+              <div className="flex items-start justify-between gap-4 py-3 last:pb-0"><dt className="text-xs font-semibold text-ink-muted">Sign-in method</dt><dd className="text-right text-sm font-extrabold text-ink">{usesEmployeeId ? "Employee ID" : "Email"}</dd></div>
+            </dl>
+            <p className="mt-6 rounded-btn bg-secondary px-3 py-3 text-xs leading-5 text-ink-muted">Your password is private to your account. Organization administrators can manage access, but cannot view your current password.</p>
+          </section>
+
+          <PasswordChangeForm displayName={displayName} mode="settings" className="admin-panel w-full p-5 sm:p-6" />
+        </section>
+
         {canWrite && <section className="admin-panel owner-guidance-settings mt-5 p-5 sm:p-6" aria-labelledby="owner-guidance-settings-heading"><div><p className="admin-panel__eyebrow">Owner help</p><h2 id="owner-guidance-settings-heading" className="admin-panel__title">Bring back the setup guide</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">Show the first-time checklist and all feature tips again on your next visit. This only changes guidance visibility in this browser; it does not change your business data.</p></div><RestoreOwnerGuidanceButton /></section>}
 
         <section className="admin-panel owner-guidance-settings mt-5 p-5 sm:p-6" aria-labelledby="pwa-install-settings-heading">
@@ -156,14 +179,19 @@ export default async function SettingsPage({
 
         <section className="admin-panel mt-5 p-5 sm:p-6" aria-labelledby="settings-scopes-heading">
           <div className="admin-panel__header">
-            <div><p className="admin-panel__eyebrow">Configuration map</p><h2 id="settings-scopes-heading" className="admin-panel__title">Organization, branch, and device settings</h2><p className="admin-panel__subtitle">Each scope has its own editor, so a branch receipt change or terminal repair cannot accidentally change organization branding.</p></div>
+            <div><p className="admin-panel__eyebrow">Configuration map</p><h2 id="settings-scopes-heading" className="admin-panel__title">Organization, account, branch, and device settings</h2><p className="admin-panel__subtitle">Each scope has its own editor, so a branch receipt change or terminal repair cannot accidentally change organization branding.</p></div>
             <Link href="/admin/pos" className="rounded-btn bg-primary px-4 py-2 text-xs font-extrabold text-primary-fg transition hover:bg-primary-hover">Open POS settings</Link>
           </div>
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <Link href="#dashboard-settings" className="rounded-card border border-primary/35 bg-primary-soft p-4 transition hover:border-primary/60">
               <span className="text-xs font-extrabold uppercase tracking-[0.12em] text-accent">Organization</span>
               <strong className="mt-2 block text-sm font-extrabold text-ink">Brand, currency, alerts, approvals</strong>
               <span className="mt-1 block text-xs leading-5 text-ink-muted">Shared workspace identity, dashboard defaults, and the custom-discount approval threshold.</span>
+            </Link>
+            <Link href="#account-settings" className="rounded-card border border-line bg-surface-raised p-4 transition hover:border-primary/40 hover:bg-primary-soft">
+              <span className="text-xs font-extrabold uppercase tracking-[0.12em] text-accent">Account</span>
+              <strong className="mt-2 block text-sm font-extrabold text-ink">Access details and password</strong>
+              <span className="mt-1 block text-xs leading-5 text-ink-muted">Review your sign-in method and update your private password.</span>
             </Link>
             <Link href="/admin/pos?tab=receipts" className="rounded-card border border-line bg-surface-raised p-4 transition hover:border-primary/40 hover:bg-primary-soft">
               <span className="text-xs font-extrabold uppercase tracking-[0.12em] text-accent">Branch</span>
@@ -200,6 +228,11 @@ function DashboardPreview({ branding, organizationName }: { branding: AdminBrand
 
 function SettingsField({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {
   return <label htmlFor={htmlFor} className="block"><span className="mb-1.5 block text-xs font-extrabold uppercase tracking-[0.12em] text-ink-muted">{label}</span>{children}</label>;
+}
+
+function labelRole(value: AdminRole | null) {
+  if (!value) return "POS user";
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function SettingsProfileMissing() {
