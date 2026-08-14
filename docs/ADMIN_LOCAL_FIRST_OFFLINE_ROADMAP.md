@@ -2,7 +2,7 @@
 
 **Project:** Dumala POS
 **Created:** 2026-08-13
-**Status:** Phase 6 implementation complete for local dialogs, client URL state, background refresh, and current payload slices; Phase 7 acceptance in progress; durable production telemetry rollout in progress
+**Status:** Phase 6 implementation complete for local dialogs, client URL state, background refresh, and current payload slices; Phase 7 acceptance in progress and blocked on authenticated/device controls; durable production telemetry rollout in progress
 **Owner:** Product and engineering
 
 ## Purpose
@@ -138,7 +138,7 @@ This document is the working plan for the entire initiative. Update the checkbox
 
 ### Phase 7 — Acceptance, rollout, and monitoring
 
-**Status:** Planned
+**Status:** Acceptance in progress; authenticated/device pass blocked on session, network, and staging/peripheral controls
 
 - [ ] Test online, slow-network, airplane-mode, reconnect, and force-close scenarios.
 - [ ] Test browser back/forward, refresh, deep links, and multiple tabs.
@@ -147,6 +147,11 @@ This document is the working plan for the entire initiative. Update the checkbox
 - [ ] Test duplicate prevention and conflict recovery for queued writes.
 - [ ] Collect a production window through `admin-performance-summary.sql` and record authoritative p50/p95 interaction latency, request counts, and observed transfer/encoded-byte percentiles.
 - [ ] Roll out in slices with rollback notes and production monitoring.
+
+The initial Phase 7 acceptance pass is recorded in
+[`PHASE7_ACCEPTANCE_REPORT.md`](PHASE7_ACCEPTANCE_REPORT.md). Automated POS,
+overlay, accessibility, business-invariant, build, and mock-printer gates pass;
+the authenticated browser/tablet and staging/device matrix remains open.
 
 ## First implementation slice
 
@@ -368,6 +373,20 @@ Do not record order numbers, customer names, employee names, receipt payloads, o
 - `/api/admin/performance` continues to emit the structured `dumala_admin_performance` deployment event and now persists the same sample to Supabase. A failed telemetry insert does not block or surface on the admin UI; the event records `persisted: false` for operational diagnosis.
 - Added `scripts/admin-performance-summary.sql` to calculate 24-hour p50/p95 duration and observed transfer/encoded-byte percentiles by surface and sample type. It currently returns no rows because an authenticated production browser session was not available after deployment; no synthetic or unauthenticated sample was inserted.
 - The next step is to let normal signed-in admin traffic run, execute the summary query, and use the resulting Sales/Inventory/Orders p50/p95 and byte data to choose the next pagination/summary change.
+
+### 2026-08-14 — Phase 7 POS acceptance boundary
+
+- Ran the local POS acceptance setup against `main` at `d88195d`.
+- The requested 1024 x 768 and 1280 x 800 viewport probes both reached the
+  local `/login` route because the in-app browser had no authenticated session;
+  no authenticated POS behavior is marked as passed.
+- `npm run test:pos`, `npm run test:pos:accessibility`, `npm run typecheck`,
+  `npm run lint`, `npm run build`, `npm run printer:validate:mock`, and
+  `git diff --check` passed.
+- Local Supabase isolation fixtures were not run because Docker Desktop's Linux
+  engine was unavailable. Real network, tablet, customer-display, printer,
+  shared-terminal, role-isolation, and authoritative telemetry checks remain
+  open and are documented in `docs/PHASE7_ACCEPTANCE_REPORT.md`.
 
 ## References
 
