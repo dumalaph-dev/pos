@@ -38,7 +38,7 @@ Use one copy per branch and one device section per POS terminal. Mark a box only
 - [ ] Shift opens with the correct opening float; X-reading prints; shift closes; Z-reading prints and seals.
 - [ ] Admin Reports for the test business date show `Balanced` and include the observed order.
 - [ ] Printer-unavailable behavior is understood: the sale remains recorded and the receipt can be retried/reprinted.
-- [ ] Go offline after the catalog is cached; complete the pilot offline-sale drill; reconnect and verify exactly-once sync.
+- [ ] Go offline after the catalog is cached; complete the pilot offline-sale drill (15 sales, PRD P2); reconnect and verify exactly-once sync with `npx supabase db query --linked --file scripts/offline-drill-verify.sql` after editing its `params` block to the branch, date, and sale count actually rung up.
 - [ ] Confirm pending count returns to zero before signing out or clearing browser data.
 - [ ] Sign out and sign in as a cashier; verify the cashier sees only the assigned branch and menu.
 - [ ] Verify the real employee can change their initial password and that the disposable QA accounts are inactive.
