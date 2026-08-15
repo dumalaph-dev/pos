@@ -22,18 +22,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # v4 of both actions ships a Node 20 entrypoint. GitHub already forces
-      # those onto Node 24 and warns; the warning becomes a hard failure when
-      # Node 20 support is removed from the runners. v5 was the first major on
-      # Node 24 — these are on the current major so the bump is not due again
-      # in a few months.
+      # Pinned to commit SHAs, not tags. A tag is mutable: `@v7` resolves to
+      # whatever that major currently points at, which means arbitrary new code
+      # runs on every push to a repository that handles payments. The trailing
+      # comment is the human-readable version — update both together, and
+      # re-resolve the SHA from the tag rather than editing it by hand.
+      #
+      # These are on v7 because v4 shipped a Node 20 entrypoint that the runners
+      # already force onto Node 24 with a deprecation warning; v5 was the first
+      # major on Node 24.
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # node-version tracks the local toolchain (v22.13.1) rather than the
       # action's own runtime, so it stays at 22.
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
