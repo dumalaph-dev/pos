@@ -1,0 +1,524 @@
+/* Shared visual system for routes rendered inside AdminRouteLayout. */
+
+/* Shared compact desktop admin shell                                         */
+/* -------------------------------------------------------------------------- */
+
+@media (min-width: 1024px) {
+  .admin-sidebar {
+    background: #fff;
+    border-right-color: #f0ebe6;
+  }
+
+  .admin-sidebar__inner {
+    padding: 18px 9px 12px;
+  }
+
+  .admin-brand {
+    display: grid;
+    justify-items: center;
+    gap: 7px;
+    padding: 0;
+    text-align: center;
+  }
+
+  .admin-brand__mark {
+    width: 72px;
+    height: 72px;
+    flex-basis: 72px;
+    background: #fff;
+  }
+
+  .admin-brand__copy {
+    justify-items: center;
+    gap: 3px;
+  }
+
+  .admin-brand__copy strong {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 15px;
+  }
+
+  .admin-brand__copy small {
+    font-size: 7px;
+  }
+
+  .admin-branch-switcher {
+    display: flex;
+    min-height: 32px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 15px 1px 12px;
+    padding: 0 11px;
+    border: 0;
+    border-radius: 8px;
+    font-size: 12px;
+  }
+
+  .admin-branch-switcher strong {
+    font-size: 12px;
+  }
+
+  .admin-branch-switcher__label {
+    display: none;
+  }
+
+  .admin-branch-switcher__chevron {
+    color: var(--text-muted);
+    font-size: 15px;
+    line-height: 1;
+  }
+
+  .admin-nav__group {
+    gap: 2px;
+  }
+
+  .admin-nav__group--secondary {
+    margin-top: 2px;
+  }
+
+  .admin-nav__item {
+    min-height: 34px;
+    gap: 10px;
+    padding: 0 10px;
+    border-radius: 8px;
+    font-size: 11px;
+  }
+
+  .admin-nav__item:hover:not(.is-disabled) {
+    transform: translateX(1px);
+  }
+
+  .admin-quick-actions {
+    display: grid;
+    gap: 5px;
+    margin: 18px 4px 0;
+    padding: 12px 9px 10px;
+    border: 1px solid #f0e9e2;
+    border-radius: 9px;
+    background: #fffaf6;
+  }
+
+  .admin-quick-actions h2,
+  .admin-system-info h2 {
+    margin: 0 0 4px;
+    color: var(--text-muted);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .admin-quick-actions__item {
+    display: flex;
+    min-height: 30px;
+    align-items: center;
+    gap: 8px;
+    padding: 0 5px;
+    border: 0;
+    border-radius: 7px;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.64);
+    font-size: 10px;
+    font-weight: 650;
+    text-align: left;
+    text-decoration: none;
+    transition: color 150ms ease, background 150ms ease;
+  }
+
+  .admin-quick-actions__item:hover {
+    color: var(--primary);
+    background: #fff;
+  }
+
+  .admin-quick-actions__icon {
+    display: grid;
+    width: 18px;
+    height: 18px;
+    place-items: center;
+    color: var(--primary);
+  }
+
+  .admin-quick-actions__message {
+    margin: 2px 0 0;
+    color: var(--success);
+    font-size: 9px;
+    font-weight: 700;
+  }
+
+  .admin-system-info {
+    display: grid;
+    gap: 4px;
+    margin: 14px 4px 0;
+    padding: 10px 9px;
+    border: 1px solid #f0e9e2;
+    border-radius: 9px;
+    background: #fff;
+  }
+
+  .admin-system-info h2 {
+    margin-bottom: 0;
+    color: var(--text);
+  }
+
+  .admin-system-info > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 5px;
+    color: var(--text-muted);
+    font-size: 8px;
+    font-weight: 600;
+  }
+
+  .admin-system-info a {
+    display: grid;
+    width: 20px;
+    height: 20px;
+    place-items: center;
+    color: var(--success);
+    border-radius: 50%;
+  }
+
+  .admin-system-info a:hover {
+    background: #eef6ed;
+  }
+}
+
+@layer components {
+
+/* Inventory uses a compact command bar so the table remains the primary task. */
+.inventory-input--compact {
+  height: 36px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 9px;
+  font-size: 11px;
+}
+
+.inventory-button {
+  display: inline-flex;
+  height: 36px;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.inventory-button--ghost {
+  color: var(--primary);
+  background: transparent;
+}
+
+.inventory-button--ghost:hover {
+  background: var(--primary-soft);
+}
+
+.inventory-button:focus-visible,
+.inventory-icon-button:focus-visible,
+.products-category-tab:focus-visible,
+.inventory-page-button:focus-visible,
+.inventory-menu-item:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.inventory-icon-button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  place-items: center;
+  border-radius: 8px;
+  text-decoration: none;
+}
+
+.inventory-menu-item {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.inventory-menu-item:hover {
+  background: var(--primary-soft);
+}
+
+
+.inventory-filter-bar {
+  align-items: center;
+}
+
+.inventory-filter-reset {
+  flex: 0 0 auto;
+}
+
+.inventory-directory-controls .products-filter-bar {
+  border-bottom: 0;
+}
+
+.products-category-tab__icon {
+  display: grid;
+  width: 23px;
+  height: 23px;
+  flex: 0 0 23px;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--primary);
+  background: var(--primary-soft);
+  font-size: 0;
+}
+
+.products-category-tab__icon svg {
+  display: block;
+}
+
+.inventory-page-button {
+  display: grid;
+  min-width: 32px;
+  height: 32px;
+  place-items: center;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.inventory-page-button:not(.is-active) {
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.inventory-page-button:not(.is-active):hover {
+  background: var(--primary-soft);
+}
+
+.inventory-page-button.is-active {
+  color: var(--primary-fg);
+  background: var(--primary);
+}
+
+.inventory-section-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.inventory-section-summary::-webkit-details-marker {
+  display: none;
+}
+
+.inventory-yield-panel {
+  border-color: color-mix(in srgb, var(--success) 22%, var(--border));
+}
+
+.inventory-yield-form {
+  display: grid;
+  gap: 12px;
+}
+
+.inventory-yield-step {
+  display: grid;
+  gap: 13px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-raised);
+}
+
+.inventory-yield-step__heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.inventory-yield-step__heading strong {
+  display: block;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.inventory-yield-step__heading small {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.inventory-yield-step__number {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--primary-fg);
+  background: var(--primary);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.inventory-yield-step__fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(130px, 0.7fr);
+  gap: 10px;
+}
+
+.inventory-field-label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.inventory-field-label em {
+  color: var(--text-subtle);
+  font-size: 9px;
+  font-style: normal;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.inventory-yield-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 14px;
+  border: 1px solid color-mix(in srgb, var(--success) 24%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--success) 7%, var(--surface));
+}
+
+.inventory-yield-summary strong {
+  display: block;
+  color: var(--success);
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+.inventory-yield-summary small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.inventory-yield-summary__ledger {
+  display: flex;
+  max-width: 360px;
+  align-items: flex-start;
+  gap: 7px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.inventory-yield-summary__ledger svg {
+  flex: 0 0 auto;
+  color: var(--success);
+}
+
+.inventory-yield-form__footer {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+@media (max-width: 760px) {
+  .inventory-yield-step__fields {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-yield-summary,
+  .inventory-yield-form__footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inventory-yield-summary__ledger {
+    max-width: none;
+  }
+
+  .inventory-yield-form__footer .inventory-button {
+    width: 100%;
+  }
+}
+
+.admin-compact-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.admin-compact-toolbar__filters {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  min-width: max-content;
+}
+
+.admin-compact-toolbar__select {
+  display: block;
+  flex: 0 0 auto;
+  height: 36px;
+  min-height: 36px;
+  min-width: 104px;
+  width: 104px;
+  padding: 0 8px;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-compact-toolbar__select--range {
+  min-width: 112px;
+  width: 112px;
+}
+
+.admin-compact-toolbar__button {
+  display: inline-flex;
+  height: 36px;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+@media (min-width: 1024px) {
+  .admin-compact-toolbar {
+    flex-wrap: nowrap;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+}

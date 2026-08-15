@@ -1,4 +1,26 @@
-import "./AdminRouteLayout.css";
+/**
+ * Admin styles, split out of the former single 8,603-line AdminRouteLayout.css.
+ *
+ * IMPORT ORDER IS LOAD-BEARING — do not reorder or alphabetize.
+ *
+ * `themes.css` deliberately comes after the workspace files because it bridges
+ * them: `.employee-page[data-admin-theme]` and friends remap palettes that
+ * `employees.css` and `products.css` define first. Hoisting themes above them
+ * would silently revert those workspaces to their hardcoded pre-theme colors
+ * under every admin theme.
+ *
+ * For the same reason these stay imported here rather than from the individual
+ * routes. Route-level imports would give each admin page a smaller stylesheet,
+ * but the load order across route boundaries is not guaranteed to keep the
+ * theme bridges last, so the payload win is not worth a theming regression.
+ * Splitting the bridges out per workspace is the prerequisite for that change.
+ */
+import "./admin-css/shell.css";
+import "./admin-css/backoffice.css";
+import "./admin-css/products.css";
+import "./admin-css/employees.css";
+import "./admin-css/themes.css";
+import "./admin-css/shifts.css";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import type { ReactNode } from "react";
