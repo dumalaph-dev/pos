@@ -22,11 +22,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # v4 of both actions ships a Node 20 entrypoint. GitHub already forces
+      # those onto Node 24 and warns; the warning becomes a hard failure when
+      # Node 20 support is removed from the runners. v5 was the first major on
+      # Node 24 — these are on the current major so the bump is not due again
+      # in a few months.
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
+      # node-version tracks the local toolchain (v22.13.1) rather than the
+      # action's own runtime, so it stays at 22.
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
