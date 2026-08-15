@@ -65,6 +65,15 @@ const nextConfig: NextConfig = {
       static: 180,
     },
   },
+  async rewrites() {
+    // The bundled catalog art in `public/food` moved from PNG to WebP
+    // (`scripts/optimize-food-images.mjs`). Returning an array applies these
+    // after the filesystem check, so the real `/food/*.webp` files always win
+    // and this only catches the retired names: Cache Storage entries written by
+    // an earlier service worker, and any stored `image_url` that reaches the
+    // browser without passing through `normalizeBundledImageUrl`.
+    return [{ source: "/food/:name.png", destination: "/food/:name.webp" }];
+  },
   async headers() {
     return [
       {

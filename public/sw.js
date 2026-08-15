@@ -12,7 +12,11 @@
  * and falls back to the login shell when the network is down. This is an
  * allowlist: a new route is uncacheable until deliberately added below.
  */
-const VERSION = "pos-shell-v7";
+/* v8: the bundled /food catalog art moved from PNG to WebP. Installed tablets
+ * hold the retired 2.3 MB PNGs in Cache Storage keyed by their old URLs, and
+ * activate only purges caches whose key is not VERSION — so this bump is what
+ * actually reclaims that space on a device already in the field. */
+const VERSION = "pos-shell-v8";
 
 /* The login page at "/login" is the only document safe to serve to anyone.
  * /pos and /admin are deliberately NOT precached: they 302 to "/login" when

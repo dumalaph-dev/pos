@@ -30,18 +30,18 @@ const DEMO_CATEGORIES = [
 ];
 
 const DEMO_PRODUCTS: DemoProduct[] = [
-  { id: "preview-regular", name: "Lechon Regular", pricing_mode: "per_kg", price: 650, unit: "kg", category_id: "preview-lechon", image_url: "/food/whole-lechon-small.png" },
-  { id: "preview-belly", name: "Lechon Belly", pricing_mode: "per_kg", price: 700, unit: "kg", category_id: "preview-lechon", image_url: "/food/lechon-belly-one.png" },
-  { id: "preview-paa", name: "Lechon Paa", pricing_mode: "fixed", price: 350, unit: "pc", category_id: "preview-lechon", image_url: "/food/lechon-kawali.png" },
-  { id: "preview-paksiw", name: "Lechon Paksiw", pricing_mode: "fixed", price: 180, unit: "bowl", category_id: "preview-lechon", image_url: "/food/lechon-paksiw.png" },
-  { id: "preview-sisig", name: "Lechon Sisig", pricing_mode: "fixed", price: 220, unit: "bowl", category_id: "preview-lechon", image_url: "/food/lechon-kawali.png" },
-  { id: "preview-garlic-rice", name: "Garlic Rice", pricing_mode: "fixed", price: 40, unit: "cup", category_id: "preview-rice", image_url: "/food/rice-sides.png" },
-  { id: "preview-java-rice", name: "Java Rice", pricing_mode: "fixed", price: 45, unit: "cup", category_id: "preview-rice", image_url: "/food/java-rice.png" },
-  { id: "preview-plain-rice", name: "Plain Rice", pricing_mode: "fixed", price: 35, unit: "cup", category_id: "preview-rice", image_url: "/food/rice-sides.png" },
-  { id: "preview-iced-tea", name: "Iced Tea", pricing_mode: "fixed", price: 50, unit: "glass", category_id: "preview-drinks", image_url: "/food/rice-sides.png" },
-  { id: "preview-softdrinks", name: "Softdrinks (Can)", pricing_mode: "fixed", price: 60, unit: "can", category_id: "preview-drinks", image_url: "/food/rice-sides.png" },
-  { id: "preview-sauce", name: "Lechon Sauce", pricing_mode: "fixed", price: 25, unit: "cup", category_id: "preview-extras", image_url: "/food/mang-tomas.png" },
-  { id: "preview-gravy", name: "Extra Gravy", pricing_mode: "fixed", price: 20, unit: "cup", category_id: "preview-extras", image_url: "/food/mang-tomas.png" },
+  { id: "preview-regular", name: "Lechon Regular", pricing_mode: "per_kg", price: 650, unit: "kg", category_id: "preview-lechon", image_url: "/food/whole-lechon-small.webp" },
+  { id: "preview-belly", name: "Lechon Belly", pricing_mode: "per_kg", price: 700, unit: "kg", category_id: "preview-lechon", image_url: "/food/lechon-belly-one.webp" },
+  { id: "preview-paa", name: "Lechon Paa", pricing_mode: "fixed", price: 350, unit: "pc", category_id: "preview-lechon", image_url: "/food/lechon-kawali.webp" },
+  { id: "preview-paksiw", name: "Lechon Paksiw", pricing_mode: "fixed", price: 180, unit: "bowl", category_id: "preview-lechon", image_url: "/food/lechon-paksiw.webp" },
+  { id: "preview-sisig", name: "Lechon Sisig", pricing_mode: "fixed", price: 220, unit: "bowl", category_id: "preview-lechon", image_url: "/food/lechon-kawali.webp" },
+  { id: "preview-garlic-rice", name: "Garlic Rice", pricing_mode: "fixed", price: 40, unit: "cup", category_id: "preview-rice", image_url: "/food/rice-sides.webp" },
+  { id: "preview-java-rice", name: "Java Rice", pricing_mode: "fixed", price: 45, unit: "cup", category_id: "preview-rice", image_url: "/food/java-rice.webp" },
+  { id: "preview-plain-rice", name: "Plain Rice", pricing_mode: "fixed", price: 35, unit: "cup", category_id: "preview-rice", image_url: "/food/rice-sides.webp" },
+  { id: "preview-iced-tea", name: "Iced Tea", pricing_mode: "fixed", price: 50, unit: "glass", category_id: "preview-drinks", image_url: "/food/rice-sides.webp" },
+  { id: "preview-softdrinks", name: "Softdrinks (Can)", pricing_mode: "fixed", price: 60, unit: "can", category_id: "preview-drinks", image_url: "/food/rice-sides.webp" },
+  { id: "preview-sauce", name: "Lechon Sauce", pricing_mode: "fixed", price: 25, unit: "cup", category_id: "preview-extras", image_url: "/food/mang-tomas.webp" },
+  { id: "preview-gravy", name: "Extra Gravy", pricing_mode: "fixed", price: 20, unit: "cup", category_id: "preview-extras", image_url: "/food/mang-tomas.webp" },
 ];
 
 const DEMO_PALETTE_OPTIONS = POS_PALETTE_OPTIONS.filter((option) => option.id !== "custom");

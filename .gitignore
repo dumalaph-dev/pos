@@ -35,6 +35,11 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# production logical backups (scripts/backup-production.mjs). These hold every
+# order, customer, employee and audit row in plain SQL — committing one would
+# publish the store's entire ledger to the repository host. Never opt in.
+/backups/
+
 # vercel
 .vercel
 

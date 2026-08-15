@@ -2,13 +2,13 @@
 
 **Owner:** Dumala production operator
 **Project:** Supabase `uzavkjftwcuixidxyopr`
-**Last checked:** 2026-08-12 (Asia/Singapore)
+**Last checked:** 2026-08-15 (Asia/Singapore)
 
 ## Verified posture
 
-The linked Supabase CLI identifies the production project as `ACTIVE_HEALTHY` in `ap-southeast-2`, running Postgres `17.6.1.155`. The migration ledger is synchronized through `0043`.
+The linked Supabase CLI identifies the production project as `ACTIVE_HEALTHY` in `ap-southeast-2`, running Postgres `17.6.1.155`.
 
-The read-only backup check returned:
+The read-only backup check returned, unchanged on 2026-08-15:
 
 ```json
 {
@@ -19,23 +19,90 @@ The read-only backup check returned:
 }
 ```
 
-Interpretation:
+Interpretation, corrected 2026-08-15 after the owner confirmed the **Free** plan:
 
-- The physical backup/WAL-G pipeline is enabled.
-- Point-in-Time Recovery (PITR) is currently **disabled**.
-- The CLI returned no listed backup entries, so the Dashboard `Database → Backups` page still needs an owner-level confirmation before the pilot.
-- Do not claim the backup gate is green until a current restore point is visible in the Dashboard.
+- `backups: []` is literal. Supabase does not take automated backups on the Free plan, so there is **no managed recovery point of any kind** for this project.
+- Point-in-Time Recovery is **disabled and unavailable**. PITR is a paid add-on sold on top of Pro; enabling it requires upgrading the plan first.
+- `walg_enabled: true` is a platform-internal flag and must not be read as "backups exist". It does not produce a restore point the owner can use.
+- The earlier instruction to confirm a restore point in `Database → Backups` still stands, but on Free that page is expected to be empty. Confirming it is how the owner verifies the gap rather than how they close it.
 
-PITR is a paid Supabase add-on and requires a suitable compute size. Enabling it, changing retention, or initiating a restore is an infrastructure/billing decision; it is intentionally not performed by the application repository.
+Enabling PITR, upgrading the plan, changing retention, or initiating a restore is an infrastructure and billing decision; it is intentionally not performed by the application repository.
+
+**Until the plan is upgraded, the scripted logical backup below is the only recovery path that exists.** Run it before the pilot and on a schedule during it.
+
+## No-cost logical backup (`npm run backup:production`)
+
+`scripts/backup-production.mjs` exports every application table to NDJSON — one file per table, one JSON object per line — into a timestamped folder under `backups/` (gitignored; the rows are the store's entire ledger and must never be committed).
+
+```bash
+npm run backup:production
+```
+
+Write somewhere other than the working disk with `--out`:
+
+```bash
+node scripts/backup-production.mjs --out D:/dumala-backups
+```
+
+It reads `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from `.env.local`, never prints the key, and exits non-zero if any of `organizations`, `stores`, `products`, `orders`, `order_items`, `stock_movements`, `audit_logs`, `shifts`, or `z_readings` fails — a partial export is never reported as a recovery point. Each run writes a `manifest.json` with per-table row counts.
+
+It reads through the API rather than `pg_dump` on purpose: `supabase db dump` runs pg_dump inside Docker, and neither Docker nor a native pg_dump is installed on the operator workstation. A backup that only runs when Docker cooperates is not a backup.
+
+**Covered:** every row of all 35 application tables.
+
+**Not covered, and why that is acceptable:**
+
+| Excluded | Recovery path |
+|---|---|
+| Schema, functions, RLS policies | `supabase/migrations` in Git is the source of truth; replay it |
+| `auth.users` | Re-provision employee logins through the Employees UI; `profiles` and `employee_records` preserve who each account belongs to |
+| Storage objects (product images, display gallery) | Re-uploadable; bundled `/food` art ships in the repo |
+| Project config, API keys, Auth/Realtime settings | Reconfigured by hand, as in any Supabase restore |
+
+### Restore from a logical backup
+
+1. Create the target Supabase project and record its ref.
+2. Apply the schema: `npx supabase db push --linked`. Confirm the ledger matches the migration set the backup was taken against (`manifest.json` records the run timestamp; match it to the migration state in Git at that commit).
+3. Load each `*.ndjson` **in the order listed in `manifest.json`** — it is ordered parents-first so foreign keys resolve. Insert with the service role key so RLS does not reject the load.
+4. Append-only tables (`orders`, `order_items`, `stock_movements`, `audit_logs`, `z_readings`) are protected by triggers that block UPDATE and DELETE. Load them into an empty project; do not attempt to merge into a project that already holds rows.
+5. Re-provision employee Auth users, then re-upload Storage objects.
+6. Run the verification checklist in "Production restore steps" below before reopening the till.
+
+### Backup cadence for the pilot
+
+| When | Action |
+|---|---|
+| Before the pilot starts | One run, copied off the machine, restore rehearsed once into a scratch project |
+| Each pilot day, after close | One run after the Z-reading, so a day's sales are never more than one shift at risk |
+| Before any migration push | One run, so a bad migration is recoverable |
+
+A backup that has never been restored is a hypothesis, not a backup. Rehearse step 1-5 once into a scratch project before the pilot week.
 
 ## Owner action before the pilot
 
-1. Open the production project in the Supabase Dashboard.
-2. Open `Database → Backups` and confirm that daily/physical backups have a current available restore point.
-3. Open the Point-in-Time settings and enable PITR if the intended recovery point objective requires it.
-4. Choose and record the retention period and the approximate recovery point objective in the incident contacts section below.
-5. Capture the date/time of the latest visible recovery point in Singapore time and UTC.
-6. Store a screenshot or Dashboard export in the restricted operations folder; do not commit it to Git.
+The plan decides which of these applies. Step 1 is how you confirm which one you are in.
+
+1. Open the production project in the Supabase Dashboard and check the plan under `Settings → Billing`, then open `Database → Backups`.
+
+**If the project is on Free (its state as of 2026-08-15):**
+
+2. Expect the Backups page to be empty. That is the platform behaviour on Free, not a fault to troubleshoot.
+3. Decide the recovery point objective. Managed backups require upgrading to Pro (which adds daily backups at 7-day retention); PITR is a further paid add-on on top of Pro. Both are billing decisions and neither can be enabled from this repository.
+4. Whether or not you upgrade, run `npm run backup:production` on the cadence in the table above — an upgrade only starts protecting you from the moment it is enabled, and PITR never protects against losing the project itself.
+
+**Once the project is on Pro:**
+
+5. Confirm daily backups show a current available restore point.
+6. Open the Point-in-Time settings and enable PITR if the intended recovery point objective requires it.
+7. Choose and record the retention period and the approximate recovery point objective in the incident contacts section below.
+8. Capture the date/time of the latest visible recovery point in Singapore time and UTC.
+9. Verify it took effect from the CLI — `pitr_enabled` should now read `true`:
+
+```bash
+npx supabase backups list --project-ref uzavkjftwcuixidxyopr
+```
+
+10. Store a screenshot or Dashboard export in the restricted operations folder; do not commit it to Git.
 
 ## Restore decision
 
@@ -50,7 +117,7 @@ Database backups do not restore product images or display-gallery Storage object
 
 1. Record the incident, the desired recovery timestamp, the last known-good order number, and the business date. Use UTC in the incident record and note the Singapore-local equivalent.
 2. Pause store operations and notify the cashier/owner. Do not accept new sales while the target project is inaccessible.
-3. In Supabase Dashboard, open `Database → Backups`.
+3. In Supabase Dashboard, open `Database → Backups`. **On the Free plan this page is empty — there is no managed restore point.** Use "Restore from a logical backup" above with the most recent `backups/` run instead, and skip to step 7.
 4. Select the closest daily backup before the target time, or select a valid point on the PITR timeline once PITR is enabled.
 5. Review the warning, confirm the downtime window, and start the restore.
 6. Wait for Supabase to report completion. Do not redeploy or run migrations during the restore.
