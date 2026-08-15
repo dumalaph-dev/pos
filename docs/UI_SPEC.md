@@ -32,7 +32,39 @@ Layout: DESIGN_SYSTEM §4 (slim rail · product grid hero · order panel). State
 | **Syncing** | Pill → `Syncing…` with subtle pulse; "Sync now" in More menu |
 | **Sync error** | Pill stays `Offline · N pending`; toast "Couldn't sync — will retry" (non-blocking) |
 
-**Top bar:** logo · segmented **POS / ORDERS** · utilities (Search, Hold, Receipts, More) · profile. Branch label chip (small, `--text-muted`) so staff know their branch.
+**Top bar:** see §3.1 for the placement contract — what lives in the bar, what lives behind a menu, and how to decide.
+
+### 3.1 Top bar — placement contract
+
+*Added 2026-08-15. On 2026-08-14 the system-health widget moved navbar → account menu → back to the navbar across four commits. That was a missing rule, not a design disagreement. This section is the rule.*
+
+The bar has two states. **Collapsed** is a single full-width button that reclaims vertical space on a tablet; **expanded** is the full `nav`. Collapsing is a cashier action and must never be automatic mid-sale.
+
+**Three homes. Each answers exactly one question:**
+
+| Home | The question it answers | Contents today |
+|---|---|---|
+| **Navbar** (always visible) | "Can a cashier afford to *miss* this mid-sale?" | Brand + branch, POS/ORDERS tabs, Shift, **System health**, account trigger, sync pill |
+| **More menu** | "Is this per-terminal configuration, touched rarely and never mid-sale?" | Hold, Receipts, Display, Printer Settings |
+| **Account menu** | "Is this scoped to the *person* signed in rather than the terminal?" | Role/branch meta, Account settings, Sign out |
+
+**The test that settles placement:** *does the cashier need to notice this without opening anything?*
+
+System health reports pending sync, failed prints, and a disconnected customer display — every one of them a condition where a sale has **already** silently gone wrong. Behind the account menu it is discovered at end of shift instead of at the sale that failed. That is why it belongs in the navbar and why moving it out was reverted. Do not move it again without changing this rule first.
+
+Sign out and Account settings are the mirror image: per-person, never urgent, never needed mid-sale, and actively dangerous as one-tap targets sitting near CHARGE. They stay behind the account menu.
+
+**The collapsed state must preserve every ambient signal.** Collapsing is a space decision, never an information decision. The collapsed button therefore still carries branch identity, the online/offline/sync-issue dot, and the pending count. A signal that only exists in the expanded bar is a bug — a cashier who prefers the collapsed bar must not see less.
+
+**Sync state appears in three places on purpose, in this precedence:**
+
+1. `sync-pill` — canonical, expanded nav, appears only when offline / pending / failed.
+2. Collapsed dot + label — the collapsed-state fallback for the same condition.
+3. System health panel — detail on demand (counts, oldest queued sale, display status).
+
+Do not add a fourth surface. A new ambient signal extends the health panel and, if a cashier must not miss it, promotes to the pill — it does not get its own chrome.
+
+**Before moving anything in this bar,** state in the change description which of the three homes it lands in and which question above it answers. A move that cannot answer one of those questions is churn.
 
 **Product tile interactions:**
 - Fixed item → tap adds qty 1 / increments; brief press feedback (scale 0.98).
