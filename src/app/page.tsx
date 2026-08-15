@@ -507,7 +507,7 @@ function HeroVisual() {
 
         <div className="lp-float relative">
           <Image
-            src="/hero-device.png"
+            src="/hero-device.webp"
             alt="The Dumala POS owner dashboard on a counter terminal, beside a card reader"
             width={1387}
             height={751}
