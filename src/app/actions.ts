@@ -8,6 +8,11 @@ import {
 } from "@/lib/employee-auth";
 import { createClient } from "@/lib/supabase/server";
 import { getStoreByStaffKey, isStaffAccessValue, normalizeStaffAccessValue } from "@/lib/store-access";
+import {
+  checkEmployeeLoginLock,
+  clearEmployeeLoginAttempts,
+  recordFailedEmployeeLogin,
+} from "@/lib/auth/login-throttle";
 
 export type LoginState = { message: string };
 
@@ -78,9 +83,22 @@ export async function loginWithEmployeeId(_previousState: LoginState, formData: 
   // path into organization-wide admin access.
   if (profile.role === "admin") return { message: "Use the owner login for administrator access." };
 
+  // Throttle only once the code resolves to a real active employee, so guessing
+  // random codes cannot fill the table. Checked before the password round trip
+  // so a locked account costs nothing to reject.
+  const lock = await checkEmployeeLoginLock(admin, store.id, employee.employee_code);
+  if (lock.locked) {
+    return { message: `Too many incorrect attempts. Try again in ${lock.retryAfterSeconds} seconds.` };
+  }
+
   const supabase = await createClient();
   const { error: signInError } = await supabase.auth.signInWithPassword({ email: authEmail, password });
-  if (signInError) return { message: INVALID_LOGIN_MESSAGE };
+  if (signInError) {
+    await recordFailedEmployeeLogin(admin, employee.org_id, store.id, employee.employee_code);
+    return { message: INVALID_LOGIN_MESSAGE };
+  }
+
+  await clearEmployeeLoginAttempts(admin, store.id, employee.employee_code);
 
   if (profile.password_change_required) redirect("/account/password?required=1");
   redirect(profile.role === "cashier" ? "/pos" : "/admin");

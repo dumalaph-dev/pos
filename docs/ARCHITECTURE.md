@@ -97,6 +97,29 @@ The order is **immutable truth**. Server stock is decremented from synced orders
 | Reconnect after N offline sales | Exactly N server rows (idempotent) |
 | SW cached stale app | Versioned SW + "Update available" prompt at shift boundary |
 
+### Why the POS is not code-split
+
+**Do not lazy-load POS components with `next/dynamic`.** It looks like an easy
+bundle win and it is an offline-correctness bug.
+
+`public/sw.js` cache-firsts `/_next/static/`, but it only ever holds chunks that
+were actually fetched: `SWRegister.tsx` reports
+`performance.getEntriesByType("resource")` to the worker, so the cache is a
+record of what loaded, not a manifest of what exists. A chunk behind a modal the
+cashier never opened while online is therefore absent from the cache — and the
+first time they open that modal offline, it fails to load.
+
+The failure lands exactly where it costs most. The components large enough to be
+worth splitting are the ones a cashier needs without a network: `OrderHistory`
+(the largest), `ShiftPanel` for an end-of-day till close during an outage,
+`PrinterSettings` when a printer drops mid-shift, and `ChargeModal`, which must
+never be unavailable. Keeping them in the initial bundle is what makes the
+service worker cache them on first load.
+
+Code splitting is fine on surfaces with no offline guarantee — the public
+landing page defers its POS playground this way (`LandingPosPlaygroundLazy`).
+The rule is specific to `/pos`, not general.
+
 ---
 
 ## 4. Multi-tenant / multi-branch model

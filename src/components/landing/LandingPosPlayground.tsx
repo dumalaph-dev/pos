@@ -1,5 +1,10 @@
 "use client";
 
+// Colocated with its only consumer. This used to be imported from
+// `app/page.tsx`, which pulled 197 KB of preview styling into the landing
+// page's critical path even though nothing above the fold uses it. Importing it
+// here means the stylesheet follows the lazily-loaded component.
+import "@/components/admin/PosSettingsScreen.css";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type SVGProps } from "react";
 import { getPosPalette, POS_PALETTE_OPTIONS, type PosPaletteId } from "@/lib/pos-palette";

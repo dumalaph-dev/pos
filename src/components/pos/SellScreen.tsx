@@ -91,6 +91,9 @@ function withCatalogGallery<T extends { display_gallery?: DisplayGalleryItem[] }
 }
 const DEFAULT_STORE_NAME = "Your Store";
 
+/** Backstop interval for customer-display settings. See the poll effect below. */
+const DISPLAY_SETTINGS_POLL_MS = 60_000;
+
 const displayPeso = (cents: number) => formatPeso(cents).replace(/\.00$/, "");
 
 type PosRuntimeConfig = {
@@ -759,15 +762,30 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     });
   }, [offlineProfile, profile?.store_id, supabase]);
 
+  /**
+   * Customer-display settings are owner-edited perhaps monthly, so the poll
+   * exists only to catch a change made on another device. At the original 4s
+   * that was ~10,800 requests per terminal per trading day — roughly 1.3 GB of
+   * egress a month across two terminals, about a quarter of the Supabase free
+   * tier's budget, re-reading a row that almost never changes. It also kept the
+   * tablet radio awake for a full shift.
+   *
+   * 60s is the backstop, not the mechanism: `focus` and `visibilitychange` both
+   * refresh immediately, so an owner who changes a setting and picks the
+   * terminal back up sees it at once rather than waiting out the interval.
+   */
   useEffect(() => {
     if (offlineProfile || !profile?.store_id) return;
     const refresh = () => { void refreshDisplaySettings(); };
+    const refreshIfVisible = () => { if (document.visibilityState === "visible") refresh(); };
     refresh();
-    const timer = window.setInterval(refresh, 4000);
+    const timer = window.setInterval(refresh, DISPLAY_SETTINGS_POLL_MS);
     window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refreshIfVisible);
     return () => {
       window.clearInterval(timer);
       window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
     };
   }, [offlineProfile, profile?.store_id, refreshDisplaySettings]);
 

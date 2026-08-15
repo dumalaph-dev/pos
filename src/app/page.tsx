@@ -1,4 +1,3 @@
-import "@/components/admin/PosSettingsScreen.css";
 import "./LandingPage.css";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
@@ -6,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import LandingHeader from "@/components/landing/LandingHeader";
 import LandingPricing from "@/components/landing/LandingPricing";
-import LandingPosPlayground from "@/components/landing/LandingPosPlayground";
+import LandingPosPlaygroundLazy from "@/components/landing/LandingPosPlaygroundLazy";
 import ScrollReveal from "@/components/landing/ScrollReveal";
 import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
@@ -507,7 +506,7 @@ function HeroVisual() {
 
         <div className="lp-float relative">
           <Image
-            src="/hero-device.png"
+            src="/hero-device.webp"
             alt="The Dumala POS owner dashboard on a counter terminal, beside a card reader"
             width={1387}
             height={751}
@@ -737,7 +736,7 @@ export default async function LandingPage() {
           </div>
 
           <div className="mt-10" data-lp-reveal="scale">
-            <LandingPosPlayground />
+            <LandingPosPlaygroundLazy />
           </div>
         </div>
       </section>
