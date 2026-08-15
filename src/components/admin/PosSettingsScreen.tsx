@@ -93,18 +93,18 @@ const DEFAULT_PREVIEW_CATEGORIES = [
   { id: "preview-extras", name: "Sauces & Extras", icon: "sauce" },
 ];
 const PREVIEW_PRODUCTS: AdminPosProduct[] = [
-  { id: "preview-regular", name: "Lechon Regular", pricing_mode: "per_kg", price: 65000, unit: "kg", category_id: "preview-lechon", image_url: "/food/whole-lechon-small.png" },
-  { id: "preview-belly", name: "Lechon Belly", pricing_mode: "per_kg", price: 70000, unit: "kg", category_id: "preview-lechon", image_url: "/food/lechon-belly-one.png" },
-  { id: "preview-paa", name: "Lechon Paa", pricing_mode: "fixed", price: 35000, unit: "pc", category_id: "preview-lechon", image_url: "/food/lechon-kawali.png" },
-  { id: "preview-paksiw", name: "Lechon Paksiw", pricing_mode: "fixed", price: 18000, unit: "bowl", category_id: "preview-lechon", image_url: "/food/lechon-paksiw.png" },
-  { id: "preview-sisig", name: "Lechon Sisig", pricing_mode: "fixed", price: 22000, unit: "bowl", category_id: "preview-lechon", image_url: "/food/lechon-kawali.png" },
-  { id: "preview-garlic-rice", name: "Garlic Rice", pricing_mode: "fixed", price: 4000, unit: "cup", category_id: "preview-rice", image_url: "/food/rice-sides.png" },
-  { id: "preview-java-rice", name: "Java Rice", pricing_mode: "fixed", price: 4500, unit: "cup", category_id: "preview-rice", image_url: "/food/java-rice.png" },
-  { id: "preview-plain-rice", name: "Plain Rice", pricing_mode: "fixed", price: 3500, unit: "cup", category_id: "preview-rice", image_url: "/food/rice-sides.png" },
-  { id: "preview-iced-tea", name: "Iced Tea", pricing_mode: "fixed", price: 5000, unit: "glass", category_id: "preview-drinks", image_url: "/food/rice-sides.png" },
-  { id: "preview-softdrinks", name: "Softdrinks (Can)", pricing_mode: "fixed", price: 6000, unit: "can", category_id: "preview-drinks", image_url: "/food/rice-sides.png" },
-  { id: "preview-sauce", name: "Lechon Sauce", pricing_mode: "fixed", price: 2500, unit: "cup", category_id: "preview-extras", image_url: "/food/mang-tomas.png" },
-  { id: "preview-gravy", name: "Extra Gravy", pricing_mode: "fixed", price: 2000, unit: "cup", category_id: "preview-extras", image_url: "/food/mang-tomas.png" },
+  { id: "preview-regular", name: "Lechon Regular", pricing_mode: "per_kg", price: 65000, unit: "kg", category_id: "preview-lechon", image_url: "/food/whole-lechon-small.webp" },
+  { id: "preview-belly", name: "Lechon Belly", pricing_mode: "per_kg", price: 70000, unit: "kg", category_id: "preview-lechon", image_url: "/food/lechon-belly-one.webp" },
+  { id: "preview-paa", name: "Lechon Paa", pricing_mode: "fixed", price: 35000, unit: "pc", category_id: "preview-lechon", image_url: "/food/lechon-kawali.webp" },
+  { id: "preview-paksiw", name: "Lechon Paksiw", pricing_mode: "fixed", price: 18000, unit: "bowl", category_id: "preview-lechon", image_url: "/food/lechon-paksiw.webp" },
+  { id: "preview-sisig", name: "Lechon Sisig", pricing_mode: "fixed", price: 22000, unit: "bowl", category_id: "preview-lechon", image_url: "/food/lechon-kawali.webp" },
+  { id: "preview-garlic-rice", name: "Garlic Rice", pricing_mode: "fixed", price: 4000, unit: "cup", category_id: "preview-rice", image_url: "/food/rice-sides.webp" },
+  { id: "preview-java-rice", name: "Java Rice", pricing_mode: "fixed", price: 4500, unit: "cup", category_id: "preview-rice", image_url: "/food/java-rice.webp" },
+  { id: "preview-plain-rice", name: "Plain Rice", pricing_mode: "fixed", price: 3500, unit: "cup", category_id: "preview-rice", image_url: "/food/rice-sides.webp" },
+  { id: "preview-iced-tea", name: "Iced Tea", pricing_mode: "fixed", price: 5000, unit: "glass", category_id: "preview-drinks", image_url: "/food/rice-sides.webp" },
+  { id: "preview-softdrinks", name: "Softdrinks (Can)", pricing_mode: "fixed", price: 6000, unit: "can", category_id: "preview-drinks", image_url: "/food/rice-sides.webp" },
+  { id: "preview-sauce", name: "Lechon Sauce", pricing_mode: "fixed", price: 2500, unit: "cup", category_id: "preview-extras", image_url: "/food/mang-tomas.webp" },
+  { id: "preview-gravy", name: "Extra Gravy", pricing_mode: "fixed", price: 2000, unit: "cup", category_id: "preview-extras", image_url: "/food/mang-tomas.webp" },
 ];
 
 const TABS: Array<{ id: TabId; label: string }> = [
@@ -118,7 +118,7 @@ const TABS: Array<{ id: TabId; label: string }> = [
 
 const ORDER_TYPE_OPTIONS = ["Dine In", "Takeout", "Delivery"] as const;
 
-const IMAGE_FALLBACK = "/food/whole-lechon-small.png";
+const IMAGE_FALLBACK = "/food/whole-lechon-small.webp";
 
 function slug(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");

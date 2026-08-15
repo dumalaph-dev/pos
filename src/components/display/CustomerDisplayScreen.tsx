@@ -37,7 +37,7 @@ const DISPLAY_PROMOTIONS = [
     title: "Bring home the good stuff.",
     detail: "Our lechon cuts are crisp, savory, and ready to share.",
     tagline: "Ask us about today’s cuts.",
-    imageUrl: "/food/whole-lechon-medium.png",
+    imageUrl: "/food/whole-lechon-medium.webp",
   },
   {
     id: "coffee-pairing",
@@ -45,7 +45,7 @@ const DISPLAY_PROMOTIONS = [
     title: "Make it a little sweeter.",
     detail: "Add a fresh latte or pastry while we prepare your order.",
     tagline: "Ask our team for a pairing.",
-    imageUrl: "/food/cafe-matcha-latte.png",
+    imageUrl: "/food/cafe-matcha-latte.webp",
   },
   {
     id: "meal-combo",
@@ -53,17 +53,17 @@ const DISPLAY_PROMOTIONS = [
     title: "Rice, sauce, and something cold.",
     detail: "Build a meal around your favorite Dumala main.",
     tagline: "Small add-ons, big comfort.",
-    imageUrl: "/food/lechon-meal-combo.png",
+    imageUrl: "/food/lechon-meal-combo.webp",
   },
 ] satisfies DisplayPromotion[];
 
 const PRODUCT_MARQUEE_PRODUCTS = [
-  { id: "marquee-cafe-latte", title: "Cafe latte", imageUrl: "/food/cafe-latte.png" },
-  { id: "marquee-croissant", title: "Butter croissant", imageUrl: "/food/bakery-croissant.png" },
-  { id: "marquee-lechon-belly", title: "Lechon belly", imageUrl: "/food/lechon-belly-one.png" },
-  { id: "marquee-matcha", title: "Matcha latte", imageUrl: "/food/cafe-matcha-latte.png" },
-  { id: "marquee-lechon-kawali", title: "Lechon kawali", imageUrl: "/food/lechon-kawali.png" },
-  { id: "marquee-blueberry-muffin", title: "Blueberry muffin", imageUrl: "/food/cafe-blueberry-muffin.png" },
+  { id: "marquee-cafe-latte", title: "Cafe latte", imageUrl: "/food/cafe-latte.webp" },
+  { id: "marquee-croissant", title: "Butter croissant", imageUrl: "/food/bakery-croissant.webp" },
+  { id: "marquee-lechon-belly", title: "Lechon belly", imageUrl: "/food/lechon-belly-one.webp" },
+  { id: "marquee-matcha", title: "Matcha latte", imageUrl: "/food/cafe-matcha-latte.webp" },
+  { id: "marquee-lechon-kawali", title: "Lechon kawali", imageUrl: "/food/lechon-kawali.webp" },
+  { id: "marquee-blueberry-muffin", title: "Blueberry muffin", imageUrl: "/food/cafe-blueberry-muffin.webp" },
 ] as const;
 
 const EMPTY_GALLERY: DisplayGalleryItem[] = [];
@@ -124,7 +124,7 @@ function ProductMarquee({ promotions }: { promotions: DisplayPromotion[] }) {
         {loopItems.map((product, index) => (
           <span key={`${product.id}-${index}`} className={styles.productMarqueeItem}>
             <span className={styles.productMarqueeImage}>
-              <Image src={product.imageUrl ?? "/food/whole-lechon-small.png"} alt="" fill sizes="2.35rem" className={styles.productMarqueeImageAsset} />
+              <Image src={product.imageUrl ?? "/food/whole-lechon-small.webp"} alt="" fill sizes="2.35rem" className={styles.productMarqueeImageAsset} />
             </span>
             <span>{product.title}</span>
           </span>
@@ -195,7 +195,7 @@ function PromotionCard({ promotion, storeName, compact = false }: { promotion: D
   return (
     <aside className={`${styles.promoCard}${compact ? ` ${styles.promoCardCompact}` : ""}`} data-promotion-id={promotion.id} aria-label={`${storeName} featured offer`}>
       <div className={styles.promoImage}>
-        <Image src={promotion.imageUrl ?? "/food/whole-lechon-small.png"} alt="" fill sizes={compact ? "(max-width: 540px) 100vw, (max-width: 760px) 44vw, 17vw" : "(max-width: 760px) 100vw, 42vw"} className={styles.promoImageAsset} />
+        <Image src={promotion.imageUrl ?? "/food/whole-lechon-small.webp"} alt="" fill sizes={compact ? "(max-width: 540px) 100vw, (max-width: 760px) 44vw, 17vw" : "(max-width: 760px) 100vw, 42vw"} className={styles.promoImageAsset} />
       </div>
       <div className={styles.promoBody}>
         <span className={styles.promoEyebrow}>{promotion.eyebrow}</span>

@@ -9,6 +9,7 @@ import {
   type DisplayGalleryItem,
   type DisplayGalleryRecord,
 } from "@/lib/display-gallery";
+import { normalizeBundledImageUrl } from "@/lib/product-images";
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   showPromotions: true,
@@ -27,11 +28,11 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
 };
 
 export const DISPLAY_IMAGE_OPTIONS = [
-  { value: "/food/whole-lechon-medium.png", label: "Whole lechon" },
-  { value: "/food/lechon-belly-one.png", label: "Lechon belly" },
-  { value: "/food/lechon-meal-combo.png", label: "Lechon meal combo" },
-  { value: "/food/cafe-matcha-latte.png", label: "Matcha latte" },
-  { value: "/food/mang-tomas.png", label: "Mang Tomas sauce" },
+  { value: "/food/whole-lechon-medium.webp", label: "Whole lechon" },
+  { value: "/food/lechon-belly-one.webp", label: "Lechon belly" },
+  { value: "/food/lechon-meal-combo.webp", label: "Lechon meal combo" },
+  { value: "/food/cafe-matcha-latte.webp", label: "Matcha latte" },
+  { value: "/food/mang-tomas.webp", label: "Mang Tomas sauce" },
 ] as const;
 
 export const DEFAULT_DISPLAY_PROMOTIONS: DisplayPromotion[] = [
@@ -41,7 +42,7 @@ export const DEFAULT_DISPLAY_PROMOTIONS: DisplayPromotion[] = [
     title: "Bring home the good stuff.",
     detail: "Our lechon cuts are crisp, savory, and ready to share.",
     tagline: "Ask us about today's cuts.",
-    imageUrl: "/food/whole-lechon-medium.png",
+    imageUrl: "/food/whole-lechon-medium.webp",
   },
   {
     id: "coffee-pairing",
@@ -49,7 +50,7 @@ export const DEFAULT_DISPLAY_PROMOTIONS: DisplayPromotion[] = [
     title: "Make it a little sweeter.",
     detail: "Add a fresh latte or pastry while we prepare your order.",
     tagline: "Ask our team for a pairing.",
-    imageUrl: "/food/cafe-matcha-latte.png",
+    imageUrl: "/food/cafe-matcha-latte.webp",
   },
   {
     id: "meal-combo",
@@ -57,7 +58,7 @@ export const DEFAULT_DISPLAY_PROMOTIONS: DisplayPromotion[] = [
     title: "Rice, sauce, and something cold.",
     detail: "Build a meal around your favorite Dumala main.",
     tagline: "Small add-ons, big comfort.",
-    imageUrl: "/food/lechon-meal-combo.png",
+    imageUrl: "/food/lechon-meal-combo.webp",
   },
 ];
 
@@ -95,7 +96,7 @@ function readDisplayCopy(value: unknown, fallback: string, maxLength: number) {
 
 function safeImageUrl(value: unknown) {
   const imageUrl = readString(value);
-  return /^\/[a-z0-9_./-]+$/i.test(imageUrl) ? imageUrl : null;
+  return /^\/[a-z0-9_./-]+$/i.test(imageUrl) ? normalizeBundledImageUrl(imageUrl) : null;
 }
 
 export function normalizeDisplaySettings(value: unknown): DisplaySettings {
@@ -133,7 +134,7 @@ export function normalizeDisplayGalleryRecord(value: unknown): DisplayGalleryRec
     storeId: readString(value.store_id) || readString(value.storeId),
     kind,
     title: title.slice(0, 120),
-    imageUrl,
+    imageUrl: normalizeBundledImageUrl(imageUrl),
     imagePath: typeof value.image_path === "string" ? value.image_path : typeof value.imagePath === "string" ? value.imagePath : null,
     overlayPosition,
     isActive: value.is_active === undefined ? true : value.is_active === true,

@@ -131,15 +131,15 @@ type QueryValue = string | string[] | undefined;
 const DEFAULT_STORE_NAME = "Your Store";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const LOCAL_PRODUCT_IMAGES: Record<string, string> = {
-  "whole lechon (small)": "/food/whole-lechon-small.png",
-  "whole lechon (medium)": "/food/whole-lechon-medium.png",
-  "whole lechon (large)": "/food/whole-lechon-medium.png",
-  "lechon belly (1/2kg)": "/food/lechon-belly-half.png",
-  "lechon belly (1kg)": "/food/lechon-belly-one.png",
-  "lechon paksiw (1/2kg)": "/food/lechon-paksiw.png",
-  "lechon kawali (1/2kg)": "/food/lechon-kawali.png",
-  "java rice": "/food/java-rice.png",
-  "mang tomas (small)": "/food/mang-tomas.png",
+  "whole lechon (small)": "/food/whole-lechon-small.webp",
+  "whole lechon (medium)": "/food/whole-lechon-medium.webp",
+  "whole lechon (large)": "/food/whole-lechon-medium.webp",
+  "lechon belly (1/2kg)": "/food/lechon-belly-half.webp",
+  "lechon belly (1kg)": "/food/lechon-belly-one.webp",
+  "lechon paksiw (1/2kg)": "/food/lechon-paksiw.webp",
+  "lechon kawali (1/2kg)": "/food/lechon-kawali.webp",
+  "java rice": "/food/java-rice.webp",
+  "mang tomas (small)": "/food/mang-tomas.webp",
 };
 
 const rangeOptions = [
@@ -227,7 +227,7 @@ function displayPeso(value: number) {
 function productImage(product: { name: string; image_url?: string | null }) {
   return isProductImageUrl(product.image_url)
     ? product.image_url
-    : LOCAL_PRODUCT_IMAGES[product.name.trim().toLowerCase()] ?? "/food/whole-lechon-small.png";
+    : LOCAL_PRODUCT_IMAGES[product.name.trim().toLowerCase()] ?? "/food/whole-lechon-small.webp";
 }
 
 function productStockStatus(product: ProductRecord, onHand: number | null): ProductStockStatus {

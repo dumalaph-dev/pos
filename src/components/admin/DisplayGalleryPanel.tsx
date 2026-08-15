@@ -86,7 +86,7 @@ function GalleryModal({
   const modalRef = useRef<HTMLDivElement>(null);
   const isNew = item === null;
   const formId = `display-gallery-form-${item?.id ?? "new"}`;
-  const imageUrl = item?.imageUrl ?? "/food/whole-lechon-medium.png";
+  const imageUrl = item?.imageUrl ?? "/food/whole-lechon-medium.webp";
   const kind = item?.kind ?? "marketing";
 
   useEffect(() => {
