@@ -26,8 +26,11 @@ export default function manifest(): MetadataRoute.Manifest {
         type: "image/png",
         purpose: "any",
       },
+      // A separate asset, not the `any` icon above: Android crops the launcher
+      // icon to its adaptive mask and only guarantees the centred 80% circle.
+      // See scripts/generate-pwa-icons.mjs for the safe-zone derivation.
       {
-        src: "/icon-512x512.png",
+        src: "/icon-maskable-512x512.png",
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",
