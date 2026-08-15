@@ -1787,6 +1787,22 @@
 
 /* --- tablet POS mockup and separate theme customizer -------------------- */
 
+/* Reserves the playground's space while it lazy-loads (see
+   LandingPosPlaygroundLazy). Heights are the measured rendered values — 859px
+   at a 1280 viewport, 982px at 375 — so the deferred demo drops in without
+   shifting the sections below it. Lives here rather than in
+   PosSettingsScreen.css because the placeholder must be styled before that
+   stylesheet has loaded. */
+.lp-playground-placeholder {
+  min-height: 982px;
+}
+
+@media (min-width: 768px) {
+  .lp-playground-placeholder {
+    min-height: 859px;
+  }
+}
+
 .lp-tablet-playground {
   position: relative;
   overflow: hidden;
