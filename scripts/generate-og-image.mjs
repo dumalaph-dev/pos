@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 
 /*
- * Builds the 1200x630 social share card at src/app/opengraph-image.png.
+ * Builds the 1200x630 social share card at public/share-card.png.
  *
  * The asset is generated once and committed, rather than rendered per request
  * with `next/og`. Two reasons: the root layout is `force-dynamic` (the nonce
@@ -11,6 +11,13 @@ import sharp from "sharp";
  * every crawler fetch of the image; and a committed PNG has no font-loading
  * failure mode in production. This mirrors how the PWA icons are produced —
  * see generate-pwa-icons.mjs.
+ *
+ * It lives in public/ rather than as an `opengraph-image` file convention.
+ * The convention only attaches to the segment holding the file, and a page that
+ * defines its own `openGraph` object drops the inherited image entirely — which
+ * is exactly how /pricing shipped announcing `summary_large_image` with no
+ * image behind it. One asset at one stable URL, referenced explicitly by
+ * lib/page-metadata.ts, has no such failure mode.
  *
  * Re-run with `npm run og:image` after changing the brand lockup, the hero
  * render, or the headline below, then commit the result.
@@ -86,6 +93,6 @@ await sharp({
     { input: overlay, top: 0, left: 0 },
   ])
   .png()
-  .toFile(path.join(projectRoot, "src", "app", "opengraph-image.png"));
+  .toFile(path.join(publicDir, "share-card.png"));
 
-console.log("Wrote src/app/opengraph-image.png (1200x630)");
+console.log("Wrote public/share-card.png (1200x630)");

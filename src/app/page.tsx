@@ -9,6 +9,7 @@ import LandingPricing from "@/components/landing/LandingPricing";
 import LandingPosPlaygroundLazy from "@/components/landing/LandingPosPlaygroundLazy";
 import ScrollReveal from "@/components/landing/ScrollReveal";
 import { formatPeso } from "@/lib/money";
+import { socialMetadata } from "@/lib/page-metadata";
 import { DEFAULT_BILLING_VARIANTS, DEFAULT_MONTHLY_PRICE_CENTAVOS, type BillingCatalog, type BillingVariant } from "@/lib/platform-operations";
 import { readCachedPlatformBillingCatalog } from "@/lib/platform-operations-server";
 import { absoluteUrl, siteUrl } from "@/lib/site-url";
@@ -28,23 +29,7 @@ export const metadata: Metadata = {
   // (?utm_source=…, ?ref=…) otherwise each look like a separate page that
   // splits the ranking signal with the clean one.
   alternates: { canonical: "/" },
-  // `openGraph` and `twitter` replace the root layout's objects outright rather
-  // than merging field by field, so the shared keys (type, siteName, locale,
-  // card) have to be repeated here. Dropping them is silent: the tags simply
-  // stop being emitted, and the Twitter card quietly degrades to `summary`.
-  openGraph: {
-    type: "website",
-    siteName: "Dumala POS",
-    locale: "en_PH",
-    title: LANDING_TITLE,
-    description: LANDING_DESCRIPTION,
-    url: "/",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: LANDING_TITLE,
-    description: LANDING_DESCRIPTION,
-  },
+  ...socialMetadata({ title: LANDING_TITLE, description: LANDING_DESCRIPTION, path: "/" }),
 };
 
 type FeatureIconName = "bag" | "chart" | "spark" | "bolt";

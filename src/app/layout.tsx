@@ -3,6 +3,7 @@ import { IBM_Plex_Sans } from "next/font/google";
 import OfflineBanner from "@/components/OfflineBanner";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 import SWRegister from "@/components/SWRegister";
+import { socialMetadata } from "@/lib/page-metadata";
 import { siteUrl } from "@/lib/site-url";
 import "./globals.css";
 
@@ -29,19 +30,11 @@ export const metadata: Metadata = {
   },
   description: DESCRIPTION,
   applicationName: "Dumala POS",
-  openGraph: {
-    type: "website",
-    siteName: "Dumala POS",
-    locale: "en_PH",
+  ...socialMetadata({
     title: "Dumala POS — POS for cafes, restaurants & food businesses",
     description: DESCRIPTION,
-    url: "/",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Dumala POS — POS for cafes, restaurants & food businesses",
-    description: DESCRIPTION,
-  },
+    path: "/",
+  }),
   icons: {
     icon: [
       { url: "/icon-192x192.png", sizes: "192x192", type: "image/png" },
