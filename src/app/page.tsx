@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Image from "next/image";
 import Link from "next/link";
+import LandingFooter from "@/components/landing/LandingFooter";
 import LandingHeader from "@/components/landing/LandingHeader";
 import LandingPricing from "@/components/landing/LandingPricing";
 import LandingPosPlaygroundLazy from "@/components/landing/LandingPosPlaygroundLazy";
@@ -12,6 +13,7 @@ import { DEFAULT_BILLING_VARIANTS, DEFAULT_MONTHLY_PRICE_CENTAVOS, type BillingC
 import { readCachedPlatformBillingCatalog } from "@/lib/platform-operations-server";
 import { absoluteUrl, siteUrl } from "@/lib/site-url";
 import { POS_THEME_OPTIONS } from "@/lib/pos-theme";
+import { PRICING_INCLUDES } from "@/lib/pricing-content";
 
 const LANDING_TITLE = "POS for Cafes, Restaurants & Food Businesses | Dumala POS";
 const LANDING_DESCRIPTION =
@@ -190,17 +192,6 @@ const syncSteps: Array<{ step: string; title: string; text: string }> = [
     title: "The records catch up",
     text: "When the connection returns, the queue clears in the background. Branch and device prefixes keep order numbers from colliding.",
   },
-];
-
-const pricingIncludes = [
-  "The complete counter POS and owner workspace",
-  "Selling through internet interruptions with automatic sync",
-  "Unlimited branches, staff, and products",
-  "ESC/POS order-slip printing over Bluetooth, Wi-Fi, or USB",
-  "Inventory, suppliers, and expense tracking",
-  "Sales reports and CSV export",
-  "Shifts, cash counts, and the audit log",
-  "Owner, manager, and cashier access",
 ];
 
 function buildFaqs(premiumPrice: string, annualVariants: BillingVariant[]): Array<{ question: string; answer: string }> {
@@ -1216,7 +1207,16 @@ export default async function LandingPage() {
             </p>
           </div>
 
-          <LandingPricing catalog={billingCatalog} pricingIncludes={pricingIncludes} />
+          <LandingPricing catalog={billingCatalog} pricingIncludes={PRICING_INCLUDES} />
+
+          {/* The standalone page is the one built to rank for pricing queries,
+              so the section links into it rather than duplicating its depth. */}
+          <p className="mt-8 text-center text-sm leading-6 text-[#657168]">
+            <Link href="/pricing" className="font-bold text-[#b18448] underline underline-offset-4">
+              See full pricing details
+            </Link>{" "}
+            — what is included, what you never pay extra for, and how billing works.
+          </p>
         </div>
       </section>
 
@@ -1285,58 +1285,7 @@ export default async function LandingPage() {
       </section>
 
       {/* Footer — deep sand ---------------------------------------------------- */}
-      <footer className="lp-sec--footer border-t border-[#ddd5c4] px-6 py-12 sm:px-10 lg:px-16">
-        <div className="mx-auto max-w-[1280px]">
-          <div className="flex flex-col gap-9 sm:flex-row sm:justify-between">
-            <div className="max-w-xs">
-              <Link href="/" aria-label="Dumala POS home" className="lp-logo inline-block rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#173a2b]">
-                <Image src="/brand-lockup.png" alt="Dumala POS" width={1535} height={451} sizes="160px" className="h-11 w-auto" />
-              </Link>
-              <p className="mt-4 text-xs leading-5 text-[#708076]">
-                A practical POS and owner workspace for Philippine cafes, restaurants, coffee shops, bakeshops, and other food
-                businesses. Free for 14 days, then
-                {annualVariants.length > 0 ? "choose monthly or annual billing" : "continue with monthly billing"} for the same complete product.
-              </p>
-            </div>
-
-            <div className="grid gap-8 text-xs sm:grid-cols-3 sm:gap-12">
-              <div>
-                <p className="font-black uppercase tracking-[0.16em] text-[#173a2b]">Product</p>
-                <ul className="mt-3 grid gap-2 text-[#708076]">
-                  <li><a href="#features" className="lp-navlink hover:text-[#b18448]">Features</a></li>
-                  <li><a href="#playground" className="lp-navlink hover:text-[#b18448]">Try the POS</a></li>
-                  <li><a href="#interfaces" className="lp-navlink hover:text-[#b18448]">Counter POS &amp; dashboard</a></li>
-                  <li><a href="#offline" className="lp-navlink hover:text-[#b18448]">Offline first</a></li>
-                  <li><a href="#details" className="lp-navlink hover:text-[#b18448]">In detail</a></li>
-                  <li><a href="#workspace" className="lp-navlink hover:text-[#b18448]">Workspace</a></li>
-                </ul>
-              </div>
-              <div>
-                <p className="font-black uppercase tracking-[0.16em] text-[#173a2b]">Learn</p>
-                <ul className="mt-3 grid gap-2 text-[#708076]">
-                  <li><a href="#pricing" className="lp-navlink hover:text-[#b18448]">Pricing</a></li>
-                  <li><a href="#how-it-works" className="lp-navlink hover:text-[#b18448]">How it works</a></li>
-                  <li><a href="#for-teams" className="lp-navlink hover:text-[#b18448]">For teams</a></li>
-                  <li><a href="#faq" className="lp-navlink hover:text-[#b18448]">FAQ</a></li>
-                </ul>
-              </div>
-              <div>
-                <p className="font-black uppercase tracking-[0.16em] text-[#173a2b]">Access</p>
-                <ul className="mt-3 grid gap-2 text-[#708076]">
-                  <li><Link href="/signup" className="lp-navlink hover:text-[#b18448]">Start free trial</Link></li>
-                  <li><Link href="/login" className="lp-navlink hover:text-[#b18448]">Owner log in</Link></li>
-                  {/* The platform operator console is deliberately not linked
-                      from here. A followed link off the strongest public page
-                      into the internal admin surface hands crawlers a route
-                      they have no reason to hold; operators bookmark
-                      /platform/login instead. */}
-                </ul>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </footer>
+      <LandingFooter hasAnnualOptions={annualVariants.length > 0} onLandingPage />
     </main>
   );
 }
