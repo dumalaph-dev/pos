@@ -2,14 +2,21 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import SectionLink from "./SectionLink";
 
-const NAV_LINKS = [
-  { href: "#features", label: "Features" },
-  { href: "#playground", label: "Try the POS" },
-  { href: "#workspace", label: "Workspace" },
-  { href: "#pricing", label: "Pricing" },
-  { href: "#faq", label: "FAQ" },
+// `section` entries render through SectionLink, which picks the right element
+// for the current page — the header is shared with standalone content pages,
+// and a section link that works on one breaks on the other. See SectionLink.
+const NAV_LINKS: Array<{ section?: string; href?: string; label: string }> = [
+  { section: "features", label: "Features" },
+  { section: "playground", label: "Try the POS" },
+  { section: "workspace", label: "Workspace" },
+  // The standalone page, not the landing section: it is the page built to rank
+  // for pricing queries, and every internal link to it counts.
+  { href: "/pricing", label: "Pricing" },
+  { section: "faq", label: "FAQ" },
 ];
 
 function ArrowIcon() {
@@ -23,6 +30,7 @@ function ArrowIcon() {
 export default function LandingHeader() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const onLandingPage = usePathname() === "/";
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -65,11 +73,17 @@ export default function LandingHeader() {
         </Link>
 
         <nav className="hidden items-center gap-9 text-sm font-semibold text-[#20372c] lg:flex" aria-label="Primary">
-          {NAV_LINKS.map((link) => (
-            <a key={link.href} href={link.href} className="lp-navlink hover:text-[#b18448] focus-visible:outline-none">
-              {link.label}
-            </a>
-          ))}
+          {NAV_LINKS.map((link) =>
+            link.section ? (
+              <SectionLink key={link.label} section={link.section} onLandingPage={onLandingPage} className="lp-navlink hover:text-[#b18448] focus-visible:outline-none">
+                {link.label}
+              </SectionLink>
+            ) : (
+              <Link key={link.label} href={link.href!} className="lp-navlink hover:text-[#b18448] focus-visible:outline-none">
+                {link.label}
+              </Link>
+            ),
+          )}
         </nav>
 
         <div className="flex items-center gap-2 sm:gap-3">
@@ -107,16 +121,18 @@ export default function LandingHeader() {
             className="mx-5 mb-3 grid gap-1 rounded-2xl border border-[#ddd8cc] bg-[#fbf8f1]/95 p-2 shadow-[0_18px_40px_rgba(16,45,33,0.10)] backdrop-blur sm:mx-10"
             aria-label="Mobile"
           >
-            {NAV_LINKS.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                onClick={() => setMenuOpen(false)}
-                className="rounded-xl px-3.5 py-3 text-sm font-semibold text-[#20372c] transition hover:bg-[#ece8de] hover:text-[#173a2b]"
-              >
-                {link.label}
-              </a>
-            ))}
+            {NAV_LINKS.map((link) => {
+              const className = "rounded-xl px-3.5 py-3 text-sm font-semibold text-[#20372c] transition hover:bg-[#ece8de] hover:text-[#173a2b]";
+              return link.section ? (
+                <SectionLink key={link.label} section={link.section} onLandingPage={onLandingPage} onClick={() => setMenuOpen(false)} className={className}>
+                  {link.label}
+                </SectionLink>
+              ) : (
+                <Link key={link.label} href={link.href!} onClick={() => setMenuOpen(false)} className={className}>
+                  {link.label}
+                </Link>
+              );
+            })}
             <Link
               href="/login"
               onClick={() => setMenuOpen(false)}
