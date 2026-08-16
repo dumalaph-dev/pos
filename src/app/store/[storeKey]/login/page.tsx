@@ -1,6 +1,12 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import StaffLoginScreen from "@/components/staff/StaffLoginScreen";
 import { getStoreByStaffKey } from "@/lib/store-access";
+
+export const metadata: Metadata = {
+  title: "Staff log in",
+  robots: { index: false, follow: false },
+};
 
 export const dynamic = "force-dynamic";
 

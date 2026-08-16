@@ -1,7 +1,8 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { createAdminClient } from "@/lib/employee-auth";
+import { BILLING_CATALOG_TAG } from "@/lib/platform-operations-server";
 import { isPlatformAdminEmail } from "@/lib/platform-admin";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
 import {
@@ -308,6 +309,18 @@ function promotionMigrationError(detail: string): PlatformActionState {
 }
 
 function revalidatePlatformPages() {
+  // The public pages read the catalog through a cached wrapper keyed by this
+  // tag. revalidatePath alone would drop their rendered output but hand the
+  // next render the same stale cache entry, so a price edit would not reach the
+  // landing page until the TTL expired.
+  //
+  // "max" is stale-while-revalidate: the first public visitor after an edit may
+  // still be served the old price while the new one is fetched behind them.
+  // That is the right trade here — the operator's own console reads the catalog
+  // uncached, so they always see their write immediately, and the alternative
+  // (`updateTag`) is only documented against `fetch` and `use cache` tags, not
+  // the `unstable_cache` entry this invalidates.
+  revalidateTag(BILLING_CATALOG_TAG, "max");
   revalidatePath("/");
   revalidatePath("/platform");
   revalidatePath("/platform/plans");

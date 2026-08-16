@@ -1,9 +1,17 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { formatBillingDate } from "@/lib/billing";
 import { formatTrialRemaining, readTrialLifecycle, TRIAL_DAY_MS, type TrialLifecycle, type TrialReminderKind } from "@/lib/trial";
 import TrialCountdown from "@/app/admin/billing/TrialCountdown";
 import TrialFeedbackForm from "@/app/admin/billing/TrialFeedbackForm";
+
+// An internal demo of the trial-expiry reminders, pinned to a fixed date. It
+// has no business being in a search index.
+export const metadata: Metadata = {
+  title: "Trial reminder preview",
+  robots: { index: false, follow: false },
+};
 
 export const dynamic = "force-dynamic";
 

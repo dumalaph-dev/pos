@@ -17,6 +17,7 @@
     "production:preflight": "node scripts/production-preflight.mjs --remote",
     "backup:production": "node scripts/backup-production.mjs",
     "pwa:icons": "node scripts/generate-pwa-icons.mjs",
+    "og:image": "node scripts/generate-og-image.mjs",
     "printer:validate": "node --experimental-strip-types scripts/validate-printer.mjs",
     "printer:validate:mock": "node --experimental-strip-types scripts/validate-printer.mjs --mock"
   },

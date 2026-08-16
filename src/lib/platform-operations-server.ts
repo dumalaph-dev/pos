@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/employee-auth";
 import {
   DEFAULT_BILLING_VARIANTS,
@@ -55,6 +56,41 @@ export async function readPlatformBillingCatalog(admin: PlatformAdminClient): Pr
     schemaAvailable,
   };
 }
+
+/** Cache key and invalidation tag for {@link readCachedPlatformBillingCatalog}. */
+export const BILLING_CATALOG_TAG = "platform-billing-catalog";
+
+/**
+ * The public-page read of the billing catalog.
+ *
+ * The landing page and /signup both render the current price, and both were
+ * paying for two uncached Supabase queries before they could emit a byte —
+ * measured at roughly 300ms of the homepage's time-to-first-byte against a
+ * `/login` render that makes no database call. TTFB feeds straight into LCP,
+ * and this data changes a few times a year.
+ *
+ * Only the public pages use this. The platform console keeps calling
+ * `readPlatformBillingCatalog` directly, because an operator editing a price
+ * has to see their own write immediately rather than up to `revalidate`
+ * seconds later.
+ *
+ * `createAdminClient()` is called inside the cache scope deliberately: it reads
+ * only environment variables — no cookies or headers — so it is safe there, and
+ * keeping it inside means a null client (unconfigured environment) is not baked
+ * into a cache entry that outlives the misconfiguration.
+ *
+ * Writes call `revalidateTag(BILLING_CATALOG_TAG, "max")` in
+ * app/platform/actions.ts, so a price change reaches the public pages on the
+ * next visit rather than waiting out the TTL.
+ */
+export const readCachedPlatformBillingCatalog = unstable_cache(
+  async (): Promise<BillingCatalog | null> => {
+    const admin = createAdminClient();
+    return admin ? readPlatformBillingCatalog(admin) : null;
+  },
+  [BILLING_CATALOG_TAG],
+  { tags: [BILLING_CATALOG_TAG], revalidate: 300 },
+);
 
 export async function readPlatformPolicies(admin: PlatformAdminClient): Promise<PlatformPolicies> {
   const result = await admin
