@@ -6,6 +6,7 @@ import LandingFooter from "@/components/landing/LandingFooter";
 import LandingHeader from "@/components/landing/LandingHeader";
 import LandingPricing from "@/components/landing/LandingPricing";
 import { formatPeso } from "@/lib/money";
+import { socialMetadata } from "@/lib/page-metadata";
 import {
   DEFAULT_BILLING_VARIANTS,
   DEFAULT_MONTHLY_PRICE_CENTAVOS,
@@ -26,22 +27,7 @@ export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/pricing" },
-  // These objects replace the root layout's rather than merging field by field,
-  // so the shared keys are repeated. Dropping them is silent — the tags simply
-  // stop being emitted and the Twitter card degrades to `summary`.
-  openGraph: {
-    type: "website",
-    siteName: "Dumala POS",
-    locale: "en_PH",
-    title: `${TITLE} | Dumala POS`,
-    description: DESCRIPTION,
-    url: "/pricing",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: `${TITLE} | Dumala POS`,
-    description: DESCRIPTION,
-  },
+  ...socialMetadata({ title: `${TITLE} | Dumala POS`, description: DESCRIPTION, path: "/pricing" }),
 };
 
 // Matches the root layout: the nonce CSP needs request-time rendering.
