@@ -13,10 +13,36 @@ import { DEFAULT_BILLING_VARIANTS, DEFAULT_MONTHLY_PRICE_CENTAVOS, type BillingC
 import { readPlatformBillingCatalog } from "@/lib/platform-operations-server";
 import { POS_THEME_OPTIONS } from "@/lib/pos-theme";
 
+const LANDING_TITLE = "POS for Cafes, Restaurants & Food Businesses | Dumala POS";
+const LANDING_DESCRIPTION =
+  "A practical POS and owner workspace for Philippine cafes, restaurants, coffee shops, bakeshops, and other counter-service businesses.";
+
 export const metadata: Metadata = {
-  title: "Dumala POS | POS for Cafes, Restaurants & Food Businesses",
-  description:
-    "A practical POS and owner workspace for Philippine cafes, restaurants, coffee shops, bakeshops, and other counter-service businesses.",
+  // `absolute` opts out of the root layout's "%s | Dumala POS" template, which
+  // this title already ends in.
+  title: { absolute: LANDING_TITLE },
+  description: LANDING_DESCRIPTION,
+  // Anchor the homepage to one URL. Campaign and referral query strings
+  // (?utm_source=…, ?ref=…) otherwise each look like a separate page that
+  // splits the ranking signal with the clean one.
+  alternates: { canonical: "/" },
+  // `openGraph` and `twitter` replace the root layout's objects outright rather
+  // than merging field by field, so the shared keys (type, siteName, locale,
+  // card) have to be repeated here. Dropping them is silent: the tags simply
+  // stop being emitted, and the Twitter card quietly degrades to `summary`.
+  openGraph: {
+    type: "website",
+    siteName: "Dumala POS",
+    locale: "en_PH",
+    title: LANDING_TITLE,
+    description: LANDING_DESCRIPTION,
+    url: "/",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: LANDING_TITLE,
+    description: LANDING_DESCRIPTION,
+  },
 };
 
 type FeatureIconName = "bag" | "chart" | "spark" | "bolt";
@@ -1237,7 +1263,11 @@ export default async function LandingPage() {
                 <ul className="mt-3 grid gap-2 text-[#708076]">
                   <li><Link href="/signup" className="lp-navlink hover:text-[#b18448]">Start free trial</Link></li>
                   <li><Link href="/login" className="lp-navlink hover:text-[#b18448]">Owner log in</Link></li>
-                  <li><Link href="/platform/login" className="lp-navlink hover:text-[#b18448]">Platform access</Link></li>
+                  {/* The platform operator console is deliberately not linked
+                      from here. A followed link off the strongest public page
+                      into the internal admin surface hands crawlers a route
+                      they have no reason to hold; operators bookmark
+                      /platform/login instead. */}
                 </ul>
               </div>
             </div>

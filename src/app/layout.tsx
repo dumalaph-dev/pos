@@ -3,6 +3,7 @@ import { IBM_Plex_Sans } from "next/font/google";
 import OfflineBanner from "@/components/OfflineBanner";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 import SWRegister from "@/components/SWRegister";
+import { siteUrl } from "@/lib/site-url";
 import "./globals.css";
 
 const ibmPlexSans = IBM_Plex_Sans({
@@ -12,9 +13,35 @@ const ibmPlexSans = IBM_Plex_Sans({
   display: "swap",
 });
 
+const DESCRIPTION = "A simple POS workspace for owners, branches, teams, and busy counters.";
+
 export const metadata: Metadata = {
-  title: "Dumala POS",
-  description: "A simple POS workspace for owners, branches, teams, and busy counters.",
+  // Every URL-based metadata field below resolves against this, so canonical
+  // tags and og:image URLs come out absolute. Without it, a relative image path
+  // is a build error and social crawlers get nothing.
+  metadataBase: new URL(siteUrl()),
+  // Pages set a bare title and inherit the suffix; the landing page opts out
+  // with `title: { absolute: ... }` because its own title already ends in the
+  // brand and would otherwise read "… | Dumala POS | Dumala POS".
+  title: {
+    default: "Dumala POS",
+    template: "%s | Dumala POS",
+  },
+  description: DESCRIPTION,
+  applicationName: "Dumala POS",
+  openGraph: {
+    type: "website",
+    siteName: "Dumala POS",
+    locale: "en_PH",
+    title: "Dumala POS — POS for cafes, restaurants & food businesses",
+    description: DESCRIPTION,
+    url: "/",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Dumala POS — POS for cafes, restaurants & food businesses",
+    description: DESCRIPTION,
+  },
   icons: {
     icon: [
       { url: "/icon-192x192.png", sizes: "192x192", type: "image/png" },
@@ -45,7 +72,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${ibmPlexSans.variable} h-full antialiased`}>
+    <html lang="en-PH" className={`${ibmPlexSans.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-bg text-ink">
         <OfflineBanner />
         {children}

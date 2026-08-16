@@ -8,8 +8,10 @@ import { readPlatformBillingCatalog } from "@/lib/platform-operations-server";
 import SignupForm from "./SignupForm";
 
 export const metadata: Metadata = {
-  title: "Create your POS workspace | Dumala POS",
+  // Bare title: the root layout appends "| Dumala POS".
+  title: "Create your POS workspace",
   description: "Register a private POS workspace for your store.",
+  alternates: { canonical: "/signup" },
 };
 
 export const dynamic = "force-dynamic";
