@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
 import { DEFAULT_BILLING_VARIANTS, DEFAULT_MONTHLY_PRICE_CENTAVOS } from "@/lib/platform-operations";
-import { readPlatformBillingCatalog } from "@/lib/platform-operations-server";
+import { readCachedPlatformBillingCatalog } from "@/lib/platform-operations-server";
 import SignupForm from "./SignupForm";
 
 export const metadata: Metadata = {
@@ -17,8 +16,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function SignupPage() {
-  const admin = createAdminClient();
-  const catalog = admin ? await readPlatformBillingCatalog(admin) : null;
+  const catalog = await readCachedPlatformBillingCatalog();
   const monthlyPriceLabel = formatPeso(catalog?.monthlyPriceCentavos ?? DEFAULT_MONTHLY_PRICE_CENTAVOS);
   const annualOptionsAvailable = (catalog?.variants ?? DEFAULT_BILLING_VARIANTS).some((variant) => variant.isActive && variant.intervalUnit === "year");
 

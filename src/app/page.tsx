@@ -7,10 +7,10 @@ import LandingHeader from "@/components/landing/LandingHeader";
 import LandingPricing from "@/components/landing/LandingPricing";
 import LandingPosPlaygroundLazy from "@/components/landing/LandingPosPlaygroundLazy";
 import ScrollReveal from "@/components/landing/ScrollReveal";
-import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
 import { DEFAULT_BILLING_VARIANTS, DEFAULT_MONTHLY_PRICE_CENTAVOS, type BillingCatalog, type BillingVariant } from "@/lib/platform-operations";
-import { readPlatformBillingCatalog } from "@/lib/platform-operations-server";
+import { readCachedPlatformBillingCatalog } from "@/lib/platform-operations-server";
+import { absoluteUrl, siteUrl } from "@/lib/site-url";
 import { POS_THEME_OPTIONS } from "@/lib/pos-theme";
 
 const LANDING_TITLE = "POS for Cafes, Restaurants & Food Businesses | Dumala POS";
@@ -269,6 +269,72 @@ function buildFaqs(premiumPrice: string, annualVariants: BillingVariant[]): Arra
 
 function formatDiscount(value: number) {
   return `${Number.isInteger(value) ? value : value.toFixed(2)}%`;
+}
+
+/**
+ * One `@graph` rather than three separate script tags, so the entities can
+ * reference each other by `@id` — the application declares the organization as
+ * its publisher instead of each node floating unattached.
+ *
+ * The offer price is read from the same live catalog the pricing section
+ * renders, on the same principle as the FAQ block below it: markup that is
+ * built from a second, hand-maintained copy of the data drifts, and structured
+ * data that contradicts the visible page is worse than none.
+ *
+ * Deliberately absent: `aggregateRating`. It is what draws star ratings in
+ * results and it is the reason so much software markup is penalised — there
+ * are no reviews behind it here, so publishing one would be a false claim in
+ * our own product's markup. Add it only when it can be computed from real
+ * collected reviews.
+ */
+function buildStructuredData(faqs: Array<{ question: string; answer: string }>, catalog: BillingCatalog) {
+  const origin = siteUrl();
+  const organizationId = `${origin}/#organization`;
+
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": organizationId,
+        name: "Dumala POS",
+        url: origin,
+        logo: absoluteUrl("/logo.png"),
+        description:
+          "Dumala POS builds point-of-sale and back-office software for Philippine cafes, restaurants, bakeshops, and other counter-service food businesses.",
+        areaServed: { "@type": "Country", name: "Philippines" },
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": `${origin}/#software`,
+        name: "Dumala POS",
+        applicationCategory: "BusinessApplication",
+        // No native binary to install — it runs in the browser and installs to
+        // a home screen as a PWA.
+        operatingSystem: "Web browser (Android, iOS, Windows, macOS)",
+        url: origin,
+        description:
+          "An offline-first point-of-sale and owner workspace for Philippine cafes, restaurants, coffee shops, and bakeshops. Sales are written to the device first and sync to the cloud when a connection is available.",
+        publisher: { "@id": organizationId },
+        offers: {
+          "@type": "Offer",
+          price: (catalog.monthlyPriceCentavos / 100).toFixed(2),
+          priceCurrency: catalog.currency,
+          availability: "https://schema.org/InStock",
+          url: absoluteUrl("/signup"),
+        },
+      },
+      {
+        "@type": "FAQPage",
+        // Same source array as the rendered FAQ, so the two cannot drift apart.
+        mainEntity: faqs.map((faq) => ({
+          "@type": "Question",
+          name: faq.question,
+          acceptedAnswer: { "@type": "Answer", text: faq.answer },
+        })),
+      },
+    ],
+  };
 }
 
 const marqueeItems = [
@@ -577,8 +643,7 @@ export const dynamic = "force-dynamic";
 
 export default async function LandingPage() {
   const nonce = (await headers()).get("x-nonce") ?? undefined;
-  const admin = createAdminClient();
-  const catalog = admin ? await readPlatformBillingCatalog(admin) : null;
+  const catalog = await readCachedPlatformBillingCatalog();
   const billingCatalog: BillingCatalog = catalog ?? {
     currency: "PHP",
     monthlyPriceCentavos: DEFAULT_MONTHLY_PRICE_CENTAVOS,
@@ -597,18 +662,7 @@ export default async function LandingPage() {
       <script
         nonce={nonce}
         type="application/ld+json"
-        // Same source array as the rendered FAQ, so the two cannot drift apart.
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "FAQPage",
-            mainEntity: faqs.map((faq) => ({
-              "@type": "Question",
-              name: faq.question,
-              acceptedAnswer: { "@type": "Answer", text: faq.answer },
-            })),
-          }),
-        }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(buildStructuredData(faqs, billingCatalog)) }}
       />
       <ScrollReveal />
       <LandingHeader />
@@ -632,6 +686,14 @@ export default async function LandingPage() {
               className="lp-in mt-7 max-w-[560px] text-[clamp(3.1rem,6vw,5.9rem)] font-black leading-[0.94] tracking-[-0.065em] text-[#102d21]"
               style={{ "--lp-delay": "160ms" } as React.CSSProperties}
             >
+              {/* Left as "business" deliberately. Adding a category noun here
+                  ("Modernize your food business.") reads well and would put the
+                  keyword in the strongest on-page slot, but it wraps to a third
+                  line in the 1024-1440 band where this grid column is ~453px,
+                  and at 1280x720 that pushed the trial CTA from 665px to 737px
+                  — below the fold. Measured: no change at 375 or 1920, +81px at
+                  1440. The category keyword lives in the deck below instead,
+                  which costs no vertical space. */}
               Modernize your business.
               <br />
               <span className="relative inline-block text-[#b18448]">
@@ -653,8 +715,8 @@ export default async function LandingPage() {
               className="lp-in mt-7 max-w-[490px] text-base leading-7 text-[#526157] sm:text-lg sm:leading-8"
               style={{ "--lp-delay": "260ms" } as React.CSSProperties}
             >
-              Fast checkout for your team. Clear records for you. Dumala brings the counter POS and owner workspace together in one
-              practical system.
+              Fast checkout for your team. Clear records for you. Dumala is a point-of-sale system for Philippine cafes and
+              restaurants that brings the counter POS and owner workspace together in one practical system.
             </p>
 
             <div className="lp-in mt-8 flex flex-wrap items-center gap-5" style={{ "--lp-delay": "340ms" } as React.CSSProperties}>
