@@ -566,7 +566,7 @@ export default async function LandingPage() {
   return (
     <main className="lp min-h-screen bg-[#f8f3eb] text-[#102d21]">
       <noscript>
-        <style>{`.lp [data-lp-reveal]{opacity:1;transform:none}`}</style>
+        <style nonce={nonce}>{`.lp [data-lp-reveal]{opacity:1;transform:none}`}</style>
       </noscript>
       <script
         nonce={nonce}
