@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { resolveSignupOrigin, signupConfirmationRedirect } from "../src/lib/signup-redirect.ts";
 import { absoluteUrl, resolveSiteUrl } from "../src/lib/site-url.ts";
 
 const PRODUCTION_ORIGIN = "https://dumala.store";
@@ -13,6 +14,17 @@ test("canonical origin never resolves to a Vercel deployment domain", () => {
   assert.equal(resolveSiteUrl("https://pos-mu-pearl.vercel.app"), PRODUCTION_ORIGIN);
   assert.equal(resolveSiteUrl("https://pos-git-main-someorg.vercel.app"), PRODUCTION_ORIGIN);
   assert.equal(resolveSiteUrl("https://vercel.app"), PRODUCTION_ORIGIN);
+});
+
+test("signup confirmation links use the production origin for Vercel deployments", () => {
+  const origin = resolveSignupOrigin("https://pos-mu-pearl.vercel.app");
+  if (!origin) throw new Error("signup origin should resolve for a configured deployment host");
+
+  assert.equal(origin, PRODUCTION_ORIGIN);
+  assert.equal(
+    signupConfirmationRedirect(origin),
+    `${PRODUCTION_ORIGIN}/auth/callback?next=%2Fadmin%3Fwelcome%3D1`,
+  );
 });
 
 test("a real public host is still honoured", () => {

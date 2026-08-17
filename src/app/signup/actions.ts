@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
+import { resolveSignupOrigin, signupConfirmationRedirect } from "@/lib/signup-redirect";
 import type { SignupField, SignupState } from "./state";
 
 // The form state and its initial value live in `./state` because a
@@ -49,15 +50,8 @@ function publicAuthError(message: string) {
 }
 
 async function publicSiteOrigin() {
-  const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (configuredSiteUrl) {
-    try {
-      const parsed = new URL(configuredSiteUrl);
-      if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.origin;
-    } catch {
-      // Fall through to the local request host when the setting is invalid.
-    }
-  }
+  const configuredOrigin = resolveSignupOrigin(process.env.NEXT_PUBLIC_SITE_URL);
+  if (configuredOrigin) return configuredOrigin;
 
   // Never derive a production email redirect from the request Host header. A
   // forged host could otherwise influence the confirmation link destination.
@@ -70,12 +64,6 @@ async function publicSiteOrigin() {
   const protocol = requestHeaders.get("x-forwarded-proto")?.split(",")[0]?.trim() || "https";
   if (protocol !== "http" && protocol !== "https") return null;
   return `${protocol}://${host}`;
-}
-
-function confirmationRedirect(origin: string) {
-  const callback = new URL("/auth/callback", origin);
-  callback.searchParams.set("next", "/admin?welcome=1");
-  return callback.toString();
 }
 
 export async function signupStoreOwner(_previousState: SignupState, formData: FormData): Promise<SignupState> {
@@ -116,7 +104,7 @@ export async function signupStoreOwner(_previousState: SignupState, formData: Fo
       store_name: storeName,
       store_address: storeAddress,
     },
-    ...(origin ? { emailRedirectTo: confirmationRedirect(origin) } : {}),
+    ...(origin ? { emailRedirectTo: signupConfirmationRedirect(origin) } : {}),
   };
 
   const { data, error } = await supabase.auth.signUp({ email, password, options });
