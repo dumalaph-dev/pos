@@ -79,6 +79,34 @@ type Product = PosProduct;
 type Category = { id: string; name: string; icon: string | null };
 type StockRow = { store_id: string; product_id: string; qty: number };
 
+type OnlinePickupItem = {
+  id: string;
+  productId: string;
+  name: string;
+  pricingMode: "fixed" | "per_kg";
+  qty: number;
+  weightKg: number | null;
+  unitPrice: number;
+  lineTotal: number;
+};
+
+type OnlinePickupState =
+  | { status: "idle" }
+  | { status: "loading"; orderId: string }
+  | {
+      status: "ready";
+      orderId: string;
+      orderNo: string;
+      customerName: string;
+      customerPhone: string;
+      pickupSlot: string;
+      queuePosition: number;
+      note: string | null;
+      total: number;
+      items: OnlinePickupItem[];
+    }
+  | { status: "error"; message: string };
+
 function withCatalogGallery<T extends { display_gallery?: DisplayGalleryItem[] }>(profile: T, products: Product[], categories: Category[]): T {
   const marketingItems = Array.isArray(profile.display_gallery)
     ? profile.display_gallery.filter((item) => item.kind === "marketing")
@@ -374,14 +402,17 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
   const [navOpen, setNavOpen] = useState(false);
   const [categoryRailOpen, setCategoryRailOpen] = useState(false);
   const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
+  const [onlinePickup, setOnlinePickup] = useState<OnlinePickupState>({ status: "idle" });
   const searchInputRef = useRef<HTMLInputElement>(null);
   const collapsedNavRef = useRef<HTMLButtonElement>(null);
   const collapseNavRef = useRef<HTMLButtonElement>(null);
   const navWasOpen = useRef(false);
   const displayLinkRef = useRef<DisplayLink | null>(null);
   const [displayLink, setDisplayLink] = useState<DisplayLink | null>(null);
+  const onlinePickupRequestRef = useRef<string | null>(null);
   const [orderState, dispatchOrder] = useReducer(orderReducer, { status: "empty" } as const);
   const payOpen = orderState.status === "paying";
+  const onlinePickupActive = onlinePickup.status === "ready";
   const success = useMemo(
     () => orderState.status === "saved" ? { orderNo: orderState.orderNo, change: orderState.change } : null,
     [orderState],
@@ -404,6 +435,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
   const cartState = useCartState({ stockByProductId, onStockNotice: stockNotice });
   const {
     cart,
+    setCart,
     note,
     setNote,
     discount,
@@ -740,6 +772,129 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     void refreshCatalog();
   }, [refreshCatalog]);
 
+  useEffect(() => {
+    const onlineOrderId = new URLSearchParams(window.location.search).get("onlineOrder")?.trim() ?? "";
+    if (!onlineOrderId || onlinePickupRequestRef.current === onlineOrderId) return;
+    if (!profile || loading) return;
+    if (offline) {
+      onlinePickupRequestRef.current = onlineOrderId;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- surface a terminal-state error at the URL handoff boundary.
+      setOnlinePickup({ status: "error", message: "Reconnect this terminal before loading an online pickup." });
+      return;
+    }
+    if (cart.length > 0) {
+      onlinePickupRequestRef.current = onlineOrderId;
+      setOnlinePickup({ status: "error", message: "Clear the current sale before opening an online pickup." });
+      return;
+    }
+    if (products.length === 0) {
+      onlinePickupRequestRef.current = onlineOrderId;
+      setOnlinePickup({ status: "error", message: "The current branch catalog is empty, so this pickup cannot be loaded." });
+      return;
+    }
+
+    onlinePickupRequestRef.current = onlineOrderId;
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.delete("onlineOrder");
+    window.history.replaceState({}, "", `${nextUrl.pathname}${nextUrl.search}`);
+    setOnlinePickup({ status: "loading", orderId: onlineOrderId });
+    let cancelled = false;
+
+    async function loadOnlinePickup() {
+      const { data: order, error: orderError } = await supabase
+        .from("online_orders")
+        .select("id, order_no, customer_name, customer_phone, pickup_slot, status, queue_position, subtotal, total, note")
+        .eq("id", onlineOrderId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (orderError || !order) {
+        setOnlinePickup({ status: "error", message: "That online pickup is not available to this terminal." });
+        return;
+      }
+      const onlineOrder = order as {
+        id: string;
+        order_no: string;
+        customer_name: string;
+        customer_phone: string;
+        pickup_slot: string;
+        status: string;
+        queue_position: number | string;
+        total: number | string;
+        note: string | null;
+      };
+      if (onlineOrder.status === "picked_up" || onlineOrder.status === "cancelled") {
+        setOnlinePickup({ status: "error", message: `This online pickup is already ${onlineOrder.status.replace("_", " ")}.` });
+        return;
+      }
+
+      const { data: itemRows, error: itemError } = await supabase
+        .from("online_order_items")
+        .select("id, product_id, name_snapshot, pricing_mode_snapshot, unit_price_snapshot, qty, line_total")
+        .eq("order_id", onlineOrderId)
+        .order("id");
+      if (cancelled) return;
+      if (itemError || !itemRows || itemRows.length === 0) {
+        setOnlinePickup({ status: "error", message: "This pickup has no readable item list. Ask a manager to review it." });
+        return;
+      }
+
+      const productById = new Map(products.map((product) => [product.id, product]));
+      const cartLines: Array<{ key: string; product: Product; qty: number; weightKg: number | null; lineTotal: number }> = [];
+      const pickupItems: OnlinePickupItem[] = [];
+      for (const row of itemRows as Array<Record<string, unknown>>) {
+        const productId = typeof row.product_id === "string" ? row.product_id : "";
+        const sourceProduct = productById.get(productId);
+        const pricingMode = row.pricing_mode_snapshot === "per_kg" ? "per_kg" : "fixed";
+        const quantity = Number(row.qty);
+        const unitPrice = Number(row.unit_price_snapshot);
+        if (!sourceProduct || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPrice) || unitPrice <= 0) {
+          setOnlinePickup({ status: "error", message: "One pickup item is no longer available in the current branch catalog." });
+          return;
+        }
+
+        const product = { ...sourceProduct, pricing_mode: pricingMode, price: Math.round(unitPrice) } as Product;
+        const weightKg = pricingMode === "per_kg" ? quantity : null;
+        const cartQty = pricingMode === "per_kg" ? 1 : Math.trunc(quantity);
+        const lineTotal = pricingMode === "per_kg" ? weightLineTotal(product.price, quantity) : product.price * cartQty;
+        const itemId = typeof row.id === "string" ? row.id : `${productId}-${pickupItems.length}`;
+        cartLines.push({ key: `online-${itemId}`, product, qty: cartQty, weightKg, lineTotal });
+        pickupItems.push({
+          id: itemId,
+          productId,
+          name: typeof row.name_snapshot === "string" ? row.name_snapshot : product.name,
+          pricingMode,
+          qty: cartQty,
+          weightKg,
+          unitPrice: product.price,
+          lineTotal,
+        });
+      }
+
+      setDiscount(NO_DISCOUNT);
+      setCart(cartLines);
+      setOrderType((current) => posConfig.orderTypes.includes("Takeout") ? "Takeout" : current);
+      setOnlinePickup({
+        status: "ready",
+        orderId: onlineOrder.id,
+        orderNo: onlineOrder.order_no,
+        customerName: onlineOrder.customer_name,
+        customerPhone: onlineOrder.customer_phone,
+        pickupSlot: onlineOrder.pickup_slot,
+        queuePosition: Number(onlineOrder.queue_position) || 0,
+        note: onlineOrder.note,
+        total: Number(onlineOrder.total) || 0,
+        items: pickupItems,
+      });
+    }
+
+    void loadOnlinePickup().catch(() => {
+      if (!cancelled) setOnlinePickup({ status: "error", message: "The online pickup could not be loaded. Try opening it again." });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cart.length, loading, offline, posConfig.orderTypes, products, profile, setCart, setDiscount, supabase]);
+
   const refreshDisplaySettings = useCallback(async () => {
     const storeId = profile?.store_id;
     if (offlineProfile || !storeId || !navigator.onLine) return;
@@ -813,6 +968,13 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
       ? { userId: syncUserId, orgId: syncOrgId, storeId: syncStoreId }
       : null
   ), [syncOrgId, syncStoreId, syncUserId]);
+  const completeOnlineOrder = useCallback(async (onlineOrderId: string, posOrderId: string) => {
+    const { error } = await supabase.rpc("complete_online_order", {
+      p_online_order_id: onlineOrderId,
+      p_pos_order_id: posOrderId,
+    });
+    if (error) throw error;
+  }, [supabase]);
   const handleSyncRecovered = useCallback(() => {
     if (!offlineProfile) setOffline(false);
   }, [offlineProfile]);
@@ -825,6 +987,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     refreshCatalog,
     onRecovered: handleSyncRecovered,
     onOffline: handleSyncOffline,
+    onOrderSynced: completeOnlineOrder,
   });
   const { pending, oldestQueuedSaleAt, syncFailure, flush, state: syncState } = sync;
   const hardware = usePosHardwareStatus({ displayLink, offline, printState, syncState });
@@ -941,6 +1104,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     if (!profile || cart.length === 0) return;
     const now = new Date();
     const orderNo = buildOrderNo(branchPrefix(profile.store_name));
+    const onlineOrder = onlinePickup.status === "ready" ? onlinePickup : null;
     const isScPwd = discount.type === "senior" || discount.type === "pwd";
     const requiresApproval = discountRequiresApproval(discount, adminPinThreshold);
 
@@ -990,7 +1154,8 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
       payment_ref: payRef || null,
       amount_tendered: method === "cash" ? tendered : null,
       change_due: method === "cash" && tendered !== null ? tendered - total : null,
-      note: note.trim() || null,
+      note: [onlineOrder ? `Online pickup ${onlineOrder.orderNo} · ${onlineOrder.customerName}` : null, note.trim() || null].filter(Boolean).join(" · ") || null,
+      online_order_id: onlineOrder?.orderId ?? null,
       created_at_device: now.toISOString(),
     };
 
@@ -1032,6 +1197,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     setPaymentPreview(null);
     setDisplayOverride({ kind: "thankyou", branding: displayBranding, ...displayPresentation, orderNo, changeDue });
     clearCart();
+    setOnlinePickup({ status: "idle" });
     void flush();
 
     // Print the receipt (fire-and-forget; failure shows a retry toast).
@@ -1450,6 +1616,28 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
           )}
         </header>
 
+        {onlinePickup.status !== "idle" && (
+          <section className={`online-pickup-banner${onlinePickup.status === "error" ? " is-error" : onlinePickup.status === "loading" ? " is-loading" : ""}`} aria-live="polite">
+            {onlinePickup.status === "loading" && <><strong>Loading online pickup…</strong><span>Checking the queue and item list for this terminal.</span></>}
+            {onlinePickup.status === "error" && <><strong>Online pickup unavailable</strong><span>{onlinePickup.message}</span><button type="button" onClick={() => setOnlinePickup({ status: "idle" })}>Dismiss</button></>}
+            {onlinePickup.status === "ready" && (
+              <>
+                <div className="online-pickup-banner__identity">
+                  <span className="online-pickup-banner__eyebrow">Online pickup · queue #{onlinePickup.queuePosition || "—"}</span>
+                  <strong>{onlinePickup.orderNo}</strong>
+                  <span>{onlinePickup.customerName} · {onlinePickup.customerPhone}</span>
+                </div>
+                <div className="online-pickup-banner__meta">
+                  <span>{onlinePickup.pickupSlot === "asap" ? "ASAP pickup" : `Scheduled ${onlinePickup.pickupSlot}`}</span>
+                  <strong>{displayPeso(onlinePickup.total)}</strong>
+                  <small>{onlinePickup.items.length} item{onlinePickup.items.length === 1 ? "" : "s"}{onlinePickup.note ? ` · ${onlinePickup.note}` : ""}</small>
+                </div>
+                <button type="button" onClick={() => { clearCart(); setOnlinePickup({ status: "idle" }); setOrderType(posConfig.defaultOrderType); }} disabled={payOpen} className="online-pickup-banner__dismiss">Close pickup</button>
+              </>
+            )}
+          </section>
+        )}
+
         <div className={"pos-body " + (categoryRailOpen ? "category-rail-open" : "category-rail-collapsed")}>
           <nav
             id="pos-category-rail"
@@ -1521,7 +1709,8 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                       type="button"
                       key={product.id}
                       onClick={() => chooseProduct(product)}
-                      className="product-card"
+                      className={`product-card${onlinePickupActive ? " is-locked" : ""}`}
+                      disabled={onlinePickupActive}
                       aria-label={"Add " + product.name}
                     >
                       <div className="product-card__image">
@@ -1574,20 +1763,21 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                   <p>{cart.length === 0 ? "Ready for a new sale" : cart.length + " line" + (cart.length === 1 ? "" : "s")}</p>
                 </div>
                 <div className="order-header__actions">
-                  <select value={orderType} onChange={(event) => setOrderType(event.target.value)} className="order-type-select" aria-label="Order type">
+                  <select value={orderType} onChange={(event) => setOrderType(event.target.value)} className="order-type-select" aria-label="Order type" disabled={onlinePickupActive}>
                     {posConfig.orderTypes.map((type) => <option key={type}>{type}</option>)}
                   </select>
                   <button
                     type="button"
                     className={"order-discount-button" + (discount.type !== "none" ? " is-active" : "")}
                     onClick={() => setDiscountOpen(true)}
+                    disabled={onlinePickupActive}
                     aria-label={discount.type === "none" ? "Add discount" : "Edit discount"}
                   >
                     <Icon name="sparkle" size={15} />
                     <span>Discount</span>
                     {discount.type !== "none" && <small>{discountLabel}</small>}
                   </button>
-                  <button type="button" className="icon-button icon-button--soft" onClick={clearCart} disabled={cart.length === 0} aria-label="Clear current order">
+                  <button type="button" className="icon-button icon-button--soft" onClick={clearCart} disabled={cart.length === 0 || onlinePickupActive} aria-label="Clear current order">
                     <Icon name="trash" size={20} />
                   </button>
                 </div>
@@ -1614,18 +1804,18 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                     {cart.map((line) => (
                       <li key={line.key} className="order-line">
                         <div className="stepper" aria-label={"Quantity for " + line.product.name}>
-                          <button type="button" onClick={() => line.weightKg === null ? bump(line.key, -1) : setKeypad({ product: line.product, lineKey: line.key })} aria-label="Decrease quantity">−</button>
-                          <button type="button" className="stepper__value" onClick={() => line.weightKg !== null && setKeypad({ product: line.product, lineKey: line.key })} aria-label={line.weightKg !== null ? "Edit weight" : "Quantity"}>
+                          <button type="button" onClick={() => line.weightKg === null ? bump(line.key, -1) : setKeypad({ product: line.product, lineKey: line.key })} disabled={onlinePickupActive} aria-label="Decrease quantity">−</button>
+                          <button type="button" className="stepper__value" onClick={() => line.weightKg !== null && setKeypad({ product: line.product, lineKey: line.key })} disabled={onlinePickupActive} aria-label={line.weightKg !== null ? "Edit weight" : "Quantity"}>
                             {line.weightKg !== null ? line.weightKg.toFixed(2) : line.qty}
                           </button>
-                          <button type="button" onClick={() => line.weightKg === null ? bump(line.key, 1) : setKeypad({ product: line.product, lineKey: line.key })} aria-label="Increase quantity">+</button>
+                          <button type="button" onClick={() => line.weightKg === null ? bump(line.key, 1) : setKeypad({ product: line.product, lineKey: line.key })} disabled={onlinePickupActive} aria-label="Increase quantity">+</button>
                         </div>
                         <div className="order-line__detail">
                           <strong>{line.product.name}</strong>
                           <span>{line.weightKg !== null ? line.weightKg.toFixed(2) + " kg" : "x" + line.qty}</span>
                         </div>
                         <strong className="order-line__total tnums">{displayPeso(line.lineTotal)}</strong>
-                        <button type="button" className="order-line__remove" onClick={() => removeLine(line.key)} aria-label={"Remove " + line.product.name}>
+                        <button type="button" className="order-line__remove" onClick={() => removeLine(line.key)} disabled={onlinePickupActive} aria-label={"Remove " + line.product.name}>
                           <Icon name="close" size={17} />
                         </button>
                       </li>
@@ -1642,7 +1832,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
               </div>
 
               <div className="order-actions">
-                <button type="button" className="button button--save" onClick={holdOrder} disabled={cart.length === 0 || parked.length >= MAX_PARKED}>SAVE</button>
+                <button type="button" className="button button--save" onClick={holdOrder} disabled={cart.length === 0 || parked.length >= MAX_PARKED || onlinePickupActive}>SAVE</button>
                 <button type="button" className="button button--charge" onClick={startPayment} disabled={cart.length === 0 || total <= 0}>CHARGE</button>
               </div>
             </div>

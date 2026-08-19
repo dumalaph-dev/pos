@@ -8,7 +8,7 @@ import { AdminBranchSwitcher } from "./AdminBranchSwitcher";
 import type { AdminBranchOption } from "@/lib/admin/branch-context";
 import type { AdminBranding } from "@/lib/admin/branding";
 
-export type AdminSection = "overview" | "calendar" | "sales" | "pos" | "orders" | "shifts" | "inventory" | "products" | "catalog" | "customers" | "suppliers" | "expenses" | "employees" | "billing" | "reports" | "audit" | "settings" | "promotions" | "referrals" | "branches";
+export type AdminSection = "overview" | "online-ordering" | "calendar" | "sales" | "pos" | "orders" | "shifts" | "inventory" | "products" | "catalog" | "customers" | "suppliers" | "expenses" | "employees" | "billing" | "reports" | "audit" | "settings" | "promotions" | "referrals" | "branches";
 
 type NavItem = {
   label: string;
@@ -34,6 +34,7 @@ export type AdminSidebarConnection = {
 
 const adminNavPrimaryItems: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: "dashboard", active: "overview" },
+  { label: "Online ordering", href: "/admin/online-ordering", icon: "bag", active: "online-ordering" },
   { label: "Shifts & Z-readings", href: "/admin/shifts", icon: "history", active: "shifts" },
 ];
 
@@ -100,6 +101,7 @@ function activeSectionForPath(pathname: string | null): AdminSection {
   if (!pathname || pathname === "/admin" || pathname === "/admin/") return "overview";
 
   const routeSections: Array<[string, AdminSection]> = [
+    ["/admin/online-ordering", "online-ordering"],
     ["/admin/calendar", "calendar"],
     ["/admin/sales", "sales"],
     ["/admin/pos", "pos"],
@@ -207,6 +209,11 @@ export function AdminSidebar({ branding, branchName, active: activeOverride, con
             <Link href="/pos?quickAction=park" className="admin-quick-actions__item">
               <span className="admin-quick-actions__icon"><AdminIcon name="pos" size={16} /></span>
               <span className="admin-quick-actions__label">Park Order</span>
+              <AdminIcon name="arrow" size={14} />
+            </Link>
+            <Link href="/admin/online-ordering" className="admin-quick-actions__item">
+              <span className="admin-quick-actions__icon"><AdminIcon name="bag" size={16} /></span>
+              <span className="admin-quick-actions__label">Share menu</span>
               <AdminIcon name="arrow" size={14} />
             </Link>
             <Link href="/admin/orders?status=refunded" className="admin-quick-actions__item">

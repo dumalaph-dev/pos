@@ -16,6 +16,7 @@ export type AdminIconName =
   | "search"
   | "bell"
   | "help"
+  | "clock"
   | "calendar"
   | "chevron"
   | "arrow"
@@ -92,6 +93,8 @@ export function AdminIcon({ name, size = 18 }: { name: AdminIconName; size?: num
       return <svg {...common}><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>;
     case "help":
       return <svg {...common}><circle cx="12" cy="12" r="9" /><path d="M9.8 9a2.4 2.4 0 1 1 4.2 1.6c-1.2 1.1-2 1.5-2 3M12 17h.01" /></svg>;
+    case "clock":
+      return <svg {...common}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.2 2" /></svg>;
     case "calendar":
       return <svg {...common}><rect x="3" y="4.5" width="18" height="16" rx="2" /><path d="M7 3v3M17 3v3M3 9h18M8 13h.01M12 13h.01M16 13h.01M8 17h.01M12 17h.01" /></svg>;
     case "chevron":
