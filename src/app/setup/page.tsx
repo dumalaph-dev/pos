@@ -18,6 +18,7 @@ type ProfileRecord = {
     subscription_trial_ends_at?: string | null;
     subscription_current_period_end?: string | null;
     subscription_billing_mode?: string | null;
+    complimentary_access_until?: string | null;
   } | null;
 };
 
@@ -36,6 +37,7 @@ export default async function SetupPage() {
       trialEndsAt: profile.organizations.subscription_trial_ends_at,
       currentPeriodEnd: profile.organizations.subscription_current_period_end,
       billingMode: profile.organizations.subscription_billing_mode,
+      complimentaryAccessUntil: profile.organizations.complimentary_access_until,
     })
     : null;
   if (subscriptionAccess === false) redirect(profile?.role === "admin" ? "/admin/billing" : "/account/billing-required");

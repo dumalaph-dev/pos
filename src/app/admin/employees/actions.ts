@@ -150,6 +150,7 @@ async function getActor(): Promise<{ supabase: Awaited<ReturnType<typeof createC
       trialEndsAt: profile.organizations.subscription_trial_ends_at,
       currentPeriodEnd: profile.organizations.subscription_current_period_end,
       billingMode: profile.organizations.subscription_billing_mode,
+      complimentaryAccessUntil: profile.organizations.complimentary_access_until,
     })
     : null;
   if (subscriptionAccess === false) employeesRedirect("Your organization needs an active billing plan before staff records can be changed.");

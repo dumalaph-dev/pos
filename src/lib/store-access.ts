@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/employee-auth";
+import { readCurrentComplimentaryAccess } from "@/lib/platform-access-server";
 import { isSubscriptionAccessCurrent } from "@/lib/trial";
 import { transitionExpiredTrial } from "@/lib/trial-server";
 
@@ -87,7 +88,12 @@ export async function getStoreByStaffKey(value: string): Promise<StoreAccessReco
       billingMode: lifecycle.data.subscription_billing_mode,
     };
     const transition = await transitionExpiredTrial(data.org_id, lifecycleInput);
-    const access = isSubscriptionAccessCurrent({ ...lifecycleInput, status: transition.status });
+    const complimentaryAccess = await readCurrentComplimentaryAccess(admin, data.org_id);
+    const access = isSubscriptionAccessCurrent({
+      ...lifecycleInput,
+      status: transition.status,
+      complimentaryAccessUntil: complimentaryAccess?.until,
+    });
     if (access === false) return null;
   }
 

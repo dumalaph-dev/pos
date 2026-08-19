@@ -1,4 +1,14 @@
 import { createAdminClient } from "@/lib/employee-auth";
+import { readOrganizationAccessGrants } from "@/lib/platform-access-server";
+import type { ComplimentaryAccessGrant } from "@/lib/platform-access";
+import {
+  normalizeReferralCodeRecord,
+  normalizeReferralRecord,
+  normalizeReferralRewardRecord,
+  type ReferralCodeRecord,
+  type ReferralRecord,
+  type ReferralRewardRecord,
+} from "@/lib/referrals";
 import { normalizeTrialFeedbackStatus, type TrialFeedbackStatus } from "@/lib/trial";
 
 export type PlatformAdminClient = NonNullable<ReturnType<typeof createAdminClient>>;
@@ -13,6 +23,11 @@ export type OrganizationRecord = {
   subscription_trial_started_at?: string | null;
   subscription_trial_ends_at?: string | null;
   subscription_current_period_end?: string | null;
+  subscription_billing_mode?: string | null;
+  subscription_billing_variant_id?: string | null;
+  subscription_provider_plan_id?: string | null;
+  subscription_provider_subscription_id?: string | null;
+  subscription_provider_payment_intent_id?: string | null;
   settings?: unknown;
   account_status?: "active" | "suspended" | null;
   suspension_reason?: string | null;
@@ -39,6 +54,58 @@ export type EmployeeRecord = {
   org_id: string;
   role: string;
   is_active: boolean;
+  employee_code?: string | null;
+  full_name?: string | null;
+  profile_id?: string | null;
+  store_id?: string | null;
+};
+
+export type SupportCaseRecord = {
+  id: string;
+  org_id: string;
+  created_by: string;
+  subject: string;
+  description: string;
+  priority: "normal" | "urgent";
+  status: "open" | "in_progress" | "waiting_on_customer" | "resolved" | "closed";
+  first_response_due_at: string;
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+};
+
+export type PlatformAuditRecord = {
+  id: string;
+  action: string;
+  entity: string | null;
+  entity_id: string | null;
+  before: unknown;
+  after: unknown;
+  created_at: string;
+};
+
+export type PlatformReferralRecord = ReferralRecord & {
+  referrerOrganizationName: string | null;
+  referredOrganizationName: string | null;
+  reward: ReferralRewardRecord | null;
+};
+
+export type PlatformOrganizationDetail = {
+  organization: OrganizationRecord;
+  profiles: ProfileRecord[];
+  stores: StoreRecord[];
+  employees: EmployeeRecord[];
+  authEmailById: Map<string, string>;
+  accessGrants: ComplimentaryAccessGrant[];
+  accessGrantsSchemaAvailable: boolean;
+  supportCases: SupportCaseRecord[];
+  supportCasesSchemaAvailable: boolean;
+  trialFeedback: TrialFeedbackRecord | null;
+  trialFeedbackAvailable: boolean;
+  auditLogs: PlatformAuditRecord[];
+  referralCode: ReferralCodeRecord | null;
+  referrals: PlatformReferralRecord[];
+  referralsAvailable: boolean;
 };
 
 export type TrialFeedbackRecord = {
@@ -80,7 +147,7 @@ export async function readOrganizations(admin: PlatformAdminClient): Promise<Org
     .from("organizations")
     .select("id, name, created_at, owner_profile_id, settings, subscription_status, subscription_plan, subscription_trial_started_at, subscription_trial_ends_at, subscription_current_period_end, account_status, suspension_reason, suspended_at")
     .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(1000);
 
   if (!rich.error) {
     return {
@@ -94,7 +161,7 @@ export async function readOrganizations(admin: PlatformAdminClient): Promise<Org
     .from("organizations")
     .select("id, name, created_at, owner_profile_id, settings, subscription_status, subscription_plan, subscription_current_period_end, account_status, suspension_reason, suspended_at")
     .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(1000);
 
   if (!legacy.error) {
     return {
@@ -108,7 +175,7 @@ export async function readOrganizations(admin: PlatformAdminClient): Promise<Org
     .from("organizations")
     .select("id, name, created_at, owner_profile_id, settings")
     .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(1000);
 
   return {
     records: (basic.data ?? []) as OrganizationRecord[],
@@ -177,6 +244,117 @@ export async function readPlatformDirectory(admin: PlatformAdminClient): Promise
   };
 }
 
+export async function readPlatformOrganizationDetail(admin: PlatformAdminClient, organizationId: string): Promise<PlatformOrganizationDetail | null> {
+  const organizationResult = await readOrganizationDetailRecord(admin, organizationId);
+  if (!organizationResult) return null;
+
+  const [profilesResult, storesResult, employeesResult, authUsersResult, grantsResult, supportResult, feedbackResult, auditResult, referralCodeResult, referralsAsReferrerResult, referralsAsReferredResult, referralRewardsResult] = await Promise.all([
+    admin.from("profiles").select("id, org_id, full_name, role, is_active, store_id").eq("org_id", organizationId).order("full_name"),
+    admin.from("stores").select("id, org_id, name, is_active").eq("org_id", organizationId).order("name"),
+    admin.from("employee_records").select("id, org_id, employee_code, full_name, role, is_active, profile_id, store_id").eq("org_id", organizationId).order("full_name"),
+    admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
+    readOrganizationAccessGrants(admin, organizationId),
+    admin.from("support_cases").select("id, org_id, created_by, subject, description, priority, status, first_response_due_at, created_at, updated_at, resolved_at").eq("org_id", organizationId).order("created_at", { ascending: false }),
+    readOrganizationTrialFeedback(admin, organizationId),
+    admin.from("audit_logs").select("id, action, entity, entity_id, before, after, created_at").eq("org_id", organizationId).order("created_at", { ascending: false }).limit(100),
+    admin.from("platform_referral_codes").select("id, code, referrer_org_id, referrer_profile_id, is_active, created_at, updated_at").eq("referrer_org_id", organizationId).eq("is_active", true).limit(1).maybeSingle(),
+    admin.from("platform_referrals").select("id, referral_code_id, referrer_org_id, referrer_profile_id, referred_user_id, referred_profile_id, referred_org_id, status, captured_at, qualified_at, rewarded_at, reward_grant_id, rejection_reason, created_at, updated_at").eq("referrer_org_id", organizationId).order("created_at", { ascending: false }).limit(1000),
+    admin.from("platform_referrals").select("id, referral_code_id, referrer_org_id, referrer_profile_id, referred_user_id, referred_profile_id, referred_org_id, status, captured_at, qualified_at, rewarded_at, reward_grant_id, rejection_reason, created_at, updated_at").eq("referred_org_id", organizationId).order("created_at", { ascending: false }).limit(1000),
+    admin.from("platform_referral_reward_ledger").select("id, referral_id, referrer_org_id, grant_id, reward_type, reward_days, status, issued_at, revoked_at, metadata").eq("referrer_org_id", organizationId).order("issued_at", { ascending: false }).limit(1000),
+  ]);
+
+  const supportCases = !supportResult.error ? (supportResult.data ?? []) as SupportCaseRecord[] : [];
+  const auditLogs = !auditResult.error ? (auditResult.data ?? []) as PlatformAuditRecord[] : [];
+  const authUsers = authUsersResult.data?.users ?? [];
+  const referrals = [
+    ...(referralsAsReferrerResult.data ?? []).map((row) => normalizeReferralRecord(row)),
+    ...(referralsAsReferredResult.data ?? []).map((row) => normalizeReferralRecord(row)),
+  ];
+  const rewards = (referralRewardsResult.data ?? []).map((row) => normalizeReferralRewardRecord(row));
+  const relatedOrganizationIds = [...new Set(referrals.flatMap((referral) => [referral.referrer_org_id, referral.referred_org_id]).filter((id) => id && id !== organizationId))];
+  const relatedOrganizationsResult = relatedOrganizationIds.length > 0
+    ? await admin.from("organizations").select("id, name").in("id", relatedOrganizationIds)
+    : null;
+  const organizationNames = new Map<string, string>([[organizationResult.id, organizationResult.name]]);
+  for (const relatedOrganization of relatedOrganizationsResult?.data ?? []) organizationNames.set(String(relatedOrganization.id), String(relatedOrganization.name ?? "Unnamed organization"));
+  const rewardByReferralId = new Map(rewards.map((reward) => [reward.referral_id, reward]));
+  const referralHistory = referrals.map<PlatformReferralRecord>((referral) => ({
+    ...referral,
+    referrerOrganizationName: organizationNames.get(referral.referrer_org_id) ?? null,
+    referredOrganizationName: organizationNames.get(referral.referred_org_id) ?? null,
+    reward: rewardByReferralId.get(referral.id) ?? null,
+  }));
+  const referralsAvailable = !referralCodeResult.error && !referralsAsReferrerResult.error && !referralsAsReferredResult.error && !referralRewardsResult.error;
+
+  return {
+    organization: organizationResult,
+    profiles: (profilesResult.data ?? []) as ProfileRecord[],
+    stores: (storesResult.data ?? []) as StoreRecord[],
+    employees: (employeesResult.data ?? []) as EmployeeRecord[],
+    authEmailById: new Map(authUsers.map((authUser) => [authUser.id, authUser.email ?? ""])),
+    accessGrants: grantsResult.records,
+    accessGrantsSchemaAvailable: grantsResult.schemaAvailable,
+    supportCases,
+    supportCasesSchemaAvailable: !supportResult.error,
+    trialFeedback: feedbackResult.record,
+    trialFeedbackAvailable: feedbackResult.available,
+    auditLogs,
+    referralCode: referralCodeResult.data ? normalizeReferralCodeRecord(referralCodeResult.data) : null,
+    referrals: referralHistory,
+    referralsAvailable,
+  };
+}
+
+async function readOrganizationDetailRecord(admin: PlatformAdminClient, organizationId: string): Promise<OrganizationRecord | null> {
+  const rich = await admin
+    .from("organizations")
+    .select("id, name, created_at, owner_profile_id, settings, subscription_status, subscription_plan, subscription_trial_started_at, subscription_trial_ends_at, subscription_current_period_end, subscription_billing_mode, subscription_billing_variant_id, subscription_provider_plan_id, subscription_provider_subscription_id, subscription_provider_payment_intent_id, account_status, suspension_reason, suspended_at")
+    .eq("id", organizationId)
+    .maybeSingle();
+
+  if (!rich.error && rich.data) return rich.data as OrganizationRecord;
+
+  const legacy = await admin
+    .from("organizations")
+    .select("id, name, created_at, owner_profile_id, settings, subscription_status, subscription_plan, subscription_current_period_end, account_status, suspension_reason, suspended_at")
+    .eq("id", organizationId)
+    .maybeSingle();
+
+  if (!legacy.error && legacy.data) return legacy.data as OrganizationRecord;
+
+  const basic = await admin
+    .from("organizations")
+    .select("id, name, created_at, owner_profile_id, settings")
+    .eq("id", organizationId)
+    .maybeSingle();
+
+  return !basic.error && basic.data ? basic.data as OrganizationRecord : null;
+}
+
+async function readOrganizationTrialFeedback(admin: PlatformAdminClient, organizationId: string): Promise<{ record: TrialFeedbackRecord | null; available: boolean }> {
+  const rich = await admin
+    .from("trial_feedback")
+    .select("org_id, submitted_by, reason, details, wants_discount, status, platform_notes, acted_at, acted_by, updated_at")
+    .eq("org_id", organizationId)
+    .maybeSingle();
+
+  if (!rich.error) {
+    return { record: rich.data ? normalizeTrialFeedbackRecord(rich.data) : null, available: true };
+  }
+
+  const legacy = await admin
+    .from("trial_feedback")
+    .select("org_id, submitted_by, reason, details, wants_discount, updated_at")
+    .eq("org_id", organizationId)
+    .maybeSingle();
+
+  if (!legacy.error) {
+    return { record: legacy.data ? normalizeTrialFeedbackRecord(legacy.data) : null, available: true };
+  }
+
+  return { record: null, available: false };
+}
+
 function normalizeTrialFeedbackRecord(value: Partial<TrialFeedbackRecord> & Record<string, unknown>): TrialFeedbackRecord {
   return {
     org_id: typeof value.org_id === "string" ? value.org_id : "",
@@ -221,8 +399,8 @@ export function countByOrg<T extends { org_id: string }>(rows: T[]) {
   return counts;
 }
 
-export function formatDate(value: string) {
-  const date = new Date(value);
+export function formatDate(value: string | null | undefined) {
+  const date = new Date(value ?? "");
   return Number.isNaN(date.getTime())
     ? "—"
     : new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeZone: "Asia/Singapore" }).format(date);

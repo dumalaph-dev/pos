@@ -30,6 +30,7 @@ export default async function PosPage() {
         trialEndsAt: profile.organizations.subscription_trial_ends_at,
         currentPeriodEnd: profile.organizations.subscription_current_period_end,
         billingMode: profile.organizations.subscription_billing_mode,
+        complimentaryAccessUntil: profile.organizations.complimentary_access_until,
       })
       : null;
     if (subscriptionAccess === false) {

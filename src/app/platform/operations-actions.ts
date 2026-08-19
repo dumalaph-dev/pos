@@ -5,8 +5,9 @@ import { createAdminClient } from "@/lib/employee-auth";
 import { isPlatformAdminEmail } from "@/lib/platform-admin";
 import { isPolicyGateOpen, readPolicyNumber } from "@/lib/platform-operations";
 import { readPlatformPolicies } from "@/lib/platform-operations-server";
+import { isMissingReferralSchemaError } from "@/lib/referrals-server";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
-import { normalizeTrialFeedbackStatus, type TrialFeedbackStatus } from "@/lib/trial";
+import { normalizeTrialFeedbackStatus, TRIAL_DAY_MS, type TrialFeedbackStatus } from "@/lib/trial";
 
 export type OperationsActionState = {
   ok: boolean;
@@ -195,6 +196,163 @@ export async function openSupportCase(_previousState: OperationsActionState, for
   return { ok: true, message: `Support case opened for ${organization.record.name}. First response target: ${formatHours(responseHours)}.` };
 }
 
+export async function grantComplimentaryPremium(_previousState: OperationsActionState, formData: FormData): Promise<OperationsActionState> {
+  const actor = await requirePlatformAdmin();
+  if (!actor.ok) return actor;
+
+  const gate = await requirePublishedPolicies(actor.admin);
+  if (!gate.ok) return gate;
+
+  const organizationId = readText(formData, "organization_id");
+  const reason = readText(formData, "reason");
+  const source = readText(formData, "source") || "manual";
+  const startMode = readText(formData, "start_mode") || "now";
+  const days = readInteger(formData, "days");
+  if (!isUuid(organizationId)) return { ok: false, message: "Choose a valid business account." };
+  if (!Number.isInteger(days) || days < 1 || days > 365) return { ok: false, message: "Choose a complimentary access period from 1–365 days." };
+  if (reason.length < 5 || reason.length > 500) return { ok: false, message: "Add a grant reason of 5–500 characters." };
+  if (source !== "manual" && source !== "support" && source !== "campaign" && source !== "referral") return { ok: false, message: "Choose a valid grant source." };
+  if (startMode !== "now" && startMode !== "after_current_access") return { ok: false, message: "Choose when the complimentary access should begin." };
+
+  const organization = await readOrganization(actor.admin, organizationId);
+  if (!organization.ok) return organization;
+  if (organization.record.account_status === "suspended") return { ok: false, message: "Restore the suspended account before granting tenant access." };
+
+  const now = new Date();
+  const currentAccess = await actor.admin
+    .from("platform_access_grants")
+    .select("ends_at")
+    .eq("org_id", organizationId)
+    .eq("status", "active")
+    .gt("ends_at", now.toISOString())
+    .order("ends_at", { ascending: false })
+    .limit(1);
+  if (currentAccess.error) return platformMigrationError(currentAccess.error.message, "0052_platform_access_grants.sql");
+
+  const lifecycle = await actor.admin
+    .from("organizations")
+    .select("subscription_status, subscription_trial_ends_at, subscription_current_period_end")
+    .eq("id", organizationId)
+    .maybeSingle();
+  if (lifecycle.error) return platformMigrationError(lifecycle.error.message, "0023_store_access_and_subscriptions.sql");
+
+  const candidateEndTimes = [
+    ...((currentAccess.data ?? []).map((row) => Date.parse(String(row.ends_at ?? "")))),
+    ...(lifecycle.data?.subscription_status === "trialing" || lifecycle.data?.subscription_status === "active" || lifecycle.data?.subscription_status === "past_due"
+      ? [
+        Date.parse(String(lifecycle.data.subscription_trial_ends_at ?? "")),
+        Date.parse(String(lifecycle.data.subscription_current_period_end ?? "")),
+      ]
+      : []),
+  ].filter(Number.isFinite);
+  const startsAtMs = startMode === "after_current_access"
+    ? Math.max(now.getTime(), ...candidateEndTimes)
+    : now.getTime();
+  const startsAt = new Date(startsAtMs).toISOString();
+  const endsAt = new Date(startsAtMs + days * TRIAL_DAY_MS).toISOString();
+  const result = await actor.admin
+    .from("platform_access_grants")
+    .insert({
+      org_id: organizationId,
+      source,
+      status: "active",
+      starts_at: startsAt,
+      ends_at: endsAt,
+      reason,
+      created_by: actor.userId,
+      metadata: { grant_kind: "complimentary_premium" },
+    })
+    .select("id")
+    .single();
+
+  if (result.error || !result.data) return platformMigrationError(result.error?.message ?? "The complimentary grant could not be created.", "0052_platform_access_grants.sql");
+
+  const auditError = await writePlatformAudit(actor.admin, {
+    orgId: organizationId,
+    actorId: actor.userId,
+    action: "platform.access_grant.created",
+    entity: "platform_access_grants",
+    entityId: result.data.id as string,
+    before: null,
+    after: {
+      grant_id: result.data.id,
+      source,
+      status: "active",
+      starts_at: startsAt,
+      ends_at: endsAt,
+      reason,
+    },
+  });
+
+  revalidatePlatformPages(organizationId);
+  if (auditError) return { ok: false, message: "The grant was created, but its audit record could not be written. Review the audit log before retrying." };
+  return { ok: true, message: `${days} complimentary Premium day${days === 1 ? "" : "s"} granted to ${organization.record.name}. Access ends ${endsAt}.` };
+}
+
+export async function revokeComplimentaryPremium(_previousState: OperationsActionState, formData: FormData): Promise<OperationsActionState> {
+  const actor = await requirePlatformAdmin();
+  if (!actor.ok) return actor;
+
+  const gate = await requirePublishedPolicies(actor.admin);
+  if (!gate.ok) return gate;
+
+  const grantId = readText(formData, "grant_id");
+  if (!isUuid(grantId)) return { ok: false, message: "Choose a valid complimentary grant." };
+
+  const grant = await actor.admin
+    .from("platform_access_grants")
+    .select("id, org_id, source, status, starts_at, ends_at, reason, created_by, created_at, metadata")
+    .eq("id", grantId)
+    .maybeSingle();
+  if (grant.error) return platformMigrationError(grant.error.message, "0052_platform_access_grants.sql");
+  if (!grant.data) return { ok: false, message: "That complimentary grant could not be found." };
+  if (grant.data.status !== "active") return { ok: false, message: "That complimentary grant has already been revoked." };
+
+  const revokedAt = new Date().toISOString();
+  const update = await actor.admin
+    .from("platform_access_grants")
+    .update({ status: "revoked", revoked_at: revokedAt, revoked_by: actor.userId })
+    .eq("id", grantId)
+    .eq("status", "active")
+    .select("id")
+    .maybeSingle();
+  if (update.error) return platformMigrationError(update.error.message, "0052_platform_access_grants.sql");
+  if (!update.data) return { ok: false, message: "This grant changed while you were reviewing it. Refresh the organization record and try again." };
+
+  let rewardLedgerSyncFailed = false;
+  if (grant.data.source === "referral") {
+    const rewardUpdate = await actor.admin
+      .from("platform_referral_reward_ledger")
+      .update({ status: "revoked", revoked_at: revokedAt })
+      .eq("grant_id", grantId)
+      .eq("status", "issued");
+    rewardLedgerSyncFailed = Boolean(rewardUpdate.error && !isMissingReferralSchemaError(rewardUpdate.error.message));
+  }
+
+  const auditError = await writePlatformAudit(actor.admin, {
+    orgId: grant.data.org_id as string,
+    actorId: actor.userId,
+    action: "platform.access_grant.revoked",
+    entity: "platform_access_grants",
+    entityId: grantId,
+    before: {
+      status: grant.data.status,
+      starts_at: grant.data.starts_at,
+      ends_at: grant.data.ends_at,
+      reason: grant.data.reason,
+    },
+    after: {
+      status: "revoked",
+      revoked_at: revokedAt,
+    },
+  });
+
+  revalidatePlatformPages(grant.data.org_id as string);
+  if (rewardLedgerSyncFailed) return { ok: false, message: "The grant was revoked, but the referral reward ledger could not be synchronized. Review the organization record before retrying." };
+  if (auditError) return { ok: false, message: "The grant was revoked, but its audit record could not be written. Review the audit log before retrying." };
+  return { ok: true, message: "Complimentary Premium access was revoked." };
+}
+
 export async function updateTrialFeedback(_previousState: OperationsActionState, formData: FormData): Promise<OperationsActionState> {
   const actor = await requirePlatformAdmin();
   if (!actor.ok) return actor;
@@ -338,7 +496,7 @@ async function writePlatformAudit(admin: PlatformAdminClient, input: {
   return result.error;
 }
 
-function revalidatePlatformPages() {
+function revalidatePlatformPages(organizationId?: string) {
   revalidatePath("/platform");
   revalidatePath("/platform/plans");
   revalidatePath("/platform/policies");
@@ -348,6 +506,7 @@ function revalidatePlatformPages() {
   revalidatePath("/admin/billing");
   revalidatePath("/account");
   revalidatePath("/pos");
+  if (organizationId) revalidatePath(`/platform/organizations/${organizationId}`);
 }
 
 function platformMigrationError(detail: string, migration: string): OperationsActionFailure {
@@ -361,6 +520,13 @@ function platformMigrationError(detail: string, migration: string): OperationsAc
 function readText(formData: FormData, name: string) {
   const value = formData.get(name);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function readInteger(formData: FormData, name: string) {
+  const value = readText(formData, name);
+  if (!value) return NaN;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : NaN;
 }
 
 function isUuid(value: string) {

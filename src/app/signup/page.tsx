@@ -5,6 +5,7 @@ import { formatPeso } from "@/lib/money";
 import { socialMetadata } from "@/lib/page-metadata";
 import { DEFAULT_BILLING_VARIANTS, DEFAULT_MONTHLY_PRICE_CENTAVOS } from "@/lib/platform-operations";
 import { readCachedPlatformBillingCatalog } from "@/lib/platform-operations-server";
+import { normalizeReferralCode } from "@/lib/referrals";
 import SignupForm from "./SignupForm";
 
 const TITLE = "Create your POS workspace";
@@ -20,7 +21,10 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default async function SignupPage() {
+export default async function SignupPage({ searchParams }: { searchParams: Promise<{ ref?: string | string[] }> }) {
+  const params = await searchParams;
+  const referralParam = Array.isArray(params.ref) ? params.ref[0] : params.ref;
+  const referralCode = normalizeReferralCode(referralParam);
   const catalog = await readCachedPlatformBillingCatalog();
   const monthlyPriceLabel = formatPeso(catalog?.monthlyPriceCentavos ?? DEFAULT_MONTHLY_PRICE_CENTAVOS);
   const annualOptionsAvailable = (catalog?.variants ?? DEFAULT_BILLING_VARIANTS).some((variant) => variant.isActive && variant.intervalUnit === "year");
@@ -60,7 +64,7 @@ export default async function SignupPage() {
         </section>
 
         <section className="rounded-card border border-line bg-surface p-6 shadow-[var(--shadow-card)] sm:p-9" aria-labelledby="signup-heading">
-          <SignupForm monthlyPriceLabel={monthlyPriceLabel} annualOptionsAvailable={annualOptionsAvailable} />
+          <SignupForm monthlyPriceLabel={monthlyPriceLabel} annualOptionsAvailable={annualOptionsAvailable} referralCode={referralCode} />
         </section>
       </div>
     </main>

@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { resolveSignupOrigin, signupConfirmationRedirect } from "@/lib/signup-redirect";
+import { normalizeReferralCode } from "@/lib/referrals";
 import type { SignupField, SignupState } from "./state";
 
 // The form state and its initial value live in `./state` because a
@@ -76,6 +77,7 @@ export async function signupStoreOwner(_previousState: SignupState, formData: Fo
   const email = readText(formData, "email").toLowerCase();
   const password = readSecret(formData, "password");
   const passwordConfirmation = readSecret(formData, "password_confirmation");
+  const referralCode = normalizeReferralCode(readText(formData, "referral_code"));
   const errors: SignupState["errors"] = {};
 
   if (fullName.length < 2 || fullName.length > 120) errors.full_name = "Enter your name (2–120 characters).";
@@ -103,6 +105,7 @@ export async function signupStoreOwner(_previousState: SignupState, formData: Fo
       organization_name: organizationName,
       store_name: storeName,
       store_address: storeAddress,
+      ...(referralCode ? { referral_code: referralCode } : {}),
     },
     ...(origin ? { emailRedirectTo: signupConfirmationRedirect(origin) } : {}),
   };

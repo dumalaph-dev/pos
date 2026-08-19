@@ -1,3 +1,5 @@
+import { isComplimentaryAccessCurrent } from "./platform-access.ts";
+
 export const DEFAULT_TRIAL_DAYS = 14;
 export const TRIAL_DAY_MS = 24 * 60 * 60 * 1000;
 /**
@@ -40,6 +42,7 @@ export type TrialLifecycleInput = {
   billingMode?: string | null;
   providerSubscriptionId?: string | null;
   providerPaymentIntentId?: string | null;
+  complimentaryAccessUntil?: string | null;
 };
 
 export function readTrialLifecycle(input: TrialLifecycleInput, now = Date.now()): TrialLifecycle {
@@ -106,6 +109,7 @@ export type SubscriptionAccessInput = {
   currentPeriodEnd?: string | null;
   trialDays?: number;
   billingMode?: string | null;
+  complimentaryAccessUntil?: string | null;
 };
 
 /**
@@ -118,6 +122,8 @@ export type SubscriptionAccessInput = {
  */
 export function isSubscriptionAccessCurrent(input: SubscriptionAccessInput, now = Date.now()): boolean | null {
   if (input.status === null || input.status === undefined) return null;
+
+  if (isComplimentaryAccessCurrent(input.complimentaryAccessUntil, now)) return true;
 
   switch (input.status) {
     case "trialing":

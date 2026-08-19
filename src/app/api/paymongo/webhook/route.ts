@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/employee-auth";
 import { normalizeSubscriptionStatus } from "@/lib/billing";
 import { markPromotionRedemptionConverted } from "@/lib/platform-promotions-server";
 import { readPayMongoString, resourceAttributes } from "@/lib/paymongo-server";
+import { isMissingReferralSchemaError, qualifyReferralForPaidConversion } from "@/lib/referrals-server";
 import { activateTemporaryQrPhCheckout, readCheckoutPaymentStatus, readTemporaryQrPhCheckoutMetadata } from "@/lib/temporary-qrph";
 
 type ProviderResource = {
@@ -120,6 +121,21 @@ async function applyProviderEvent(admin: NonNullable<ReturnType<typeof createAdm
   if (result.error) throw new Error("Organization billing status could not be updated.");
   if (status === "active") {
     await markPromotionRedemptionConverted(admin, organization.subscription_provider_subscription_id ?? subscriptionId ?? paymentIntentId, paymentIntentId);
+    const referralReward = await qualifyReferralForPaidConversion(admin, organization.id);
+    if (!referralReward.schemaAvailable) {
+      console.warn("[paymongo/webhook] Referral reward migration is not available; billing access was still updated.");
+    } else if (referralReward.error) {
+      if (isMissingReferralSchemaError(referralReward.error)) {
+        console.warn("[paymongo/webhook] Referral reward schema is incomplete; billing access was still updated.");
+      } else {
+        throw new Error(`Referral reward qualification failed: ${referralReward.error}`);
+      }
+    } else if (referralReward.rewarded) {
+      console.info("[paymongo/webhook] Referral reward issued", {
+        referralId: referralReward.referralId,
+        rewardDays: referralReward.rewardDays,
+      });
+    }
     await invalidateAdminProfilesForOrganization(organization.id);
   }
 }

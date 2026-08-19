@@ -18,7 +18,8 @@ export type SignupField =
   | "store_address"
   | "email"
   | "password"
-  | "password_confirmation";
+  | "password_confirmation"
+  | "referral_code";
 
 export type SignupState = {
   ok: boolean;

@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { createAdminClient } from "@/lib/employee-auth";
+import { readCurrentComplimentaryAccess } from "@/lib/platform-access-server";
 import { createClient } from "@/lib/supabase/server";
 import { createTtlCache } from "@/lib/ttl-cache";
 import { transitionExpiredTrial } from "@/lib/trial-server";
@@ -23,6 +24,10 @@ export type AdminProfile = {
     subscription_billing_mode?: string | null;
     subscription_provider_subscription_id?: string | null;
     subscription_provider_payment_intent_id?: string | null;
+    complimentary_access_grant_id?: string | null;
+    complimentary_access_until?: string | null;
+    complimentary_access_source?: string | null;
+    complimentary_access_reason?: string | null;
   } | null;
   stores: { name?: string } | null;
 };
@@ -74,11 +79,26 @@ export const getAdminProfile = cache(async (userId: string): Promise<AdminProfil
       const profile = (data as AdminProfile) ?? null;
       if (!profile || profile.organizations?.account_status !== "active") return profile;
 
+      const admin = createAdminClient();
+      const complimentaryAccess = admin
+        ? await readCurrentComplimentaryAccess(admin, profile.org_id)
+        : null;
+      if (complimentaryAccess && profile.organizations) {
+        profile.organizations = {
+          ...profile.organizations,
+          complimentary_access_grant_id: complimentaryAccess.grantId,
+          complimentary_access_until: complimentaryAccess.until,
+          complimentary_access_source: complimentaryAccess.source,
+          complimentary_access_reason: complimentaryAccess.reason,
+        };
+      }
+
       const transition = await transitionExpiredTrial(profile.org_id, {
         status: profile.organizations.subscription_status,
         trialStartedAt: profile.organizations.subscription_trial_started_at,
         trialEndsAt: profile.organizations.subscription_trial_ends_at,
         currentPeriodEnd: profile.organizations.subscription_current_period_end,
+        complimentaryAccessUntil: profile.organizations.complimentary_access_until,
       });
       if (transition.transitioned && profile.organizations) {
         profile.organizations = {

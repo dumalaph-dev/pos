@@ -8,6 +8,8 @@ import { getAdminBranchOptions } from "@/lib/admin/branches";
 import { formatBillingDate, getBillingPlan, isBillingPeriodCurrent, normalizeSubscriptionStatus, subscriptionStatusLabel, type BillingPlan, type SubscriptionStatus } from "@/lib/billing";
 import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
+import { isComplimentaryAccessCurrent } from "@/lib/platform-access";
+import { readCurrentComplimentaryAccess } from "@/lib/platform-access-server";
 import { billingVariantMonthlyEquivalent, billingVariantPriceLabel, calculateBillingVariantPrice, DEFAULT_MONTHLY_PRICE_CENTAVOS, DEFAULT_PLATFORM_POLICIES, hasSubscriptionPaymentMethod, isPolicyGateOpen, readPolicyNumber, type BillingCatalog, type BillingVariant } from "@/lib/platform-operations";
 import { payMongoConfiguration, readPayMongoSubscriptionReadiness, readPlatformOperations } from "@/lib/platform-operations-server";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
@@ -98,6 +100,8 @@ export default async function BillingPage() {
     ? operations.catalog
     : { ...operations.catalog, variants: [] };
   const currentVariant = findCurrentBillingVariant(catalog.variants, organization);
+  const complimentaryAccess = platformAdmin ? await readCurrentComplimentaryAccess(platformAdmin, profile.org_id) : null;
+  const complimentaryAccessIsCurrent = Boolean(complimentaryAccess && isComplimentaryAccessCurrent(complimentaryAccess.until));
   const policyGateOpen = operations.policies.schemaAvailable && isPolicyGateOpen(operations.policies);
   const paymongo = payMongoConfiguration();
   const paymongoSubscriptionReadiness = await readPayMongoSubscriptionReadiness();
@@ -137,6 +141,7 @@ export default async function BillingPage() {
   const currentAccessIsValid = (
     (status === "active" && (billingMode !== "temporary_qrph" || isBillingPeriodCurrent(currentPeriodEnd)))
     || trialAccessIsCurrent
+    || complimentaryAccessIsCurrent
   );
   const showCheckout = status !== "active" || !currentAccessIsValid;
   const feedbackResult = trial.isLastDay || trial.isExpired
@@ -175,9 +180,10 @@ export default async function BillingPage() {
           activeBranches={activeBranches}
           totalBranches={branches.length}
           monthlyPriceLabel={monthlyPriceLabel}
+          complimentaryAccessUntil={complimentaryAccessIsCurrent ? complimentaryAccess?.until ?? null : null}
         />
 
-        {trial.reminder && <TrialReminder trial={trial} monthlyPriceLabel={monthlyPriceLabel} />}
+        {trial.reminder && !complimentaryAccessIsCurrent && <TrialReminder trial={trial} monthlyPriceLabel={monthlyPriceLabel} />}
         {(trial.isLastDay || trial.isExpired) && <TrialFeedbackForm submitted={feedbackSubmitted} />}
 
         {showCheckout && (
@@ -216,6 +222,7 @@ function CurrentPlanCard({
   activeBranches,
   totalBranches,
   monthlyPriceLabel,
+  complimentaryAccessUntil,
 }: {
   status: SubscriptionStatus | null;
   accessIsCurrent: boolean;
@@ -228,17 +235,22 @@ function CurrentPlanCard({
   activeBranches: number;
   totalBranches: number;
   monthlyPriceLabel: string;
+  complimentaryAccessUntil: string | null;
 }) {
-  const trialExpired = status === "paused" && trial.isExpired;
-  const isTrialing = status === null || status === "trialing" || trialExpired;
+  const complimentaryAccessIsCurrent = isComplimentaryAccessCurrent(complimentaryAccessUntil);
+  const trialExpired = status === "paused" && trial.isExpired && !complimentaryAccessIsCurrent;
+  const isTrialing = !complimentaryAccessIsCurrent && (status === null || status === "trialing" || trialExpired);
   const isTrial = isTrialing && !trialExpired;
   const isActive = status === "active" && accessIsCurrent;
   const accessEnded = status === "active" && !accessIsCurrent;
+  const isComplimentary = complimentaryAccessIsCurrent && !isActive && !isTrial;
   const isRecurring = billingMode !== "temporary_qrph";
-  const statusLabel = isActive ? "Active" : trialExpired ? "Trial ended" : isTrial ? "Trial active" : accessEnded ? "Access ended" : status ? subscriptionStatusLabel(status) : "Not connected";
-  const title = trialExpired ? "Trial ended" : isTrial ? "Premium trial" : "Premium";
+  const statusLabel = isActive ? "Active" : isComplimentary ? "Complimentary Premium" : trialExpired ? "Trial ended" : isTrial ? "Trial active" : accessEnded ? "Access ended" : status ? subscriptionStatusLabel(status) : "Not connected";
+  const title = isComplimentary ? "Complimentary Premium" : trialExpired ? "Trial ended" : isTrial ? "Premium trial" : "Premium";
   const summary = isActive
     ? "Your Premium plan is active across every branch and staff account."
+    : isComplimentary
+      ? `Platform-owned access is active through ${complimentaryAccessUntil ? formatBillingDate(complimentaryAccessUntil) : "the grant end date"}. You can subscribe at any time to continue without an entitlement gap.`
     : trialExpired
       ? "Your 14-day trial has ended. Subscribe to keep the complete Premium workspace available."
     : isTrial
@@ -250,16 +262,18 @@ function CurrentPlanCard({
   const monthlyEquivalentLabel = variant ? formatPeso(billingVariantMonthlyEquivalent(catalog, variant)) : monthlyPriceLabel;
   const variantLabel = variant?.label ?? "Monthly";
   const planCadence = variant?.intervalUnit === "year" ? `Paid for ${variant.intervalCount} ${variant.intervalCount === 1 ? "year" : "years"}` : "Billed monthly";
-  const timingLabel = trialExpired ? "Trial ended" : isTrialing ? "Trial ends" : isRecurring ? "Next billing" : "Access through";
-  const timingValue = isTrialing
+  const timingLabel = isComplimentary ? "Access through" : trialExpired ? "Trial ended" : isTrialing ? "Trial ends" : isRecurring ? "Next billing" : "Access through";
+  const timingValue = isComplimentary
+    ? complimentaryAccessUntil ? formatBillingDate(complimentaryAccessUntil) : "Grant end date"
+    : isTrialing
     ? trial.endsAt ? formatBillingDate(trial.endsAt) : "14 days included"
     : currentPeriodEnd ? formatBillingDate(currentPeriodEnd) : "Not scheduled";
-  const cardTone = isActive
+  const cardTone = isActive || isComplimentary
     ? "border-primary/20 bg-primary text-primary-fg shadow-[var(--shadow-pop)]"
     : isTrial
       ? "border-accent/30 bg-secondary text-ink shadow-[var(--shadow-card)]"
       : "border-line bg-surface text-ink shadow-[var(--shadow-card)]";
-  const mutedTone = isActive ? "text-primary-fg/72" : "text-ink-muted";
+  const mutedTone = isActive || isComplimentary ? "text-primary-fg/72" : "text-ink-muted";
 
   return (
     <section className={`relative mt-5 overflow-hidden rounded-card border ${cardTone}`} aria-labelledby="current-plan-heading">
@@ -273,25 +287,26 @@ function CurrentPlanCard({
                 <h2 id="current-plan-heading" className="mt-1 text-2xl font-extrabold tracking-[-0.04em]">{title}</h2>
               </div>
             </div>
-            <span className={`rounded-pill px-3 py-1.5 text-xs font-extrabold ${isActive ? "bg-primary-fg/15 text-primary-fg" : isTrial ? "bg-primary/10 text-primary" : "bg-warning/15 text-ink"}`}>{statusLabel}</span>
+            <span className={`rounded-pill px-3 py-1.5 text-xs font-extrabold ${isActive || isComplimentary ? "bg-primary-fg/15 text-primary-fg" : isTrial ? "bg-primary/10 text-primary" : "bg-warning/15 text-ink"}`}>{statusLabel}</span>
           </div>
 
           <p className={`mt-3 max-w-xl text-sm leading-5 ${mutedTone}`}>{summary}</p>
 
-          <div className={`mt-4 grid gap-2 border-t pt-3 sm:grid-cols-3 ${isActive ? "border-primary-fg/15" : "border-line"}`}>
-            <PlanMetric inverse={isActive} label={isTrialing ? "Trial remaining" : "Plan"} value={isTrialing ? formatTrialRemaining(trial.remainingMs) : variantLabel} detail={isTrialing ? "Live countdown below" : planCadence} />
-            <PlanMetric inverse={isActive} label={isTrialing ? "Starting price" : "Monthly equivalent"} value={isTrialing ? monthlyPriceLabel : monthlyEquivalentLabel} detail={isTrialing ? "Monthly billing" : variant?.discountPercent ? `${variant.discountPercent}% plan savings` : "Premium rate"} />
-            <PlanMetric inverse={isActive} label={timingLabel} value={timingValue} detail={isTrialing ? "All features included" : isRecurring ? "Automatic renewal" : "Renew before this date"} />
+          <div className={`mt-4 grid gap-2 border-t pt-3 sm:grid-cols-3 ${isActive || isComplimentary ? "border-primary-fg/15" : "border-line"}`}>
+            <PlanMetric inverse={isActive || isComplimentary} label={isComplimentary ? "Access" : isTrialing ? "Trial remaining" : "Plan"} value={isComplimentary ? "Complimentary" : isTrialing ? formatTrialRemaining(trial.remainingMs) : variantLabel} detail={isComplimentary ? "Platform grant" : isTrialing ? "Live countdown below" : planCadence} />
+            <PlanMetric inverse={isActive || isComplimentary} label={isComplimentary ? "Plan" : isTrialing ? "Starting price" : "Monthly equivalent"} value={isComplimentary ? "Premium" : isTrialing ? monthlyPriceLabel : monthlyEquivalentLabel} detail={isComplimentary ? "No provider charge" : isTrialing ? "Monthly billing" : variant?.discountPercent ? `${variant.discountPercent}% plan savings` : "Premium rate"} />
+            <PlanMetric inverse={isActive || isComplimentary} label={timingLabel} value={timingValue} detail={isComplimentary ? "Subscribe before this date" : isTrialing ? "All features included" : isRecurring ? "Automatic renewal" : "Renew before this date"} />
           </div>
 
           {isTrialing && trial.known && trial.endsAt && trial.remainingMs !== null && <TrialCountdown endsAt={trial.endsAt} initialRemainingMs={trial.remainingMs} inverse={isActive} />}
 
           {isActive && <p className={`mt-5 text-xs leading-5 ${mutedTone}`}>Current total: <strong className={isActive ? "text-primary-fg" : "text-ink"}>{totalPriceLabel}</strong>{variant?.intervalUnit === "year" ? ` for ${variant.intervalCount} ${variant.intervalCount === 1 ? "year" : "years"}` : " per month"} · {activeBranches} of {totalBranches} branches active.</p>}
+          {isComplimentary && <p className={`mt-5 text-xs leading-5 ${mutedTone}`}>Complimentary access covers {activeBranches} of {totalBranches} active branches. Subscription checkout remains available before the grant ends.</p>}
         </div>
 
         <aside className="rounded-xl border border-primary/10 bg-primary/5 p-4" aria-label="Premium plan features">
           <div className="flex items-center justify-between gap-3">
-            <p className={`text-xs font-extrabold uppercase tracking-[0.14em] ${isActive ? "text-primary-fg/65" : "text-accent"}`}>Included with Premium</p>
+            <p className={`text-xs font-extrabold uppercase tracking-[0.14em] ${isActive || isComplimentary ? "text-primary-fg/65" : "text-accent"}`}>Included with Premium</p>
             <AdminIcon name="star" size={17} />
           </div>
           <ul className={`mt-3 grid gap-2 text-sm leading-5 ${mutedTone}`}>

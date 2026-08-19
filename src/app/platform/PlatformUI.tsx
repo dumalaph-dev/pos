@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AdminIcon } from "@/components/admin/AdminIcon";
+import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 
 export function PlatformPageHeader({
   eyebrow,
@@ -33,7 +33,7 @@ export function PlatformMetric({
   label: string;
   value: number | string;
   detail: string;
-  icon?: "dashboard" | "customers" | "employees" | "wallet" | "lock" | "refresh";
+  icon?: AdminIconName;
 }) {
   return (
     <article className="rounded-[18px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:border-line-strong hover:shadow-[var(--shadow-pop)]">

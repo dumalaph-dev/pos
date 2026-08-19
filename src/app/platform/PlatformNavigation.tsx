@@ -9,7 +9,7 @@ const PLATFORM_NAV_ITEMS: Array<{ label: string; href: string; icon: AdminIconNa
   { label: "Overview", href: "/platform", icon: "dashboard", detail: "Command center" },
   { label: "Plans & Pricing", href: "/platform/plans", icon: "wallet", detail: "Subscription catalog" },
   { label: "Promo & Marketing", href: "/platform/promotions", icon: "tag", detail: "Campaign codes & performance" },
-  { label: "Users", href: "/platform/users", icon: "customers", detail: "Workspace access" },
+  { label: "Directory", href: "/platform/users", icon: "customers", detail: "Users & organizations" },
   { label: "Policies", href: "/platform/policies", icon: "lock", detail: "Operating rules" },
   { label: "Operations", href: "/platform/operations", icon: "refresh", detail: "Lifecycle & support" },
 ];

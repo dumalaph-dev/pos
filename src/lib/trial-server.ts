@@ -1,4 +1,6 @@
 import { createAdminClient } from "@/lib/employee-auth";
+import { isComplimentaryAccessCurrent } from "@/lib/platform-access";
+import { readCurrentComplimentaryAccess } from "@/lib/platform-access-server";
 import {
   readTrialLifecycle,
   TRIAL_EXPIRED_SUBSCRIPTION_STATUS,
@@ -27,6 +29,17 @@ export async function transitionExpiredTrial(
 
   const admin = createAdminClient();
   if (!admin) return { transitioned: false, status: input.status };
+
+  if (isComplimentaryAccessCurrent(input.complimentaryAccessUntil, now)) {
+    return { transitioned: false, status: input.status };
+  }
+
+  // The grant lookup is intentionally best-effort for rolling deploys. If the
+  // grant table is not present yet, the existing trial expiry path remains in
+  // force; once migration 0052 is applied, the same guard protects this write
+  // at the database layer as well.
+  const complimentaryAccess = await readCurrentComplimentaryAccess(admin, organizationId);
+  if (complimentaryAccess) return { transitioned: false, status: input.status };
 
   try {
     const rpc = await admin.rpc("expire_trialing_organization", { p_org_id: organizationId });
