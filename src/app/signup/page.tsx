@@ -2,15 +2,20 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { formatPeso } from "@/lib/money";
+import { socialMetadata } from "@/lib/page-metadata";
 import { DEFAULT_BILLING_VARIANTS, DEFAULT_MONTHLY_PRICE_CENTAVOS } from "@/lib/platform-operations";
 import { readCachedPlatformBillingCatalog } from "@/lib/platform-operations-server";
 import SignupForm from "./SignupForm";
 
+const TITLE = "Create your POS workspace";
+const DESCRIPTION = "Register a private POS workspace for your store.";
+
 export const metadata: Metadata = {
   // Bare title: the root layout appends "| Dumala POS".
-  title: "Create your POS workspace",
-  description: "Register a private POS workspace for your store.",
+  title: TITLE,
+  description: DESCRIPTION,
   alternates: { canonical: "/signup" },
+  ...socialMetadata({ title: `${TITLE} | Dumala POS`, description: DESCRIPTION, path: "/signup" }),
 };
 
 export const dynamic = "force-dynamic";
