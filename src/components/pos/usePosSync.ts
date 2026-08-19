@@ -6,6 +6,7 @@ import {
   flushAuditOutbox,
   flushOutbox,
   getPendingQueueStatus,
+  type SyncedOrderCallback,
   watchPendingStatus,
   type OfflineProfileSnapshot,
   type OfflineSyncScope,
@@ -28,6 +29,7 @@ export function usePosSync({
   refreshCatalog,
   onRecovered,
   onOffline,
+  onOrderSynced,
 }: {
   supabase: BrowserSupabaseClient;
   offlineProfile?: OfflineProfileSnapshot | null;
@@ -36,6 +38,7 @@ export function usePosSync({
   refreshCatalog: () => Promise<void>;
   onRecovered?: () => void;
   onOffline?: () => void;
+  onOrderSynced?: SyncedOrderCallback;
 }) {
   const [state, dispatch] = useReducer(syncReducer, INITIAL_SYNC_STATE);
   const retryMs = useRef(2000);
@@ -75,7 +78,7 @@ export function usePosSync({
     dispatch({ type: "started" });
     try {
       const [orderResult, auditResult] = await Promise.all([
-        flushOutbox(supabase, scope),
+        flushOutbox(supabase, scope, onOrderSynced),
         flushAuditOutbox(supabase, scope),
       ]);
       const failed = orderResult.failed + auditResult.failed;
@@ -102,7 +105,7 @@ export function usePosSync({
       dispatch({ type: "failed", error: "Sync could not run — queued work is safe and will retry automatically." });
       retryMs.current = Math.min(60000, retryMs.current * 2);
     }
-  }, [offlineProfile, onRecovered, refreshCatalog, requiresOfflineUnlock, scope, supabase]);
+  }, [offlineProfile, onOrderSynced, onRecovered, refreshCatalog, requiresOfflineUnlock, scope, supabase]);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;

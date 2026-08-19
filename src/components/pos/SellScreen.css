@@ -718,6 +718,159 @@
 .pos-health-panel__metrics dd { margin: 0; color: var(--text); font-size: 10px; font-weight: 800; text-align: right; }
 .pos-health-panel__error { margin: 10px 0 0; padding: 8px; border-radius: 8px; color: var(--danger); background: var(--danger-soft); font-size: 10px; line-height: 1.4; }
 
+.online-pickup-banner {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 18px;
+  border-bottom: 1px solid rgba(141, 104, 49, 0.28);
+  color: var(--primary);
+  background: linear-gradient(90deg, rgba(236, 222, 198, 0.96), rgba(250, 247, 240, 0.96));
+}
+
+.online-pickup-banner.is-loading,
+.online-pickup-banner.is-error {
+  gap: 8px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.online-pickup-banner.is-error {
+  color: var(--danger);
+  border-bottom-color: rgba(154, 46, 19, 0.2);
+  background: var(--danger-soft);
+}
+
+.online-pickup-banner > strong,
+.online-pickup-banner > span {
+  font-size: 11px;
+}
+
+.online-pickup-banner > span {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.online-pickup-banner > button {
+  min-height: 32px;
+  margin-left: auto;
+  padding: 0 10px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  color: inherit;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.online-pickup-banner__identity,
+.online-pickup-banner__meta {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.online-pickup-banner__identity {
+  flex: 1 1 260px;
+}
+
+.online-pickup-banner__identity strong {
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+
+.online-pickup-banner__identity > span:last-child {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.online-pickup-banner__eyebrow {
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.online-pickup-banner__meta {
+  flex: 0 1 250px;
+  grid-template-columns: auto auto;
+  align-items: center;
+  column-gap: 12px;
+  text-align: right;
+}
+
+.online-pickup-banner__meta span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.online-pickup-banner__meta strong {
+  font-size: 15px;
+}
+
+.online-pickup-banner__meta small {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--text-subtle);
+  font-size: 10px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.online-pickup-banner__dismiss {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  color: var(--primary);
+  background: rgba(251, 248, 242, 0.78);
+  font-size: 10px;
+  font-weight: 900;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.online-pickup-banner__dismiss:hover,
+.online-pickup-banner > button:hover {
+  background: var(--primary-soft);
+}
+
+.online-pickup-banner button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .online-pickup-banner {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    padding: 10px 12px;
+  }
+
+  .online-pickup-banner__identity,
+  .online-pickup-banner__meta {
+    flex-basis: calc(100% - 48px);
+  }
+
+  .online-pickup-banner__meta {
+    text-align: left;
+  }
+
+  .online-pickup-banner__dismiss {
+    margin-left: auto;
+  }
+}
+
 @media (pointer: coarse) {
   .product-card,
   .order-type-select,
@@ -901,6 +1054,19 @@
   border-color: rgba(154, 46, 19, 0.27);
   box-shadow: 0 9px 20px rgba(78, 46, 21, 0.11);
   transform: translateY(-3px);
+}
+
+.product-card.is-locked,
+.product-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.product-card.is-locked:hover,
+.product-card:disabled:hover {
+  border-color: rgba(217, 201, 178, 0.64);
+  box-shadow: var(--shadow-card);
+  transform: none;
 }
 
 .product-card:active {
@@ -1241,6 +1407,20 @@
   transform: translateY(-1px);
 }
 
+.order-type-select:disabled,
+.order-discount-button:disabled {
+  color: var(--text-muted);
+  background: rgba(230, 222, 210, 0.52);
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
+.order-discount-button:disabled:hover {
+  border-color: rgba(217, 201, 178, 0.9);
+  background: rgba(230, 222, 210, 0.52);
+  transform: none;
+}
+
 .order-discount-button.is-active {
   border-color: rgba(154, 46, 19, 0.42);
   color: var(--accent);
@@ -1395,6 +1575,11 @@
 
 .order-line__remove:hover {
   transform: scale(1.1);
+}
+
+.order-line__remove:disabled {
+  cursor: not-allowed;
+  opacity: 0.2;
 }
 
 .order-empty {

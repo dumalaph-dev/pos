@@ -40,6 +40,8 @@ export type SyncBatchResult = {
   lastError: string | null;
 };
 
+export type SyncedOrderCallback = (onlineOrderId: string, posOrderId: string) => Promise<void>;
+
 export type PendingQueueStatus = {
   pending: number;
   oldestQueuedSaleAt: string | null;
@@ -684,7 +686,7 @@ export function watchPendingStatus(cb: (status: PendingQueueStatus) => void, sco
  * Replay every queued order through `place_order`. The RPC is idempotent on
  * local_uuid, so replays are safe. Returns how many orders were confirmed.
  */
-export async function flushOutbox(client: OrderSyncClient, scope: OfflineSyncScope): Promise<SyncBatchResult> {
+export async function flushOutbox(client: OrderSyncClient, scope: OfflineSyncScope, onOrderSynced?: SyncedOrderCallback): Promise<SyncBatchResult> {
   const db = getDb();
   const pending = (await db.outbox.orderBy("created_at").toArray())
     .filter((item) => matchesOrderScope(item.p_order, scope));
@@ -699,6 +701,19 @@ export async function flushOutbox(client: OrderSyncClient, scope: OfflineSyncSco
         p_items: item.p_items,
       });
       error = res.error ?? null;
+      const onlineOrderId = typeof item.p_order.online_order_id === "string" ? item.p_order.online_order_id : null;
+      const posOrderId = typeof res.data === "string" ? res.data : null;
+      if (!error && onlineOrderId) {
+        if (!posOrderId || !onOrderSynced) {
+          error = new Error("Online pickup handoff is missing the synced POS order.");
+        } else {
+          try {
+            await onOrderSynced(onlineOrderId, posOrderId);
+          } catch (handoffError) {
+            error = handoffError;
+          }
+        }
+      }
       if (!error) await linkPendingAudits(item.local_uuid, res.data, scope);
     } catch (e) {
       error = e; // network failure — keep queued, retry later
