@@ -25,7 +25,7 @@ export function ComplimentaryGrantPanel({ orgId, grants, schemaAvailable, policy
     ? "Restore the suspended account before granting tenant access."
     : !policyGateOpen
       ? "Publish both platform policies to unlock complimentary access."
-      : "Apply migration 0052_platform_access_grants.sql to enable grants.";
+      : "Apply migrations 0052_platform_access_grants.sql and 0054_atomic_platform_access_grant.sql to enable grants.";
 
   return (
     <section className="mt-8 overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)]" aria-labelledby="complimentary-access-heading">
@@ -34,7 +34,7 @@ export function ComplimentaryGrantPanel({ orgId, grants, schemaAvailable, policy
           <div>
             <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-primary">Platform entitlement</p>
             <h2 id="complimentary-access-heading" className="mt-1 text-xl font-extrabold">Complimentary Premium access</h2>
-            <p className="mt-1 max-w-2xl text-sm leading-5 text-ink-muted">Add a time-bounded Premium grant without changing the organization&apos;s paid subscription, trial dates, or provider records. Every grant and revocation is audited.</p>
+            <p className="mt-1 max-w-2xl text-sm leading-5 text-ink-muted">Add a time-bounded Premium grant without changing the organization&apos;s paid subscription, trial dates, or provider records. Paused or expired subscriptions can be restored deliberately; suspended accounts remain blocked. Every grant and revocation is audited.</p>
           </div>
           <span className="inline-flex w-fit items-center gap-2 rounded-full bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary"><AdminIcon name="star" size={14} /> {grants.length} recorded grant{grants.length === 1 ? "" : "s"}</span>
         </div>
@@ -46,7 +46,7 @@ export function ComplimentaryGrantPanel({ orgId, grants, schemaAvailable, policy
           <div>
             <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-primary">New grant</p>
             <h3 className="mt-1 text-base font-extrabold">Give Premium days</h3>
-            <p className="mt-1 text-xs leading-5 text-ink-muted">Use a clear reason so future operators can understand why access was added.</p>
+            <p className="mt-1 text-xs leading-5 text-ink-muted">Use a clear reason so future operators can understand why access was added. “After current access ends” follows the server-side trial or prepaid expiry boundary; paused and expired accounts start immediately.</p>
           </div>
           <fieldset disabled={locked || grantPending} className="mt-4 space-y-3">
             <label className="block text-[11px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor={`grant-days-${orgId}`}>Premium days
