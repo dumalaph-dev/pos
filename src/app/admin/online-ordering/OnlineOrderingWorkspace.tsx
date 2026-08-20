@@ -6,16 +6,20 @@ import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import * as QRCode from "qrcode";
 import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
+import { OnlineOrderAlertBanner } from "@/components/online-ordering/OnlineOrderAlertBanner";
+import { useOnlineOrderAttention } from "@/components/online-ordering/useOnlineOrderAttention";
 import { OnlineMenuEditor } from "./OnlineMenuEditor";
 import {
   formatOnlineEta,
   formatOrderStatusLabel,
+  getOnlineOrderNextAction,
   pickupSlotLabel,
   type OnlineOrderingBrandDefaults,
   type OnlineOrderingFulfillmentMethod,
   type OnlineOrderStatus,
   type OnlineOrderingSettings,
 } from "@/lib/online-ordering";
+import { ONLINE_ORDER_ALERT_POLL_MS } from "@/lib/online-order-alerts";
 import { formatPeso } from "@/lib/money";
 import { updateOnlineOrderStatus, updateOnlineOrderingSettings } from "./actions";
 
@@ -54,7 +58,7 @@ export function OnlineOrderingWorkspace({
   canManage,
   canUploadLogo,
 }: {
-  store: { id: string; name: string; address: string | null; slug: string };
+  store: { id: string; orgId: string; name: string; address: string | null; slug: string };
   settings: OnlineOrderingSettings;
   onlineBrandDefaults: OnlineOrderingBrandDefaults;
   shareUrl: string;
@@ -75,6 +79,15 @@ export function OnlineOrderingWorkspace({
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>(() => savedMessage.toLowerCase().includes("appearance") ? "appearance" : "queue");
   const tabRefs = useRef<Record<WorkspaceTab, HTMLButtonElement | null>>({ queue: null, appearance: null });
+  const {
+    pendingOrders: newPickupOrders,
+    announcement: attentionAnnouncement,
+    attentionPulse,
+  } = useOnlineOrderAttention({
+    orders,
+    scopeKey: `${store.orgId}:${store.id}`,
+    enabled: !queryError,
+  });
 
   function refreshQueue() {
     setRefreshing(true);
@@ -89,7 +102,7 @@ export function OnlineOrderingWorkspace({
       setLastUpdatedAt(new Date().toISOString());
       router.refresh();
     };
-    const interval = window.setInterval(refreshIfVisible, 15_000);
+    const interval = window.setInterval(refreshIfVisible, ONLINE_ORDER_ALERT_POLL_MS);
     const handleVisibility = () => {
       if (document.visibilityState === "visible") refreshIfVisible();
     };
@@ -164,6 +177,13 @@ export function OnlineOrderingWorkspace({
           {errorMessage || queryError || savedMessage}
         </div>
       )}
+
+      <OnlineOrderAlertBanner
+        surface="admin"
+        orders={newPickupOrders}
+        announcement={attentionAnnouncement}
+        attentionPulse={attentionPulse}
+      />
 
       <div className="mt-6 rounded-[20px] border border-line bg-surface p-1.5 shadow-[var(--shadow-card)]">
         <div className="grid grid-cols-2 gap-1" role="tablist" aria-label="Online ordering workspace">
@@ -246,7 +266,7 @@ function WorkspaceTabButton({ id, panelId, label, detail, icon, active, onClick,
 
 type QueueDashboardProps = {
   hidden: boolean;
-  store: { id: string; name: string; address: string | null; slug: string };
+  store: { id: string; orgId: string; name: string; address: string | null; slug: string };
   settings: OnlineOrderingSettings;
   shareUrl: string;
   orders: QueueOrder[];
@@ -409,13 +429,7 @@ function QueueFilterButton({ label, count, active, onClick }: { label: string; c
 }
 
 function QueueRow({ order, storeId, canManage }: { order: QueueOrder; storeId: string; canManage: boolean }) {
-  const nextAction = order.status === "new" || order.status === "confirmed"
-    ? { label: "Start preparing", status: "preparing" as OnlineOrderStatus }
-    : order.status === "preparing"
-      ? { label: "Mark ready", status: "ready" as OnlineOrderStatus }
-      : order.status === "ready"
-        ? { label: order.fulfillmentMethod === "delivery" ? "Mark delivered" : "Mark picked up", status: "picked_up" as OnlineOrderStatus }
-        : null;
+  const nextAction = getOnlineOrderNextAction(order.status, order.fulfillmentMethod);
   const statusClass = order.status === "ready"
     ? "bg-success/10 text-success"
     : order.status === "preparing"
