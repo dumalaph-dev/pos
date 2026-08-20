@@ -154,7 +154,7 @@ export default async function OnlineOrderingPage({
         <div className="mt-5 flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Store owner feature · {store.name}</p>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-ink-muted">Publish a menu customers can reach from a QR code, then turn every order into a predictable pickup handoff for your team.</p>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-ink-muted">Manage the live pickup queue first, then tune the customer-facing menu and copy from the separate Theme &amp; copy tab.</p>
           </div>
           <span className="inline-flex items-center gap-2 rounded-full bg-primary-soft px-3 py-2 text-xs font-extrabold text-primary"><i className={`h-2 w-2 rounded-full ${settings.enabled ? "bg-success" : "bg-warning"}`} />{settings.enabled ? "Accepting orders" : "Paused"}</span>
         </div>

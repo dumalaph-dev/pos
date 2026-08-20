@@ -1,11 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import * as QRCode from "qrcode";
-import { AdminIcon } from "@/components/admin/AdminIcon";
+import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 import { OnlineMenuEditor } from "./OnlineMenuEditor";
 import {
   formatOnlineEta,
@@ -32,6 +32,7 @@ type QueueOrder = {
 };
 
 type QueueFilter = "attention" | "preparing" | "ready" | "all";
+type WorkspaceTab = "queue" | "appearance";
 
 const ACTIVE_QUEUE_STATUSES: OnlineOrderStatus[] = ["new", "confirmed", "preparing"];
 
@@ -61,6 +62,8 @@ export function OnlineOrderingWorkspace({
   const [filter, setFilter] = useState<QueueFilter>("attention");
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>(() => savedMessage.toLowerCase().includes("appearance") ? "appearance" : "queue");
+  const tabRefs = useRef<Record<WorkspaceTab, HTMLButtonElement | null>>({ queue: null, appearance: null });
 
   function refreshQueue() {
     setRefreshing(true);
@@ -114,6 +117,16 @@ export function OnlineOrderingWorkspace({
     if (filter === "preparing") return orders.filter((order) => order.status === "preparing");
     return orders.filter((order) => order.status === "ready");
   }, [filter, orders]);
+  const attentionCount = orders.filter((order) => order.status === "new" || order.status === "confirmed").length;
+  const preparingCount = orders.filter((order) => order.status === "preparing").length;
+
+  function handleWorkspaceTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, current: WorkspaceTab) {
+    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+    event.preventDefault();
+    const next = current === "queue" ? "appearance" : "queue";
+    setActiveTab(next);
+    window.setTimeout(() => tabRefs.current[next]?.focus(), 0);
+  }
 
   async function copyShareUrl() {
     try {
@@ -141,83 +154,146 @@ export function OnlineOrderingWorkspace({
         </div>
       )}
 
-      <section className="mt-6 grid gap-5 xl:grid-cols-3" aria-label="Online ordering overview">
-        <article className="relative overflow-hidden rounded-[24px] bg-primary p-6 text-primary-fg shadow-[var(--shadow-pop)] sm:p-8 xl:col-span-2">
-          <div className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full border-[22px] border-accent/15" />
-          <div className="pointer-events-none absolute -bottom-24 left-1/2 h-52 w-52 rounded-full bg-accent/10 blur-3xl" />
-          <div className="relative">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full bg-primary-fg/10 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-primary-fg/80">
-                <i className={`h-1.5 w-1.5 rounded-full ${enabled ? "bg-[#9bd1a0]" : "bg-accent"}`} />
-                {enabled ? "Public menu live" : "Menu paused"}
-              </span>
-              <span className="text-xs font-semibold text-primary-fg/55">{store.name}</span>
-            </div>
-            <h2 className="mt-6 max-w-2xl text-3xl font-extrabold leading-[1.04] tracking-[-0.045em] sm:text-[42px]">Turn your menu into a morning pickup lane.</h2>
-            <p className="mt-4 max-w-xl text-sm leading-6 text-primary-fg/72 sm:text-base">Let customers order before the rush, see a realistic pickup ETA, and arrive when the bag is ready. Your team manages every web order from the same queue.</p>
+      <div className="mt-6 rounded-[20px] border border-line bg-surface p-1.5 shadow-[var(--shadow-card)]">
+        <div className="grid grid-cols-2 gap-1" role="tablist" aria-label="Online ordering workspace">
+          <WorkspaceTabButton
+            id="online-ordering-queue-tab"
+            panelId="online-ordering-queue-panel"
+            label="Pickup queue"
+            detail={`${attentionCount} need attention · ${activeOrders.length} active`}
+            icon="bag"
+            active={activeTab === "queue"}
+            onClick={() => setActiveTab("queue")}
+            onKeyDown={(event) => handleWorkspaceTabKeyDown(event, "queue")}
+            buttonRef={(node) => { tabRefs.current.queue = node; }}
+          />
+          <WorkspaceTabButton
+            id="online-ordering-appearance-tab"
+            panelId="online-ordering-appearance-panel"
+            label="Theme & copy"
+            detail="Customer-facing menu"
+            icon="edit"
+            active={activeTab === "appearance"}
+            onClick={() => setActiveTab("appearance")}
+            onKeyDown={(event) => handleWorkspaceTabKeyDown(event, "appearance")}
+            buttonRef={(node) => { tabRefs.current.appearance = node; }}
+          />
+        </div>
+      </div>
 
-            <div className="mt-7 flex flex-wrap gap-2.5">
-              <a href={shareUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-accent px-4 py-3 text-xs font-extrabold uppercase tracking-wide text-accent-fg transition hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-fg">Open public menu <AdminIcon name="arrow" size={14} /></a>
-              <button type="button" onClick={copyShareUrl} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary-fg/20 bg-primary-fg/10 px-4 py-3 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-fg/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">{copied ? "Link copied" : "Copy menu link"} <AdminIcon name={copied ? "check" : "arrow"} size={14} /></button>
-            </div>
+      <QueueDashboard
+        hidden={activeTab !== "queue"}
+        store={store}
+        settings={settings}
+        shareUrl={shareUrl}
+        orders={orders}
+        queryError={queryError}
+        canManage={canManage}
+        enabled={enabled}
+        setEnabled={setEnabled}
+        activeOrders={activeOrders}
+        readyOrders={readyOrders}
+        attentionCount={attentionCount}
+        preparingCount={preparingCount}
+        todaySales={todaySales}
+        filteredOrders={filteredOrders}
+        filter={filter}
+        setFilter={setFilter}
+        lastUpdatedAt={lastUpdatedAt}
+        refreshing={refreshing}
+        refreshQueue={refreshQueue}
+        copied={copied}
+        copyShareUrl={copyShareUrl}
+        qrCode={qrCode}
+        downloadQrCode={downloadQrCode}
+      />
 
-            <div className="mt-8 grid max-w-2xl grid-cols-2 gap-2.5 sm:grid-cols-4">
-              <HeroMetric label="In queue" value={String(activeOrders.length)} detail="needs prep" />
-              <HeroMetric label="Ready now" value={String(readyOrders.length)} detail="pickup shelf" />
-              <HeroMetric label="Prep promise" value={`${settings.averagePrepMinutes} min`} detail="average" />
-              <HeroMetric label="Today online" value={formatPeso(todaySales).replace(/\.00$/, "")} detail="gross value" />
-            </div>
+      <section id="online-ordering-appearance-panel" role="tabpanel" aria-labelledby="online-ordering-appearance-tab" tabIndex={0} hidden={activeTab !== "appearance"} className="mt-5 outline-none">
+        <div className="flex flex-col gap-4 rounded-[22px] border border-line bg-primary p-5 text-primary-fg shadow-[var(--shadow-card)] sm:flex-row sm:items-center sm:justify-between sm:p-6">
+          <div>
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary-fg/60">Customer-facing menu</p>
+            <h2 className="mt-1 text-2xl font-extrabold tracking-[-0.04em]">Shape what customers see.</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-primary-fg/70">Choose a POS-synced theme and tune the welcome copy for the public QR menu. Preview changes on a phone before publishing.</p>
           </div>
-        </article>
-
-        <aside className="rounded-[24px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6 xl:col-span-1" aria-labelledby="menu-link-heading">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-accent">Share everywhere</p>
-              <h2 id="menu-link-heading" className="mt-1 text-xl font-extrabold tracking-[-0.025em] text-ink">Your public menu link</h2>
-            </div>
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary-soft text-primary"><AdminIcon name="bag" size={17} /></span>
-          </div>
-          <p className="mt-2 text-sm leading-5 text-ink-muted">Put the QR code at the counter, in your bio, or on a takeaway bag.</p>
-          <div className="mt-4 flex items-center gap-2 rounded-xl border border-line bg-raised px-3 py-2.5">
-            <span className="min-w-0 flex-1 truncate text-xs font-semibold text-primary">{shareUrl.replace(/^https?:\/\//, "")}</span>
-            <button type="button" onClick={copyShareUrl} className="shrink-0 rounded-lg p-1.5 text-ink-muted transition hover:bg-primary-soft hover:text-primary" aria-label="Copy public menu link"><AdminIcon name="check" size={14} /></button>
-          </div>
-          <div className="mt-4 flex items-end justify-between gap-4 rounded-2xl border border-line bg-[#fffdf8] p-3">
-            <div className="grid min-h-[132px] min-w-[132px] place-items-center rounded-xl border border-line bg-white p-2">
-              {qrCode ? <Image src={qrCode} alt={`QR code for the ${store.name} public menu`} width={128} height={128} unoptimized /> : <span className="text-center text-xs font-semibold text-ink-muted">Generating QR…</span>}
-            </div>
-            <div className="min-w-0 flex-1 pb-1">
-              <p className="text-sm font-extrabold text-ink">One scan to order</p>
-              <p className="mt-1 text-xs leading-5 text-ink-muted">Download a print-ready PNG or open the menu to test the customer view.</p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button type="button" onClick={downloadQrCode} disabled={!qrCode} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[10px] font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"><AdminIcon name="download" size={13} /> Download</button>
-                <a href={shareUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 py-2 text-[10px] font-extrabold uppercase tracking-wide text-primary transition hover:bg-primary-soft"><AdminIcon name="eye" size={13} /> Preview</a>
-              </div>
-            </div>
-          </div>
-        </aside>
+          <a href={shareUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-accent px-4 py-3 text-xs font-extrabold uppercase tracking-wide text-accent-fg transition hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-fg">View live menu <AdminIcon name="arrow" size={14} /></a>
+        </div>
+        <OnlineMenuEditor store={store} settings={settings} canManage={canManage} />
       </section>
+    </>
+  );
+}
 
-      <OnlineMenuEditor store={store} settings={settings} canManage={canManage} />
+function formatQueueLastUpdated(value: string) {
+  return new Intl.DateTimeFormat("en-SG", { hour: "numeric", minute: "2-digit" }).format(new Date(value));
+}
 
-      <section className="mt-5 grid gap-5 xl:grid-cols-3">
-        <section className="overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)] xl:col-span-2" aria-labelledby="pickup-queue-heading">
+function WorkspaceTabButton({ id, panelId, label, detail, icon, active, onClick, onKeyDown, buttonRef }: { id: string; panelId: string; label: string; detail: string; icon: AdminIconName; active: boolean; onClick: () => void; onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void; buttonRef: (node: HTMLButtonElement | null) => void }) {
+  return <button ref={buttonRef} type="button" role="tab" id={id} aria-controls={panelId} aria-selected={active} tabIndex={active ? 0 : -1} onClick={onClick} onKeyDown={onKeyDown} className={`flex min-h-14 items-center justify-between gap-3 rounded-2xl px-3.5 py-3 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:px-4 ${active ? "bg-primary text-primary-fg shadow-sm" : "text-ink-muted hover:bg-primary-soft hover:text-primary"}`}><span className="flex min-w-0 items-center gap-3"><span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${active ? "bg-primary-fg/12" : "bg-raised text-primary"}`}><AdminIcon name={icon} size={16} /></span><span className="min-w-0"><strong className="block truncate text-sm font-extrabold">{label}</strong><small className={`mt-0.5 block truncate text-[10px] font-semibold ${active ? "text-primary-fg/65" : "text-ink-subtle"}`}>{detail}</small></span></span><AdminIcon name="chevron" size={16} /></button>;
+}
+
+type QueueDashboardProps = {
+  hidden: boolean;
+  store: { id: string; name: string; address: string | null; slug: string };
+  settings: OnlineOrderingSettings;
+  shareUrl: string;
+  orders: QueueOrder[];
+  queryError: string | null;
+  canManage: boolean;
+  enabled: boolean;
+  setEnabled: (value: boolean) => void;
+  activeOrders: QueueOrder[];
+  readyOrders: QueueOrder[];
+  attentionCount: number;
+  preparingCount: number;
+  todaySales: number;
+  filteredOrders: QueueOrder[];
+  filter: QueueFilter;
+  setFilter: (value: QueueFilter) => void;
+  lastUpdatedAt: string | null;
+  refreshing: boolean;
+  refreshQueue: () => void;
+  copied: boolean;
+  copyShareUrl: () => Promise<void>;
+  qrCode: string | null;
+  downloadQrCode: () => void;
+};
+
+function QueueDashboard({ hidden, store, settings, shareUrl, orders, queryError, canManage, enabled, setEnabled, activeOrders, readyOrders, attentionCount, preparingCount, todaySales, filteredOrders, filter, setFilter, lastUpdatedAt, refreshing, refreshQueue, copied, copyShareUrl, qrCode, downloadQrCode }: QueueDashboardProps) {
+  return (
+    <section id="online-ordering-queue-panel" role="tabpanel" aria-labelledby="online-ordering-queue-tab" tabIndex={0} hidden={hidden} className="mt-5 outline-none">
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2"><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-accent">Order operations</p><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-extrabold ${enabled ? "bg-success/10 text-success" : "bg-warning/15 text-warning"}`}><i className={`h-1.5 w-1.5 rounded-full ${enabled ? "bg-success" : "bg-warning"}`} />{enabled ? "Accepting orders" : "Menu paused"}</span></div>
+          <h2 className="mt-1 text-2xl font-extrabold tracking-[-0.04em] text-ink sm:text-3xl">Pickup queue</h2>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-ink-muted">Keep the next handoff visible: confirm the order, move it through prep, and mark it ready for pickup.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-primary-soft px-3 py-2 text-[10px] font-extrabold text-primary" aria-live="polite"><i className="h-1.5 w-1.5 rounded-full bg-success" />{lastUpdatedAt ? `Live · ${formatQueueLastUpdated(lastUpdatedAt)}` : "Live · checking every 15 sec"}</span>
+          <button type="button" onClick={refreshQueue} disabled={refreshing} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 py-2 text-[10px] font-extrabold uppercase tracking-wide text-primary transition hover:bg-primary-soft disabled:cursor-not-allowed disabled:opacity-60" aria-label="Refresh online order queue"><AdminIcon name="refresh" size={12} />{refreshing ? "Refreshing…" : "Refresh"}</button>
+        </div>
+      </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <QueueMetric label="Needs attention" value={String(attentionCount)} detail="new or confirmed" tone="attention" />
+        <QueueMetric label="Preparing" value={String(preparingCount)} detail="in the prep line" tone="preparing" />
+        <QueueMetric label="Ready now" value={String(readyOrders.length)} detail="pickup shelf" tone="ready" />
+        <QueueMetric label="Today online" value={formatPeso(todaySales).replace(/\.00$/, "")} detail={`${activeOrders.length} active orders`} tone="value" />
+      </div>
+
+      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(290px,0.8fr)] xl:items-start">
+        <section className="min-w-0 overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)]" aria-labelledby="pickup-queue-heading">
           <div className="flex flex-col gap-4 border-b border-line px-5 py-5 sm:flex-row sm:items-end sm:justify-between sm:px-6">
             <div>
               <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-accent">Live pickup queue</p>
-              <h2 id="pickup-queue-heading" className="mt-1 text-xl font-extrabold tracking-[-0.025em] text-ink">Keep the handoff calm.</h2>
+              <h3 id="pickup-queue-heading" className="mt-1 text-xl font-extrabold tracking-[-0.025em] text-ink">Orders to prepare</h3>
               <p className="mt-1 text-sm leading-5 text-ink-muted">New online orders land here with their promised pickup time.</p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-primary-soft px-3 py-1.5 text-[10px] font-extrabold text-primary" aria-live="polite"><i className="h-1.5 w-1.5 rounded-full bg-success" />{lastUpdatedAt ? `Live · last checked ${formatQueueLastUpdated(lastUpdatedAt)}` : "Live · checking every 15 sec"}</span>
-              <button type="button" onClick={refreshQueue} disabled={refreshing} className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-line-strong bg-surface px-2.5 py-1.5 text-[10px] font-extrabold uppercase tracking-wide text-primary transition hover:bg-primary-soft disabled:cursor-not-allowed disabled:opacity-60" aria-label="Refresh online order queue"><AdminIcon name="refresh" size={12} />{refreshing ? "Refreshing…" : "Refresh"}</button>
-            </div>
+            <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-raised px-3 py-1.5 text-[10px] font-extrabold text-ink-muted"><AdminIcon name="clock" size={12} />{activeOrders.length ? `${activeOrders.length} active` : "Queue is clear"}</span>
           </div>
 
           <div className="flex flex-wrap gap-1.5 border-b border-line px-5 py-3 sm:px-6" role="tablist" aria-label="Filter pickup queue">
-            <QueueFilterButton label="Needs attention" count={orders.filter((order) => order.status === "new" || order.status === "confirmed").length} active={filter === "attention"} onClick={() => setFilter("attention")} />
-            <QueueFilterButton label="Preparing" count={orders.filter((order) => order.status === "preparing").length} active={filter === "preparing"} onClick={() => setFilter("preparing")} />
+            <QueueFilterButton label="Needs attention" count={attentionCount} active={filter === "attention"} onClick={() => setFilter("attention")} />
+            <QueueFilterButton label="Preparing" count={preparingCount} active={filter === "preparing"} onClick={() => setFilter("preparing")} />
             <QueueFilterButton label="Ready" count={readyOrders.length} active={filter === "ready"} onClick={() => setFilter("ready")} />
             <QueueFilterButton label="All orders" count={orders.length} active={filter === "all"} onClick={() => setFilter("all")} />
           </div>
@@ -233,12 +309,14 @@ export function OnlineOrderingWorkspace({
           )}
         </section>
 
-        <div className="grid gap-5 xl:col-span-1">
+        <div className="grid gap-5">
+          <QueueShareCard store={store} shareUrl={shareUrl} qrCode={qrCode} copied={copied} copyShareUrl={copyShareUrl} downloadQrCode={downloadQrCode} />
+
           <form action={updateOnlineOrderingSettings} className="rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="pickup-settings-heading">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-accent">Pickup settings</p>
-                <h2 id="pickup-settings-heading" className="mt-1 text-xl font-extrabold tracking-[-0.025em] text-ink">Set a promise your team can keep.</h2>
+                <h3 id="pickup-settings-heading" className="mt-1 text-xl font-extrabold tracking-[-0.025em] text-ink">Set a promise your team can keep.</h3>
               </div>
               <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary-soft text-primary"><AdminIcon name="clock" size={17} /></span>
             </div>
@@ -251,7 +329,7 @@ export function OnlineOrderingWorkspace({
                 <span className="pointer-events-none absolute left-1 top-1 h-4 w-4 rounded-full bg-white shadow-sm transition peer-checked:translate-x-5" />
               </span>
             </label>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <SettingField label="Average prep time" name="average_prep_minutes" defaultValue={settings.averagePrepMinutes} suffix="min" min={5} max={180} />
               <SettingField label="Lead time" name="order_lead_minutes" defaultValue={settings.orderLeadMinutes} suffix="min" min={0} max={180} />
             </div>
@@ -266,7 +344,7 @@ export function OnlineOrderingWorkspace({
 
           <aside className="rounded-[22px] border border-[#e2d7c5] bg-[#f7efe1] p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="flow-heading">
             <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#a77c3f]">How the flow works</p>
-            <h2 id="flow-heading" className="mt-1 text-xl font-extrabold tracking-[-0.025em] text-primary">A clearer morning for everyone.</h2>
+            <h3 id="flow-heading" className="mt-1 text-xl font-extrabold tracking-[-0.025em] text-primary">A clearer morning for everyone.</h3>
             <div className="mt-5 grid gap-3">
               <FlowStep number="01" title="Customer orders" detail="They choose a pickup time and get a queue number." />
               <FlowStep number="02" title="Team prepares" detail="The order moves from received to preparing in your queue." />
@@ -274,17 +352,23 @@ export function OnlineOrderingWorkspace({
             </div>
           </aside>
         </div>
-      </section>
-    </>
+      </div>
+    </section>
   );
 }
 
-function formatQueueLastUpdated(value: string) {
-  return new Intl.DateTimeFormat("en-SG", { hour: "numeric", minute: "2-digit" }).format(new Date(value));
+function QueueMetric({ label, value, detail, tone }: { label: string; value: string; detail: string; tone: "attention" | "preparing" | "ready" | "value" }) {
+  const classes = {
+    attention: "border-danger/15 bg-danger-soft text-danger",
+    preparing: "border-accent/15 bg-accent/10 text-accent-hover",
+    ready: "border-success/15 bg-success/10 text-success",
+    value: "border-primary/10 bg-primary-soft text-primary",
+  }[tone];
+  return <article className={`rounded-2xl border px-3.5 py-3.5 ${classes}`}><p className="text-[10px] font-extrabold uppercase tracking-[0.09em] opacity-70">{label}</p><strong className="mt-1 block text-xl font-extrabold tracking-[-0.04em]">{value}</strong><small className="mt-0.5 block text-[10px] font-semibold opacity-70">{detail}</small></article>;
 }
 
-function HeroMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return <div className="rounded-2xl border border-primary-fg/10 bg-primary-fg/10 px-3 py-3"><p className="text-[10px] font-bold uppercase tracking-[0.08em] text-primary-fg/55">{label}</p><strong className="mt-1 block text-lg font-extrabold tracking-[-0.03em]">{value}</strong><small className="mt-0.5 block text-[10px] text-primary-fg/55">{detail}</small></div>;
+function QueueShareCard({ store, shareUrl, qrCode, copied, copyShareUrl, downloadQrCode }: { store: { name: string; slug: string }; shareUrl: string; qrCode: string | null; copied: boolean; copyShareUrl: () => Promise<void>; downloadQrCode: () => void }) {
+  return <aside className="rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="menu-link-heading"><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-accent">Share the menu</p><h3 id="menu-link-heading" className="mt-1 text-xl font-extrabold tracking-[-0.025em] text-ink">One scan to order</h3></div><span className="grid h-9 w-9 place-items-center rounded-xl bg-primary-soft text-primary"><AdminIcon name="bag" size={17} /></span></div><p className="mt-2 text-sm leading-5 text-ink-muted">Put this QR code at the counter, in your bio, or on a takeaway bag.</p><div className="mt-4 flex items-center gap-2 rounded-xl border border-line bg-raised px-3 py-2.5"><span className="min-w-0 flex-1 truncate text-xs font-semibold text-primary">{shareUrl.replace(/^https?:\/\//, "")}</span><button type="button" onClick={copyShareUrl} className="shrink-0 rounded-lg p-1.5 text-ink-muted transition hover:bg-primary-soft hover:text-primary" aria-label="Copy public menu link">{copied ? <AdminIcon name="check" size={14} /> : <AdminIcon name="edit" size={14} />}</button></div><div className="mt-4 flex flex-col items-center gap-4 rounded-2xl border border-line bg-[#fffdf8] p-3 sm:flex-row xl:flex-col 2xl:flex-row"><div className="grid min-h-[132px] min-w-[132px] place-items-center rounded-xl border border-line bg-white p-2">{qrCode ? <Image src={qrCode} alt={`QR code for the ${store.name} public menu`} width={128} height={128} unoptimized /> : <span className="text-center text-xs font-semibold text-ink-muted">Generating QR…</span>}</div><div className="min-w-0 flex-1"><p className="text-sm font-extrabold text-ink">Print or preview</p><p className="mt-1 text-xs leading-5 text-ink-muted">Test the customer view before sharing it with guests.</p><div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={downloadQrCode} disabled={!qrCode} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[10px] font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"><AdminIcon name="download" size={13} /> Download</button><a href={shareUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 py-2 text-[10px] font-extrabold uppercase tracking-wide text-primary transition hover:bg-primary-soft"><AdminIcon name="eye" size={13} /> Preview</a></div></div></div></aside>;
 }
 
 function QueueFilterButton({ label, count, active, onClick }: { label: string; count: number; active: boolean; onClick: () => void }) {
