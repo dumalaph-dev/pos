@@ -235,7 +235,7 @@ function TrackOrderDialog({ orderNo, phone, state, onOrderNoChange, onPhoneChang
         </div>
         <p className="mt-3 text-sm leading-6 text-[var(--public-menu-muted)]">Use the order number from your confirmation and the mobile number you gave the store.</p>
         <form onSubmit={onSubmit} className="mt-5 grid gap-4">
-          <CheckoutField label="Order number" name="track-order-number" placeholder="e.g. WEB-1234" value={orderNo} onChange={onOrderNoChange} />
+          <CheckoutField label="Order number" name="track-order-number" placeholder="e.g. MB-0001" value={orderNo} onChange={onOrderNoChange} />
           <CheckoutField label="Mobile number" name="track-phone" placeholder="09XX XXX XXXX" type="tel" value={phone} onChange={onPhoneChange} />
           {state.status === "error" && <p role="alert" className="rounded-xl border border-[var(--public-menu-danger-soft)] bg-[var(--public-menu-danger-soft)] px-3 py-2.5 text-xs font-semibold leading-5 text-[var(--public-menu-danger)]">{state.message}</p>}
           {state.status === "success" && (

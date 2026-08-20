@@ -1,5 +1,6 @@
 import { getPublicStoreBySlug } from "@/lib/online-ordering-server";
 import { createAdminClient } from "@/lib/employee-auth";
+import { getDemoOnlineOrderNo } from "@/lib/online-ordering";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ export async function GET(
   if (!store) return Response.json({ ok: false, message: "Order not found" }, { status: 404 });
 
   if (orderId.startsWith("demo-")) {
-    return Response.json({ ok: true, orderNo: orderId.slice(-5).toUpperCase(), status: "new", queuePosition: 3, etaAt: new Date(Date.now() + 24 * 60_000).toISOString() });
+    return Response.json({ ok: true, orderNo: getDemoOnlineOrderNo(store.name, orderId.slice(5)), status: "new", queuePosition: 3, etaAt: new Date(Date.now() + 24 * 60_000).toISOString() });
   }
 
   const admin = createAdminClient();

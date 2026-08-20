@@ -92,6 +92,26 @@ export type PublicOnlineOrderResult = {
   fulfillmentMethod?: OnlineOrderingFulfillmentMethod;
 };
 
+export function getOnlineOrderStoreCode(storeName: string) {
+  const initials = storeName
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.replace(/[^a-z\d]/gi, ""))
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((word) => word.charAt(0))
+    .join("")
+    .toUpperCase()
+    .replace(/[^A-Z\d]/g, "")
+    .slice(0, 4);
+  return initials || "STORE";
+}
+
+export function getDemoOnlineOrderNo(storeName: string, requestId: string) {
+  const numericPart = Number.parseInt(requestId.replaceAll("-", "").slice(-8), 16) % 10000;
+  return `${getOnlineOrderStoreCode(storeName)}-${String(numericPart || 1).padStart(4, "0")}`;
+}
+
 export const DEFAULT_ONLINE_ORDERING_COPY: OnlineOrderingCopy = {
   headerTagline: "Order ahead · pickup at the counter",
   heroEyebrow: "Made for your morning run",
