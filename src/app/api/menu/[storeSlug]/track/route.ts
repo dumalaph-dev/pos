@@ -32,7 +32,7 @@ export async function GET(
 
   const { data, error } = await admin
     .from("online_orders")
-    .select("order_no, status, queue_position, eta_at")
+    .select("order_no, status, queue_position, eta_at, fulfillment_method")
     .eq("store_id", store.id)
     .eq("order_no", orderNo)
     .eq("customer_phone", customerPhone)
@@ -46,5 +46,6 @@ export async function GET(
     status: data.status,
     queuePosition: data.queue_position,
     etaAt: data.eta_at,
+    fulfillmentMethod: data.fulfillment_method === "delivery" ? "delivery" : "pickup",
   });
 }
