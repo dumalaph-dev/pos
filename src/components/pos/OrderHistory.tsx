@@ -12,10 +12,12 @@ import {
 import { buildReceipt } from "@/lib/receipt";
 import type { PaperWidth } from "@/lib/paper-width";
 import { OverlayDialog } from "@/components/ui/OverlayLayer";
+import OnlineQueuePanel from "@/components/pos/OnlineQueuePanel";
 
 type OrderStatus = "completed" | "voided" | "refunded";
 type PaymentMethod = "cash" | "gcash" | "maya" | "card";
 type HistoryFilter = "all" | "pending" | "completed";
+type OrderHistoryView = "online" | "sales";
 
 export type OrderHistoryProfile = {
   id: string;
@@ -24,6 +26,7 @@ export type OrderHistoryProfile = {
   store_name: string | null;
   store_tin: string | null;
   full_name: string | null;
+  role: "admin" | "manager" | "cashier" | null;
 };
 
 type OrderHistoryItem = {
@@ -362,6 +365,7 @@ export default function OrderHistory({
 }: OrderHistoryProps) {
   const supabase = useMemo(() => createClient(), []);
   const [orders, setOrders] = useState<OrderHistoryRecord[]>([]);
+  const [view, setView] = useState<OrderHistoryView>("online");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<HistoryFilter>("all");
   const [search, setSearch] = useState("");
@@ -373,6 +377,8 @@ export default function OrderHistory({
   const [voidPin, setVoidPin] = useState("");
   const [voidError, setVoidError] = useState("");
   const [voidingId, setVoidingId] = useState<string | null>(null);
+  const [onlineAttentionCount, setOnlineAttentionCount] = useState(0);
+  const [onlineActiveCount, setOnlineActiveCount] = useState(0);
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -563,6 +569,10 @@ export default function OrderHistory({
   };
 
   const pendingVisible = orders.filter((order) => order.status === "pending").length;
+  const handleOnlineSummaryChange = useCallback(({ attentionCount, activeCount }: { attentionCount: number; activeCount: number }) => {
+    setOnlineAttentionCount(attentionCount);
+    setOnlineActiveCount(activeCount);
+  }, []);
 
   return (
     <OverlayDialog
@@ -576,23 +586,27 @@ export default function OrderHistory({
           <div className="order-history-header__brand">
             <div className="order-history-header__mark"><HistoryIcon name="receipt" size={20} /></div>
             <div>
-              <p>Orders / Receipts</p>
-              <h1 id="order-history-title">Recent branch orders</h1>
+              <p>{view === "online" ? "Orders / Online queue" : "Orders / Receipts"}</p>
+              <h1 id="order-history-title">{view === "online" ? "Online queue" : "Recent branch orders"}</h1>
             </div>
           </div>
           <div className="order-history-header__context">
             <span className={offline ? "is-offline" : ""}>
               <span className="order-history-status-dot" />
-              {offline ? "Offline history" : "Branch history"}
+              {view === "online" ? (offline ? "Queue unavailable offline" : "Live branch queue") : offline ? "Offline history" : "Branch history"}
             </span>
             <span>{storeName}</span>
-            {(pendingCount > 0 || pendingVisible > 0) && <b>{Math.max(pendingCount, pendingVisible)} pending</b>}
+            {view === "online"
+              ? onlineAttentionCount > 0 && <b>{onlineAttentionCount} needs attention</b>
+              : (pendingCount > 0 || pendingVisible > 0) && <b>{Math.max(pendingCount, pendingVisible)} pending sync</b>}
           </div>
           <div className="order-history-header__actions">
-            <button type="button" className="order-history-button order-history-button--soft" onClick={() => void loadOrders()} disabled={loading}>
-              <HistoryIcon name="refresh" size={16} />
-              Refresh
-            </button>
+            {view === "sales" && (
+              <button type="button" className="order-history-button order-history-button--soft" onClick={() => void loadOrders()} disabled={loading}>
+                <HistoryIcon name="refresh" size={16} />
+                Refresh
+              </button>
+            )}
             <button type="button" data-order-dialog-autofocus className="order-history-button order-history-button--close" onClick={onClose}>
               Back to POS
               <HistoryIcon name="arrow" size={16} />
@@ -600,38 +614,61 @@ export default function OrderHistory({
           </div>
         </header>
 
-        <div className="order-history-toolbar">
-          <div className="order-history-filter" role="tablist" aria-label="Order history filter">
-            {([
-              ["all", "All orders"],
-              ["pending", `Pending${pendingVisible ? ` · ${pendingVisible}` : ""}`],
-              ["completed", "Completed"],
-            ] as const).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                role="tab"
-                aria-selected={filter === value}
-                className={filter === value ? "is-active" : ""}
-                onClick={() => setFilter(value)}
-              >
-                {label}
-              </button>
-            ))}
+        <div className={`order-history-toolbar${view === "online" ? " order-history-toolbar--view-switch" : ""}`}>
+          <div className="order-history-view-switch" role="tablist" aria-label="Orders workspace">
+            <button id="order-history-online-tab" type="button" role="tab" aria-controls="online-queue-panel" aria-selected={view === "online"} className={view === "online" ? "is-active" : ""} onClick={() => setView("online")}>
+              Online Queue{onlineAttentionCount > 0 && <span>{onlineAttentionCount}</span>}
+            </button>
+            <button id="order-history-sales-tab" type="button" role="tab" aria-controls="sales-receipts-panel" aria-selected={view === "sales"} className={view === "sales" ? "is-active" : ""} onClick={() => setView("sales")}>
+              Sales &amp; Receipts
+            </button>
           </div>
-          <label className="order-history-search">
-            <HistoryIcon name="search" size={17} />
-            <span className="sr-only">Search orders</span>
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search order no. or item" />
-          </label>
+          {view === "sales" && (
+            <>
+              <div className="order-history-filter" role="tablist" aria-label="Order history filter">
+                {([
+                  ["all", "All orders"],
+                  ["pending", `Pending sync${pendingVisible ? ` · ${pendingVisible}` : ""}`],
+                  ["completed", "Completed"],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="tab"
+                    aria-selected={filter === value}
+                    className={filter === value ? "is-active" : ""}
+                    onClick={() => setFilter(value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <label className="order-history-search">
+                <HistoryIcon name="search" size={17} />
+                <span className="sr-only">Search orders</span>
+                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search order no. or item" />
+              </label>
+            </>
+          )}
+          {view === "online" && <span className="order-history-view-switch__detail">{onlineActiveCount} active · refreshes every 15 sec</span>}
         </div>
 
-        {notice && (
-          <div className="order-history-notice" role="status">
-            <HistoryIcon name={offline ? "wifi" : "receipt"} size={16} />
-            <span>{notice}</span>
-          </div>
-        )}
+        {view === "online" ? (
+          <OnlineQueuePanel
+            profile={profile}
+            offline={offline}
+            onClose={onClose}
+            onToast={onToast}
+            onSummaryChange={handleOnlineSummaryChange}
+          />
+        ) : (
+          <div id="sales-receipts-panel" role="tabpanel" aria-labelledby="order-history-sales-tab" tabIndex={0} className="order-history-sales-view">
+            {notice && (
+              <div className="order-history-notice" role="status">
+                <HistoryIcon name={offline ? "wifi" : "receipt"} size={16} />
+                <span>{notice}</span>
+              </div>
+            )}
 
         <div className="order-history-content">
           <section className="order-history-list-panel" aria-label="Recent orders">
@@ -797,6 +834,8 @@ export default function OrderHistory({
             )}
           </section>
         </div>
+          </div>
+        )}
     </OverlayDialog>
   );
 }

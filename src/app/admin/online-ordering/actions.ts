@@ -12,12 +12,18 @@ import {
 import { isProductImageUrl } from "@/lib/product-images";
 import { toCentavos } from "@/lib/money";
 import { isPosThemeId } from "@/lib/pos-theme";
-import { isOnlineOrderingHexColor, mergeOnlineOrderingSettings, ONLINE_ORDER_STATUSES, publicMenuPath, readOnlineOrderingSettings, type OnlineOrderStatus } from "@/lib/online-ordering";
+import { formatOrderStatusLabel, isOnlineOrderingHexColor, mergeOnlineOrderingSettings, ONLINE_ORDER_STATUSES, publicMenuPath, readOnlineOrderingSettings, type OnlineOrderStatus } from "@/lib/online-ordering";
 
 type OwnerProfile = {
   org_id: string;
   role: "admin" | "manager" | "cashier";
 };
+
+const POS_ONLINE_ORDER_STATUSES = ["confirmed", "preparing", "ready"] as const;
+
+export type PosOnlineOrderStatusResult =
+  | { ok: true; message: string }
+  | { ok: false; message: string };
 
 function readText(formData: FormData, name: string) {
   const value = formData.get(name);
@@ -241,4 +247,48 @@ export async function updateOnlineOrderStatus(formData: FormData) {
   revalidatePath("/admin/online-ordering");
   revalidatePath(publicMenuPath(store.staff_login_slug));
   redirect("/admin/online-ordering?saved=status");
+}
+
+/**
+ * Advance an online order from the cashier queue without granting the POS
+ * client broad UPDATE access to the online_orders table. The database RPC
+ * validates branch scope, the allowed transition, and writes the audit row.
+ */
+export async function updatePosOnlineOrderStatus(
+  orderId: string,
+  status: OnlineOrderStatus,
+): Promise<PosOnlineOrderStatusResult> {
+  const normalizedOrderId = orderId.trim();
+  if (!normalizedOrderId) return { ok: false, message: "The online order could not be identified." };
+  if (!POS_ONLINE_ORDER_STATUSES.some((candidate) => candidate === status)) {
+    return { ok: false, message: "That online order transition is not available from the POS." };
+  }
+
+  const user = await getAuthenticatedUser();
+  if (!user) return { ok: false, message: "Your session has expired. Sign in again before updating the online queue." };
+
+  const supabase = await createClient();
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("org_id, store_id, role")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profileError || !profile) return { ok: false, message: "Your POS profile is not available. Sign in again and try once more." };
+
+  const role = profile.role as OwnerProfile["role"];
+  if (role !== "admin" && role !== "manager" && role !== "cashier") {
+    return { ok: false, message: "Your POS role cannot update the online queue." };
+  }
+  if (role !== "admin" && !profile.store_id) {
+    return { ok: false, message: "This POS terminal is not assigned to a branch." };
+  }
+
+  const { error } = await supabase.rpc("advance_online_order_status", {
+    p_online_order_id: normalizedOrderId,
+    p_next_status: status,
+  });
+  if (error) return { ok: false, message: error.message || "The online order could not be updated." };
+
+  const label = formatOrderStatusLabel(status) ?? "updated";
+  return { ok: true, message: `Online order ${label.toLowerCase()}.` };
 }

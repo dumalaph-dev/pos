@@ -417,6 +417,15 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const collapsedNavRef = useRef<HTMLButtonElement>(null);
   const collapseNavRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("orders") !== "online") return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- open the queue after an alert link hands off to the POS route.
+    setOrderHistoryOpen(true);
+    url.searchParams.delete("orders");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+  }, []);
   const navWasOpen = useRef(false);
   const displayLinkRef = useRef<DisplayLink | null>(null);
   const [displayLink, setDisplayLink] = useState<DisplayLink | null>(null);
@@ -1709,7 +1718,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
           orders={newOnlinePickupOrders}
           announcement={onlinePickupAnnouncement}
           attentionPulse={onlinePickupAttentionPulse}
-          queueHref={profile?.role === "admin" || profile?.role === "manager" ? "/admin/online-ordering" : undefined}
+          queueHref={profile?.role === "admin" || profile?.role === "manager" ? "/admin/online-ordering" : profile?.role === "cashier" ? "/pos?orders=online" : undefined}
         />
 
         {onlinePickup.status !== "idle" && (

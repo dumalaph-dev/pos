@@ -4853,6 +4853,62 @@
   box-shadow: 0 3px 8px rgba(91, 42, 10, 0.14);
 }
 
+.order-history-view-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 11px;
+  background: rgba(63, 125, 83, 0.12);
+}
+
+.order-history-view-switch button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-muted);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.order-history-view-switch button:hover {
+  color: var(--primary);
+}
+
+.order-history-view-switch button.is-active {
+  color: var(--primary-fg);
+  background: var(--primary);
+  box-shadow: 0 3px 8px rgba(23, 58, 43, 0.14);
+}
+
+.order-history-view-switch button span {
+  display: inline-grid;
+  min-width: 18px;
+  min-height: 18px;
+  place-items: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  color: var(--danger);
+  background: rgba(255, 255, 255, 0.78);
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.order-history-view-switch__detail {
+  margin-left: auto;
+  color: var(--text-subtle);
+  font-size: 10px;
+  font-weight: 800;
+}
+
 .order-history-search {
   display: flex;
   width: min(330px, 42%);
@@ -4885,6 +4941,186 @@
 
 .order-history-search input::placeholder {
   color: var(--text-subtle);
+}
+
+.order-history-online-view {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.order-history-sales-view {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.order-history-sales-view .order-history-content {
+  flex: 1 1 auto;
+}
+
+.order-history-online-toolbar {
+  display: flex;
+  min-height: 62px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 22px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(248, 244, 236, 0.76);
+}
+
+.order-history-online-toolbar .order-history-filter {
+  flex: 1 1 auto;
+}
+
+.order-history-online-toolbar .order-history-filter button span {
+  margin-left: 4px;
+  color: currentColor;
+  opacity: 0.7;
+  font-size: 9px;
+}
+
+.order-history-online-toolbar__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  flex: 0 0 auto;
+}
+
+.order-history-online-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--success);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.order-history-online-live i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.order-history-online-toolbar .order-history-search {
+  width: min(330px, 34%);
+  flex: 0 1 330px;
+}
+
+.online-queue-content {
+  flex: 1 1 auto;
+}
+
+.online-queue-row {
+  align-items: center;
+}
+
+.online-queue-row__number {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--primary-fg);
+  background: var(--primary);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.online-queue-row .order-history-row__main {
+  flex: 1 1 auto;
+}
+
+.online-queue-row .order-history-row__summary {
+  max-width: 48ch;
+}
+
+.order-history-status.is-online-new {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.order-history-status.is-online-confirmed {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.order-history-status.is-online-preparing {
+  color: var(--accent-hover);
+  background: rgba(192, 138, 46, 0.16);
+}
+
+.order-history-status.is-online-ready,
+.order-history-status.is-online-picked-up {
+  color: var(--success);
+  background: rgba(63, 125, 83, 0.11);
+}
+
+.order-history-status.is-online-cancelled {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.online-queue-fulfillment-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(130px, 0.55fr);
+  gap: 1px;
+  overflow: hidden;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--border);
+}
+
+.online-queue-fulfillment-card > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 12px;
+  background: rgba(63, 125, 83, 0.08);
+}
+
+.online-queue-fulfillment-card span {
+  color: var(--text-subtle);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.online-queue-fulfillment-card strong {
+  overflow-wrap: anywhere;
+  color: var(--primary);
+  font-size: 11px;
+}
+
+.order-history-button--online-action {
+  border-color: var(--primary);
+  color: var(--primary-fg);
+  background: var(--primary);
+}
+
+.order-history-button--online-action:hover:not(:disabled) {
+  border-color: var(--primary-hover);
+  color: var(--primary-fg);
+  background: var(--primary-hover);
+}
+
+.order-history-button--online-open {
+  border-color: var(--accent);
+  color: var(--accent-fg);
+  background: var(--accent);
+  text-decoration: none;
+}
+
+.order-history-button--online-open:hover:not(:disabled) {
+  border-color: var(--accent-hover);
+  color: var(--accent-fg);
+  background: var(--accent-hover);
 }
 
 .order-history-notice {
@@ -5527,6 +5763,29 @@
     padding: 10px 16px;
   }
 
+  .order-history-toolbar--view-switch {
+    align-items: stretch;
+  }
+
+  .order-history-view-switch__detail {
+    margin-left: 0;
+  }
+
+  .order-history-online-toolbar {
+    align-items: stretch;
+    flex-wrap: wrap;
+    padding: 10px 16px;
+  }
+
+  .order-history-online-toolbar .order-history-filter {
+    flex-basis: 100%;
+  }
+
+  .order-history-online-toolbar .order-history-search {
+    width: 100%;
+    flex-basis: 100%;
+  }
+
   .order-history-search {
     width: 100%;
   }
@@ -5570,6 +5829,24 @@
 
   .order-history-filter {
     width: 100%;
+  }
+
+  .order-history-view-switch {
+    width: 100%;
+  }
+
+  .order-history-view-switch button {
+    flex: 1 1 0;
+    padding: 0 8px;
+    font-size: 10px;
+  }
+
+  .order-history-online-toolbar__actions {
+    justify-content: space-between;
+  }
+
+  .online-queue-fulfillment-card {
+    grid-template-columns: 1fr;
   }
 
   .order-history-filter button {
