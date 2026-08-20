@@ -206,9 +206,9 @@ export function AdminSidebar({ branding, branchName, active: activeOverride, con
               <span className="admin-quick-actions__label">New Sale</span>
               <AdminIcon name="arrow" size={14} />
             </Link>
-            <Link href="/pos?quickAction=park" className="admin-quick-actions__item">
-              <span className="admin-quick-actions__icon"><AdminIcon name="pos" size={16} /></span>
-              <span className="admin-quick-actions__label">Park Order</span>
+            <Link href="/admin/shifts" className="admin-quick-actions__item">
+              <span className="admin-quick-actions__icon"><AdminIcon name="history" size={16} /></span>
+              <span className="admin-quick-actions__label">Z-Readings</span>
               <AdminIcon name="arrow" size={14} />
             </Link>
             <Link href="/admin/online-ordering" className="admin-quick-actions__item">
@@ -216,14 +216,14 @@ export function AdminSidebar({ branding, branchName, active: activeOverride, con
               <span className="admin-quick-actions__label">Share menu</span>
               <AdminIcon name="arrow" size={14} />
             </Link>
-            <Link href="/admin/orders?status=refunded" className="admin-quick-actions__item">
-              <span className="admin-quick-actions__icon"><AdminIcon name="history" size={16} /></span>
-              <span className="admin-quick-actions__label">Return / Refund</span>
+            <Link href="/admin/pos" className="admin-quick-actions__item">
+              <span className="admin-quick-actions__icon"><AdminIcon name="pos" size={16} /></span>
+              <span className="admin-quick-actions__label">POS</span>
               <AdminIcon name="arrow" size={14} />
             </Link>
-            <Link href="/pos?quickAction=drawer" className="admin-quick-actions__item">
-              <span className="admin-quick-actions__icon"><AdminIcon name="wallet" size={16} /></span>
-              <span className="admin-quick-actions__label">Open Cash Drawer</span>
+            <Link href="/admin/calendar" className="admin-quick-actions__item">
+              <span className="admin-quick-actions__icon"><AdminIcon name="calendar" size={16} /></span>
+              <span className="admin-quick-actions__label">Calendar</span>
               <AdminIcon name="arrow" size={14} />
             </Link>
           </div>
