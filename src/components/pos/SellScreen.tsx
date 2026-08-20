@@ -99,6 +99,9 @@ type OnlinePickupState =
       orderNo: string;
       customerName: string;
       customerPhone: string;
+      fulfillmentMethod: "pickup" | "delivery";
+      deliveryAddress: string | null;
+      deliveryNote: string | null;
       pickupSlot: string;
       queuePosition: number;
       note: string | null;
@@ -803,7 +806,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     async function loadOnlinePickup() {
       const { data: order, error: orderError } = await supabase
         .from("online_orders")
-        .select("id, order_no, customer_name, customer_phone, pickup_slot, status, queue_position, subtotal, total, note")
+        .select("id, order_no, customer_name, customer_phone, fulfillment_method, delivery_address, delivery_note, pickup_slot, status, queue_position, subtotal, total, note")
         .eq("id", onlineOrderId)
         .maybeSingle();
       if (cancelled) return;
@@ -816,6 +819,9 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
         order_no: string;
         customer_name: string;
         customer_phone: string;
+        fulfillment_method: string;
+        delivery_address: string | null;
+        delivery_note: string | null;
         pickup_slot: string;
         status: string;
         queue_position: number | string;
@@ -872,13 +878,18 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
 
       setDiscount(NO_DISCOUNT);
       setCart(cartLines);
-      setOrderType((current) => posConfig.orderTypes.includes("Takeout") ? "Takeout" : current);
+      setOrderType((current) => onlineOrder.fulfillment_method === "delivery"
+        ? posConfig.orderTypes.includes("Delivery") ? "Delivery" : current
+        : posConfig.orderTypes.includes("Takeout") ? "Takeout" : current);
       setOnlinePickup({
         status: "ready",
         orderId: onlineOrder.id,
         orderNo: onlineOrder.order_no,
         customerName: onlineOrder.customer_name,
         customerPhone: onlineOrder.customer_phone,
+        fulfillmentMethod: onlineOrder.fulfillment_method === "delivery" ? "delivery" : "pickup",
+        deliveryAddress: onlineOrder.delivery_address,
+        deliveryNote: onlineOrder.delivery_note,
         pickupSlot: onlineOrder.pickup_slot,
         queuePosition: Number(onlineOrder.queue_position) || 0,
         note: onlineOrder.note,
@@ -1154,7 +1165,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
       payment_ref: payRef || null,
       amount_tendered: method === "cash" ? tendered : null,
       change_due: method === "cash" && tendered !== null ? tendered - total : null,
-      note: [onlineOrder ? `Online pickup ${onlineOrder.orderNo} · ${onlineOrder.customerName}` : null, note.trim() || null].filter(Boolean).join(" · ") || null,
+      note: [onlineOrder ? `${onlineOrder.fulfillmentMethod === "delivery" ? "Online delivery" : "Online pickup"} ${onlineOrder.orderNo} · ${onlineOrder.customerName}${onlineOrder.deliveryAddress ? ` · ${onlineOrder.deliveryAddress}` : ""}${onlineOrder.deliveryNote ? ` · ${onlineOrder.deliveryNote}` : ""}` : null, note.trim() || null].filter(Boolean).join(" · ") || null,
       online_order_id: onlineOrder?.orderId ?? null,
       created_at_device: now.toISOString(),
     };
@@ -1623,14 +1634,14 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
             {onlinePickup.status === "ready" && (
               <>
                 <div className="online-pickup-banner__identity">
-                  <span className="online-pickup-banner__eyebrow">Online pickup · queue #{onlinePickup.queuePosition || "—"}</span>
+                  <span className="online-pickup-banner__eyebrow">{onlinePickup.fulfillmentMethod === "delivery" ? "Online delivery" : "Online pickup"} · queue #{onlinePickup.queuePosition || "—"}</span>
                   <strong>{onlinePickup.orderNo}</strong>
                   <span>{onlinePickup.customerName} · {onlinePickup.customerPhone}</span>
                 </div>
                 <div className="online-pickup-banner__meta">
-                  <span>{onlinePickup.pickupSlot === "asap" ? "ASAP pickup" : `Scheduled ${onlinePickup.pickupSlot}`}</span>
+                  <span>{onlinePickup.fulfillmentMethod === "delivery" ? onlinePickup.deliveryAddress || "Delivery address not provided" : onlinePickup.pickupSlot === "asap" ? "ASAP pickup" : `Scheduled ${onlinePickup.pickupSlot}`}</span>
                   <strong>{displayPeso(onlinePickup.total)}</strong>
-                  <small>{onlinePickup.items.length} item{onlinePickup.items.length === 1 ? "" : "s"}{onlinePickup.note ? ` · ${onlinePickup.note}` : ""}</small>
+                  <small>{onlinePickup.items.length} item{onlinePickup.items.length === 1 ? "" : "s"}{onlinePickup.deliveryNote ? ` · ${onlinePickup.deliveryNote}` : ""}{onlinePickup.note ? ` · ${onlinePickup.note}` : ""}</small>
                 </div>
                 <button type="button" onClick={() => { clearCart(); setOnlinePickup({ status: "idle" }); setOrderType(posConfig.defaultOrderType); }} disabled={payOpen} className="online-pickup-banner__dismiss">Close pickup</button>
               </>

@@ -10,10 +10,11 @@ export async function generateMetadata({ params }: { params: Promise<{ storeSlug
   const menu = await getPublicMenuStoreBySlug(storeSlug);
   if (!menu) return { title: "Menu", robots: { index: false, follow: false } };
   const brandName = menu.settings.branding.brandName || menu.name;
+  const fulfillment = menu.settings.delivery.enabled ? "pickup or delivery" : "pickup";
   return {
     title: `${brandName} · Order ahead`,
-    description: `Order ahead for pickup from ${brandName}. See the live pickup estimate before you leave.`,
-    openGraph: { title: `${brandName} · Order ahead`, description: `Order ahead for pickup from ${brandName}.` },
+    description: `Order ahead for ${fulfillment} from ${brandName}. See your live estimate before you go.`,
+    openGraph: { title: `${brandName} · Order ahead`, description: `Order ahead for ${fulfillment} from ${brandName}.` },
   };
 }
 

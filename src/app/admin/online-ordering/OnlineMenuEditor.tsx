@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { PosThemePicker } from "@/components/admin/PosThemePicker";
 import { getPosTheme, type PosThemeId } from "@/lib/pos-theme";
+import { formatPeso } from "@/lib/money";
 import { getPublicMenuThemeVariables } from "@/lib/online-ordering-theme";
 import { isOnlineOrderingHexColor, resolveOnlineOrderingBranding, type OnlineOrderingBrandDefaults, type OnlineOrderingBranding, type OnlineOrderingCopy, type OnlineOrderingSettings } from "@/lib/online-ordering";
 import { updateOnlineOrderingPresentation } from "./actions";
@@ -127,7 +128,7 @@ export function OnlineMenuEditor({
                     <div className="min-w-0 flex-1">
                       <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted">Menu logo</p>
                       <p className="mt-1 truncate text-sm font-extrabold text-ink">{logoFile ? logoFile.name : branding.logoUrl ? "Logo connected" : "Use a clear mark"}</p>
-                      <p className="mt-1 text-[11px] leading-4 text-ink-muted">{branding.useOrganizationBranding ? "Turn off organization branding to add a branch logo" : canUploadLogo ? "JPG, PNG, or WebP · up to 900 KB" : "Ask an organization admin to upload a logo"}</p>
+                      <p className="mt-1 text-[11px] leading-4 text-ink-muted">{branding.useOrganizationBranding ? "Turn off organization branding to add a branch logo" : canUploadLogo ? "Transparent PNG, JPG, or WebP · up to 900 KB" : "Ask an organization admin to upload a logo"}</p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <label className={`inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 py-2 text-[10px] font-extrabold uppercase tracking-wide text-primary transition hover:bg-primary-soft ${branding.useOrganizationBranding || !canManage || !canUploadLogo ? "pointer-events-none opacity-45" : ""}`}>
                           {logoFile || branding.logoUrl ? "Replace logo" : "Upload logo"}
@@ -277,10 +278,11 @@ function PublicMenuPreview({ store, settings, branding, theme, copy }: { store: 
           </div>
 
           <div className="relative overflow-hidden border-b px-3 py-5" style={{ borderColor: "var(--public-menu-border)", background: "var(--public-menu-panel-gradient)" }}>
+            <div className="mb-3 flex items-center gap-2"><span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-2xl text-sm font-black" style={branding.logoUrl ? { backgroundColor: "var(--public-menu-primary-soft)", backgroundImage: `url(${JSON.stringify(branding.logoUrl)})`, backgroundPosition: "center", backgroundRepeat: "no-repeat", backgroundSize: "contain" } : { background: "var(--public-menu-primary)", color: "var(--public-menu-primary-text)" }}>{!branding.logoUrl && brandName.charAt(0).toUpperCase()}</span><span className="min-w-0"><strong className="block truncate text-[11px]">{brandName}</strong><small className="mt-0.5 block truncate text-[8px] font-bold uppercase tracking-[0.08em]" style={{ color: "var(--public-menu-subtle)" }}>Official online menu</small></span></div>
             <span className="inline-flex rounded-full px-2.5 py-1 text-[8px] font-extrabold uppercase tracking-[0.12em]" style={{ background: "var(--public-menu-primary)", color: "var(--public-menu-primary-text)" }}>{copy.heroEyebrow}</span>
             <h3 className="mt-3 text-[1.55rem] font-black leading-[0.98] tracking-[-0.06em]">{copy.heroTitle}<br /><span style={{ color: "var(--public-menu-accent)" }}>{copy.heroAccent}</span></h3>
             <p className="mt-3 text-[10px] leading-4" style={{ color: "var(--public-menu-muted)" }}>{copy.heroDescription}</p>
-            <div className="mt-3 rounded-2xl border p-3" style={{ borderColor: "var(--public-menu-border-strong)", background: "color-mix(in srgb, var(--public-menu-raised) 82%, transparent)" }}><p className="text-[8px] font-extrabold uppercase tracking-[0.12em]" style={{ color: "var(--public-menu-accent)" }}>{copy.pickupTitle}</p><strong className="mt-1 block text-[11px]">{store.address || "Pickup at the counter"}</strong><span className="mt-1 block text-[9px] leading-3.5" style={{ color: "var(--public-menu-muted)" }}>{settings.pickupNote}</span></div>
+            <div className="mt-3 rounded-2xl border p-3" style={{ borderColor: "var(--public-menu-border-strong)", background: "color-mix(in srgb, var(--public-menu-raised) 82%, transparent)" }}><p className="text-[8px] font-extrabold uppercase tracking-[0.12em]" style={{ color: "var(--public-menu-accent)" }}>{copy.pickupTitle}</p><strong className="mt-1 block text-[11px]">{store.address || "Pickup at the counter"}</strong><span className="mt-1 block text-[9px] leading-3.5" style={{ color: "var(--public-menu-muted)" }}>{settings.pickupNote}</span>{settings.delivery.enabled && <span className="mt-2 block text-[8px] font-bold" style={{ color: "var(--public-menu-primary)" }}>Delivery · {formatPeso(settings.delivery.feeCentavos)} fee</span>}</div>
           </div>
 
           <div className="px-3 py-4">

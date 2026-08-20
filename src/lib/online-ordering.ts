@@ -23,11 +23,21 @@ export type OnlineOrderingBrandDefaults = {
   logoUrl?: string | null;
 };
 
+export type OnlineOrderingFulfillmentMethod = "pickup" | "delivery";
+
+export type OnlineOrderingDeliverySettings = {
+  enabled: boolean;
+  feeCentavos: number;
+  etaMinutes: number;
+  note: string;
+};
+
 export type OnlineOrderingSettings = {
   enabled: boolean;
   averagePrepMinutes: number;
   orderLeadMinutes: number;
   pickupNote: string;
+  delivery: OnlineOrderingDeliverySettings;
   theme: PosThemeId;
   branding: OnlineOrderingBranding;
   copy: OnlineOrderingCopy;
@@ -78,6 +88,8 @@ export type PublicOnlineOrderResult = {
   orderNo?: string;
   queuePosition?: number;
   etaAt?: string;
+  total?: number;
+  fulfillmentMethod?: OnlineOrderingFulfillmentMethod;
 };
 
 export const DEFAULT_ONLINE_ORDERING_COPY: OnlineOrderingCopy = {
@@ -107,6 +119,12 @@ export const DEFAULT_ONLINE_ORDERING_SETTINGS: OnlineOrderingSettings = {
   averagePrepMinutes: 20,
   orderLeadMinutes: 15,
   pickupNote: "We will have your order ready at the counter. Show your order number when you arrive.",
+  delivery: {
+    enabled: false,
+    feeCentavos: 0,
+    etaMinutes: 45,
+    note: "Delivery is available within our service area. We’ll confirm the address and total by phone.",
+  },
   theme: "modern",
   branding: DEFAULT_ONLINE_ORDERING_BRANDING,
   copy: DEFAULT_ONLINE_ORDERING_COPY,
@@ -144,6 +162,16 @@ function readOnlineOrderingBranding(value: unknown): OnlineOrderingBranding {
     colorMode: branding.color_mode === "brand" ? "brand" : DEFAULT_ONLINE_ORDERING_BRANDING.colorMode,
     primaryColor: isOnlineOrderingHexColor(branding.primary_color) ? branding.primary_color.toLowerCase() : DEFAULT_ONLINE_ORDERING_BRANDING.primaryColor,
     accentColor: isOnlineOrderingHexColor(branding.accent_color) ? branding.accent_color.toLowerCase() : DEFAULT_ONLINE_ORDERING_BRANDING.accentColor,
+  };
+}
+
+function readOnlineOrderingDelivery(value: unknown): OnlineOrderingDeliverySettings {
+  const delivery = asRecord(value);
+  return {
+    enabled: delivery.enabled === true,
+    feeCentavos: readNumber(delivery.fee_centavos, DEFAULT_ONLINE_ORDERING_SETTINGS.delivery.feeCentavos, 0, 1000000),
+    etaMinutes: readNumber(delivery.eta_minutes, DEFAULT_ONLINE_ORDERING_SETTINGS.delivery.etaMinutes, 15, 180),
+    note: readText(delivery.note, DEFAULT_ONLINE_ORDERING_SETTINGS.delivery.note, 240),
   };
 }
 
@@ -193,6 +221,7 @@ export function readOnlineOrderingSettings(settings: unknown): OnlineOrderingSet
     averagePrepMinutes: readNumber(online.average_prep_minutes, DEFAULT_ONLINE_ORDERING_SETTINGS.averagePrepMinutes, 5, 180),
     orderLeadMinutes: readNumber(online.order_lead_minutes, DEFAULT_ONLINE_ORDERING_SETTINGS.orderLeadMinutes, 0, 180),
     pickupNote: readText(online.pickup_note, DEFAULT_ONLINE_ORDERING_SETTINGS.pickupNote, 240),
+    delivery: readOnlineOrderingDelivery(online.delivery),
     theme: isPosThemeId(online.theme) ? online.theme : fallbackTheme,
     branding: readOnlineOrderingBranding(online.branding),
     copy: readOnlineOrderingCopy(online.copy),
@@ -216,6 +245,12 @@ export function mergeOnlineOrderingSettings(settings: unknown, next: Partial<Onl
       average_prep_minutes: merged.averagePrepMinutes,
       order_lead_minutes: merged.orderLeadMinutes,
       pickup_note: merged.pickupNote,
+      delivery: {
+        enabled: merged.delivery.enabled,
+        fee_centavos: merged.delivery.feeCentavos,
+        eta_minutes: merged.delivery.etaMinutes,
+        note: merged.delivery.note,
+      },
       theme: merged.theme,
       branding: {
         use_organization_branding: merged.branding.useOrganizationBranding,

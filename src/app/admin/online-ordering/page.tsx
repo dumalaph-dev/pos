@@ -40,6 +40,10 @@ type OnlineOrderRecord = {
   order_no: string;
   customer_name: string;
   customer_phone: string;
+  fulfillment_method: string;
+  delivery_address: string | null;
+  delivery_note: string | null;
+  delivery_fee: number;
   pickup_slot: string;
   status: OnlineOrderStatus;
   queue_position: number;
@@ -98,7 +102,7 @@ export default async function OnlineOrderingPage({
 
   const ordersResult = await supabase
     .from("online_orders")
-    .select("id, order_no, customer_name, customer_phone, pickup_slot, status, queue_position, total, eta_at, created_at")
+    .select("id, order_no, customer_name, customer_phone, fulfillment_method, delivery_address, delivery_note, delivery_fee, pickup_slot, status, queue_position, total, eta_at, created_at")
     .eq("store_id", store.id)
     .order("created_at", { ascending: false })
     .limit(100);
@@ -119,6 +123,10 @@ export default async function OnlineOrderingPage({
     orderNo: order.order_no,
     customerName: order.customer_name,
     customerPhone: order.customer_phone,
+    fulfillmentMethod: order.fulfillment_method === "delivery" ? "delivery" as const : "pickup" as const,
+    deliveryAddress: order.delivery_address,
+    deliveryNote: order.delivery_note,
+    deliveryFee: Number(order.delivery_fee) || 0,
     pickupSlot: order.pickup_slot,
     status: order.status,
     queuePosition: Number(order.queue_position) || index + 1,

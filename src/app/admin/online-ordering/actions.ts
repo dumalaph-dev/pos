@@ -10,6 +10,7 @@ import {
   uploadOrganizationImage,
 } from "@/lib/admin/image-storage";
 import { isProductImageUrl } from "@/lib/product-images";
+import { toCentavos } from "@/lib/money";
 import { isPosThemeId } from "@/lib/pos-theme";
 import { isOnlineOrderingHexColor, mergeOnlineOrderingSettings, ONLINE_ORDER_STATUSES, publicMenuPath, readOnlineOrderingSettings, type OnlineOrderStatus } from "@/lib/online-ordering";
 
@@ -75,6 +76,10 @@ export async function updateOnlineOrderingSettings(formData: FormData) {
   const averagePrepMinutes = Number(readText(formData, "average_prep_minutes"));
   const orderLeadMinutes = Number(readText(formData, "order_lead_minutes"));
   const pickupNote = readText(formData, "pickup_note");
+  const deliveryEnabled = formData.get("delivery_enabled") === "on";
+  const deliveryFeePeso = Number(readText(formData, "delivery_fee"));
+  const deliveryEtaMinutes = Number(readText(formData, "delivery_eta_minutes"));
+  const deliveryNote = readText(formData, "delivery_note");
   const enabled = formData.get("enabled") === "on";
 
   if (!Number.isInteger(averagePrepMinutes) || averagePrepMinutes < 5 || averagePrepMinutes > 180) {
@@ -84,6 +89,13 @@ export async function updateOnlineOrderingSettings(formData: FormData) {
     actionRedirect("Lead time must be a whole number from 0 to 180 minutes.");
   }
   if (!pickupNote || pickupNote.length > 240) actionRedirect("Add a pickup note under 240 characters.");
+  if (!Number.isFinite(deliveryFeePeso) || deliveryFeePeso < 0 || deliveryFeePeso > 10000) {
+    actionRedirect("Delivery fee must be between ₱0 and ₱10,000.");
+  }
+  if (!Number.isInteger(deliveryEtaMinutes) || deliveryEtaMinutes < 15 || deliveryEtaMinutes > 180) {
+    actionRedirect("Delivery ETA must be a whole number from 15 to 180 minutes.");
+  }
+  if (!deliveryNote || deliveryNote.length > 240) actionRedirect("Add a delivery note under 240 characters.");
 
   const { error } = await supabase
     .from("stores")
@@ -93,6 +105,12 @@ export async function updateOnlineOrderingSettings(formData: FormData) {
         averagePrepMinutes,
         orderLeadMinutes,
         pickupNote,
+        delivery: {
+          enabled: deliveryEnabled,
+          feeCentavos: toCentavos(deliveryFeePeso),
+          etaMinutes: deliveryEtaMinutes,
+          note: deliveryNote,
+        },
       }),
     })
     .eq("id", store.id)

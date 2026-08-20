@@ -34,7 +34,15 @@ function demoMenu(): PublicMenuStore {
     image_url: product.imageUrl,
   }, new Map(categories.map((category) => [category.id, category.name]))));
 
-  const settings = readOnlineOrderingSettings({ online_ordering: { enabled: true } });
+  const settings = readOnlineOrderingSettings({ online_ordering: {
+    enabled: true,
+    delivery: {
+      enabled: true,
+      fee_centavos: 500,
+      eta_minutes: 45,
+      note: "Delivery is available within our service area. We’ll confirm the address and total by phone.",
+    },
+  } });
   return {
     id: "demo-store",
     name: "Morning Ritual Cafe",

@@ -20,11 +20,11 @@ export async function GET(
 
   const { data, error } = await admin
     .from("online_orders")
-    .select("order_no, status, queue_position, eta_at")
+    .select("order_no, status, queue_position, eta_at, fulfillment_method")
     .eq("id", orderId)
     .eq("store_id", store.id)
     .maybeSingle();
   if (error || !data) return Response.json({ ok: false, message: "Order not found" }, { status: 404 });
 
-  return Response.json({ ok: true, orderNo: data.order_no, status: data.status, queuePosition: data.queue_position, etaAt: data.eta_at });
+  return Response.json({ ok: true, orderNo: data.order_no, status: data.status, queuePosition: data.queue_position, etaAt: data.eta_at, fulfillmentMethod: data.fulfillment_method === "delivery" ? "delivery" : "pickup" });
 }
