@@ -7,7 +7,7 @@
 
 ## Current project status
 
-**Last updated:** 2026-08-15
+**Last updated:** 2026-08-20
 
 This section is the current source of truth for delivered work and the next gate. Keep it updated in the same change as every feature, migration, QA pass, commit, or deployment.
 
@@ -19,6 +19,7 @@ This section is the current source of truth for delivered work and the next gate
 | Printing | In progress (6/7) | Physical LAN printer slip validation |
 | Multi-branch | Complete | Production second-branch sign-off |
 | Customer display | Hosted migration `0042` applied; RLS/grants verified; one real Main Branch promotion is active; paired browser two-screen QA passed for cart, weight, discount, payment/change, thank-you, rotation, and disconnect | Keep the separate physical display/LAN and offline pilot gate moving |
+| Online ordering and public menu | Deployed; pay-at-pickup queue/ETA, QR link, POS pickup handoff, mobile-first customer menu, and owner copy/theme editor are implemented; production preflight and public-menu smoke check pass | Owner acceptance with one real pickup order; keep the physical pilot gate moving |
 | Admin backoffice | Complete (9/9 checklist items; hosted Employee ID login and forced-password-change QA passed 2026-08-09; hosted migration ledger synchronized through `0049` and disposable account/PIN UI rechecked 2026-08-14) | Maintain regression coverage |
 | Inventory workflow | Complete | Maintain regression coverage |
 | Inventory reporting and exports | Authenticated admin and manager QA passed | Reconciliation against broader live data |
@@ -28,6 +29,8 @@ This section is the current source of truth for delivered work and the next gate
 | Production pilot | In progress; `dumala.store` is live, production identity/deployment preflight passed 2026-08-12, and P9 readiness work is underway | Complete the physical-device pilot gates, PITR/restore confirmation, Vercel log/alert setup, real data intake, pilot week, and branch #2 |
 
 ### Recent delivery log
+
+- **2026-08-20 - Public menu editor merged and production smoke coverage added:** Merged `codex/online-menu-editor` into `main` as `f47783b` (feature commit `7d99f42`). The customer-facing menu now supports owner-editable copy and POS-synced themes, while the POS install prompt remains excluded from public routes. `node scripts/production-preflight.mjs --remote --menu-slug dumala-main` now checks the public menu route for HTTP 200, the rendered public-menu shell, and the absence of the `Install Dumala PWA` label without placing an order. Production preflight, typecheck, lint, POS business tests, accessibility tests, and the public route smoke check passed. Final acceptance still requires the owner's real pay-at-pickup order and the physical pilot gates below.
 
 - **2026-08-15 - P9 pre-tablet pass: maskable icon fixed, PWA install behaviour verified, offline-drill check added:** Everything in the P9 install gate that can be settled without the physical tablet was settled, so the on-device session fails only on hardware, not on software.
 
