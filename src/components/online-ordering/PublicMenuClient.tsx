@@ -164,7 +164,7 @@ export function PublicMenuClient({ menu }: { menu: PublicMenuStore }) {
       <header className="public-menu__safe-top sticky top-0 z-30 border-b border-[var(--public-menu-border)]/90 bg-[var(--public-menu-surface)]/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-2 px-3 py-2.5 sm:gap-4 sm:px-6 sm:py-3 lg:px-8">
           <div className="flex min-w-0 max-w-[42vw] items-center gap-2.5 sm:max-w-none sm:gap-3">
-            <PublicBrandMark branding={branding} name={brandName} size="nav" />
+            <PublicBrandMark branding={branding} name={brandName} />
             <div className="min-w-0"><p className="truncate text-[13px] font-extrabold tracking-[-0.02em] sm:text-sm">{brandName}</p><p className="truncate text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--public-menu-subtle)] sm:text-[10px] sm:tracking-[0.12em]">{branding.brandTagline || copy.headerTagline}</p></div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -180,10 +180,6 @@ export function PublicMenuClient({ menu }: { menu: PublicMenuStore }) {
         <div className="pointer-events-none absolute -bottom-32 left-[45%] h-56 w-56 rounded-full bg-[var(--public-menu-accent)]/10 blur-3xl sm:-bottom-40 sm:h-72 sm:w-72" />
         <div className="relative mx-auto grid max-w-[1240px] gap-6 px-4 py-8 sm:gap-8 sm:px-6 sm:py-14 lg:grid-cols-3 lg:items-end lg:px-8 lg:py-[76px]">
           <div className="lg:col-span-2">
-            <div className="mb-5 flex items-center gap-3 sm:mb-6">
-              <PublicBrandMark branding={branding} name={brandName} size="hero" />
-              <div className="min-w-0"><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[var(--public-menu-accent-dark)]">Official online menu</p><p className="mt-1 truncate text-lg font-black tracking-[-0.04em] text-[var(--public-menu-primary)] sm:text-xl">{brandName}</p><p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--public-menu-subtle)]">{branding.brandTagline || copy.headerTagline}</p></div>
-            </div>
             <div className="flex flex-wrap items-center gap-2"><span className="inline-flex items-center gap-2 rounded-full bg-[var(--public-menu-primary)] px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[var(--public-menu-primary-text)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--public-menu-accent)]" />{copy.heroEyebrow}</span><span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-extrabold sm:hidden ${orderingPaused ? "bg-[var(--public-menu-danger-soft)] text-[var(--public-menu-danger)]" : "bg-[var(--public-menu-primary-soft)] text-[var(--public-menu-primary)]"}`}><i className={`h-1.5 w-1.5 rounded-full ${orderingPaused ? "bg-[var(--public-menu-danger)]" : "bg-[var(--public-menu-success)]"}`} />{orderingPaused ? "Ordering paused" : menu.settings.delivery.enabled ? "Pickup + delivery" : "Open for pickup"}</span></div>
             <h1 className="mt-4 max-w-3xl text-[2.8rem] font-black leading-[0.95] tracking-[-0.07em] text-[var(--public-menu-primary)] sm:mt-5 sm:text-6xl">{copy.heroTitle}<br /><span className="text-[var(--public-menu-accent-dark)]">{copy.heroAccent}</span></h1>
             <p className="mt-4 max-w-xl text-[13px] leading-6 text-[var(--public-menu-muted)] sm:mt-5 sm:text-base sm:leading-7">{copy.heroDescription}</p>
@@ -263,9 +259,9 @@ function TrackOrderDialog({ orderNo, phone, state, onOrderNoChange, onPhoneChang
   );
 }
 
-function PublicBrandMark({ branding, name, size = "nav" }: { branding: PublicMenuStore["settings"]["branding"]; name: string; size?: "nav" | "hero" }) {
+function PublicBrandMark({ branding, name }: { branding: PublicMenuStore["settings"]["branding"]; name: string }) {
   const hasLogo = Boolean(branding.logoUrl);
-  const sizeClass = size === "hero" ? "h-16 w-16 rounded-[22px] text-xl sm:h-20 sm:w-20 sm:rounded-[26px]" : "h-11 w-11 rounded-2xl text-base sm:h-14 sm:w-14 sm:rounded-[var(--public-menu-radius-card)]";
+  const sizeClass = "h-11 w-11 rounded-2xl text-base sm:h-14 sm:w-14 sm:rounded-[var(--public-menu-radius-card)]";
   return <span className={`grid shrink-0 place-items-center overflow-hidden bg-[var(--public-menu-primary)] font-black text-[var(--public-menu-primary-text)] ${sizeClass}`} role={hasLogo ? "img" : undefined} aria-label={hasLogo ? `${name} logo` : undefined} aria-hidden={hasLogo ? undefined : true} style={hasLogo ? { backgroundColor: "var(--public-menu-primary-soft)", backgroundImage: `url(${JSON.stringify(branding.logoUrl)})`, backgroundPosition: "center", backgroundRepeat: "no-repeat", backgroundSize: "contain" } : undefined}>{!hasLogo && name.charAt(0).toUpperCase()}</span>;
 }
 
