@@ -8,7 +8,13 @@ Dumala POS does not require a paid third-party error-monitoring service. Product
 2. **Application and browser diagnostics:** `src/lib/monitoring.ts` reports handled boundary errors and sync failures to the server log or browser console with a small context object. This is useful during support and device troubleshooting; it does not send data to an external paid service.
 3. **Offline sync alerts:** order and audit outbox failures are counted, retried with backoff, shown in the POS sync pill, and made actionable with retry guidance. Repeated identical failures are deduplicated for five minutes so a disconnected till does not flood the console.
 
-Run `npm run production:preflight` before a production deployment. It checks the production Supabase/site identity and, with the remote check enabled by the npm script, probes the live root, manifest, and service-worker endpoints. It does not require a third-party monitoring account.
+Run `npm run production:preflight` before a production deployment. It checks the production Supabase/site identity and, with the remote check enabled by the npm script, probes the live root, manifest, and service-worker endpoints. For a branch with online ordering enabled, also pass its public slug so the customer route and POS-install exclusion are checked:
+
+```text
+node scripts/production-preflight.mjs --remote --menu-slug dumala-main
+```
+
+The public-menu check confirms HTTP 200, the public menu shell, and the absence of the `Install Dumala PWA` label. It does not place an order or mutate production data. The preflight does not require a third-party monitoring account.
 
 ## Vercel production setup
 

@@ -6,6 +6,7 @@ const remote = args.has("--remote");
 const env = { ...readEnvFile(".env.local"), ...process.env };
 const issues = [];
 const warnings = [];
+const menuSlug = readOption("--menu-slug") || value("ONLINE_ORDERING_PREFLIGHT_SLUG");
 
 const supabaseUrl = value("NEXT_PUBLIC_SUPABASE_URL");
 const siteUrl = value("NEXT_PUBLIC_SITE_URL") || "https://dumala.store";
@@ -16,6 +17,10 @@ console.log("Safe mode: secret values are never printed.");
 
 checkHttpsOrigin("NEXT_PUBLIC_SITE_URL", siteUrl);
 checkSupabaseUrl();
+
+if (menuSlug && !/^[a-z0-9][a-z0-9-]{0,119}$/i.test(menuSlug)) {
+  issues.push("--menu-slug must contain only letters, numbers, and hyphens, and be 1-120 characters long.");
+}
 
 if (remote) await checkRemote();
 
@@ -116,7 +121,10 @@ async function checkRemote() {
     return;
   }
 
-  for (const pathName of ["/", "/manifest.webmanifest", "/sw.js"]) {
+  const paths = ["/", "/manifest.webmanifest", "/sw.js"];
+  if (menuSlug) paths.push(`/menu/${encodeURIComponent(menuSlug)}`);
+
+  for (const pathName of paths) {
     const response = await fetchWithTimeout(origin + pathName);
     if (response.error) {
       issues.push(`Remote check failed for ${pathName}: ${response.error}.`);
@@ -139,7 +147,21 @@ async function checkRemote() {
       if (manifest.display !== "standalone") issues.push("Production manifest is not configured for standalone PWA display.");
       if (manifest.name !== "Dumala POS") warnings.push("Production manifest name differs from Dumala POS; verify the deployed build.");
     }
+
+    if (menuSlug && pathName === `/menu/${encodeURIComponent(menuSlug)}`) {
+      if (!response.body.includes("public-menu")) issues.push(`Production public menu ${pathName} did not render the public menu shell.`);
+      if (response.body.includes("Install Dumala PWA")) issues.push(`Production public menu ${pathName} still contains the POS install prompt.`);
+    }
   }
+}
+
+function readOption(name) {
+  const inline = process.argv.find((argument) => argument.startsWith(`${name}=`));
+  if (inline) return inline.slice(name.length + 1).trim();
+  const index = process.argv.indexOf(name);
+  if (index < 0) return "";
+  const candidate = process.argv[index + 1];
+  return typeof candidate === "string" ? candidate.trim() : "";
 }
 
 async function fetchWithTimeout(url) {
