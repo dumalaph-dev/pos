@@ -62,7 +62,9 @@ export function PublicMenuClient({ menu }: { menu: PublicMenuStore }) {
   const cartTotal = cart.reduce((sum, line) => sum + line.product.price * line.qty, 0);
   const cartCount = cart.reduce((sum, line) => sum + line.qty, 0);
   const copy = menu.settings.copy;
-  const themeStyle = getPublicMenuThemeVariables(menu.settings.theme) as CSSProperties;
+  const branding = menu.settings.branding;
+  const brandName = branding.brandName || menu.name;
+  const themeStyle = getPublicMenuThemeVariables(menu.settings.theme, branding) as CSSProperties;
 
   useEffect(() => {
     if (!orderState.ok || !orderState.orderId || orderState.orderId.startsWith("demo-")) return;
@@ -157,8 +159,8 @@ export function PublicMenuClient({ menu }: { menu: PublicMenuStore }) {
       <header className="public-menu__safe-top sticky top-0 z-30 border-b border-[var(--public-menu-border)]/90 bg-[var(--public-menu-surface)]/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-2 px-3 py-2.5 sm:gap-4 sm:px-6 sm:py-3 lg:px-8">
           <div className="flex min-w-0 max-w-[42vw] items-center gap-2.5 sm:max-w-none sm:gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--public-menu-primary)] text-sm font-black text-[var(--public-menu-primary-text)] sm:h-10 sm:w-10 sm:rounded-[var(--public-menu-radius-card)]">{menu.name.charAt(0).toUpperCase()}</span>
-            <div className="min-w-0"><p className="truncate text-[13px] font-extrabold tracking-[-0.02em] sm:text-sm">{menu.name}</p><p className="truncate text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--public-menu-subtle)] sm:text-[10px] sm:tracking-[0.12em]">{copy.headerTagline}</p></div>
+            <PublicBrandMark branding={branding} name={brandName} />
+            <div className="min-w-0"><p className="truncate text-[13px] font-extrabold tracking-[-0.02em] sm:text-sm">{brandName}</p><p className="truncate text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--public-menu-subtle)] sm:text-[10px] sm:tracking-[0.12em]">{branding.brandTagline || copy.headerTagline}</p></div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <span aria-live="polite" className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1.5 text-[9px] font-extrabold sm:px-3 sm:text-[10px] ${orderingPaused ? "bg-[var(--public-menu-danger-soft)] text-[var(--public-menu-danger)]" : "bg-[var(--public-menu-primary-soft)] text-[var(--public-menu-primary)]"}`}><i className={`h-1.5 w-1.5 rounded-full ${orderingPaused ? "bg-[var(--public-menu-danger)]" : "bg-[var(--public-menu-success)]"}`} /><span className="sm:hidden">{orderingPaused ? "Paused" : "Open"}</span><span className="hidden sm:inline">{orderingPaused ? "Ordering paused" : "Open for pickup"}</span></span>
@@ -202,7 +204,7 @@ export function PublicMenuClient({ menu }: { menu: PublicMenuStore }) {
 
       {drawerOpen && <div className="fixed inset-0 z-40 flex items-end justify-center overscroll-contain bg-[var(--public-menu-primary)]/35 p-0 backdrop-blur-[2px] sm:items-center sm:p-5" role="dialog" aria-modal="true" aria-labelledby="checkout-heading"><div className="public-menu__sheet max-h-[92dvh] w-full max-w-xl overflow-y-auto rounded-t-[24px] bg-[var(--public-menu-raised)] p-4 shadow-[var(--public-menu-shadow-pop)] sm:rounded-[var(--public-menu-radius-card)] sm:p-7"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[var(--public-menu-accent-dark)]">{orderState.ok ? "Order received" : "Almost there"}</p><h2 id="checkout-heading" className="mt-1 text-[1.4rem] font-black leading-tight tracking-[-0.045em] text-[var(--public-menu-primary)] sm:text-2xl">{orderState.ok ? "Your pickup is in the queue." : "Set your pickup details."}</h2></div><button type="button" onClick={() => setDrawerOpen(false)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-[var(--public-menu-muted)] transition hover:bg-[var(--public-menu-sidebar)] hover:text-[var(--public-menu-primary)]" aria-label="Close checkout"><AdminIcon name="close" size={18} /></button></div>{orderState.ok ? <OrderConfirmation orderState={orderState} status={trackedStatus} etaAt={trackedEta ?? orderState.etaAt ?? null} queuePosition={trackedQueuePosition ?? orderState.queuePosition ?? null} copied={copied} onCopy={copyOrderNumber} /> : <CheckoutForm menu={menu} cart={cart} cartTotal={cartTotal} requestId={checkoutRequestId} action={formAction} pending={pending} orderState={orderState} />}</div></div>}
 
-      <footer className="border-t border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] px-4 py-7 text-center text-[11px] font-semibold text-[var(--public-menu-subtle)] sm:px-6"><span className="font-extrabold text-[var(--public-menu-primary)]">{menu.name}</span> · order ahead with Dumala POS</footer>
+      <footer className="border-t border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] px-4 py-7 text-center text-[11px] font-semibold text-[var(--public-menu-subtle)] sm:px-6"><span className="font-extrabold text-[var(--public-menu-primary)]">{brandName}</span> · order ahead with Dumala POS</footer>
     </main>
   );
 }
@@ -249,6 +251,11 @@ function TrackOrderDialog({ orderNo, phone, state, onOrderNoChange, onPhoneChang
       </div>
     </div>
   );
+}
+
+function PublicBrandMark({ branding, name }: { branding: PublicMenuStore["settings"]["branding"]; name: string }) {
+  const hasLogo = Boolean(branding.logoUrl);
+  return <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-[var(--public-menu-primary)] text-sm font-black text-[var(--public-menu-primary-text)] sm:h-10 sm:w-10 sm:rounded-[var(--public-menu-radius-card)]" role={hasLogo ? "img" : undefined} aria-label={hasLogo ? `${name} logo` : undefined} aria-hidden={hasLogo ? undefined : true} style={hasLogo ? { backgroundColor: "var(--public-menu-primary-soft)", backgroundImage: `url(${JSON.stringify(branding.logoUrl)})`, backgroundPosition: "center", backgroundRepeat: "no-repeat", backgroundSize: "contain" } : undefined}>{!hasLogo && name.charAt(0).toUpperCase()}</span>;
 }
 
 function ProductCard({ product, disabled, onAdd }: { product: PublicMenuProduct; disabled: boolean; onAdd: () => void }) {

@@ -2,7 +2,9 @@ import { createAdminClient } from "@/lib/employee-auth";
 import {
   buildPublicMenuProduct,
   normalizePublicMenuSlug,
+  readOnlineOrderingBrandDefaults,
   readOnlineOrderingSettings,
+  resolveOnlineOrderingBranding,
   type PublicMenuStore,
 } from "@/lib/online-ordering";
 import { getCatalogPreset } from "@/lib/catalog-presets";
@@ -32,12 +34,19 @@ function demoMenu(): PublicMenuStore {
     image_url: product.imageUrl,
   }, new Map(categories.map((category) => [category.id, category.name]))));
 
+  const settings = readOnlineOrderingSettings({ online_ordering: { enabled: true } });
   return {
     id: "demo-store",
     name: "Morning Ritual Cafe",
     address: "18 Rizal Avenue · 7:00 AM–8:00 PM",
     slug: DEMO_STORE_SLUG,
-    settings: readOnlineOrderingSettings({ online_ordering: { enabled: true } }),
+    settings: {
+      ...settings,
+      branding: resolveOnlineOrderingBranding(settings.branding, {
+        brandName: "Morning Ritual Cafe",
+        brandTagline: "Order ahead · pickup at the counter",
+      }),
+    },
     categories,
     products,
   };
@@ -78,9 +87,10 @@ export async function getPublicMenuStoreBySlug(slug: string): Promise<PublicMenu
   if (storeResult.error || !storeResult.data) return normalizedSlug === DEMO_STORE_SLUG ? demoMenu() : null;
 
   const store = storeResult.data as StoreRecord;
-  const [categoriesResult, productsResult] = await Promise.all([
+  const [categoriesResult, productsResult, organizationResult] = await Promise.all([
     admin.from("categories").select("id, name, sort_order").eq("store_id", store.id).eq("is_active", true).order("sort_order").order("name"),
     admin.from("products").select("id, name, price, pricing_mode, unit, category_id, image_url, sort_order").eq("store_id", store.id).eq("is_active", true).order("sort_order").order("name"),
+    admin.from("organizations").select("settings").eq("id", store.org_id).maybeSingle(),
   ]);
 
   if (categoriesResult.error || productsResult.error) return null;
@@ -97,12 +107,18 @@ export async function getPublicMenuStoreBySlug(slug: string): Promise<PublicMenu
     image_url?: string | null;
   }, categoryNames));
 
+  const settings = readOnlineOrderingSettings(store.settings);
+  const brandDefaults = readOnlineOrderingBrandDefaults(organizationResult.data?.settings, store.name);
+
   return {
     id: store.id,
     name: store.name,
     address: store.address,
     slug: store.staff_login_slug,
-    settings: readOnlineOrderingSettings(store.settings),
+    settings: {
+      ...settings,
+      branding: resolveOnlineOrderingBranding(settings.branding, brandDefaults),
+    },
     categories,
     products,
   };

@@ -3,8 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getAuthenticatedUser, createClient } from "@/lib/supabase/server";
+import {
+  organizationImageStoragePath,
+  readOrganizationImageFile,
+  removeOrganizationImage,
+  uploadOrganizationImage,
+} from "@/lib/admin/image-storage";
+import { isProductImageUrl } from "@/lib/product-images";
 import { isPosThemeId } from "@/lib/pos-theme";
-import { mergeOnlineOrderingSettings, ONLINE_ORDER_STATUSES, publicMenuPath, type OnlineOrderStatus } from "@/lib/online-ordering";
+import { isOnlineOrderingHexColor, mergeOnlineOrderingSettings, ONLINE_ORDER_STATUSES, publicMenuPath, readOnlineOrderingSettings, type OnlineOrderStatus } from "@/lib/online-ordering";
 
 type OwnerProfile = {
   org_id: string;
@@ -103,8 +110,33 @@ export async function updateOnlineOrderingPresentation(formData: FormData) {
   const storeId = readText(formData, "store_id");
   const store = await readStoreContext(supabase, profile.org_id, storeId);
   const theme = readText(formData, "theme");
+  const brandLogoFile = readOrganizationImageFile(formData, "brand_logo_file");
+  const brandName = readText(formData, "brand_name");
+  const brandTagline = readText(formData, "brand_tagline");
+  const brandLogoUrl = readText(formData, "brand_logo_url");
+  const useOrganizationBranding = formData.get("use_organization_branding") === "on";
+  const colorMode = readText(formData, "color_mode");
+  const primaryColor = readText(formData, "primary_color").toLowerCase();
+  const accentColor = readText(formData, "accent_color").toLowerCase();
 
   if (!isPosThemeId(theme)) actionRedirect("Choose a valid public menu theme.");
+  if (!brandName || brandName.length > 80) actionRedirect("Add a menu brand name under 80 characters.");
+  if (brandTagline.length > 80) actionRedirect("Menu brand tagline must be 80 characters or fewer.");
+  if (brandLogoUrl && !isProductImageUrl(brandLogoUrl)) actionRedirect("Choose a valid menu logo.");
+  if (colorMode !== "theme" && colorMode !== "brand") actionRedirect("Choose a valid menu color direction.");
+  if (!isOnlineOrderingHexColor(primaryColor) || !isOnlineOrderingHexColor(accentColor)) actionRedirect("Choose valid six-digit brand colors.");
+  if (brandLogoFile === undefined) actionRedirect("Choose a JPG, PNG, or WebP menu logo under 900 KB.");
+  if (brandLogoFile && profile.role !== "admin") actionRedirect("Only organization admins can upload a menu logo.");
+
+  const currentSettings = readOnlineOrderingSettings(store.settings);
+  const uploadedLogo = brandLogoFile
+    ? await uploadOrganizationImage(supabase, profile.org_id, `online-menu/${store.id}/logo`, brandLogoFile)
+    : null;
+  if (uploadedLogo?.error || (uploadedLogo && !uploadedLogo.url)) {
+    await removeOrganizationImage(supabase, uploadedLogo?.path ?? null);
+    actionRedirect("Menu logo upload failed. Check that image storage is configured, then try again.");
+  }
+  const nextLogoUrl = uploadedLogo?.url ?? (brandLogoUrl || null);
 
   const copy = {
     headerTagline: readPresentationText(formData, "header_tagline", 80),
@@ -121,12 +153,32 @@ export async function updateOnlineOrderingPresentation(formData: FormData) {
   const { error } = await supabase
     .from("stores")
     .update({
-      settings: mergeOnlineOrderingSettings(store.settings, { theme, copy }),
+      settings: mergeOnlineOrderingSettings(store.settings, {
+        theme,
+        branding: {
+          useOrganizationBranding,
+          brandName: brandName.slice(0, 80),
+          brandTagline: brandTagline.slice(0, 80),
+          logoUrl: nextLogoUrl,
+          colorMode,
+          primaryColor,
+          accentColor,
+        },
+        copy,
+      }),
     })
     .eq("id", store.id)
     .eq("org_id", profile.org_id);
 
-  if (error) actionRedirect(error.message || "Public menu appearance could not be saved.");
+  if (error) {
+    await removeOrganizationImage(supabase, uploadedLogo?.path ?? null);
+    actionRedirect(error.message || "Public menu appearance could not be saved.");
+  }
+
+  const previousLogoPath = organizationImageStoragePath(currentSettings.branding.logoUrl, profile.org_id);
+  if (previousLogoPath && currentSettings.branding.logoUrl !== nextLogoUrl) {
+    await removeOrganizationImage(supabase, previousLogoPath);
+  }
 
   revalidatePath("/admin/online-ordering");
   revalidatePath(publicMenuPath(store.staff_login_slug));

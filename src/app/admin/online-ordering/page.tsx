@@ -9,7 +9,7 @@ import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import { readAdminBranding } from "@/lib/admin/branding";
 import { absoluteUrl } from "@/lib/site-url";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
-import { publicMenuPath, readOnlineOrderingSettings, type OnlineOrderStatus } from "@/lib/online-ordering";
+import { publicMenuPath, readOnlineOrderingBrandDefaults, readOnlineOrderingSettings, type OnlineOrderStatus } from "@/lib/online-ordering";
 
 export const metadata: Metadata = {
   title: "Online ordering",
@@ -128,6 +128,7 @@ export default async function OnlineOrderingPage({
     itemSummary: (itemsByOrder.get(order.id) ?? []).map((item) => `${item.name_snapshot} × ${Number(item.qty)}`).join(" · ") || "Online pickup order",
   }));
   const branding = readAdminBranding(profile.organizations?.settings);
+  const onlineBrandDefaults = readOnlineOrderingBrandDefaults(profile.organizations?.settings, store.name);
   const settings = readOnlineOrderingSettings(store.settings);
   const shareUrl = absoluteUrl(publicMenuPath(store.staff_login_slug));
   const saved = readParam(params.saved);
@@ -162,12 +163,14 @@ export default async function OnlineOrderingPage({
         <OnlineOrderingWorkspace
           store={{ id: store.id, name: store.name, address: store.address, slug: store.staff_login_slug }}
           settings={settings}
+          onlineBrandDefaults={onlineBrandDefaults}
           shareUrl={shareUrl}
           orders={orders}
           queryError={queryError}
           savedMessage={savedMessage}
           errorMessage={errorMessage}
           canManage={profile.role === "admin" || profile.role === "manager"}
+          canUploadLogo={profile.role === "admin"}
         />
       </div>
     </main>

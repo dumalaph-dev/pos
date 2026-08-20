@@ -1,9 +1,27 @@
-import { resolveProductImage } from "@/lib/product-images";
+import { isProductImageUrl, resolveProductImage } from "@/lib/product-images";
 import { isPosThemeId, type PosThemeId } from "@/lib/pos-theme";
 
 export const ONLINE_ORDER_STATUSES = ["new", "confirmed", "preparing", "ready", "picked_up", "cancelled"] as const;
 
 export type OnlineOrderStatus = (typeof ONLINE_ORDER_STATUSES)[number];
+
+export type OnlineOrderingBrandColorMode = "theme" | "brand";
+
+export type OnlineOrderingBranding = {
+  useOrganizationBranding: boolean;
+  brandName: string;
+  brandTagline: string;
+  logoUrl: string | null;
+  colorMode: OnlineOrderingBrandColorMode;
+  primaryColor: string;
+  accentColor: string;
+};
+
+export type OnlineOrderingBrandDefaults = {
+  brandName?: string;
+  brandTagline?: string;
+  logoUrl?: string | null;
+};
 
 export type OnlineOrderingSettings = {
   enabled: boolean;
@@ -11,6 +29,7 @@ export type OnlineOrderingSettings = {
   orderLeadMinutes: number;
   pickupNote: string;
   theme: PosThemeId;
+  branding: OnlineOrderingBranding;
   copy: OnlineOrderingCopy;
 };
 
@@ -73,12 +92,23 @@ export const DEFAULT_ONLINE_ORDERING_COPY: OnlineOrderingCopy = {
   searchPlaceholder: "Search menu",
 };
 
+export const DEFAULT_ONLINE_ORDERING_BRANDING: OnlineOrderingBranding = {
+  useOrganizationBranding: true,
+  brandName: "",
+  brandTagline: "",
+  logoUrl: null,
+  colorMode: "theme",
+  primaryColor: "#173a2b",
+  accentColor: "#e4b34f",
+};
+
 export const DEFAULT_ONLINE_ORDERING_SETTINGS: OnlineOrderingSettings = {
   enabled: false,
   averagePrepMinutes: 20,
   orderLeadMinutes: 15,
   pickupNote: "We will have your order ready at the counter. Show your order number when you arrive.",
   theme: "modern",
+  branding: DEFAULT_ONLINE_ORDERING_BRANDING,
   copy: DEFAULT_ONLINE_ORDERING_COPY,
 };
 
@@ -94,6 +124,48 @@ function readNumber(value: unknown, fallback: number, min: number, max: number) 
 
 function readText(value: unknown, fallback: string, maxLength: number) {
   return typeof value === "string" && value.trim() ? value.trim().slice(0, maxLength) : fallback;
+}
+
+function readOptionalText(value: unknown, fallback: string, maxLength: number) {
+  return typeof value === "string" ? value.trim().slice(0, maxLength) : fallback;
+}
+
+export function isOnlineOrderingHexColor(value: unknown): value is string {
+  return typeof value === "string" && /^#[\da-f]{6}$/i.test(value);
+}
+
+function readOnlineOrderingBranding(value: unknown): OnlineOrderingBranding {
+  const branding = asRecord(value);
+  return {
+    useOrganizationBranding: branding.use_organization_branding !== false,
+    brandName: readOptionalText(branding.brand_name, DEFAULT_ONLINE_ORDERING_BRANDING.brandName, 80),
+    brandTagline: readOptionalText(branding.brand_tagline, DEFAULT_ONLINE_ORDERING_BRANDING.brandTagline, 80),
+    logoUrl: isProductImageUrl(branding.logo_url) ? branding.logo_url : null,
+    colorMode: branding.color_mode === "brand" ? "brand" : DEFAULT_ONLINE_ORDERING_BRANDING.colorMode,
+    primaryColor: isOnlineOrderingHexColor(branding.primary_color) ? branding.primary_color.toLowerCase() : DEFAULT_ONLINE_ORDERING_BRANDING.primaryColor,
+    accentColor: isOnlineOrderingHexColor(branding.accent_color) ? branding.accent_color.toLowerCase() : DEFAULT_ONLINE_ORDERING_BRANDING.accentColor,
+  };
+}
+
+export function resolveOnlineOrderingBranding(branding: OnlineOrderingBranding, defaults: OnlineOrderingBrandDefaults = {}) {
+  if (!branding.useOrganizationBranding) return branding;
+  return {
+    ...branding,
+    brandName: defaults.brandName?.trim() || branding.brandName,
+    brandTagline: defaults.brandTagline?.trim() || branding.brandTagline,
+    logoUrl: defaults.logoUrl !== undefined ? defaults.logoUrl : branding.logoUrl,
+  };
+}
+
+export function readOnlineOrderingBrandDefaults(settings: unknown, fallbackBrandName: string): OnlineOrderingBrandDefaults {
+  const root = asRecord(settings);
+  const dashboard = asRecord(root.admin_dashboard);
+  const brandTagline = readOptionalText(dashboard.brand_tagline, "Order ahead · pickup at the counter", 80);
+  return {
+    brandName: readText(dashboard.brand_name, fallbackBrandName, 80),
+    brandTagline: brandTagline || "Order ahead · pickup at the counter",
+    logoUrl: isProductImageUrl(dashboard.logo_url) ? dashboard.logo_url : null,
+  };
 }
 
 function readOnlineOrderingCopy(value: unknown): OnlineOrderingCopy {
@@ -122,6 +194,7 @@ export function readOnlineOrderingSettings(settings: unknown): OnlineOrderingSet
     orderLeadMinutes: readNumber(online.order_lead_minutes, DEFAULT_ONLINE_ORDERING_SETTINGS.orderLeadMinutes, 0, 180),
     pickupNote: readText(online.pickup_note, DEFAULT_ONLINE_ORDERING_SETTINGS.pickupNote, 240),
     theme: isPosThemeId(online.theme) ? online.theme : fallbackTheme,
+    branding: readOnlineOrderingBranding(online.branding),
     copy: readOnlineOrderingCopy(online.copy),
   };
 }
@@ -133,15 +206,26 @@ export function mergeOnlineOrderingSettings(settings: unknown, next: Partial<Onl
     ...current,
     ...next,
   };
+  const existingOnline = asRecord(existing.online_ordering);
 
   return {
     ...existing,
     online_ordering: {
+      ...existingOnline,
       enabled: merged.enabled,
       average_prep_minutes: merged.averagePrepMinutes,
       order_lead_minutes: merged.orderLeadMinutes,
       pickup_note: merged.pickupNote,
       theme: merged.theme,
+      branding: {
+        use_organization_branding: merged.branding.useOrganizationBranding,
+        brand_name: merged.branding.brandName,
+        brand_tagline: merged.branding.brandTagline,
+        logo_url: merged.branding.logoUrl,
+        color_mode: merged.branding.colorMode,
+        primary_color: merged.branding.primaryColor,
+        accent_color: merged.branding.accentColor,
+      },
       copy: {
         header_tagline: merged.copy.headerTagline,
         hero_eyebrow: merged.copy.heroEyebrow,

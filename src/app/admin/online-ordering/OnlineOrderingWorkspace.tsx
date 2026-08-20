@@ -11,6 +11,7 @@ import {
   formatOnlineEta,
   formatOrderStatusLabel,
   pickupSlotLabel,
+  type OnlineOrderingBrandDefaults,
   type OnlineOrderStatus,
   type OnlineOrderingSettings,
 } from "@/lib/online-ordering";
@@ -39,21 +40,25 @@ const ACTIVE_QUEUE_STATUSES: OnlineOrderStatus[] = ["new", "confirmed", "prepari
 export function OnlineOrderingWorkspace({
   store,
   settings,
+  onlineBrandDefaults,
   shareUrl,
   orders,
   queryError,
   savedMessage,
   errorMessage,
   canManage,
+  canUploadLogo,
 }: {
   store: { id: string; name: string; address: string | null; slug: string };
   settings: OnlineOrderingSettings;
+  onlineBrandDefaults: OnlineOrderingBrandDefaults;
   shareUrl: string;
   orders: QueueOrder[];
   queryError: string | null;
   savedMessage: string;
   errorMessage: string;
   canManage: boolean;
+  canUploadLogo: boolean;
 }) {
   const router = useRouter();
   const [enabled, setEnabled] = useState(settings.enabled);
@@ -217,7 +222,7 @@ export function OnlineOrderingWorkspace({
           </div>
           <a href={shareUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-accent px-4 py-3 text-xs font-extrabold uppercase tracking-wide text-accent-fg transition hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-fg">View live menu <AdminIcon name="arrow" size={14} /></a>
         </div>
-        <OnlineMenuEditor store={store} settings={settings} canManage={canManage} />
+        <OnlineMenuEditor store={store} settings={settings} onlineBrandDefaults={onlineBrandDefaults} canManage={canManage} canUploadLogo={canUploadLogo} />
       </section>
     </>
   );

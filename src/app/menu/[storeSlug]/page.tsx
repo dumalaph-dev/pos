@@ -9,10 +9,11 @@ export async function generateMetadata({ params }: { params: Promise<{ storeSlug
   const { storeSlug } = await params;
   const menu = await getPublicMenuStoreBySlug(storeSlug);
   if (!menu) return { title: "Menu", robots: { index: false, follow: false } };
+  const brandName = menu.settings.branding.brandName || menu.name;
   return {
-    title: `${menu.name} · Order ahead`,
-    description: `Order ahead for pickup from ${menu.name}. See the live pickup estimate before you leave.`,
-    openGraph: { title: `${menu.name} · Order ahead`, description: `Order ahead for pickup from ${menu.name}.` },
+    title: `${brandName} · Order ahead`,
+    description: `Order ahead for pickup from ${brandName}. See the live pickup estimate before you leave.`,
+    openGraph: { title: `${brandName} · Order ahead`, description: `Order ahead for pickup from ${brandName}.` },
   };
 }
 
