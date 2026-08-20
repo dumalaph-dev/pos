@@ -118,6 +118,29 @@
   letter-spacing: var(--public-menu-letter-spacing);
 }
 
+.public-menu :where(button, input, select, textarea) {
+  font-family: inherit;
+}
+
+.public-menu :where(input, select, textarea) {
+  color-scheme: light;
+}
+
+.public-menu[data-public-menu-theme="dark"] :where(input, select, textarea) {
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .public-menu *,
+  .public-menu *::before,
+  .public-menu *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* Public QR menu: keep the customer surface touch-friendly and free of the
    owner POS shell's install/update affordances. */
 .public-menu__safe-top {

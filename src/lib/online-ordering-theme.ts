@@ -16,7 +16,14 @@ function hexToRgb(hex: string) {
   };
 }
 
+const MINIMUM_TEXT_CONTRAST = 4.5;
+
+function isHexColor(value: string): boolean {
+  return /^#[\da-f]{6}$/i.test(value);
+}
+
 function relativeLuminance(hex: string) {
+  if (!isHexColor(hex)) return 0;
   const { red, green, blue } = hexToRgb(hex);
   return [red, green, blue].map((channel) => {
     const normalized = channel / 255;
@@ -30,12 +37,24 @@ function contrastRatio(left: string, right: string) {
   return (brighter + 0.05) / (darker + 0.05);
 }
 
-function textOnColor(background: string) {
-  return contrastRatio(background, "#ffffff") >= contrastRatio(background, "#173a2b") ? "#ffffff" : "#173a2b";
+function mixHex(foreground: string, background: string, foregroundWeight: number) {
+  const foregroundRgb = hexToRgb(foreground);
+  const backgroundRgb = hexToRgb(background);
+  const weight = Math.min(1, Math.max(0, foregroundWeight));
+  const channel = (foregroundChannel: number, backgroundChannel: number) => Math.round((foregroundChannel * weight) + (backgroundChannel * (1 - weight)));
+  return `#${[channel(foregroundRgb.red, backgroundRgb.red), channel(foregroundRgb.green, backgroundRgb.green), channel(foregroundRgb.blue, backgroundRgb.blue)].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
 }
 
-function readableAccentInk(accent: string, fallback: string) {
-  return contrastRatio(accent, "#fffdf8") >= 4.5 ? accent : fallback;
+function pickReadableColor(background: string, candidates: string[], fallback = "#000000") {
+  const validCandidates = candidates.filter(isHexColor);
+  if (!isHexColor(background) || validCandidates.length === 0) return fallback;
+  return validCandidates.reduce((best, candidate) => contrastRatio(candidate, background) > contrastRatio(best, background) ? candidate : best);
+}
+
+function keepReadableColor(foreground: string, background: string, fallbacks: string[]) {
+  return isHexColor(foreground) && contrastRatio(foreground, background) >= MINIMUM_TEXT_CONTRAST
+    ? foreground
+    : pickReadableColor(background, fallbacks);
 }
 
 export function getPublicMenuThemeVariables(themeId: PosThemeId, branding?: OnlineOrderingBranding): PublicMenuThemeVariables {
@@ -45,32 +64,65 @@ export function getPublicMenuThemeVariables(themeId: PosThemeId, branding?: Onli
   const useBrandPalette = branding?.colorMode === "brand";
   const primary = useBrandPalette ? branding.primaryColor : variables["--pos-theme-topbar"];
   const accent = useBrandPalette ? branding.accentColor : variables["--pos-theme-highlight"];
+  const background = variables["--pos-theme-bg"];
+  const panel = variables["--pos-theme-surface-panel"];
+  const surface = variables["--pos-theme-surface"];
+  const raised = variables["--pos-theme-surface-raised"];
+  const sidebar = variables["--pos-theme-sidebar"];
+  const baseText = pickReadableColor(surface, [variables["--pos-theme-text"], variables["--pos-theme-topbar"], variables["--pos-theme-topbar-text"], "#000000", "#ffffff"]);
+  const panelText = pickReadableColor(panel, [variables["--pos-theme-text"], baseText, variables["--pos-theme-topbar"], variables["--pos-theme-topbar-text"], "#000000", "#ffffff"]);
+  const raisedText = pickReadableColor(raised, [primary, variables["--pos-theme-text"], baseText, variables["--pos-theme-topbar-text"], "#000000", "#ffffff"]);
+  const sidebarText = pickReadableColor(sidebar, [primary, variables["--pos-theme-text"], baseText, variables["--pos-theme-topbar-text"], "#000000", "#ffffff"]);
+  const muted = keepReadableColor(variables["--pos-theme-text-muted"], surface, [baseText, panelText, "#000000", "#ffffff"]);
+  const subtle = keepReadableColor(variables["--pos-theme-text-subtle"], surface, [muted, baseText, "#000000", "#ffffff"]);
+  const primaryText = pickReadableColor(primary, [variables["--pos-theme-topbar-text"], baseText, "#ffffff", "#000000"]);
+  const primarySoft = useBrandPalette ? mixHex(primary, surface, 0.12) : variables["--pos-theme-primary-soft"];
+  const primarySoftText = pickReadableColor(primarySoft, [baseText, panelText, primary, "#000000", "#ffffff"]);
+  const accentText = pickReadableColor(accent, [primary, baseText, variables["--pos-theme-topbar-text"], "#ffffff", "#000000"]);
+  const accentInk = pickReadableColor(surface, [accent, baseText, primary, "#000000", "#ffffff"]);
+  const accentSoft = useBrandPalette ? mixHex(accent, surface, 0.18) : variables["--pos-theme-highlight-soft"];
+  const successSoft = useBrandPalette ? mixHex(accent, surface, 0.16) : variables["--pos-theme-highlight-soft"];
+  const successInk = pickReadableColor(successSoft, [accent, baseText, primary, "#000000", "#ffffff"]);
+  const danger = "#a9513d";
+  const dangerSoft = "#f8e9e2";
+  const dangerText = pickReadableColor(dangerSoft, [danger, baseText, "#000000", "#ffffff"]);
 
   return {
-    "--public-menu-bg": variables["--pos-theme-bg"],
-    "--public-menu-panel": variables["--pos-theme-surface-panel"],
-    "--public-menu-surface": variables["--pos-theme-surface"],
-    "--public-menu-raised": variables["--pos-theme-surface-raised"],
-    "--public-menu-sidebar": variables["--pos-theme-sidebar"],
+    "--public-menu-bg": background,
+    "--public-menu-panel": panel,
+    "--public-menu-surface": surface,
+    "--public-menu-raised": raised,
+    "--public-menu-sidebar": sidebar,
     "--public-menu-border": variables["--pos-theme-border"],
     "--public-menu-border-strong": variables["--pos-theme-border-strong"],
-    "--public-menu-text": variables["--pos-theme-text"],
-    "--public-menu-muted": variables["--pos-theme-text-muted"],
-    "--public-menu-subtle": variables["--pos-theme-text-subtle"],
+    "--public-menu-text": baseText,
+    "--public-menu-panel-text": panelText,
+    "--public-menu-surface-text": baseText,
+    "--public-menu-raised-text": raisedText,
+    "--public-menu-sidebar-text": sidebarText,
+    "--public-menu-muted": muted,
+    "--public-menu-subtle": subtle,
+    "--public-menu-heading": pickReadableColor(raised, [primary, raisedText, baseText, "#000000", "#ffffff"]),
     "--public-menu-primary": primary,
     "--public-menu-primary-hover": primary,
-    "--public-menu-primary-text": useBrandPalette ? textOnColor(primary) : variables["--pos-theme-topbar-text"],
-    "--public-menu-primary-soft": useBrandPalette ? `color-mix(in srgb, ${primary} 12%, transparent)` : variables["--pos-theme-primary-soft"],
+    "--public-menu-primary-text": primaryText,
+    "--public-menu-primary-soft": primarySoft,
+    "--public-menu-primary-soft-text": primarySoftText,
     "--public-menu-secondary": variables["--pos-theme-secondary"],
     "--public-menu-secondary-hover": variables["--pos-theme-secondary-hover"],
     "--public-menu-accent": accent,
-    "--public-menu-accent-dark": useBrandPalette ? readableAccentInk(accent, "#173a2b") : colors.accentInk,
-    "--public-menu-accent-soft": useBrandPalette ? `color-mix(in srgb, ${accent} 18%, transparent)` : variables["--pos-theme-highlight-soft"],
+    "--public-menu-accent-hover": accent,
+    "--public-menu-accent-text": accentText,
+    "--public-menu-accent-ink": pickReadableColor(surface, [accent, colors.accentInk, accentInk, baseText, "#000000", "#ffffff"]),
+    "--public-menu-accent-dark": accentInk,
+    "--public-menu-accent-soft": accentSoft,
+    "--public-menu-accent-soft-text": pickReadableColor(accentSoft, [accent, baseText, primary, "#000000", "#ffffff"]),
     "--public-menu-success": accent,
-    "--public-menu-success-soft": useBrandPalette ? `color-mix(in srgb, ${accent} 16%, transparent)` : variables["--pos-theme-highlight-soft"],
-    "--public-menu-success-ink": useBrandPalette ? readableAccentInk(accent, "#173a2b") : colors.accentInk,
-    "--public-menu-danger": "#a9513d",
-    "--public-menu-danger-soft": "#f8e9e2",
+    "--public-menu-success-soft": successSoft,
+    "--public-menu-success-ink": successInk,
+    "--public-menu-danger": danger,
+    "--public-menu-danger-soft": dangerSoft,
+    "--public-menu-danger-text": dangerText,
     "--public-menu-font": variables["--pos-theme-font"],
     "--public-menu-weight": variables["--pos-theme-weight"],
     "--public-menu-letter-spacing": variables["--pos-theme-letter-spacing"],
