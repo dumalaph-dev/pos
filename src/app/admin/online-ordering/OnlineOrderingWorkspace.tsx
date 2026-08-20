@@ -314,7 +314,7 @@ function QueueDashboard({ hidden, store, settings, shareUrl, orders, queryError,
           </div>
 
           {queryError ? (
-            <div className="m-5 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-4 text-sm leading-6 text-ink sm:m-6">The online queue table is not available yet. Apply the online-ordering migrations, including <code className="font-extrabold">0058_online_order_delivery.sql</code>, to receive pickup and delivery orders.</div>
+            <div className="m-5 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-4 text-sm leading-6 text-ink sm:m-6">The online queue table is not available yet. Apply the latest online-ordering migrations, including <code className="font-extrabold">0059_online_order_delivery.sql</code> and <code className="font-extrabold">0060_readable_online_order_numbers.sql</code>, to receive pickup and delivery orders.</div>
           ) : filteredOrders.length === 0 ? (
             <QueueEmptyState filter={filter} />
           ) : (

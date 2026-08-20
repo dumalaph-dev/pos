@@ -17,7 +17,7 @@ export async function GET(
     return Response.json({ ok: false, message: "Order not found" }, { status: 404 });
   }
 
-  if (storeSlug.toLowerCase() === "demo" && orderNo.startsWith("WEB-")) {
+  if (storeSlug.toLowerCase() === "demo" && /^[A-Z\d]{1,5}-\d{4}$/.test(orderNo)) {
     return Response.json({
       ok: true,
       orderNo,

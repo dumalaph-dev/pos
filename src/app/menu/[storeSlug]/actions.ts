@@ -3,7 +3,7 @@
 import { getPublicMenuStoreBySlug } from "@/lib/online-ordering-server";
 import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
-import type { OnlineOrderingFulfillmentMethod, PublicOnlineOrderResult } from "@/lib/online-ordering";
+import { getDemoOnlineOrderNo, type OnlineOrderingFulfillmentMethod, type PublicOnlineOrderResult } from "@/lib/online-ordering";
 
 type OrderDraft = {
   productId: string;
@@ -120,7 +120,7 @@ export async function placeOnlineOrder(_previousState: PublicOnlineOrderResult, 
   const admin = createAdminClient();
   if (!admin) {
     const demoOrderId = `demo-${requestId}`;
-    const demoOrderNo = `WEB-${requestId.replaceAll("-", "").slice(0, 8).toUpperCase()}`;
+    const demoOrderNo = getDemoOnlineOrderNo(menu.name, requestId);
     const etaAt = resolveEta(pickupSlot, 2, menu.settings.averagePrepMinutes, menu.settings.orderLeadMinutes, fulfillmentMethod, menu.settings.delivery.etaMinutes).toISOString();
     const total = subtotal + (fulfillmentMethod === "delivery" ? menu.settings.delivery.feeCentavos : 0);
     return { ok: true, orderId: demoOrderId, orderNo: demoOrderNo, queuePosition: 3, etaAt, total, fulfillmentMethod };
