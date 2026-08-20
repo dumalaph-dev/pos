@@ -120,9 +120,10 @@ function PublicMenuPreview({ store, settings, theme, copy }: { store: { name: st
   const previewProducts = PREVIEW_PRODUCTS.slice(0, 4);
 
   return (
-    <div className="mx-auto max-w-[340px] overflow-hidden rounded-[26px] border-[7px] border-ink/80 bg-black shadow-[var(--shadow-pop)]" style={{ fontFamily: previewFont }}>
-      <div className="max-h-[620px] overflow-y-auto" style={themeStyle}>
-        <div className="min-h-[620px]" style={{ background: "var(--public-menu-bg)", color: "var(--public-menu-text)", backgroundImage: "var(--public-menu-pattern)" }}>
+    <div className="relative isolate mx-auto max-w-[340px] rounded-[28px] bg-[#10261f] p-[7px] shadow-[var(--shadow-pop)] ring-1 ring-black/10" style={{ fontFamily: previewFont }}>
+      <div className="relative isolate overflow-hidden rounded-[21px]" style={themeStyle}>
+        <div className="public-menu__scrollbar-hidden max-h-[620px] overflow-y-auto overscroll-contain">
+          <div className="min-h-[620px]" style={{ background: "var(--public-menu-bg)", color: "var(--public-menu-text)", backgroundImage: "var(--public-menu-pattern)" }}>
           <div className="sticky top-0 z-10 border-b px-3 py-2.5 backdrop-blur" style={{ borderColor: "var(--public-menu-border)", background: "color-mix(in srgb, var(--public-menu-surface) 94%, transparent)" }}>
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl text-xs font-black" style={{ background: "var(--public-menu-primary)", color: "var(--public-menu-primary-text)" }}>{store.name.charAt(0).toUpperCase()}</span><span className="min-w-0"><strong className="block truncate text-[11px]">{store.name}</strong><small className="block truncate text-[8px] font-bold uppercase tracking-[0.08em]" style={{ color: "var(--public-menu-subtle)" }}>{copy.headerTagline}</small></span></div>
@@ -145,6 +146,7 @@ function PublicMenuPreview({ store, settings, theme, copy }: { store: { name: st
             <div className="mt-3 grid grid-cols-2 gap-2">
               {previewProducts.map((product) => <div key={product.name} className="overflow-hidden rounded-2xl border" style={{ borderColor: "var(--public-menu-border)", background: "var(--public-menu-card-gradient)", boxShadow: "var(--public-menu-shadow-card)" }}><div className="aspect-square" style={{ background: product.tone }} /><div className="p-2"><strong className="block truncate text-[10px]">{product.name}</strong><span className="mt-1 block text-[9px] font-bold" style={{ color: "var(--public-menu-accent)" }}>{product.price}</span></div></div>)}
             </div>
+          </div>
           </div>
         </div>
       </div>
