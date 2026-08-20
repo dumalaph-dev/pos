@@ -336,6 +336,28 @@ export function formatOrderStatusLabel(status: OnlineOrderStatus) {
   }
 }
 
+export function getOnlineOrderNextAction(
+  status: OnlineOrderStatus,
+  fulfillmentMethod: OnlineOrderingFulfillmentMethod,
+) {
+  switch (status) {
+    case "new":
+      return { label: "Acknowledge order", status: "confirmed" as const };
+    case "confirmed":
+      return { label: "Start preparing", status: "preparing" as const };
+    case "preparing":
+      return { label: "Mark ready", status: "ready" as const };
+    case "ready":
+      return {
+        label: fulfillmentMethod === "delivery" ? "Mark delivered" : "Mark picked up",
+        status: "picked_up" as const,
+      };
+    case "picked_up":
+    case "cancelled":
+      return null;
+  }
+}
+
 export function formatOnlineEta(value: string | null | undefined, now = Date.now()) {
   if (!value) return "We’ll confirm your pickup time shortly";
   const eta = new Date(value);

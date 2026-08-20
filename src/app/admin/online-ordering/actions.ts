@@ -218,6 +218,7 @@ export async function updateOnlineOrderStatus(formData: FormData) {
     .from("online_orders")
     .select("id, store_id, status")
     .eq("id", orderId)
+    .eq("org_id", profile.org_id)
     .eq("store_id", store.id)
     .maybeSingle();
   if (orderError || !order) actionRedirect("That online order is no longer in the pickup queue.");
@@ -233,6 +234,7 @@ export async function updateOnlineOrderStatus(formData: FormData) {
     .from("online_orders")
     .update(update)
     .eq("id", orderId)
+    .eq("org_id", profile.org_id)
     .eq("store_id", store.id);
   if (error) actionRedirect(error.message || "The online order could not be updated.");
 

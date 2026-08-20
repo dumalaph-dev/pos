@@ -37,6 +37,7 @@ type StoreRecord = {
 
 type OnlineOrderRecord = {
   id: string;
+  org_id: string;
   order_no: string;
   customer_name: string;
   customer_phone: string;
@@ -102,7 +103,8 @@ export default async function OnlineOrderingPage({
 
   const ordersResult = await supabase
     .from("online_orders")
-    .select("id, order_no, customer_name, customer_phone, fulfillment_method, delivery_address, delivery_note, delivery_fee, pickup_slot, status, queue_position, total, eta_at, created_at")
+    .select("id, org_id, order_no, customer_name, customer_phone, fulfillment_method, delivery_address, delivery_note, delivery_fee, pickup_slot, status, queue_position, total, eta_at, created_at")
+    .eq("org_id", profile.org_id)
     .eq("store_id", store.id)
     .order("created_at", { ascending: false })
     .limit(100);
@@ -169,7 +171,7 @@ export default async function OnlineOrderingPage({
         </div>
 
         <OnlineOrderingWorkspace
-          store={{ id: store.id, name: store.name, address: store.address, slug: store.staff_login_slug }}
+          store={{ id: store.id, orgId: profile.org_id, name: store.name, address: store.address, slug: store.staff_login_slug }}
           settings={settings}
           onlineBrandDefaults={onlineBrandDefaults}
           shareUrl={shareUrl}

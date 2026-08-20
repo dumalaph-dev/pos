@@ -18,6 +18,8 @@ import { readAdminBranding } from "@/lib/admin/branding";
 import { DEFAULT_ADMIN_DISCOUNT_SETTINGS, readAdminDiscountSettings } from "@/lib/admin/discount-settings";
 import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminMenu } from "@/components/admin/AdminMenu";
+import { OnlineOrderAlertBanner } from "@/components/online-ordering/OnlineOrderAlertBanner";
+import { useOnlineOrderAttention } from "@/components/online-ordering/useOnlineOrderAttention";
 import { SignOutButton } from "@/components/SignOutButton";
 import OfflinePinSetup from "@/components/OfflinePinSetup";
 import OfflinePinUnlock from "@/components/OfflinePinUnlock";
@@ -55,6 +57,11 @@ import { normalizePaperWidth, type PaperWidth } from "@/lib/paper-width";
 import { getPosTheme, isPosThemeId, type PosThemeId } from "@/lib/pos-theme";
 import { getPosPalette, isPosPaletteId, type PosPaletteId } from "@/lib/pos-palette";
 import { getPosFont, isPosFontId, readPosFontColorWithFallback, type PosFontId } from "@/lib/pos-font";
+import {
+  ONLINE_ORDER_ALERT_POLL_MS,
+  normalizeScopedNewOnlinePickupAlerts,
+  type OnlineOrderAttentionRecord,
+} from "@/lib/online-order-alerts";
 import { readPosRadiusWithFallback, resolvePosRadius } from "@/lib/pos-shape";
 import {
   createDisplayLink,
@@ -406,6 +413,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
   const [categoryRailOpen, setCategoryRailOpen] = useState(false);
   const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
   const [onlinePickup, setOnlinePickup] = useState<OnlinePickupState>({ status: "idle" });
+  const [onlinePickupAlerts, setOnlinePickupAlerts] = useState<OnlineOrderAttentionRecord[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const collapsedNavRef = useRef<HTMLButtonElement>(null);
   const collapseNavRef = useRef<HTMLButtonElement>(null);
@@ -905,6 +913,75 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
       cancelled = true;
     };
   }, [cart.length, loading, offline, posConfig.orderTypes, products, profile, setCart, setDiscount, supabase]);
+
+  const refreshOnlinePickupAlerts = useCallback(async () => {
+    if (offlineProfile || offline || !profile?.org_id || !profile.store_id || !navigator.onLine) {
+      setOnlinePickupAlerts([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("online_orders")
+      .select("id, org_id, store_id, order_no, status, fulfillment_method")
+      .eq("org_id", profile.org_id)
+      .eq("store_id", profile.store_id)
+      .eq("fulfillment_method", "pickup")
+      .eq("status", "new")
+      .order("created_at", { ascending: true })
+      .limit(25);
+
+    if (error) return;
+
+    setOnlinePickupAlerts(normalizeScopedNewOnlinePickupAlerts(data ?? [], {
+      orgId: profile.org_id,
+      storeId: profile.store_id,
+    }));
+  }, [offline, offlineProfile, profile, supabase]);
+
+  useEffect(() => {
+    if (loading || offlineProfile || offline || !profile?.org_id || !profile.store_id) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear the poll snapshot when its authenticated scope is unavailable.
+      setOnlinePickupAlerts([]);
+      return;
+    }
+
+    const refreshIfVisible = () => {
+      if (document.visibilityState !== "visible" || !navigator.onLine) return;
+      void refreshOnlinePickupAlerts();
+    };
+    refreshIfVisible();
+    const interval = window.setInterval(refreshIfVisible, ONLINE_ORDER_ALERT_POLL_MS);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") refreshIfVisible();
+    };
+    const handleOnline = () => refreshIfVisible();
+    const handleOffline = () => setOnlinePickupAlerts([]);
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [
+    loading,
+    offline,
+    offlineProfile,
+    profile,
+    refreshOnlinePickupAlerts,
+  ]);
+
+  const {
+    pendingOrders: newOnlinePickupOrders,
+    announcement: onlinePickupAnnouncement,
+    attentionPulse: onlinePickupAttentionPulse,
+  } = useOnlineOrderAttention({
+    orders: onlinePickupAlerts,
+    scopeKey: profile?.org_id && profile.store_id ? `${profile.org_id}:${profile.store_id}` : "pos:unscoped",
+    enabled: !offline && !offlineProfile,
+  });
 
   const refreshDisplaySettings = useCallback(async () => {
     const storeId = profile?.store_id;
@@ -1626,6 +1703,14 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
             </nav>
           )}
         </header>
+
+        <OnlineOrderAlertBanner
+          surface="pos"
+          orders={newOnlinePickupOrders}
+          announcement={onlinePickupAnnouncement}
+          attentionPulse={onlinePickupAttentionPulse}
+          queueHref={profile?.role === "admin" || profile?.role === "manager" ? "/admin/online-ordering" : undefined}
+        />
 
         {onlinePickup.status !== "idle" && (
           <section className={`online-pickup-banner${onlinePickup.status === "error" ? " is-error" : onlinePickup.status === "loading" ? " is-loading" : ""}`} aria-live="polite">
