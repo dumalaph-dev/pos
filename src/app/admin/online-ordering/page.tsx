@@ -131,7 +131,13 @@ export default async function OnlineOrderingPage({
   const settings = readOnlineOrderingSettings(store.settings);
   const shareUrl = absoluteUrl(publicMenuPath(store.staff_login_slug));
   const saved = readParam(params.saved);
-  const savedMessage = saved === "settings" ? "Online ordering settings saved." : saved === "status" ? "Queue status updated." : "";
+  const savedMessage = saved === "settings"
+    ? "Online ordering settings saved."
+    : saved === "appearance"
+      ? "Public menu appearance saved."
+      : saved === "status"
+        ? "Queue status updated."
+        : "";
   const errorMessage = readParam(params.error);
   const queryError = ordersResult.error || itemsResult.error
     ? "Online order storage is not active yet."

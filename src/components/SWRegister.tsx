@@ -7,6 +7,8 @@
  * new version is available (skipWaiting + reload, per P2 spec).
  */
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
+import { isPublicMenuPath } from "@/lib/public-menu-route";
 
 function cacheLoadedAssets(registration: ServiceWorkerRegistration) {
   const urls = performance
@@ -17,10 +19,12 @@ function cacheLoadedAssets(registration: ServiceWorkerRegistration) {
 }
 
 export default function SWRegister() {
+  const pathname = usePathname();
   const [updateReady, setUpdateReady] = useState(false);
 
   useEffect(() => {
     if (process.env.NODE_ENV !== "production") return;
+    if (isPublicMenuPath(pathname ?? "")) return;
     if (!("serviceWorker" in navigator)) return;
     let registration: ServiceWorkerRegistration | undefined;
     let onUpdateFound: (() => void) | undefined;
@@ -47,9 +51,9 @@ export default function SWRegister() {
     return () => {
       if (registration && onUpdateFound) registration.removeEventListener("updatefound", onUpdateFound);
     };
-  }, []);
+  }, [pathname]);
 
-  if (!updateReady) return null;
+  if (!updateReady || isPublicMenuPath(pathname ?? "")) return null;
 
   return (
     <div className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-card border border-line bg-raised px-4 py-3 shadow-[var(--shadow-pop)]">

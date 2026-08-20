@@ -108,6 +108,36 @@
   overflow: hidden;
 }
 
+/* The customer menu receives its own scoped theme variables from the public
+   menu server payload. Keep those variables isolated from the POS shell. */
+.public-menu {
+  color: var(--public-menu-text);
+  background-color: var(--public-menu-bg);
+  background-image: var(--public-menu-pattern);
+  font-family: var(--public-menu-font), var(--font-ui), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: var(--public-menu-letter-spacing);
+}
+
+/* Public QR menu: keep the customer surface touch-friendly and free of the
+   owner POS shell's install/update affordances. */
+.public-menu__safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.public-menu__sheet {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  overscroll-behavior: contain;
+}
+
+.public-menu__scrollbar-hidden {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.public-menu__scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
 /* Money, quantities, and any figure that must not jitter as it changes. */
 .tnums {
   font-variant-numeric: tabular-nums;

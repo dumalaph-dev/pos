@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import * as QRCode from "qrcode";
 import { AdminIcon } from "@/components/admin/AdminIcon";
+import { OnlineMenuEditor } from "./OnlineMenuEditor";
 import {
   formatOnlineEta,
   formatOrderStatusLabel,
@@ -197,6 +198,8 @@ export function OnlineOrderingWorkspace({
           </div>
         </aside>
       </section>
+
+      <OnlineMenuEditor store={store} settings={settings} canManage={canManage} />
 
       <section className="mt-5 grid gap-5 xl:grid-cols-3">
         <section className="overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)] xl:col-span-2" aria-labelledby="pickup-queue-heading">

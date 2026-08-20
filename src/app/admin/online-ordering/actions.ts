@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getAuthenticatedUser, createClient } from "@/lib/supabase/server";
+import { isPosThemeId } from "@/lib/pos-theme";
 import { mergeOnlineOrderingSettings, ONLINE_ORDER_STATUSES, publicMenuPath, type OnlineOrderStatus } from "@/lib/online-ordering";
 
 type OwnerProfile = {
@@ -13,6 +14,13 @@ type OwnerProfile = {
 function readText(formData: FormData, name: string) {
   const value = formData.get(name);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function readPresentationText(formData: FormData, name: string, maxLength: number) {
+  const value = readText(formData, name);
+  if (!value) actionRedirect(`Add text for ${name.replaceAll("_", " ")}.`);
+  if (value.length > maxLength) actionRedirect(`${name.replaceAll("_", " ")} must be ${maxLength} characters or fewer.`);
+  return value.slice(0, maxLength);
 }
 
 function actionRedirect(message: string): never {
@@ -88,6 +96,41 @@ export async function updateOnlineOrderingSettings(formData: FormData) {
   revalidatePath("/admin/online-ordering");
   revalidatePath(publicMenuPath(store.staff_login_slug));
   redirect("/admin/online-ordering?saved=settings");
+}
+
+export async function updateOnlineOrderingPresentation(formData: FormData) {
+  const { supabase, profile } = await requireOnlineOrderingUser();
+  const storeId = readText(formData, "store_id");
+  const store = await readStoreContext(supabase, profile.org_id, storeId);
+  const theme = readText(formData, "theme");
+
+  if (!isPosThemeId(theme)) actionRedirect("Choose a valid public menu theme.");
+
+  const copy = {
+    headerTagline: readPresentationText(formData, "header_tagline", 80),
+    heroEyebrow: readPresentationText(formData, "hero_eyebrow", 80),
+    heroTitle: readPresentationText(formData, "hero_title", 80),
+    heroAccent: readPresentationText(formData, "hero_accent", 100),
+    heroDescription: readPresentationText(formData, "hero_description", 240),
+    pickupTitle: readPresentationText(formData, "pickup_title", 80),
+    menuEyebrow: readPresentationText(formData, "menu_eyebrow", 80),
+    menuHeading: readPresentationText(formData, "menu_heading", 100),
+    searchPlaceholder: readPresentationText(formData, "search_placeholder", 60),
+  };
+
+  const { error } = await supabase
+    .from("stores")
+    .update({
+      settings: mergeOnlineOrderingSettings(store.settings, { theme, copy }),
+    })
+    .eq("id", store.id)
+    .eq("org_id", profile.org_id);
+
+  if (error) actionRedirect(error.message || "Public menu appearance could not be saved.");
+
+  revalidatePath("/admin/online-ordering");
+  revalidatePath(publicMenuPath(store.staff_login_slug));
+  redirect("/admin/online-ordering?saved=appearance");
 }
 
 export async function updateOnlineOrderStatus(formData: FormData) {

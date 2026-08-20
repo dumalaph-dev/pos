@@ -1,4 +1,5 @@
 import { resolveProductImage } from "@/lib/product-images";
+import { isPosThemeId, type PosThemeId } from "@/lib/pos-theme";
 
 export const ONLINE_ORDER_STATUSES = ["new", "confirmed", "preparing", "ready", "picked_up", "cancelled"] as const;
 
@@ -9,6 +10,20 @@ export type OnlineOrderingSettings = {
   averagePrepMinutes: number;
   orderLeadMinutes: number;
   pickupNote: string;
+  theme: PosThemeId;
+  copy: OnlineOrderingCopy;
+};
+
+export type OnlineOrderingCopy = {
+  headerTagline: string;
+  heroEyebrow: string;
+  heroTitle: string;
+  heroAccent: string;
+  heroDescription: string;
+  pickupTitle: string;
+  menuEyebrow: string;
+  menuHeading: string;
+  searchPlaceholder: string;
 };
 
 export type PublicMenuProduct = {
@@ -46,11 +61,25 @@ export type PublicOnlineOrderResult = {
   etaAt?: string;
 };
 
-const DEFAULT_ONLINE_ORDERING_SETTINGS: OnlineOrderingSettings = {
+export const DEFAULT_ONLINE_ORDERING_COPY: OnlineOrderingCopy = {
+  headerTagline: "Order ahead · pickup at the counter",
+  heroEyebrow: "Made for your morning run",
+  heroTitle: "Order now.",
+  heroAccent: "Pick up when it’s ready.",
+  heroDescription: "Skip the line and keep your morning moving. Choose your favorites, pick a time, and we’ll give you a live estimate before you head over.",
+  pickupTitle: "Pickup details",
+  menuEyebrow: "Today’s menu",
+  menuHeading: "Choose something good.",
+  searchPlaceholder: "Search menu",
+};
+
+export const DEFAULT_ONLINE_ORDERING_SETTINGS: OnlineOrderingSettings = {
   enabled: false,
   averagePrepMinutes: 20,
   orderLeadMinutes: 15,
   pickupNote: "We will have your order ready at the counter. Show your order number when you arrive.",
+  theme: "modern",
+  copy: DEFAULT_ONLINE_ORDERING_COPY,
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -67,13 +96,33 @@ function readText(value: unknown, fallback: string, maxLength: number) {
   return typeof value === "string" && value.trim() ? value.trim().slice(0, maxLength) : fallback;
 }
 
+function readOnlineOrderingCopy(value: unknown): OnlineOrderingCopy {
+  const copy = asRecord(value);
+  return {
+    headerTagline: readText(copy.header_tagline, DEFAULT_ONLINE_ORDERING_COPY.headerTagline, 80),
+    heroEyebrow: readText(copy.hero_eyebrow, DEFAULT_ONLINE_ORDERING_COPY.heroEyebrow, 80),
+    heroTitle: readText(copy.hero_title, DEFAULT_ONLINE_ORDERING_COPY.heroTitle, 80),
+    heroAccent: readText(copy.hero_accent, DEFAULT_ONLINE_ORDERING_COPY.heroAccent, 100),
+    heroDescription: readText(copy.hero_description, DEFAULT_ONLINE_ORDERING_COPY.heroDescription, 240),
+    pickupTitle: readText(copy.pickup_title, DEFAULT_ONLINE_ORDERING_COPY.pickupTitle, 80),
+    menuEyebrow: readText(copy.menu_eyebrow, DEFAULT_ONLINE_ORDERING_COPY.menuEyebrow, 80),
+    menuHeading: readText(copy.menu_heading, DEFAULT_ONLINE_ORDERING_COPY.menuHeading, 100),
+    searchPlaceholder: readText(copy.search_placeholder, DEFAULT_ONLINE_ORDERING_COPY.searchPlaceholder, 60),
+  };
+}
+
 export function readOnlineOrderingSettings(settings: unknown): OnlineOrderingSettings {
-  const online = asRecord(asRecord(settings).online_ordering);
+  const root = asRecord(settings);
+  const online = asRecord(root.online_ordering);
+  const posConfig = asRecord(root.pos_config);
+  const fallbackTheme = isPosThemeId(posConfig.uiStyle) ? posConfig.uiStyle : DEFAULT_ONLINE_ORDERING_SETTINGS.theme;
   return {
     enabled: online.enabled === undefined ? DEFAULT_ONLINE_ORDERING_SETTINGS.enabled : online.enabled === true,
     averagePrepMinutes: readNumber(online.average_prep_minutes, DEFAULT_ONLINE_ORDERING_SETTINGS.averagePrepMinutes, 5, 180),
     orderLeadMinutes: readNumber(online.order_lead_minutes, DEFAULT_ONLINE_ORDERING_SETTINGS.orderLeadMinutes, 0, 180),
     pickupNote: readText(online.pickup_note, DEFAULT_ONLINE_ORDERING_SETTINGS.pickupNote, 240),
+    theme: isPosThemeId(online.theme) ? online.theme : fallbackTheme,
+    copy: readOnlineOrderingCopy(online.copy),
   };
 }
 
@@ -92,6 +141,18 @@ export function mergeOnlineOrderingSettings(settings: unknown, next: Partial<Onl
       average_prep_minutes: merged.averagePrepMinutes,
       order_lead_minutes: merged.orderLeadMinutes,
       pickup_note: merged.pickupNote,
+      theme: merged.theme,
+      copy: {
+        header_tagline: merged.copy.headerTagline,
+        hero_eyebrow: merged.copy.heroEyebrow,
+        hero_title: merged.copy.heroTitle,
+        hero_accent: merged.copy.heroAccent,
+        hero_description: merged.copy.heroDescription,
+        pickup_title: merged.copy.pickupTitle,
+        menu_eyebrow: merged.copy.menuEyebrow,
+        menu_heading: merged.copy.menuHeading,
+        search_placeholder: merged.copy.searchPlaceholder,
+      },
     },
   };
 }
