@@ -4127,31 +4127,24 @@
   border-color: var(--primary);
 }
 
-/* Keep the theme picker contained while letting the expanded editor share the
-   full height of the controls column. */
+/* Keep the theme picker compact while still exposing five complete rows per
+   column. The remaining themes stay available through the visible scrollbar. */
 .pos-style-options {
   display: grid;
-  max-height: 300px;
-  gap: 5px;
+  height: 368px;
+  min-height: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 68px;
+  align-content: start;
+  max-height: 368px;
+  gap: 6px;
   margin-top: 13px;
-  padding-right: 6px;
-  overflow-y: auto;
+  padding: 2px 9px 2px 1px;
+  overflow-y: scroll;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: #cbb9ab transparent;
-}
-
-.pos-appearance-card--expanded .pos-style-options {
-  height: 580px;
-  min-height: 0;
-  flex: 0 0 580px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-auto-rows: 90px;
-  align-content: start;
-  max-height: 580px;
-  gap: 8px;
-  padding-right: 10px;
 }
 
 .pos-style-options::-webkit-scrollbar {
@@ -4170,22 +4163,18 @@
 
 .pos-style-option {
   display: grid;
-  grid-template-columns: 68px minmax(0, 1fr) 16px;
+  grid-template-columns: 60px minmax(0, 1fr) 15px;
   align-items: center;
-  gap: 10px;
-  min-height: 78px;
-  padding: 8px;
+  gap: 7px;
+  min-width: 0;
+  min-height: 68px;
+  padding: 6px;
   border: 1px solid #eee8e4;
-  border-radius: 10px;
+  border-radius: 9px;
   color: inherit;
   background: #fff;
   text-align: left;
   transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease, transform 150ms ease;
-}
-
-.pos-appearance-card--expanded .pos-style-option {
-  grid-template-columns: 84px minmax(0, 1fr) 16px;
-  min-height: 90px;
 }
 
 .pos-style-option:hover,
@@ -4201,15 +4190,16 @@
 
 .pos-style-option > span:nth-child(2) {
   display: grid;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
 .pos-style-option strong {
   overflow: hidden;
   color: #4a2c1d;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4217,20 +4207,9 @@
 .pos-style-option small {
   overflow: hidden;
   color: #81766f;
-  font-size: 8px;
-  line-height: 1.35;
+  font-size: 7px;
+  line-height: 1.25;
   text-overflow: ellipsis;
-}
-
-.pos-style-option em {
-  overflow: hidden;
-  color: #a08d82;
-  font-size: 8px;
-  font-style: normal;
-  font-weight: 750;
-  letter-spacing: 0.04em;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -4257,9 +4236,14 @@
   box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.55);
 }
 
-.pos-appearance-card--expanded .pos-style-thumbnail {
+.pos-appearance-card--expanded .pos-theme-active-summary .pos-style-thumbnail {
   width: 84px;
   height: 65px;
+}
+
+.pos-style-option .pos-style-thumbnail {
+  width: 60px;
+  height: 44px;
 }
 
 .pos-style-thumbnail i {
@@ -7133,10 +7117,10 @@
   }
 
   .pos-appearance-card--expanded .pos-style-options {
-    height: 482px;
-    grid-template-columns: 1fr;
-    flex: 0 0 482px;
-    max-height: 482px;
+    height: 368px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    flex: 0 0 368px;
+    max-height: 368px;
   }
 
   .pos-display-intro {
@@ -7300,6 +7284,12 @@
 
   .pos-settings-sidebar--category .pos-category-card__cta {
     width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .pos-appearance-card--expanded .pos-style-options {
+    grid-template-columns: 1fr;
   }
 }
 
