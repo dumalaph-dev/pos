@@ -135,7 +135,7 @@ export default function PWAInstallPrompt() {
   const [iosHelpOpen, setIosHelpOpen] = useState(false);
   const [installing, setInstalling] = useState(false);
   const installingRef = useRef(false);
-  const publicMenu = isPublicMenuPath(pathname ?? "");
+  const publicMenu = isPublicMenuPath(pathname ?? "", typeof window === "undefined" ? "" : window.location.hostname);
 
   useEffect(() => {
     const standalone = isStandalone();

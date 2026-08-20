@@ -24,6 +24,7 @@ Fill `.env.local` from Supabase → **Settings → API**:
 | Var | Where | Exposure |
 |---|---|---|
 | `NEXT_PUBLIC_SITE_URL` | public app origin for email-confirmation redirects (required on deployed environments) | client + server |
+| `NEXT_PUBLIC_PUBLIC_MENU_ROOT_DOMAIN` | root domain for customer menu hostnames such as `branch.dumala.store` (defaults to `dumala.store`) | client + server |
 | `NEXT_PUBLIC_SUPABASE_URL` | Project URL | client + server |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon/public key | client + server |
 | `NEXT_PUBLIC_PAYMONGO_PUBLIC_KEY` | PayMongo public key for browser-side payment-method tokenization | client + server |
@@ -63,7 +64,12 @@ server. Configure the PayMongo webhook URL as
 
 ## 4. Database migrations
 SQL lives in `supabase/migrations/` (run in order):
-The latest migrations add store staff access keys, subscription tracking, the single Premium billing plan, append-only privilege hardening, the policy-first platform operations catalog, the initial annual billing offers, POS approval hardening, QR Ph access, current-plan variant tracking, trial lifecycle/feedback, and platform promotion campaigns: `0023_store_access_and_subscriptions.sql`, `0024_shifts_and_z_readings.sql`, `0025_premium_billing_plan.sql`, `0026_authenticated_append_only_hardening.sql`, `0027_platform_operations.sql`, `0028_support_cases.sql`, `0029_support_cases_privileges.sql`, `0030_suspended_account_rls.sql`, `0031_enable_annual_billing_offers.sql`, `0032_admin_pin_discount_policy.sql`, `0033_human_staff_login_slugs.sql`, `0034_pos_void_manager_approval.sql`, `0035_fix_shift_sequence_rls.sql`, `0036_temporary_qrph_checkout.sql`, `0037_subscription_billing_variant.sql`, `0038_trial_lifecycle_and_feedback.sql`, `0039_trial_feedback_workflow.sql`, and `0040_platform_promotions.sql`.
+The latest migrations add store staff access keys, subscription tracking, the
+platform operations catalog, POS and display workflows, the online ordering
+queue, and customer-facing menu subdomains. Apply all files in numeric order;
+the current end of the sequence is `0055_online_ordering.sql` through
+`0061_cashier_online_order_queue.sql`, followed by
+`0062_public_menu_subdomains.sql`.
 1. `0001_schema.sql` — tables, enums, indexes
 2. `0002_rls.sql` — grants, helper functions, RLS policies, append-only triggers
 3. `0003_functions.sql` — `clone_menu` (multi-branch)
@@ -106,8 +112,16 @@ The latest migrations add store staff access keys, subscription tracking, the si
 38. `0038_trial_lifecycle_and_feedback.sql` — store trial dates and owner feedback
 39. `0039_trial_feedback_workflow.sql` — add platform follow-up controls for trial feedback
 40. `0040_platform_promotions.sql` — store global promotion codes and paid redemption history for checkout performance reporting
-
 41. `0041_trial_expiry_access.sql` - persist expired trials as `paused`, remove expired tenant RLS context, and keep owner Billing/feedback access available
+42–54. Display, admin offline/performance, employee access, platform grants, and referral migrations
+55. `0055_online_ordering.sql` — public menu, online order settings, and customer order storage
+56. `0056_online_order_pos_handoff.sql` — POS queue handoff fields and access
+57. `0057_atomic_online_order_placement.sql` — atomic public order placement
+58. `0058_lockdown_online_order_handoff.sql` — restrict queue handoff mutations
+59. `0059_online_order_delivery.sql` — delivery fulfillment fields and settings
+60. `0060_readable_online_order_numbers.sql` — readable customer order numbers
+61. `0061_cashier_online_order_queue.sql` — cashier queue actions and status transitions
+62. `0062_public_menu_subdomains.sql` — assign each active branch a unique customer-facing menu subdomain
 
 **Apply them** either way:
 - **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push`
@@ -269,6 +283,22 @@ npm run build     # production build (also typechecks)
 npm run start     # run the production build locally
 ```
 **Deploy:** push to GitHub, import into Vercel, set env vars, deploy. Use a **separate Supabase project** for production vs. dev; apply the same migrations there and re-verify RLS with the fixture.
+
+### Customer menu subdomains
+
+The Vercel project should contain the wildcard domain `*.dumala.store`. Because
+`dumala.store` is delegated to Vercel DNS, no separate wildcard DNS record is
+needed in Cloudflare. Apply `0062_public_menu_subdomains.sql` before deploying
+the application changes; it adds and backfills the branch subdomain column and
+enforces uniqueness. Each branch can then choose its address from
+**Admin → Online ordering → Custom menu address**. A link such as
+`https://morning-ritual.dumala.store` is routed by Vercel to the branch menu,
+while legacy `/menu/<staff-login-slug>` links continue to work.
+
+If Vercel continues to show **Proxy Status Unknown** for the wildcard domain,
+refresh it after the wildcard hostname has been tested. A working concrete
+hostname and an HTTP 200 response from Vercel are the meaningful checks; do not
+put Cloudflare’s orange-cloud reverse proxy in front of Vercel for this setup.
 
 ## 8. Project layout
 ```

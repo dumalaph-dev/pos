@@ -1,4 +1,4 @@
-import { getPublicStoreBySlug } from "@/lib/online-ordering-server";
+import { getPublicStoreForRequest } from "@/lib/online-ordering-server";
 import { createAdminClient } from "@/lib/employee-auth";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ export async function GET(
   const searchParams = new URL(request.url).searchParams;
   const orderNo = searchParams.get("order")?.trim().toUpperCase() ?? "";
   const customerPhone = searchParams.get("phone")?.trim() ?? "";
-  const store = await getPublicStoreBySlug(storeSlug);
+  const store = await getPublicStoreForRequest(request, storeSlug);
 
   if (!store || orderNo.length < 5 || orderNo.length > 32 || customerPhone.length < 7 || customerPhone.length > 32) {
     return Response.json({ ok: false, message: "Order not found" }, { status: 404 });

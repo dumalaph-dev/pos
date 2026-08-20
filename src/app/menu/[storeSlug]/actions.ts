@@ -1,6 +1,7 @@
 "use server";
 
-import { getPublicMenuStoreBySlug } from "@/lib/online-ordering-server";
+import { headers } from "next/headers";
+import { getPublicMenuStoreForHostname } from "@/lib/online-ordering-server";
 import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
 import { getDemoOnlineOrderNo, type OnlineOrderingFulfillmentMethod, type PublicOnlineOrderResult } from "@/lib/online-ordering";
@@ -97,7 +98,7 @@ export async function placeOnlineOrder(_previousState: PublicOnlineOrderResult, 
   if (!drafts) return fail("Your cart is empty. Add an item before checking out.");
   if (pickupSlot !== "asap" && !/^\d{2}:\d{2}$/.test(pickupSlot)) return fail("Choose a valid pickup time.");
 
-  const menu = await getPublicMenuStoreBySlug(storeSlug);
+  const menu = await getPublicMenuStoreForHostname(storeSlug, (await headers()).get("host"));
   if (!menu) return fail("This menu is no longer available. Refresh and try again.");
   if (!menu.settings.enabled) return fail("This store is not accepting online orders right now.");
   if (fulfillmentMethod === "delivery" && !menu.settings.delivery.enabled) return fail("Delivery is not available right now. Choose pickup instead.");

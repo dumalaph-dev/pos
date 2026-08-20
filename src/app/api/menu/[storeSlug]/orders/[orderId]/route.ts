@@ -1,15 +1,15 @@
-import { getPublicStoreBySlug } from "@/lib/online-ordering-server";
+import { getPublicStoreForRequest } from "@/lib/online-ordering-server";
 import { createAdminClient } from "@/lib/employee-auth";
 import { getDemoOnlineOrderNo } from "@/lib/online-ordering";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ storeSlug: string; orderId: string }> },
 ) {
   const { storeSlug, orderId } = await params;
-  const store = await getPublicStoreBySlug(storeSlug);
+  const store = await getPublicStoreForRequest(request, storeSlug);
   if (!store) return Response.json({ ok: false, message: "Order not found" }, { status: 404 });
 
   if (orderId.startsWith("demo-")) {
