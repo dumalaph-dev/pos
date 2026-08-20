@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition, type CSSProperties, type SVGProps } from "react";
 import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
+import { PosThemePicker } from "@/components/admin/PosThemePicker";
 import { SignOutButton } from "@/components/SignOutButton";
 import { MultiProductModal } from "@/components/admin/MultiProductModal";
 import DisplayPromotionsPanel from "@/components/admin/DisplayPromotionsPanel";
@@ -13,7 +14,7 @@ import { CATALOG_PRESETS, getCatalogPreset, type CatalogPreset } from "@/lib/cat
 import { createDeviceSettings, savePosSettings, updateDeviceSettings } from "@/app/admin/pos/actions";
 import { buildReceipt } from "@/lib/receipt";
 import { getPrinter, type PrinterSettings } from "@/lib/printer";
-import { getPosTheme, POS_THEME_OPTIONS, type PosThemeId } from "@/lib/pos-theme";
+import { getPosTheme, type PosThemeId } from "@/lib/pos-theme";
 import { getPosPalette, POS_PALETTE_OPTIONS, type PosPaletteId } from "@/lib/pos-palette";
 import { getPosFont, isPosFontId, POS_FONT_OPTIONS, readPosFontColor, type PosFontId } from "@/lib/pos-font";
 import { parseThemeRadius, POS_RADIUS_MAX, resolvePosRadius } from "@/lib/pos-shape";
@@ -1107,13 +1108,7 @@ function AppearancePanel({ config, choosePalette, updateConfig, customPaletteOpe
           <span className={`pos-style-thumbnail pos-style-thumbnail--${activeTheme.id}`} aria-hidden="true"><i className="pos-style-thumbnail__top" /><i className="pos-style-thumbnail__rail" /><i className="pos-style-thumbnail__card" /><i className="pos-style-thumbnail__order" /><i className="pos-style-thumbnail__accent" /></span>
           <span><small>Selected theme</small><strong>{activeTheme.label}</strong><p>{activeTheme.description}</p><em>{activeTheme.mood}</em></span>
         </div>
-        <div className="pos-style-options" role="radiogroup" aria-label="POS interface theme">
-          {POS_THEME_OPTIONS.map((style) => <button type="button" role="radio" aria-checked={config.uiStyle === style.id} key={style.id} className={`pos-style-option ${config.uiStyle === style.id ? "is-selected" : ""}`} onClick={() => updateConfig({ uiStyle: style.id })}>
-            <span className={`pos-style-thumbnail pos-style-thumbnail--${style.id}`} aria-hidden="true"><i className="pos-style-thumbnail__top" /><i className="pos-style-thumbnail__rail" /><i className="pos-style-thumbnail__card" /><i className="pos-style-thumbnail__order" /><i className="pos-style-thumbnail__accent" /></span>
-            <span><strong>{style.label}</strong><small>{style.description}</small><em>{style.mood}</em></span>
-            <span className="pos-style-radio" />
-          </button>)}
-        </div>
+        <PosThemePicker value={config.uiStyle} onChange={(uiStyle) => updateConfig({ uiStyle })} ariaLabel="POS interface theme" />
       </div>
       <div className="pos-appearance-note"><MiniIcon name="info" size={16} /><div><strong>Preview updates instantly</strong><p>All changes you make here will be reflected in the POS preview on the left.</p></div></div>
     </aside>

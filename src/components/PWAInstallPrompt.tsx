@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { isPublicMenuPath } from "@/lib/public-menu-route";
 
 type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -124,6 +126,7 @@ export function PWAInstallButton({ className, children = "Install Dumala App" }:
 }
 
 export default function PWAInstallPrompt() {
+  const pathname = usePathname();
   const [ready, setReady] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<InstallPromptEvent | null>(null);
   const [ios, setIos] = useState(false);
@@ -132,6 +135,7 @@ export default function PWAInstallPrompt() {
   const [iosHelpOpen, setIosHelpOpen] = useState(false);
   const [installing, setInstalling] = useState(false);
   const installingRef = useRef(false);
+  const publicMenu = isPublicMenuPath(pathname ?? "");
 
   useEffect(() => {
     const standalone = isStandalone();
@@ -240,7 +244,7 @@ export default function PWAInstallPrompt() {
     return () => window.removeEventListener(PWA_INSTALL_REQUEST_EVENT, onInstallRequest);
   }, [install]);
 
-  if (typeof window !== "undefined" && window.location.pathname === "/display") return null;
+  if (publicMenu || (typeof window !== "undefined" && window.location.pathname === "/display")) return null;
   if (!ready || installed || dismissed || (!deferredPrompt && !ios)) return null;
 
   return (

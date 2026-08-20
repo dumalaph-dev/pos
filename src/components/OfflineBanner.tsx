@@ -2,12 +2,15 @@
 
 import { useOffline } from "next/offline";
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
+import { isPublicMenuPath } from "@/lib/public-menu-route";
 
 /**
  * Surfaces both browser connectivity events and Next's request-level offline
  * signal. The latter also covers a Wi-Fi connection with no usable upstream.
  */
 export default function OfflineBanner() {
+  const pathname = usePathname();
   const frameworkOffline = useOffline();
   const [browserOffline, setBrowserOffline] = useState(false);
 
@@ -22,7 +25,7 @@ export default function OfflineBanner() {
     };
   }, []);
 
-  if (typeof window !== "undefined" && window.location.pathname === "/display") return null;
+  if (pathname === "/display" || isPublicMenuPath(pathname ?? "")) return null;
   if (!frameworkOffline && !browserOffline) return null;
 
   const message = browserOffline
