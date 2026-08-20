@@ -27,6 +27,10 @@ const configuredSupabaseImagePatterns = (() => {
   }
 })();
 
+const publicMenuRootDomain = (process.env.NEXT_PUBLIC_PUBLIC_MENU_ROOT_DOMAIN || "dumala.store").trim().toLowerCase().replace(/\.$/, "");
+const escapedPublicMenuRootDomain = publicMenuRootDomain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const publicMenuHostPattern = `^(?<publicMenuSubdomain>[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)\\.${escapedPublicMenuRootDomain}$`;
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   images: {
@@ -66,13 +70,27 @@ const nextConfig: NextConfig = {
     },
   },
   async rewrites() {
+    // The host rewrite keeps the customer-facing URL at
+    // `https://branch.dumala.store/` while routing the request to a normal
+    // App Router page. The page resolves the subdomain against the active
+    // branch record; the rewrite itself never queries the database.
+    //
     // The bundled catalog art in `public/food` moved from PNG to WebP
-    // (`scripts/optimize-food-images.mjs`). Returning an array applies these
-    // after the filesystem check, so the real `/food/*.webp` files always win
-    // and this only catches the retired names: Cache Storage entries written by
-    // an earlier service worker, and any stored `image_url` that reaches the
-    // browser without passing through `normalizeBundledImageUrl`.
-    return [{ source: "/food/:name.png", destination: "/food/:name.webp" }];
+    // (`scripts/optimize-food-images.mjs`). Returning this as an afterFiles
+    // rewrite keeps the real `/food/*.webp` files winning while catching
+    // retired names from older service-worker caches or stored image URLs.
+    return {
+      beforeFiles: [
+        {
+          source: "/",
+          has: [{ type: "host", value: publicMenuHostPattern }],
+          destination: "/public-menu/:publicMenuSubdomain",
+        },
+      ],
+      afterFiles: [
+        { source: "/food/:name.png", destination: "/food/:name.webp" },
+      ],
+    };
   },
   async headers() {
     return [

@@ -21,7 +21,7 @@ import {
 } from "@/lib/online-ordering";
 import { ONLINE_ORDER_ALERT_POLL_MS } from "@/lib/online-order-alerts";
 import { formatPeso } from "@/lib/money";
-import { updateOnlineOrderStatus, updateOnlineOrderingSettings } from "./actions";
+import { updateOnlineMenuSubdomain, updateOnlineOrderStatus, updateOnlineOrderingSettings } from "./actions";
 
 type QueueOrder = {
   id: string;
@@ -50,6 +50,7 @@ export function OnlineOrderingWorkspace({
   store,
   settings,
   onlineBrandDefaults,
+  publicMenuRootDomain,
   shareUrl,
   orders,
   queryError,
@@ -58,9 +59,10 @@ export function OnlineOrderingWorkspace({
   canManage,
   canUploadLogo,
 }: {
-  store: { id: string; orgId: string; name: string; address: string | null; slug: string };
+  store: { id: string; orgId: string; name: string; address: string | null; slug: string; publicMenuSubdomain: string | null };
   settings: OnlineOrderingSettings;
   onlineBrandDefaults: OnlineOrderingBrandDefaults;
+  publicMenuRootDomain: string;
   shareUrl: string;
   orders: QueueOrder[];
   queryError: string | null;
@@ -216,6 +218,7 @@ export function OnlineOrderingWorkspace({
         hidden={activeTab !== "queue"}
         store={store}
         settings={settings}
+        publicMenuRootDomain={publicMenuRootDomain}
         shareUrl={shareUrl}
         orders={orders}
         queryError={queryError}
@@ -266,8 +269,9 @@ function WorkspaceTabButton({ id, panelId, label, detail, icon, active, onClick,
 
 type QueueDashboardProps = {
   hidden: boolean;
-  store: { id: string; orgId: string; name: string; address: string | null; slug: string };
+  store: { id: string; orgId: string; name: string; address: string | null; slug: string; publicMenuSubdomain: string | null };
   settings: OnlineOrderingSettings;
+  publicMenuRootDomain: string;
   shareUrl: string;
   orders: QueueOrder[];
   queryError: string | null;
@@ -293,7 +297,7 @@ type QueueDashboardProps = {
   downloadQrCode: () => void;
 };
 
-function QueueDashboard({ hidden, store, settings, shareUrl, orders, queryError, canManage, enabled, setEnabled, deliveryEnabled, setDeliveryEnabled, activeOrders, readyOrders, attentionCount, preparingCount, todaySales, filteredOrders, filter, setFilter, lastUpdatedAt, refreshing, refreshQueue, copied, copyShareUrl, qrCode, downloadQrCode }: QueueDashboardProps) {
+function QueueDashboard({ hidden, store, settings, publicMenuRootDomain, shareUrl, orders, queryError, canManage, enabled, setEnabled, deliveryEnabled, setDeliveryEnabled, activeOrders, readyOrders, attentionCount, preparingCount, todaySales, filteredOrders, filter, setFilter, lastUpdatedAt, refreshing, refreshQueue, copied, copyShareUrl, qrCode, downloadQrCode }: QueueDashboardProps) {
   return (
     <section id="online-ordering-queue-panel" role="tabpanel" aria-labelledby="online-ordering-queue-tab" tabIndex={0} hidden={hidden} className="mt-5 outline-none">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -345,7 +349,7 @@ function QueueDashboard({ hidden, store, settings, shareUrl, orders, queryError,
         </section>
 
         <div className="grid gap-5">
-          <QueueShareCard store={store} shareUrl={shareUrl} qrCode={qrCode} copied={copied} copyShareUrl={copyShareUrl} downloadQrCode={downloadQrCode} />
+          <QueueShareCard store={store} publicMenuRootDomain={publicMenuRootDomain} shareUrl={shareUrl} qrCode={qrCode} copied={copied} copyShareUrl={copyShareUrl} downloadQrCode={downloadQrCode} canManage={canManage} />
 
           <form action={updateOnlineOrderingSettings} className="rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="pickup-settings-heading">
             <div className="flex items-start justify-between gap-3">
@@ -420,8 +424,53 @@ function QueueMetric({ label, value, detail, tone }: { label: string; value: str
   return <article className={`rounded-2xl border px-3.5 py-3.5 ${classes}`}><p className="text-[10px] font-extrabold uppercase tracking-[0.09em] opacity-70">{label}</p><strong className="mt-1 block text-xl font-extrabold tracking-[-0.04em]">{value}</strong><small className="mt-0.5 block text-[10px] font-semibold opacity-70">{detail}</small></article>;
 }
 
-function QueueShareCard({ store, shareUrl, qrCode, copied, copyShareUrl, downloadQrCode }: { store: { name: string; slug: string }; shareUrl: string; qrCode: string | null; copied: boolean; copyShareUrl: () => Promise<void>; downloadQrCode: () => void }) {
-  return <aside className="rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="menu-link-heading"><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-accent">Share the menu</p><h3 id="menu-link-heading" className="mt-1 text-xl font-extrabold tracking-[-0.025em] text-ink">One scan to order</h3></div><span className="grid h-9 w-9 place-items-center rounded-xl bg-primary-soft text-primary"><AdminIcon name="bag" size={17} /></span></div><p className="mt-2 text-sm leading-5 text-ink-muted">Put this QR code at the counter, in your bio, or on a takeaway bag.</p><div className="mt-4 flex items-center gap-2 rounded-xl border border-line bg-raised px-3 py-2.5"><span className="min-w-0 flex-1 truncate text-xs font-semibold text-primary">{shareUrl.replace(/^https?:\/\//, "")}</span><button type="button" onClick={copyShareUrl} className="shrink-0 rounded-lg p-1.5 text-ink-muted transition hover:bg-primary-soft hover:text-primary" aria-label="Copy public menu link">{copied ? <AdminIcon name="check" size={14} /> : <AdminIcon name="edit" size={14} />}</button></div><div className="mt-4 flex flex-col items-center gap-4 rounded-2xl border border-line bg-[#fffdf8] p-3 sm:flex-row xl:flex-col 2xl:flex-row"><div className="grid min-h-[132px] min-w-[132px] place-items-center rounded-xl border border-line bg-white p-2">{qrCode ? <Image src={qrCode} alt={`QR code for the ${store.name} public menu`} width={128} height={128} unoptimized /> : <span className="text-center text-xs font-semibold text-ink-muted">Generating QR…</span>}</div><div className="min-w-0 flex-1"><p className="text-sm font-extrabold text-ink">Print or preview</p><p className="mt-1 text-xs leading-5 text-ink-muted">Test the customer view before sharing it with guests.</p><div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={downloadQrCode} disabled={!qrCode} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[10px] font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"><AdminIcon name="download" size={13} /> Download</button><a href={shareUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 py-2 text-[10px] font-extrabold uppercase tracking-wide text-primary transition hover:bg-primary-soft"><AdminIcon name="eye" size={13} /> Preview</a></div></div></div></aside>;
+function QueueShareCard({ store, publicMenuRootDomain, shareUrl, qrCode, copied, copyShareUrl, downloadQrCode, canManage }: { store: { id: string; name: string; slug: string; publicMenuSubdomain: string | null }; publicMenuRootDomain: string; shareUrl: string; qrCode: string | null; copied: boolean; copyShareUrl: () => Promise<void>; downloadQrCode: () => void; canManage: boolean }) {
+  return (
+    <aside className="rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="menu-link-heading">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-accent">Share the menu</p>
+          <h3 id="menu-link-heading" className="mt-1 text-xl font-extrabold tracking-[-0.025em] text-ink">One scan to order</h3>
+        </div>
+        <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary-soft text-primary"><AdminIcon name="bag" size={17} /></span>
+      </div>
+      <p className="mt-2 text-sm leading-5 text-ink-muted">Put this QR code at the counter, in your bio, or on a takeaway bag.</p>
+
+      {canManage && (
+        <form action={updateOnlineMenuSubdomain} className="mt-4 rounded-2xl border border-primary/15 bg-primary-soft/35 p-3.5">
+          <input type="hidden" name="store_id" value={store.id} />
+          <label htmlFor="public-menu-subdomain" className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-primary">Custom menu address</label>
+          <div className="mt-1.5 flex items-center rounded-xl border border-line-strong bg-raised focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10">
+            <input id="public-menu-subdomain" name="public_menu_subdomain" defaultValue={store.publicMenuSubdomain ?? store.slug} required maxLength={63} pattern="[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?" spellCheck={false} autoCapitalize="none" autoCorrect="off" className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm font-extrabold text-ink outline-none" aria-describedby="public-menu-subdomain-help" />
+            <span className="shrink-0 border-l border-line px-2.5 text-xs font-bold text-ink-muted">.{publicMenuRootDomain}</span>
+          </div>
+          <p id="public-menu-subdomain-help" className="mt-2 text-[11px] leading-5 text-ink-muted">Use lowercase letters, numbers, or hyphens. This link is reserved for this branch.</p>
+          <SubdomainSaveButton />
+        </form>
+      )}
+
+      <div className="mt-4 flex items-center gap-2 rounded-xl border border-line bg-raised px-3 py-2.5">
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-primary">{shareUrl.replace(/^https?:\/\//, "")}</span>
+        <button type="button" onClick={copyShareUrl} className="shrink-0 rounded-lg p-1.5 text-ink-muted transition hover:bg-primary-soft hover:text-primary" aria-label="Copy public menu link">{copied ? <AdminIcon name="check" size={14} /> : <AdminIcon name="edit" size={14} />}</button>
+      </div>
+      <div className="mt-4 flex flex-col items-center gap-4 rounded-2xl border border-line bg-[#fffdf8] p-3 sm:flex-row xl:flex-col 2xl:flex-row">
+        <div className="grid min-h-[132px] min-w-[132px] place-items-center rounded-xl border border-line bg-white p-2">{qrCode ? <Image src={qrCode} alt={`QR code for the ${store.name} public menu`} width={128} height={128} unoptimized /> : <span className="text-center text-xs font-semibold text-ink-muted">Generating QR…</span>}</div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-extrabold text-ink">Print or preview</p>
+          <p className="mt-1 text-xs leading-5 text-ink-muted">Test the customer view before sharing it with guests.</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button type="button" onClick={downloadQrCode} disabled={!qrCode} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[10px] font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"><AdminIcon name="download" size={13} /> Download</button>
+            <a href={shareUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 py-2 text-[10px] font-extrabold uppercase tracking-wide text-primary transition hover:bg-primary-soft"><AdminIcon name="eye" size={13} /> Preview</a>
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function SubdomainSaveButton() {
+  const { pending } = useFormStatus();
+  return <button type="submit" disabled={pending} className="mt-3 inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[10px] font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60">{pending ? "Saving…" : "Save address"}<AdminIcon name="check" size={12} /></button>;
 }
 
 function QueueFilterButton({ label, count, active, onClick }: { label: string; count: number; active: boolean; onClick: () => void }) {

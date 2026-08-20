@@ -14,6 +14,7 @@
     "test:pos": "node --experimental-strip-types --test scripts/pos-business.property.test.ts",
     "test:pos:accessibility": "node --experimental-strip-types --test scripts/pos-accessibility.test.ts",
     "test:online-order-alerts": "node --experimental-strip-types --test scripts/online-order-alerts.test.ts",
+    "test:public-menu-domain": "node --experimental-strip-types --test scripts/public-menu-domain.test.ts",
     "test:site-url": "node --experimental-strip-types --test scripts/site-url.test.ts",
     "test:metadata": "node --experimental-strip-types --test scripts/page-metadata.test.ts",
     "trial:validate": "npx supabase db query --linked --file scripts/trial-lifecycle-smoke.sql --output json",

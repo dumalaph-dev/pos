@@ -24,7 +24,7 @@ export default function SWRegister() {
 
   useEffect(() => {
     if (process.env.NODE_ENV !== "production") return;
-    if (isPublicMenuPath(pathname ?? "")) return;
+    if (isPublicMenuPath(pathname ?? "", window.location.hostname)) return;
     if (!("serviceWorker" in navigator)) return;
     let registration: ServiceWorkerRegistration | undefined;
     let onUpdateFound: (() => void) | undefined;
@@ -53,7 +53,7 @@ export default function SWRegister() {
     };
   }, [pathname]);
 
-  if (!updateReady || isPublicMenuPath(pathname ?? "")) return null;
+  if (!updateReady || isPublicMenuPath(pathname ?? "", typeof window === "undefined" ? "" : window.location.hostname)) return null;
 
   return (
     <div className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-card border border-line bg-raised px-4 py-3 shadow-[var(--shadow-pop)]">

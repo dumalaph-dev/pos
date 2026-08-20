@@ -76,6 +76,7 @@ export type PublicMenuStore = {
   name: string;
   address: string | null;
   slug: string;
+  publicMenuSubdomain: string | null;
   settings: OnlineOrderingSettings;
   categories: PublicMenuCategory[];
   products: PublicMenuProduct[];

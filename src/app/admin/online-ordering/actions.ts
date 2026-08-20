@@ -13,6 +13,7 @@ import { isProductImageUrl } from "@/lib/product-images";
 import { toCentavos } from "@/lib/money";
 import { isPosThemeId } from "@/lib/pos-theme";
 import { formatOrderStatusLabel, isOnlineOrderingHexColor, mergeOnlineOrderingSettings, ONLINE_ORDER_STATUSES, publicMenuPath, readOnlineOrderingSettings, type OnlineOrderStatus } from "@/lib/online-ordering";
+import { isValidPublicMenuSubdomain, normalizePublicMenuSubdomain } from "@/lib/public-menu-domain";
 
 type OwnerProfile = {
   org_id: string;
@@ -66,13 +67,44 @@ async function readStoreContext(supabase: Awaited<ReturnType<typeof createClient
 
   const { data: store, error } = await supabase
     .from("stores")
-    .select("id, name, settings, staff_login_slug, is_active")
+    .select("id, name, settings, staff_login_slug, public_menu_subdomain, is_active")
     .eq("id", storeId)
     .eq("org_id", orgId)
     .maybeSingle();
 
   if (error || !store || !store.is_active) actionRedirect("That branch is not available for online ordering.");
-  return store as { id: string; name: string; settings: unknown; staff_login_slug: string };
+  return store as { id: string; name: string; settings: unknown; staff_login_slug: string; public_menu_subdomain: string | null };
+}
+
+export async function updateOnlineMenuSubdomain(formData: FormData) {
+  const { supabase, profile } = await requireOnlineOrderingUser();
+  const storeId = readText(formData, "store_id");
+  const store = await readStoreContext(supabase, profile.org_id, storeId);
+  const subdomain = normalizePublicMenuSubdomain(readText(formData, "public_menu_subdomain"));
+
+  if (!isValidPublicMenuSubdomain(subdomain)) {
+    actionRedirect("Use 1–63 lowercase letters, numbers, or hyphens. Avoid reserved platform names.");
+  }
+
+  const conflict = await supabase
+    .from("stores")
+    .select("id")
+    .eq("public_menu_subdomain", subdomain)
+    .neq("id", store.id)
+    .maybeSingle();
+  if (conflict.error) actionRedirect("The custom menu link could not be checked. Try again.");
+  if (conflict.data) actionRedirect("That menu name is already in use. Choose another one.");
+
+  const { error } = await supabase
+    .from("stores")
+    .update({ public_menu_subdomain: subdomain })
+    .eq("id", store.id)
+    .eq("org_id", profile.org_id);
+  if (error) actionRedirect(error.message || "The custom menu link could not be saved.");
+
+  revalidatePath("/admin/online-ordering");
+  revalidatePath(publicMenuPath(store.staff_login_slug));
+  redirect("/admin/online-ordering?saved=domain");
 }
 
 export async function updateOnlineOrderingSettings(formData: FormData) {

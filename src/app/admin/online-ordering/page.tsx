@@ -10,6 +10,7 @@ import { readAdminBranding } from "@/lib/admin/branding";
 import { absoluteUrl } from "@/lib/site-url";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { publicMenuPath, readOnlineOrderingBrandDefaults, readOnlineOrderingSettings, type OnlineOrderStatus } from "@/lib/online-ordering";
+import { publicMenuRootDomain, publicMenuUrl } from "@/lib/public-menu-domain";
 
 export const metadata: Metadata = {
   title: "Online ordering",
@@ -32,6 +33,7 @@ type StoreRecord = {
   address: string | null;
   settings: unknown;
   staff_login_slug: string;
+  public_menu_subdomain: string | null;
   is_active: boolean;
 };
 
@@ -91,7 +93,7 @@ export default async function OnlineOrderingPage({
 
   const { data: storeData, error: storeError } = await supabase
     .from("stores")
-    .select("id, name, address, settings, staff_login_slug, is_active")
+    .select("id, name, address, settings, staff_login_slug, public_menu_subdomain, is_active")
     .eq("id", storeId)
     .eq("org_id", profile.org_id)
     .maybeSingle();
@@ -140,7 +142,9 @@ export default async function OnlineOrderingPage({
   const branding = readAdminBranding(profile.organizations?.settings);
   const onlineBrandDefaults = readOnlineOrderingBrandDefaults(profile.organizations?.settings, store.name);
   const settings = readOnlineOrderingSettings(store.settings);
-  const shareUrl = absoluteUrl(publicMenuPath(store.staff_login_slug));
+  const shareUrl = store.public_menu_subdomain
+    ? publicMenuUrl(store.public_menu_subdomain) ?? absoluteUrl(publicMenuPath(store.staff_login_slug))
+    : absoluteUrl(publicMenuPath(store.staff_login_slug));
   const saved = readParam(params.saved);
   const savedMessage = saved === "settings"
     ? "Online ordering settings saved."
@@ -148,6 +152,8 @@ export default async function OnlineOrderingPage({
       ? "Public menu appearance saved."
       : saved === "status"
         ? "Queue status updated."
+        : saved === "domain"
+          ? "Custom menu link saved."
         : "";
   const errorMessage = readParam(params.error);
   const queryError = ordersResult.error || itemsResult.error
@@ -171,9 +177,10 @@ export default async function OnlineOrderingPage({
         </div>
 
         <OnlineOrderingWorkspace
-          store={{ id: store.id, orgId: profile.org_id, name: store.name, address: store.address, slug: store.staff_login_slug }}
+          store={{ id: store.id, orgId: profile.org_id, name: store.name, address: store.address, slug: store.staff_login_slug, publicMenuSubdomain: store.public_menu_subdomain }}
           settings={settings}
           onlineBrandDefaults={onlineBrandDefaults}
+          publicMenuRootDomain={publicMenuRootDomain()}
           shareUrl={shareUrl}
           orders={orders}
           queryError={queryError}
