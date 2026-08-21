@@ -288,37 +288,25 @@ export function PublicMenuClient({ menu }: { menu: PublicMenuStore }) {
 
 function OrderGuidance() {
   return (
-    <section className="mx-auto max-w-[1240px] px-3 pt-5 sm:px-6 sm:pt-7 lg:px-8" aria-labelledby="ordering-guidelines-heading">
-      <div className="overflow-hidden rounded-[var(--public-menu-radius-card)] border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] shadow-[var(--public-menu-shadow-card)]">
-        <div className="grid gap-5 p-4 sm:p-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.55fr)] lg:items-center">
-          <div>
-            <div className="flex items-start gap-3">
-              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[var(--public-menu-primary-soft)] text-[var(--public-menu-primary-soft-text)]"><AdminIcon name="check" size={18} /></span>
-              <div>
-                <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[var(--public-menu-accent-ink)]">Before you submit</p>
-                <h2 id="ordering-guidelines-heading" className="mt-1 text-xl font-black leading-tight tracking-[-0.04em] text-[var(--public-menu-heading)]">A little care keeps every order on track.</h2>
-              </div>
+    <section className="mx-auto max-w-[1240px] px-3 pt-4 sm:px-6 sm:pt-5 lg:px-8" aria-labelledby="ordering-guidelines-heading">
+      <div className="flex flex-col gap-3 rounded-[var(--public-menu-radius-card)] border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3.5 py-3 shadow-[var(--public-menu-shadow-card)] sm:flex-row sm:items-center sm:justify-between sm:gap-5 sm:px-4 sm:py-3.5">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--public-menu-primary-soft)] text-[var(--public-menu-primary-soft-text)]"><AdminIcon name="check" size={16} /></span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <p className="text-[9px] font-extrabold uppercase tracking-[0.16em] text-[var(--public-menu-accent-ink)]">Before you submit</p>
+              <h2 id="ordering-guidelines-heading" className="text-sm font-black leading-tight tracking-[-0.025em] text-[var(--public-menu-heading)] sm:text-[15px]">Check your order details.</h2>
             </div>
-            <p className="mt-3 max-w-xl text-xs leading-5 text-[var(--public-menu-muted)] sm:text-sm">Please review your items, quantities, fulfillment method, and contact details. The team prepares your order from the information you send.</p>
-            <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-[var(--public-menu-danger-soft)] bg-[var(--public-menu-danger-soft)] px-3 py-3 text-[11px] leading-5 text-[var(--public-menu-danger-text)]">
-              <AdminIcon name="lock" size={16} />
-              <p><strong className="font-extrabold">Order responsibly.</strong> Please place only genuine orders you intend to receive. Fake, prank, duplicate, or fraudulent orders or information may be cancelled and reviewed by the store.</p>
-            </div>
+            <p className="mt-1 text-[11px] leading-4.5 text-[var(--public-menu-muted)] sm:text-xs">Review items, quantities, fulfillment, and contact details. Save your order number after checkout.</p>
           </div>
-
-          <div className="grid gap-2.5 sm:grid-cols-3">
-            <OrderGuidanceStep icon="bag" title="Choose carefully" detail="Check the menu items and quantities before adding them." />
-            <OrderGuidanceStep icon="check" title="Review details" detail="Confirm pickup or delivery, phone, address, and notes." />
-            <OrderGuidanceStep icon="lock" title="Keep your number" detail="Save the order number and show it when your order is ready." />
-          </div>
+        </div>
+        <div className="flex items-start gap-2 border-t border-[var(--public-menu-danger-soft)] pt-2.5 text-[10px] leading-4.5 text-[var(--public-menu-danger-text)] sm:max-w-[310px] sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0 sm:text-[11px]">
+          <AdminIcon name="lock" size={14} />
+          <p><strong className="font-extrabold">Order carefully.</strong> Use accurate details and place only genuine orders.</p>
         </div>
       </div>
     </section>
   );
-}
-
-function OrderGuidanceStep({ icon, title, detail }: { icon: "bag" | "check" | "lock"; title: string; detail: string }) {
-  return <div className="rounded-2xl border border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] p-3.5"><span className="grid h-8 w-8 place-items-center rounded-xl bg-[var(--public-menu-sidebar)] text-[var(--public-menu-sidebar-text)]"><AdminIcon name={icon} size={15} /></span><strong className="mt-3 block text-xs font-extrabold text-[var(--public-menu-heading)]">{title}</strong><p className="mt-1 text-[11px] leading-4.5 text-[var(--public-menu-muted)]">{detail}</p></div>;
 }
 
 function CategoryButton({ label, active, disabled = false, onClick }: { label: string; active: boolean; disabled?: boolean; onClick: () => void }) {

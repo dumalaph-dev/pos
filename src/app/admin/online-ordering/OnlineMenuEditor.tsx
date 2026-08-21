@@ -284,7 +284,16 @@ function PublicMenuPreview({ store, settings, branding, theme, copy }: { store: 
             <div className="mt-3 rounded-2xl border p-3" style={{ borderColor: "var(--public-menu-border-strong)", background: "color-mix(in srgb, var(--public-menu-raised) 82%, transparent)" }}><p className="text-[8px] font-extrabold uppercase tracking-[0.12em]" style={{ color: "var(--public-menu-accent-ink)" }}>{copy.pickupTitle}</p><strong className="mt-1 block text-[11px]" style={{ color: "var(--public-menu-heading)" }}>{store.address || "Pickup at the counter"}</strong><span className="mt-1 block text-[9px] leading-3.5" style={{ color: "var(--public-menu-muted)" }}>{settings.pickupNote}</span>{settings.delivery.enabled && <span className="mt-2 block text-[8px] font-bold" style={{ color: "var(--public-menu-heading)" }}>Delivery · {formatPeso(settings.delivery.feeCentavos)} fee</span>}</div>
           </div>
 
-          <div className="mx-3 mt-3 flex items-start gap-2 rounded-2xl border px-2.5 py-2" style={{ borderColor: "var(--public-menu-danger-soft)", background: "var(--public-menu-danger-soft)", color: "var(--public-menu-danger-text)" }}><AdminIcon name="lock" size={11} /><span className="text-[8px] leading-3.5"><strong className="font-extrabold">Order carefully.</strong> Use accurate details and place only genuine orders.</span></div>
+          <div className="mx-3 mt-3 rounded-2xl border px-2.5 py-2" style={{ borderColor: "var(--public-menu-border-strong)", background: "var(--public-menu-raised)" }}>
+            <div className="flex items-center gap-2">
+              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg" style={{ background: "var(--public-menu-primary-soft)", color: "var(--public-menu-primary-soft-text)" }}><AdminIcon name="check" size={11} /></span>
+              <div className="min-w-0">
+                <p className="text-[7px] font-extrabold uppercase tracking-[0.12em]" style={{ color: "var(--public-menu-accent-ink)" }}>Before you submit</p>
+                <p className="mt-0.5 truncate text-[9px] font-extrabold" style={{ color: "var(--public-menu-heading)" }}>Review details and save your order number.</p>
+              </div>
+            </div>
+            <div className="mt-2 flex items-start gap-1.5 border-t pt-2" style={{ borderColor: "var(--public-menu-danger-soft)", color: "var(--public-menu-danger-text)" }}><AdminIcon name="lock" size={10} /><span className="text-[8px] leading-3.5"><strong className="font-extrabold">Order carefully.</strong> Use accurate details and place only genuine orders.</span></div>
+          </div>
 
           <div className="px-3 py-4">
             <p className="text-[8px] font-extrabold uppercase tracking-[0.13em]" style={{ color: "var(--public-menu-accent-ink)" }}>{copy.menuEyebrow}</p>
