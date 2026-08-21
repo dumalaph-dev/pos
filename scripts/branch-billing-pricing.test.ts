@@ -9,6 +9,7 @@ import {
   DEFAULT_ADDITIONAL_BRANCH_PRICE_CENTAVOS,
   DEFAULT_INCLUDED_BRANCH_COUNT,
   DEFAULT_MONTHLY_PRICE_CENTAVOS,
+  requiresAdditionalBranchPayment,
 } from "../src/lib/branch-billing-pricing.ts";
 
 test("the default catalog matches the requested base and branch prices", () => {
@@ -42,6 +43,23 @@ test("each branch after the included branch adds the configured monthly amount",
   assert.equal(calculateBillableBranchCount(3), 2);
   assert.equal(calculateSubscriptionMonthlyTotal(59_900, 29_900, 2), 89_800);
   assert.equal(calculateSubscriptionMonthlyTotal(59_900, 29_900, 3), 119_700);
+});
+
+test("an extra active branch requires paid or complimentary access", () => {
+  const input = {
+    branchCountDelta: 1 as const,
+    nextActiveBranchCount: 2,
+    includedBranchCount: 1,
+    hasPaidAccess: false,
+    hasComplimentaryAccess: false,
+  };
+
+  assert.equal(requiresAdditionalBranchPayment(input), true);
+  assert.equal(requiresAdditionalBranchPayment({ ...input, hasPaidAccess: true }), false);
+  assert.equal(requiresAdditionalBranchPayment({ ...input, hasComplimentaryAccess: true }), false);
+  assert.equal(requiresAdditionalBranchPayment({ ...input, nextActiveBranchCount: 1 }), false);
+  assert.equal(requiresAdditionalBranchPayment({ ...input, branchCountDelta: -1, nextActiveBranchCount: 1 }), false);
+  assert.equal(requiresAdditionalBranchPayment({ ...input, includedBranchCount: 2 }), false);
 });
 
 test("catalog variants use the shared branch-aware quote", () => {

@@ -43,13 +43,16 @@ export default async function BranchesPage({
   const error = readParam(params.error);
   const cloneFailed = readParam(params.clone) === "failed";
   const billingStatus = readParam(params.billing);
+  const billingAction = billingStatus === "required"
+    ? { href: "/admin/billing?reason=additional_branch", label: "Open Billing & Plan" }
+    : undefined;
   const billingMessage = billingStatus === "scheduled"
     ? " The next billing cycle will use the updated active-branch price."
     : billingStatus === "deferred"
       ? " Your next prepaid renewal will include the updated active-branch price."
       : "";
   const notice = error
-    ? { kind: "error" as const, message: error }
+    ? { kind: "error" as const, message: error, action: billingAction }
     : branchesResult.error || devicesResult.error || staffResult.error
       ? { kind: "warning" as const, message: "Some branch details could not be refreshed. The available records are still shown." }
       : saved === "created"

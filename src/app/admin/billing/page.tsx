@@ -38,10 +38,21 @@ type OrganizationRecord = {
 };
 
 type BranchRecord = { id: string; is_active: boolean };
+type QueryValue = string | string[] | undefined;
+
+function readParam(value: QueryValue) {
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
 
 export const dynamic = "force-dynamic";
 
-export default async function BillingPage() {
+export default async function BillingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ reason?: QueryValue }>;
+}) {
+  const params = await searchParams;
+  const additionalBranchRequested = readParam(params.reason) === "additional_branch";
   const user = await getAuthenticatedUser();
   if (!user) redirect("/");
 
@@ -171,6 +182,8 @@ export default async function BillingPage() {
           <div className="flex items-center gap-2 rounded-pill bg-primary-soft px-3 py-2 text-xs font-extrabold text-primary"><AdminIcon name="wallet" size={15} /> {organization?.name ?? "Your business"}</div>
         </section>
 
+        {additionalBranchRequested && <section role="alert" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-4 text-sm text-ink shadow-[var(--shadow-card)]"><p className="text-xs font-extrabold uppercase tracking-[0.14em] text-accent">Additional branch payment required</p><h2 className="mt-1 text-base font-extrabold">Complete billing before adding another active location.</h2><p className="mt-1 max-w-2xl leading-5 text-ink-muted">Your current access does not cover another active branch. Choose a Premium plan and complete payment below, then return to Branches to create the location. Paid subscriptions apply the additional-branch charge to the next billing cycle.</p>{showCheckout && <Link href="#checkout-heading" className="mt-3 inline-flex rounded-btn bg-primary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover">Continue to payment</Link>}</section>}
+
         {(!subscriptionFieldsAvailable || !catalog.schemaAvailable) && <div role="status" className="mt-4 rounded-xl border border-warning/35 bg-warning/10 px-4 py-3 text-sm font-semibold text-ink">Billing details are still being set up. Please contact support if this message continues.</div>}
 
         <CurrentPlanCard
@@ -259,7 +272,7 @@ function CurrentPlanCard({
     : trialExpired
       ? "Your 14-day trial has ended. Subscribe to keep the complete Premium workspace available."
     : isTrial
-      ? "Your 14-day trial includes the complete Premium workspace."
+      ? "Your 14-day trial includes Premium workspace access for the included branch. Additional active branches require a paid plan."
       : accessEnded
         ? "Your Premium access has ended. Choose a plan below to continue using every feature."
         : "Review your billing details and choose a plan when you are ready.";
@@ -299,7 +312,7 @@ function CurrentPlanCard({
           <p className={`mt-3 max-w-xl text-sm leading-5 ${mutedTone}`}>{summary}</p>
 
           <div className={`mt-4 grid gap-2 border-t pt-3 sm:grid-cols-3 ${isActive || isComplimentary ? "border-primary-fg/15" : "border-line"}`}>
-            <PlanMetric inverse={isActive || isComplimentary} label={isComplimentary ? "Access" : isTrialing ? "Trial remaining" : "Plan"} value={isComplimentary ? "Complimentary" : isTrialing ? formatTrialRemaining(trial.remainingMs) : variantLabel} detail={isComplimentary ? "Platform grant" : isTrialing ? "Live countdown below" : planCadence} />
+            <PlanMetric inverse={isActive || isComplimentary} label={isComplimentary ? "Access" : isTrialing ? "Trial remaining" : "Plan"} value={isComplimentary ? "Complimentary" : isTrialing ? formatTrialRemaining(trial.remainingMs) : variantLabel} detail={isComplimentary ? "Platform grant" : isTrialing ? "Included branch covered" : planCadence} />
             <PlanMetric inverse={isActive || isComplimentary} label={isComplimentary ? "Plan" : isTrialing ? "Starting price" : "Monthly equivalent"} value={isComplimentary ? "Premium" : isTrialing ? monthlyPriceLabel : monthlyEquivalentLabel} detail={isComplimentary ? "No provider charge" : isTrialing ? "Monthly billing" : variant?.discountPercent ? `${variant.discountPercent}% plan savings` : "Premium rate"} />
             <PlanMetric inverse={isActive || isComplimentary} label={timingLabel} value={timingValue} detail={isComplimentary ? "Subscribe before this date" : isTrialing ? "All features included" : isRecurring ? "Automatic renewal" : "Renew before this date"} />
           </div>

@@ -38,9 +38,10 @@ function readBoolean(formData: FormData, name: string) {
   return formData.get(name) === "on" || formData.get(name) === "true";
 }
 
-function branchRedirect(message: string, editId = ""): never {
+function branchRedirect(message: string, editId = "", billingStatus: "required" | "" = ""): never {
   const params = new URLSearchParams({ error: message });
   if (editId) params.set("edit", editId);
+  if (billingStatus) params.set("billing", billingStatus);
   redirect(`/admin/branches?${params.toString()}`);
 }
 
@@ -133,7 +134,7 @@ export async function createBranch(formData: FormData) {
 
   const admin = createAdminClient();
   const billingPreparation = await prepareBranchBillingChange(admin, actor.orgId, 1);
-  if (!billingPreparation.ok) branchRedirect(billingPreparation.message);
+  if (!billingPreparation.ok) branchRedirect(billingPreparation.message, "", billingPreparation.code === "payment_required" ? "required" : "");
 
   const { data: branch, error } = await actor.supabase
     .from("stores")
@@ -216,7 +217,7 @@ export async function updateBranch(formData: FormData) {
   const billingPreparation = branchCountDelta === 0
     ? { ok: true as const, change: { status: "unchanged" as const, organizationId: actor.orgId, subscriptionId: null, previousPlanId: null, nextPlanId: null, currentActiveBranchCount: 0, nextActiveBranchCount: 0 } }
     : await prepareBranchBillingChange(admin, actor.orgId, branchCountDelta);
-  if (!billingPreparation.ok) branchRedirect(billingPreparation.message, branchId);
+  if (!billingPreparation.ok) branchRedirect(billingPreparation.message, branchId, billingPreparation.code === "payment_required" ? "required" : "");
 
   const { error } = await actor.supabase
     .from("stores")

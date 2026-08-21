@@ -1,4 +1,9 @@
 import { normalizeSubscriptionStatus } from "@/lib/billing";
+import { readCurrentComplimentaryAccess } from "@/lib/platform-access-server";
+import {
+  DEFAULT_INCLUDED_BRANCH_COUNT,
+  requiresAdditionalBranchPayment,
+} from "@/lib/branch-billing-pricing";
 import { createAdminClient } from "@/lib/employee-auth";
 import { calculateCatalogVariantPriceQuote } from "@/lib/platform-operations";
 import { readPlatformOperations } from "@/lib/platform-operations-server";
@@ -28,9 +33,11 @@ export type BranchBillingChange = {
   nextActiveBranchCount: number;
 };
 
+export type BranchBillingFailureCode = "payment_required" | "billing_unavailable";
+
 type BranchBillingResult =
   | { ok: true; change: BranchBillingChange }
-  | { ok: false; message: string };
+  | { ok: false; message: string; code?: BranchBillingFailureCode };
 
 /**
  * Prepare the provider-side price change before a branch mutation is written.
@@ -82,6 +89,40 @@ export async function prepareBranchBillingChange(
   });
 
   const subscriptionStatus = normalizeSubscriptionStatus(organization.subscription_status);
+  const hasPaidAccess = subscriptionStatus === "active"
+    && (Boolean(organization.subscription_provider_subscription_id) || organization.subscription_billing_mode === "temporary_qrph");
+  let operations: Awaited<ReturnType<typeof readPlatformOperations>> | null = null;
+
+  // Trial, paused, and otherwise unconnected organizations may keep their
+  // included branch, but an additional active branch must be covered before
+  // the branch row is written. Complimentary platform grants are an explicit
+  // exception because they already carry Premium access.
+  if (branchCountDelta === 1 && nextActiveBranchCount > DEFAULT_INCLUDED_BRANCH_COUNT && !hasPaidAccess) {
+    const [candidateOperations, complimentaryAccess] = await Promise.all([
+      readPlatformOperations(admin),
+      readCurrentComplimentaryAccess(admin, organizationId),
+    ]);
+    operations = candidateOperations;
+    const includedBranchCount = candidateOperations.catalog.schemaAvailable
+      ? candidateOperations.catalog.includedBranchCount
+      : DEFAULT_INCLUDED_BRANCH_COUNT;
+
+    if (requiresAdditionalBranchPayment({
+      branchCountDelta,
+      nextActiveBranchCount,
+      includedBranchCount,
+      hasPaidAccess,
+      hasComplimentaryAccess: Boolean(complimentaryAccess),
+    })) {
+      if (!candidateOperations.catalog.schemaAvailable) {
+        return { ok: false, code: "billing_unavailable", message: "The branch pricing catalog is not available. Apply the latest billing migrations before adding another active branch." };
+      }
+
+      const branchLabel = `${includedBranchCount} active branch${includedBranchCount === 1 ? "" : "es"}`;
+      return { ok: false, code: "payment_required", message: `Your current access includes ${branchLabel}. Complete payment in Billing & Plan before adding another active branch.` };
+    }
+  }
+
   if (organization.subscription_billing_mode === "temporary_qrph" && subscriptionStatus === "active") return unchanged("deferred");
   if (!organization.subscription_provider_subscription_id) return unchanged();
   if (subscriptionStatus === "past_due") return { ok: false, message: "Resolve the outstanding subscription payment before changing active branches." };
@@ -89,8 +130,8 @@ export async function prepareBranchBillingChange(
   if (subscriptionStatus !== "active" || organization.subscription_billing_mode === "temporary_qrph") return unchanged();
   if (!organization.subscription_provider_plan_id) return { ok: false, message: "The active subscription plan could not be identified. Contact support before changing branches." };
 
-  const operations = await readPlatformOperations(admin);
-  if (!operations.catalog.schemaAvailable) return { ok: false, message: "The branch pricing catalog is not available. Apply the latest billing migrations before changing branches." };
+  operations ??= await readPlatformOperations(admin);
+  if (!operations.catalog.schemaAvailable) return { ok: false, code: "billing_unavailable", message: "The branch pricing catalog is not available. Apply the latest billing migrations before changing branches." };
 
   const variant = operations.catalog.variants.find((candidate) => candidate.id === organization.subscription_billing_variant_id)
     ?? operations.catalog.variants.find((candidate) => candidate.paymongoPlanId === organization.subscription_provider_plan_id)
