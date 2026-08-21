@@ -42,6 +42,14 @@ function actionRedirect(message: string): never {
   redirect(`/admin/online-ordering?error=${encodeURIComponent(message)}`);
 }
 
+function onlineOrderingRpcError(error: { message?: string | null } | null, fallback: string) {
+  const message = error?.message?.trim() ?? "";
+  if (/schema cache|could not find the function public\./i.test(message)) {
+    return "The online-ordering database schema is still syncing. Apply migration 0063_online_ordering_protection.sql, refresh the page, and try again.";
+  }
+  return message || fallback;
+}
+
 async function requireOnlineOrderingUser() {
   const user = await getAuthenticatedUser();
   if (!user) redirect("/");
@@ -188,7 +196,7 @@ export async function updateOnlineOrderingSettings(formData: FormData) {
     p_settings: nextSettings,
   });
 
-  if (error) actionRedirect(error.message || "Online ordering settings could not be saved.");
+  if (error) actionRedirect(onlineOrderingRpcError(error, "Online ordering settings could not be saved."));
 
   revalidatePath("/admin/online-ordering");
   revalidatePath(publicMenuPath(store.staff_login_slug));
@@ -292,7 +300,7 @@ export async function updateOnlineAvailability(formData: FormData) {
     p_entity_id: entityId,
     p_available: availableValue === "true",
   });
-  if (error) actionRedirect(error.message || "Online availability could not be changed.");
+  if (error) actionRedirect(onlineOrderingRpcError(error, "Online availability could not be changed."));
 
   revalidatePath("/admin/online-ordering");
   revalidatePath(publicMenuPath(store.staff_login_slug));
@@ -309,7 +317,7 @@ export async function verifyOnlineOrderPhone(formData: FormData) {
   const { error } = await supabase.rpc("mark_online_order_phone_verified", {
     p_online_order_id: orderId,
   });
-  if (error) actionRedirect(error.message || "The customer phone could not be verified.");
+  if (error) actionRedirect(onlineOrderingRpcError(error, "The customer phone could not be verified."));
 
   revalidatePath("/admin/online-ordering");
   revalidatePath(publicMenuPath(store.staff_login_slug));
@@ -341,7 +349,7 @@ export async function updateOnlineOrderStatus(formData: FormData) {
     p_next_status: requestedStatus,
     p_cancel_reason: readText(formData, "cancel_reason") || null,
   });
-  if (error) actionRedirect(error.message || "The online order could not be updated.");
+  if (error) actionRedirect(onlineOrderingRpcError(error, "The online order could not be updated."));
 
   revalidatePath("/admin/online-ordering");
   revalidatePath(publicMenuPath(store.staff_login_slug));
@@ -386,7 +394,7 @@ export async function updatePosOnlineOrderStatus(
     p_online_order_id: normalizedOrderId,
     p_next_status: status,
   });
-  if (error) return { ok: false, message: error.message || "The online order could not be updated." };
+  if (error) return { ok: false, message: onlineOrderingRpcError(error, "The online order could not be updated.") };
 
   const label = formatOrderStatusLabel(status) ?? "updated";
   return { ok: true, message: `Online order ${label.toLowerCase()}.` };

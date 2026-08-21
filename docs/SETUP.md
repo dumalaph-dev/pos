@@ -66,10 +66,12 @@ server. Configure the PayMongo webhook URL as
 SQL lives in `supabase/migrations/` (run in order):
 The latest migrations add store staff access keys, subscription tracking, the
 platform operations catalog, POS and display workflows, the online ordering
-queue, and customer-facing menu subdomains. Apply all files in numeric order;
-the current end of the sequence is `0055_online_ordering.sql` through
-`0061_cashier_online_order_queue.sql`, followed by
-`0062_public_menu_subdomains.sql`.
+queue, customer-facing menu subdomains, and RPC contract hardening. Apply all
+files in numeric order; the current end of the sequence is
+`0055_online_ordering.sql` through `0061_cashier_online_order_queue.sql`,
+followed by `0062_public_menu_subdomains.sql` and
+`0063_online_ordering_protection.sql` through
+`0067_verify_phone_rpc_acl_fix.sql`.
 1. `0001_schema.sql` — tables, enums, indexes
 2. `0002_rls.sql` — grants, helper functions, RLS policies, append-only triggers
 3. `0003_functions.sql` — `clone_menu` (multi-branch)
@@ -122,6 +124,11 @@ the current end of the sequence is `0055_online_ordering.sql` through
 60. `0060_readable_online_order_numbers.sql` — readable customer order numbers
 61. `0061_cashier_online_order_queue.sql` — cashier queue actions and status transitions
 62. `0062_public_menu_subdomains.sql` — assign each active branch a unique customer-facing menu subdomain
+63. `0063_online_ordering_protection.sql` — online availability, scheduling, pricing, and abuse-protection RPCs
+64. `0064_rpc_contract_hardening.sql` — refresh PostgREST after hosted DDL and remove anonymous RPC execution
+65. `0065_rpc_acl_normalization.sql` — remove inherited PUBLIC execution and restore application RPC grants
+66. `0066_service_rpc_acl_fix.sql` — keep server-only RPCs unavailable to authenticated browser clients
+67. `0067_verify_phone_rpc_acl_fix.sql` — keep phone-code verification service-role-only
 
 **Apply them** either way:
 - **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push`
