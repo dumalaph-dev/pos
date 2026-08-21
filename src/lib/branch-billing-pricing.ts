@@ -29,6 +29,26 @@ export const DEFAULT_MONTHLY_PRICE_CENTAVOS = 59_900;
 export const DEFAULT_ADDITIONAL_BRANCH_PRICE_CENTAVOS = 29_900;
 export const DEFAULT_INCLUDED_BRANCH_COUNT = 1;
 
+export type AdditionalBranchPaymentInput = {
+  branchCountDelta: 1 | -1;
+  nextActiveBranchCount: number;
+  includedBranchCount: number;
+  hasPaidAccess: boolean;
+  hasComplimentaryAccess: boolean;
+};
+
+/**
+ * An extra active branch is an entitlement change, not just a directory write.
+ * Deactivations are always allowed to reduce an existing branch commitment.
+ */
+export function requiresAdditionalBranchPayment(input: AdditionalBranchPaymentInput) {
+  if (input.branchCountDelta !== 1 || input.hasPaidAccess || input.hasComplimentaryAccess) return false;
+
+  const nextActiveBranchCount = normalizeWholeNumber(input.nextActiveBranchCount);
+  const includedBranchCount = normalizeMinimumWholeNumber(input.includedBranchCount, 1);
+  return nextActiveBranchCount > includedBranchCount;
+}
+
 export function calculateBillableBranchCount(activeBranchCount: number, includedBranchCount = DEFAULT_INCLUDED_BRANCH_COUNT) {
   const active = normalizeWholeNumber(activeBranchCount);
   const included = normalizeMinimumWholeNumber(includedBranchCount, 1);
