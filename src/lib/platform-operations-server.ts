@@ -2,6 +2,8 @@ import { unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/employee-auth";
 import {
   DEFAULT_BILLING_VARIANTS,
+  DEFAULT_ADDITIONAL_BRANCH_PRICE_CENTAVOS,
+  DEFAULT_INCLUDED_BRANCH_COUNT,
   DEFAULT_MONTHLY_PRICE_CENTAVOS,
   DEFAULT_PLATFORM_POLICIES,
   type BillingCatalog,
@@ -15,12 +17,14 @@ type PlatformAdminClient = NonNullable<ReturnType<typeof createAdminClient>>;
 
 export async function readPlatformBillingCatalog(admin: PlatformAdminClient): Promise<BillingCatalog> {
   const [settingsResult, variantsResult] = await Promise.all([
-    admin.from("platform_billing_settings").select("currency, monthly_price_centavos").eq("id", "default").maybeSingle(),
+    admin.from("platform_billing_settings").select("currency, monthly_price_centavos, additional_branch_price_centavos, included_branch_count").eq("id", "default").maybeSingle(),
     admin.from("platform_billing_variants").select("id, label, billing_unit, interval_count, discount_percent, paymongo_plan_id, is_active, sort_order").order("sort_order", { ascending: true }),
   ]);
 
   const schemaAvailable = !settingsResult.error && !variantsResult.error;
   const monthlyPriceCentavos = readInteger(settingsResult.data?.monthly_price_centavos, DEFAULT_MONTHLY_PRICE_CENTAVOS);
+  const additionalBranchPriceCentavos = readPositiveInteger(settingsResult.data?.additional_branch_price_centavos, DEFAULT_ADDITIONAL_BRANCH_PRICE_CENTAVOS);
+  const includedBranchCount = readIncludedBranchCount(settingsResult.data?.included_branch_count, DEFAULT_INCLUDED_BRANCH_COUNT);
   const rows = (variantsResult.data ?? []) as Array<{
     id: string;
     label: string;
@@ -48,6 +52,8 @@ export async function readPlatformBillingCatalog(admin: PlatformAdminClient): Pr
   return {
     currency: "PHP",
     monthlyPriceCentavos,
+    additionalBranchPriceCentavos,
+    includedBranchCount,
     // The platform catalog is authoritative whenever its tables are
     // available. Keep defaults only for the unavailable-schema fallback used
     // by public/platform pages during migrations; customer billing must not
@@ -240,6 +246,16 @@ function normalizePolicy(key: PlatformPolicyKey, row: {
 function readInteger(value: unknown, fallback: number) {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) ? parsed : fallback;
+}
+
+function readPositiveInteger(value: unknown, fallback: number) {
+  const parsed = readInteger(value, fallback);
+  return parsed > 0 ? parsed : fallback;
+}
+
+function readIncludedBranchCount(value: unknown, fallback: number) {
+  const parsed = readInteger(value, fallback);
+  return parsed >= 1 && parsed <= 10 ? parsed : fallback;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

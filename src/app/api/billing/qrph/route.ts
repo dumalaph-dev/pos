@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { normalizeSubscriptionStatus } from "@/lib/billing";
 import { createAdminClient } from "@/lib/employee-auth";
-import { calculateBillingVariantPrice, isPolicyGateOpen } from "@/lib/platform-operations";
+import { calculateCatalogVariantPriceQuote, isPolicyGateOpen } from "@/lib/platform-operations";
 import { readPromotionQuote, recordPromotionRedemption } from "@/lib/platform-promotions-server";
 import {
   createPayMongoQrPhCheckoutSession,
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
 
     const operations = await readPlatformOperations(admin);
     if (!operations.catalog.schemaAvailable || !operations.policies.schemaAvailable) {
-      return errorResponse("Apply Supabase migration 0027_platform_operations.sql before enabling checkout.", 503);
+      return errorResponse("Apply Supabase migrations 0027_platform_operations.sql and 0068_branch_billing_pricing.sql before enabling checkout.", 503);
     }
     if (!isPolicyGateOpen(operations.policies)) {
       return errorResponse("Checkout is locked until both the billing and support policies are published.", 423);
@@ -66,6 +66,14 @@ export async function POST(request: NextRequest) {
     if (!organization) return errorResponse("Your POS organization could not be found.", 404);
     if (organization.account_status === "suspended") return errorResponse("This organization is suspended. Contact support before starting billing.", 423);
 
+    const activeBranchesResult = await admin
+      .from("stores")
+      .select("id")
+      .eq("org_id", organization.id)
+      .eq("is_active", true);
+    if (activeBranchesResult.error) return errorResponse("The active branch count could not be verified. Try again after the branch data is available.", 503);
+    const activeBranchCount = Math.max(activeBranchesResult.data?.length ?? 0, 1);
+
     const body = await readJson(request);
     const variantId = isRecord(body) && typeof body.variantId === "string" ? body.variantId.trim() : "";
     const promoCode = isRecord(body) && typeof body.promoCode === "string" ? body.promoCode.trim() : "";
@@ -89,12 +97,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const baseAmountCentavos = calculateBillingVariantPrice(
-      operations.catalog.monthlyPriceCentavos,
-      variant.intervalUnit,
-      variant.intervalCount,
-      variant.discountPercent,
-    );
+    const pricingQuote = calculateCatalogVariantPriceQuote(operations.catalog, variant, activeBranchCount);
+    const baseAmountCentavos = pricingQuote.termTotalCentavos;
     const promotionQuote = await readPromotionQuote(admin, {
       code: promoCode,
       organizationId: organization.id,
@@ -118,13 +122,15 @@ export async function POST(request: NextRequest) {
       base_amount_centavos: String(promotionQuote.baseAmountCentavos),
       discount_amount_centavos: String(promotionQuote.discountAmountCentavos),
       amount_centavos: String(amountCentavos),
+      active_branch_count: String(activeBranchCount),
+      billable_branch_count: String(pricingQuote.billableBranchCount),
     };
     const successUrl = new URL("/admin/billing?qrph=success", request.nextUrl.origin).toString();
     const cancelUrl = new URL("/admin/billing?qrph=cancelled", request.nextUrl.origin).toString();
     const checkout = await createPayMongoQrPhCheckoutSession({
       amountCentavos,
-      itemName: `Dumala POS Premium · ${variant.label}`,
-      description: `Prepaid Dumala POS Premium access · ${variant.label}`,
+      itemName: `Dumala POS Premium · ${variant.label} · ${activeBranchCount} branch${activeBranchCount === 1 ? "" : "es"}`,
+      description: `Prepaid Dumala POS Premium access · ${variant.label} · ${activeBranchCount} active branch${activeBranchCount === 1 ? "" : "es"}`,
       successUrl,
       cancelUrl,
       referenceNumber,
@@ -165,6 +171,8 @@ export async function POST(request: NextRequest) {
       baseAmountCentavos: promotionQuote.baseAmountCentavos,
       discountAmountCentavos: promotionQuote.discountAmountCentavos,
       promotionCode: promotionQuote.code,
+      activeBranchCount,
+      billableBranchCount: pricingQuote.billableBranchCount,
       currency: "PHP",
       variantId: variant.id,
     });

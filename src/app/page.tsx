@@ -10,7 +10,7 @@ import LandingPosPlaygroundLazy from "@/components/landing/LandingPosPlaygroundL
 import ScrollReveal from "@/components/landing/ScrollReveal";
 import { formatPeso } from "@/lib/money";
 import { socialMetadata } from "@/lib/page-metadata";
-import { DEFAULT_BILLING_VARIANTS, DEFAULT_MONTHLY_PRICE_CENTAVOS, type BillingCatalog, type BillingVariant } from "@/lib/platform-operations";
+import { DEFAULT_ADDITIONAL_BRANCH_PRICE_CENTAVOS, DEFAULT_BILLING_VARIANTS, DEFAULT_INCLUDED_BRANCH_COUNT, DEFAULT_MONTHLY_PRICE_CENTAVOS, type BillingCatalog, type BillingVariant } from "@/lib/platform-operations";
 import { readCachedPlatformBillingCatalog } from "@/lib/platform-operations-server";
 import { absoluteUrl, siteUrl } from "@/lib/site-url";
 import { POS_THEME_OPTIONS } from "@/lib/pos-theme";
@@ -203,7 +203,7 @@ function buildFaqs(premiumPrice: string, annualVariants: BillingVariant[]): Arra
   {
     question: "Will the prices on this page stay current?",
     answer:
-      "Yes. This page reads the same pricing catalog as the Plans & Pricing control center. When the platform owner changes the monthly base price, an annual duration, or its discount, the public options update with it. Price changes apply to new checkouts; existing subscriptions are not repriced automatically.",
+      "Yes. This page reads the same pricing catalog as the Plans & Pricing control center. When the platform owner changes the monthly base price, an annual duration, or its discount, the public options update with it. Catalog and base-price changes apply to new checkouts; active subscriptions update when their branch count changes.",
   },
   {
     question: "Does it keep working when the internet drops?",
@@ -623,6 +623,8 @@ export default async function LandingPage() {
   const billingCatalog: BillingCatalog = catalog ?? {
     currency: "PHP",
     monthlyPriceCentavos: DEFAULT_MONTHLY_PRICE_CENTAVOS,
+    additionalBranchPriceCentavos: DEFAULT_ADDITIONAL_BRANCH_PRICE_CENTAVOS,
+    includedBranchCount: DEFAULT_INCLUDED_BRANCH_COUNT,
     variants: DEFAULT_BILLING_VARIANTS,
     schemaAvailable: false,
   };

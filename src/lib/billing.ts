@@ -1,8 +1,8 @@
 export type SubscriptionStatus = "trialing" | "active" | "past_due" | "canceled" | "incomplete" | "paused";
 
 export const PREMIUM_PLAN_ID = "premium" as const;
-export const PREMIUM_PRICE_PHP = 799;
-export const PREMIUM_PRICE_LABEL = "₱799";
+export const PREMIUM_PRICE_PHP = 599;
+export const PREMIUM_PRICE_LABEL = "₱599";
 
 export type SubscriptionPlanId = typeof PREMIUM_PLAN_ID;
 
@@ -23,7 +23,7 @@ export const PREMIUM_PLAN: BillingPlan = {
   priceLabel: PREMIUM_PRICE_LABEL,
   features: [
     "Tablet POS and owner dashboard",
-    "Unlimited branches, staff, and products",
+    "Branch-ready POS with staff and product management",
     "Offline-first selling with automatic sync",
     "Inventory, suppliers, expenses, and reports",
     "Shifts, cash counts, and audit history",

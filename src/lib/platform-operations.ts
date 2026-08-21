@@ -1,6 +1,22 @@
 import { formatPeso } from "@/lib/money";
+import type { BillingIntervalUnit } from "@/lib/branch-billing-pricing";
 
-export type BillingIntervalUnit = "month" | "year";
+export {
+  DEFAULT_ADDITIONAL_BRANCH_PRICE_CENTAVOS,
+  DEFAULT_INCLUDED_BRANCH_COUNT,
+  DEFAULT_MONTHLY_PRICE_CENTAVOS,
+  calculateBillableBranchCount,
+  calculateCatalogVariantPriceQuote,
+  calculateSubscriptionMonthlyTotal,
+  calculateSubscriptionPriceQuote,
+  calculateSubscriptionVariantPrice,
+  type BillingIntervalUnit,
+  type SubscriptionPriceInput,
+  type SubscriptionPriceQuote,
+  type SubscriptionCatalogPricing,
+  type SubscriptionVariantInput,
+} from "@/lib/branch-billing-pricing";
+
 export type PlatformPolicyKey = "billing" | "support";
 export type PlatformPolicyStatus = "draft" | "published";
 
@@ -18,6 +34,8 @@ export type BillingVariant = {
 export type BillingCatalog = {
   currency: "PHP";
   monthlyPriceCentavos: number;
+  additionalBranchPriceCentavos: number;
+  includedBranchCount: number;
   variants: BillingVariant[];
   schemaAvailable: boolean;
 };
@@ -63,8 +81,6 @@ export type CheckoutReadiness = {
   items: CheckoutReadinessItem[];
   remainingActions: CheckoutReadinessItem[];
 };
-
-export const DEFAULT_MONTHLY_PRICE_CENTAVOS = 79_900;
 
 export const DEFAULT_BILLING_VARIANTS: BillingVariant[] = [
   {
@@ -215,7 +231,7 @@ export function getCheckoutReadiness({
         : "Pricing catalog storage is unavailable",
       action: catalog.schemaAvailable
         ? "Activate at least one checkout offer in Plans & Pricing."
-        : "Apply 0027_platform_operations.sql, then save an offer in Plans & Pricing.",
+        : "Apply 0027_platform_operations.sql and 0068_branch_billing_pricing.sql, then save an offer in Plans & Pricing.",
       href: "/platform/plans#pricing-settings",
       linkLabel: "Open Plans & Pricing",
     },

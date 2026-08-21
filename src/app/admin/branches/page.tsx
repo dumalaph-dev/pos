@@ -17,7 +17,7 @@ function readParam(value: QueryValue) {
 export default async function BranchesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: QueryValue; saved?: QueryValue; edit?: QueryValue; clone?: QueryValue }>;
+  searchParams: Promise<{ error?: QueryValue; saved?: QueryValue; edit?: QueryValue; clone?: QueryValue; billing?: QueryValue }>;
 }) {
   const params = await searchParams;
   const user = await getAuthenticatedUser();
@@ -42,14 +42,20 @@ export default async function BranchesPage({
   const saved = readParam(params.saved);
   const error = readParam(params.error);
   const cloneFailed = readParam(params.clone) === "failed";
+  const billingStatus = readParam(params.billing);
+  const billingMessage = billingStatus === "scheduled"
+    ? " The next billing cycle will use the updated active-branch price."
+    : billingStatus === "deferred"
+      ? " Your next prepaid renewal will include the updated active-branch price."
+      : "";
   const notice = error
     ? { kind: "error" as const, message: error }
     : branchesResult.error || devicesResult.error || staffResult.error
       ? { kind: "warning" as const, message: "Some branch details could not be refreshed. The available records are still shown." }
       : saved === "created"
-        ? { kind: "success" as const, message: cloneFailed ? "Branch created, but its menu could not be cloned. Apply the latest Supabase migration, then add the menu from Products." : "Branch created successfully." }
+        ? { kind: "success" as const, message: cloneFailed ? `Branch created, but its menu could not be cloned. Apply the latest Supabase migration, then add the menu from Products.${billingMessage}` : `Branch created successfully.${billingMessage}` }
         : saved === "updated"
-          ? { kind: "success" as const, message: "Branch details saved." }
+          ? { kind: "success" as const, message: `Branch details saved.${billingMessage}` }
           : undefined;
 
   return (

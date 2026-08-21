@@ -108,7 +108,7 @@ export default async function PlatformOperationsPage() {
           </>}
         />
 
-        {(!organizationsResult.subscriptionFieldsAvailable || !organizationsResult.accountFieldsAvailable || !catalog.schemaAvailable || !policies.schemaAvailable || !supportCasesReady) && <PlatformMigrationNotice migrations={["0027_platform_operations.sql", "0028_support_cases.sql"]} />}
+        {(!organizationsResult.subscriptionFieldsAvailable || !organizationsResult.accountFieldsAvailable || !catalog.schemaAvailable || !policies.schemaAvailable || !supportCasesReady) && <PlatformMigrationNotice migrations={["0027_platform_operations.sql", "0028_support_cases.sql", "0068_branch_billing_pricing.sql"]} />}
 
         <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Operations summary">
           <PlatformMetric label="Active subscriptions" value={activeSubscriptions} detail={`${trialSubscriptions} businesses in trial`} icon="wallet" />

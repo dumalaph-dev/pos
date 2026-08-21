@@ -11,6 +11,7 @@
     "test:platform-access": "node --experimental-strip-types --test scripts/platform-access.test.ts",
     "test:referrals": "node --experimental-strip-types --test scripts/referrals.test.ts",
     "test:trial": "node --experimental-strip-types --test scripts/trial-lifecycle.test.ts",
+    "test:branch-billing": "node --experimental-strip-types --test scripts/branch-billing-pricing.test.ts",
     "test:pos": "node --experimental-strip-types --test scripts/pos-business.property.test.ts",
     "test:pos:accessibility": "node --experimental-strip-types --test scripts/pos-accessibility.test.ts",
     "test:online-order-alerts": "node --experimental-strip-types --test scripts/online-order-alerts.test.ts",

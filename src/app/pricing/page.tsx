@@ -9,7 +9,9 @@ import ScrollReveal from "@/components/landing/ScrollReveal";
 import { formatPeso } from "@/lib/money";
 import { socialMetadata } from "@/lib/page-metadata";
 import {
+  DEFAULT_ADDITIONAL_BRANCH_PRICE_CENTAVOS,
   DEFAULT_BILLING_VARIANTS,
+  DEFAULT_INCLUDED_BRANCH_COUNT,
   DEFAULT_MONTHLY_PRICE_CENTAVOS,
   billingVariantMonthlyEquivalent,
   calculateBillingVariantPrice,
@@ -89,7 +91,7 @@ function buildPricingFaqs(catalog: BillingCatalog, billing: BillingSummary) {
     {
       question: "Will the price on this page stay current?",
       answer:
-        "Yes. This page reads the same pricing catalog the checkout uses, so it updates when the price does. Price changes apply to new checkouts; existing subscriptions are not repriced automatically.",
+        "Yes. This page reads the same pricing catalog the checkout uses, so it updates when the price does. Catalog and base-price changes apply to new checkouts; active subscriptions update when their branch count changes.",
     },
   ];
 }
@@ -100,6 +102,8 @@ export default async function PricingPage() {
   const billingCatalog: BillingCatalog = catalog ?? {
     currency: "PHP",
     monthlyPriceCentavos: DEFAULT_MONTHLY_PRICE_CENTAVOS,
+    additionalBranchPriceCentavos: DEFAULT_ADDITIONAL_BRANCH_PRICE_CENTAVOS,
+    includedBranchCount: DEFAULT_INCLUDED_BRANCH_COUNT,
     variants: DEFAULT_BILLING_VARIANTS,
     schemaAvailable: false,
   };

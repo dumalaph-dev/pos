@@ -61,7 +61,7 @@ export default async function PlatformOverviewPage() {
           </>}
         />
 
-        {(!organizationsResult.subscriptionFieldsAvailable || !organizationsResult.accountFieldsAvailable || !catalog.schemaAvailable || !policies.schemaAvailable || !supportCasesReady) && <PlatformMigrationNotice migrations={["0027_platform_operations.sql", "0028_support_cases.sql"]} />}
+        {(!organizationsResult.subscriptionFieldsAvailable || !organizationsResult.accountFieldsAvailable || !catalog.schemaAvailable || !policies.schemaAvailable || !supportCasesReady) && <PlatformMigrationNotice migrations={["0027_platform_operations.sql", "0028_support_cases.sql", "0068_branch_billing_pricing.sql"]} />}
 
         <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Platform summary">
           <PlatformMetric label="Businesses" value={organizations.length} detail={`${activeSubscriptions} active subscriptions · ${trialSubscriptions} in trial`} icon="dashboard" />
@@ -74,7 +74,7 @@ export default async function PlatformOverviewPage() {
           <article className="rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6">
             <PlatformSectionHeading eyebrow="Workspace map" title="Manage the platform by feature" description="Each area now has one job, so the control you need is never buried in a long page." />
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <FeatureLink href="/platform/plans" icon="wallet" label="Plans & Pricing" detail={`${catalog.variants.filter((variant) => variant.isActive).length} live offers · ${formatPeso(catalog.monthlyPriceCentavos)} monthly base`} />
+              <FeatureLink href="/platform/plans" icon="wallet" label="Plans & Pricing" detail={`${catalog.variants.filter((variant) => variant.isActive).length} live offers · ${formatPeso(catalog.monthlyPriceCentavos)} base · ${formatPeso(catalog.additionalBranchPriceCentavos)} per extra branch`} />
               <FeatureLink href="/platform/promotions" icon="tag" label="Promo & Marketing" detail="Create checkout codes and measure paid conversion" />
               <FeatureLink href="/platform/users" icon="customers" label="Users" detail={`${profiles.length} user profiles across ${organizations.length} businesses`} />
               <FeatureLink href="/platform/policies" icon="lock" label="Policies" detail={`${publishedPolicies}/2 published · controls stay gated until complete`} />

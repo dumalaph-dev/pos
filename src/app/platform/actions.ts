@@ -6,7 +6,8 @@ import { BILLING_CATALOG_TAG } from "@/lib/platform-operations-server";
 import { isPlatformAdminEmail } from "@/lib/platform-admin";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
 import {
-  calculateBillingVariantPrice,
+  calculateSubscriptionVariantPrice,
+  DEFAULT_INCLUDED_BRANCH_COUNT,
   normalizeDiscount,
   parsePhpToCentavos,
   type BillingIntervalUnit,
@@ -30,6 +31,11 @@ export async function saveBillingCatalog(_previousState: PlatformActionState, fo
   const monthlyPrice = parsePhpToCentavos(readText(formData, "monthly_price"));
   if (monthlyPrice === null || monthlyPrice < 2_000) {
     return { ok: false, message: "Enter a monthly PHP price of at least ₱20.00 for PayMongo subscription compatibility." };
+  }
+
+  const additionalBranchPrice = parsePhpToCentavos(readText(formData, "additional_branch_price"));
+  if (additionalBranchPrice === null || additionalBranchPrice < 100) {
+    return { ok: false, message: "Enter an additional active branch price of at least ₱1.00." };
   }
 
   const rawVariants = readText(formData, "variants");
@@ -73,7 +79,15 @@ export async function saveBillingCatalog(_previousState: PlatformActionState, fo
     if (intervalUnit === "month" && intervalCount !== 1) return { ok: false, message: "Monthly billing must use a one-month interval." };
     if (discountPercent === null) return { ok: false, message: `Discount for pricing row ${index + 1} must be between 0% and 100%.` };
     if (intervalUnit === "month" && discountPercent !== 0) return { ok: false, message: "The monthly base price cannot have a discount." };
-    if (isActive && calculateBillingVariantPrice(monthlyPrice, intervalUnit, intervalCount, discountPercent) < 2_000) return { ok: false, message: `Pricing row ${index + 1} would be below PayMongo's minimum active subscription amount after its discount.` };
+    if (isActive && calculateSubscriptionVariantPrice({
+      monthlyPriceCentavos: monthlyPrice,
+      additionalBranchPriceCentavos: additionalBranchPrice,
+      includedBranchCount: DEFAULT_INCLUDED_BRANCH_COUNT,
+      activeBranchCount: DEFAULT_INCLUDED_BRANCH_COUNT,
+      intervalUnit,
+      intervalCount,
+      discountPercent,
+    }) < 2_000) return { ok: false, message: `Pricing row ${index + 1} would be below PayMongo's minimum active subscription amount after its discount.` };
     if (id && !isUuid(id)) return { ok: false, message: `Pricing row ${index + 1} has an invalid identifier.` };
     const cycleKey = `${intervalUnit}:${intervalCount}`;
     if (cycleKeys.has(cycleKey)) return { ok: false, message: "Each billing duration can only appear once in the catalog." };
@@ -98,15 +112,17 @@ export async function saveBillingCatalog(_previousState: PlatformActionState, fo
     id: "default",
     currency: "PHP",
     monthly_price_centavos: monthlyPrice,
+    additional_branch_price_centavos: additionalBranchPrice,
+    included_branch_count: DEFAULT_INCLUDED_BRANCH_COUNT,
     updated_at: new Date().toISOString(),
   });
-  if (settingsResult.error) return migrationError(settingsResult.error.message);
+  if (settingsResult.error) return pricingMigrationError(settingsResult.error.message);
 
   const variantsResult = await actor.admin.from("platform_billing_variants").upsert(variants, { onConflict: "id" });
   if (variantsResult.error) return migrationError(variantsResult.error.message);
 
   revalidatePlatformPages();
-  return { ok: true, message: "Subscription pricing saved. New checkouts can use this catalog after the policy gate and PayMongo setup are complete." };
+  return { ok: true, message: "Subscription base and branch pricing saved. New checkouts can use this catalog after the policy gate and PayMongo setup are complete." };
 }
 
 export async function savePlatformPolicy(_previousState: PlatformActionState, formData: FormData): Promise<PlatformActionState> {
@@ -298,6 +314,14 @@ function migrationError(detail: string): PlatformActionState {
     return { ok: false, message: "Apply Supabase migration 0027_platform_operations.sql before saving platform policies or pricing." };
   }
   return { ok: false, message: detail || "The platform operation could not be saved." };
+}
+
+function pricingMigrationError(detail: string): PlatformActionState {
+  const lower = detail.toLowerCase();
+  if (lower.includes("does not exist") || lower.includes("relation") || lower.includes("column")) {
+    return { ok: false, message: "Apply Supabase migrations 0027_platform_operations.sql and 0068_branch_billing_pricing.sql before saving platform pricing." };
+  }
+  return { ok: false, message: detail || "The platform pricing could not be saved." };
 }
 
 function promotionMigrationError(detail: string): PlatformActionState {

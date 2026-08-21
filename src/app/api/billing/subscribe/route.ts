@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getAdminProfile, invalidateAdminProfile } from "@/lib/admin/profile";
 import { normalizeSubscriptionStatus } from "@/lib/billing";
 import { createAdminClient } from "@/lib/employee-auth";
-import { isPolicyGateOpen, calculateBillingVariantPrice, type BillingVariant } from "@/lib/platform-operations";
+import { calculateCatalogVariantPriceQuote, isPolicyGateOpen, type BillingVariant } from "@/lib/platform-operations";
 import { readPromotionQuote, recordPromotionRedemption } from "@/lib/platform-promotions-server";
 import { payMongoConfiguration, readPlatformOperations } from "@/lib/platform-operations-server";
 import {
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
 
     const operations = await readPlatformOperations(admin);
     if (!operations.catalog.schemaAvailable || !operations.policies.schemaAvailable) {
-      return errorResponse("Apply Supabase migration 0027_platform_operations.sql before enabling checkout.", 503);
+      return errorResponse("Apply Supabase migrations 0027_platform_operations.sql and 0068_branch_billing_pricing.sql before enabling checkout.", 503);
     }
     if (!isPolicyGateOpen(operations.policies)) {
       return errorResponse("Checkout is locked until both the billing and support policies are published.", 423);
@@ -87,6 +87,14 @@ export async function POST(request: NextRequest) {
     if (!organization) return errorResponse("Your POS organization could not be found.", 404);
     if (organization.account_status === "suspended") return errorResponse("This organization is suspended. Contact support before starting billing.", 423);
 
+    const activeBranchesResult = await admin
+      .from("stores")
+      .select("id")
+      .eq("org_id", organization.id)
+      .eq("is_active", true);
+    if (activeBranchesResult.error) return errorResponse("The active branch count could not be verified. Try again after the branch data is available.", 503);
+    const activeBranchCount = Math.max(activeBranchesResult.data?.length ?? 0, 1);
+
     const body = await readJson(request);
     const variantId = isRecord(body) && typeof body.variantId === "string" ? body.variantId.trim() : "";
     const promoCode = isRecord(body) && typeof body.promoCode === "string" ? body.promoCode.trim() : "";
@@ -112,12 +120,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const baseAmountCentavos = calculateBillingVariantPrice(
-      operations.catalog.monthlyPriceCentavos,
-      variant.intervalUnit,
-      variant.intervalCount,
-      variant.discountPercent,
-    );
+    const pricingQuote = calculateCatalogVariantPriceQuote(operations.catalog, variant, activeBranchCount);
+    const baseAmountCentavos = pricingQuote.termTotalCentavos;
     const promotionQuote = await readPromotionQuote(admin, {
       code: promoCode,
       organizationId: organization.id,
@@ -130,21 +134,21 @@ export async function POST(request: NextRequest) {
     if (amountCentavos < 2_000) return errorResponse("The selected price is below PayMongo's minimum subscription amount.", 400);
 
     if (status === "incomplete" && organization.subscription_provider_subscription_id) {
-      const existing = await resumeIncompleteSubscription(organization, variant, amountCentavos, hasPromotion ? null : variant.paymongoPlanId);
+      const existing = await resumeIncompleteSubscription(organization, variant, amountCentavos, hasPromotion || activeBranchCount !== operations.catalog.includedBranchCount ? null : variant.paymongoPlanId);
       if (existing instanceof NextResponse) return existing;
       if (existing) return NextResponse.json(existing);
     }
 
     const plan = await ensurePayMongoPlan({
-      existingPlanId: hasPromotion ? null : variant.paymongoPlanId,
-      variantId: hasPromotion ? `${variant.id}-${promotionQuote.code}` : variant.id,
-      label: hasPromotion ? `${variant.label} · ${promotionQuote.code}` : variant.label,
+      existingPlanId: hasPromotion || activeBranchCount !== operations.catalog.includedBranchCount ? null : variant.paymongoPlanId,
+      variantId: providerPlanVariantId(variant.id, activeBranchCount, hasPromotion ? promotionQuote.code : null),
+      label: providerPlanLabel(variant.label, activeBranchCount, hasPromotion ? promotionQuote.code : null),
       amountCentavos,
       intervalUnit: variant.intervalUnit,
       intervalCount: variant.intervalCount,
     });
 
-    if (!hasPromotion && plan.id !== variant.paymongoPlanId) {
+    if (!hasPromotion && activeBranchCount === operations.catalog.includedBranchCount && plan.id !== variant.paymongoPlanId) {
       const planUpdate = await admin
         .from("platform_billing_variants")
         .update({ paymongo_plan_id: plan.id, updated_at: new Date().toISOString() })
@@ -225,6 +229,8 @@ export async function POST(request: NextRequest) {
       baseAmountCentavos: promotionQuote.baseAmountCentavos,
       discountAmountCentavos: promotionQuote.discountAmountCentavos,
       promotionCode: promotionQuote.code,
+      activeBranchCount,
+      billableBranchCount: pricingQuote.billableBranchCount,
       currency: "PHP",
     });
   } catch (error) {
@@ -329,6 +335,16 @@ function readProviderPlanId(attributes: Record<string, unknown>) {
 function subscriptionAttemptKey(organization: OrganizationRecord) {
   const revision = (organization.subscription_updated_at ?? "new").replace(/[^a-zA-Z0-9]/g, "");
   return `pos-subscription-${organization.id}-${revision}`;
+}
+
+function providerPlanVariantId(variantId: string, activeBranchCount: number, promotionCode: string | null) {
+  const branchSuffix = activeBranchCount > 1 ? `-branches-${activeBranchCount}` : "";
+  return `${variantId}${branchSuffix}${promotionCode ? `-${promotionCode}` : ""}`;
+}
+
+function providerPlanLabel(label: string, activeBranchCount: number, promotionCode: string | null) {
+  const branchLabel = `${activeBranchCount} active branch${activeBranchCount === 1 ? "" : "es"}`;
+  return `${label} · ${branchLabel}${promotionCode ? ` · ${promotionCode}` : ""}`;
 }
 
 function firstName(value: string | null) {
