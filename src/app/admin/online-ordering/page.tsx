@@ -48,10 +48,18 @@ type OnlineOrderRecord = {
   delivery_note: string | null;
   delivery_fee: number;
   pickup_slot: string;
+  pickup_date: string;
+  scheduled_for: string | null;
   status: OnlineOrderStatus;
   queue_position: number;
+  subtotal: number;
+  tax_amount: number;
   total: number;
   eta_at: string;
+  risk_level: string;
+  phone_verification_status: string;
+  address_validation_status: string;
+  cancel_reason: string | null;
   created_at: string;
 };
 
@@ -60,6 +68,17 @@ type OnlineOrderItemRecord = {
   name_snapshot: string;
   qty: number;
 };
+
+type AuditLogRecord = {
+  entity_id: string;
+  action: string;
+  after: unknown;
+  created_at: string;
+};
+
+function readPhoneVerificationStatus(value: string): "not_required" | "pending" | "verified" | "manual" {
+  return value === "pending" || value === "verified" || value === "manual" ? value : "not_required";
+}
 
 function readParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
@@ -105,7 +124,7 @@ export default async function OnlineOrderingPage({
 
   const ordersResult = await supabase
     .from("online_orders")
-    .select("id, org_id, order_no, customer_name, customer_phone, fulfillment_method, delivery_address, delivery_note, delivery_fee, pickup_slot, status, queue_position, total, eta_at, created_at")
+    .select("id, org_id, order_no, customer_name, customer_phone, fulfillment_method, delivery_address, delivery_note, delivery_fee, pickup_slot, pickup_date, scheduled_for, status, queue_position, subtotal, tax_amount, total, eta_at, risk_level, phone_verification_status, address_validation_status, cancel_reason, created_at")
     .eq("org_id", profile.org_id)
     .eq("store_id", store.id)
     .order("created_at", { ascending: false })
@@ -122,6 +141,22 @@ export default async function OnlineOrderingPage({
     itemsByOrder.set(item.order_id, items);
   }
 
+  const [categoriesResult, productsResult] = await Promise.all([
+    supabase.from("categories").select("id, name, online_available").eq("store_id", store.id).eq("is_active", true).order("sort_order").order("name"),
+    supabase.from("products").select("id, name, category_id, online_available, track_stock").eq("store_id", store.id).eq("is_active", true).order("sort_order").order("name"),
+  ]);
+  const auditResult = orderIds.length > 0
+    ? await supabase.from("audit_logs").select("entity_id, action, after, created_at").eq("store_id", store.id).eq("entity", "online_orders").in("entity_id", orderIds).order("created_at", { ascending: false }).limit(500)
+    : { data: [], error: null };
+  const auditByOrder = new Map<string, Array<{ action: string; createdAt: string; after: Record<string, unknown> }>>();
+  for (const log of (auditResult.data ?? []) as AuditLogRecord[]) {
+    if (!log.entity_id) continue;
+    const after = log.after && typeof log.after === "object" && !Array.isArray(log.after) ? log.after as Record<string, unknown> : {};
+    const history = auditByOrder.get(log.entity_id) ?? [];
+    history.push({ action: log.action, createdAt: log.created_at, after });
+    auditByOrder.set(log.entity_id, history);
+  }
+
   const orders = rawOrders.map((order, index) => ({
     id: order.id,
     orderNo: order.order_no,
@@ -132,11 +167,20 @@ export default async function OnlineOrderingPage({
     deliveryNote: order.delivery_note,
     deliveryFee: Number(order.delivery_fee) || 0,
     pickupSlot: order.pickup_slot,
+    pickupDate: order.pickup_date,
+    scheduledFor: order.scheduled_for,
     status: order.status,
     queuePosition: Number(order.queue_position) || index + 1,
+    subtotal: Number(order.subtotal) || 0,
+    taxAmount: Number(order.tax_amount) || 0,
     total: Number(order.total),
     etaAt: order.eta_at,
+    riskLevel: order.risk_level === "high" ? "high" as const : "normal" as const,
+    phoneVerificationStatus: readPhoneVerificationStatus(order.phone_verification_status),
+    addressValidationStatus: order.address_validation_status === "manual_review" ? "manual_review" as const : order.address_validation_status === "validated" ? "validated" as const : "not_required" as const,
+    cancelReason: order.cancel_reason,
     createdAt: order.created_at,
+    history: auditByOrder.get(order.id) ?? [],
     itemSummary: (itemsByOrder.get(order.id) ?? []).map((item) => `${item.name_snapshot} × ${Number(item.qty)}`).join(" · ") || "Online pickup order",
   }));
   const branding = readAdminBranding(profile.organizations?.settings);
@@ -152,12 +196,19 @@ export default async function OnlineOrderingPage({
       ? "Public menu appearance saved."
       : saved === "status"
         ? "Queue status updated."
-        : saved === "domain"
-          ? "Custom menu link saved."
+    : saved === "domain"
+      ? "Custom menu link saved."
+      : saved === "availability"
+        ? "Online availability updated."
+        : saved === "phone"
+          ? "Customer phone marked as verified."
         : "";
   const errorMessage = readParam(params.error);
   const queryError = ordersResult.error || itemsResult.error
     ? "Online order storage is not active yet."
+    : null;
+  const availabilityError = categoriesResult.error || productsResult.error
+    ? "Availability controls need the latest online-ordering catalog migration."
     : null;
 
   return (
@@ -186,6 +237,15 @@ export default async function OnlineOrderingPage({
           queryError={queryError}
           savedMessage={savedMessage}
           errorMessage={errorMessage}
+          availability={
+            categoriesResult.error || productsResult.error
+              ? { categories: [], products: [] }
+              : {
+                categories: (categoriesResult.data ?? []).map((category) => ({ id: String(category.id), name: String(category.name), onlineAvailable: category.online_available !== false })),
+                products: (productsResult.data ?? []).map((product) => ({ id: String(product.id), name: String(product.name), categoryId: product.category_id ? String(product.category_id) : null, onlineAvailable: product.online_available !== false, trackStock: product.track_stock === true })),
+              }
+          }
+          availabilityError={availabilityError}
           canManage={profile.role === "admin" || profile.role === "manager"}
           canUploadLogo={profile.role === "admin"}
         />

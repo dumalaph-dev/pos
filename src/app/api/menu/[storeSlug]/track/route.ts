@@ -11,9 +11,10 @@ export async function GET(
   const searchParams = new URL(request.url).searchParams;
   const orderNo = searchParams.get("order")?.trim().toUpperCase() ?? "";
   const customerPhone = searchParams.get("phone")?.trim() ?? "";
+  const normalizedPhone = customerPhone.replace(/[^0-9]/g, "");
   const store = await getPublicStoreForRequest(request, storeSlug);
 
-  if (!store || orderNo.length < 5 || orderNo.length > 32 || customerPhone.length < 7 || customerPhone.length > 32) {
+  if (!store || orderNo.length < 5 || orderNo.length > 32 || normalizedPhone.length < 7 || normalizedPhone.length > 15) {
     return Response.json({ ok: false, message: "Order not found" }, { status: 404 });
   }
 
@@ -32,13 +33,12 @@ export async function GET(
 
   const { data, error } = await admin
     .from("online_orders")
-    .select("order_no, status, queue_position, eta_at, fulfillment_method")
+    .select("order_no, status, queue_position, eta_at, fulfillment_method, customer_phone")
     .eq("store_id", store.id)
     .eq("order_no", orderNo)
-    .eq("customer_phone", customerPhone)
     .maybeSingle();
 
-  if (error || !data) return Response.json({ ok: false, message: "Order not found" }, { status: 404 });
+  if (error || !data || String(data.customer_phone).replace(/[^0-9]/g, "") !== normalizedPhone) return Response.json({ ok: false, message: "Order not found" }, { status: 404 });
 
   return Response.json({
     ok: true,

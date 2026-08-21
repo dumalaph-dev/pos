@@ -6,7 +6,13 @@ import { AdminIcon } from "@/components/admin/AdminIcon";
 import {
   formatOnlineEta,
   formatOrderStatusLabel,
+  calculateOnlineOrderTotals,
+  formatOnlineOrderingDate,
+  generateOnlineOrderingDateOptions,
+  generateOnlineOrderingSlots,
   pickupSlotLabel,
+  validateOnlineDeliveryAddress,
+  singaporeDateKey,
   type OnlineOrderingFulfillmentMethod,
   type OnlineOrderStatus,
   type PublicMenuProduct,
@@ -32,8 +38,16 @@ type TrackState = {
   queuePosition: number | null;
 };
 
+type LiveAvailability = {
+  isAvailable: boolean;
+  availabilityReason: PublicMenuProduct["availabilityReason"];
+  availableQty: number | null;
+};
+
 const INITIAL_ORDER_STATE: PublicOnlineOrderResult = { ok: false, message: "" };
-const PICKUP_SLOTS = ["asap", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00", "17:30", "18:00"];
+// Kept only for the legacy component below; the rendered checkout uses the
+// schedule-driven SmarterCheckoutForm.
+const PICKUP_SLOTS = ["asap"];
 const TRACKED_STATUSES: OnlineOrderStatus[] = ["new", "confirmed", "preparing", "ready", "picked_up", "cancelled"];
 const INITIAL_TRACK_STATE: TrackState = { status: "idle", message: "", orderNo: "", orderStatus: null, fulfillmentMethod: null, etaAt: null, queuePosition: null };
 
@@ -53,21 +67,72 @@ export function PublicMenuClient({ menu }: { menu: PublicMenuStore }) {
   const [trackOrderNo, setTrackOrderNo] = useState("");
   const [trackPhone, setTrackPhone] = useState("");
   const [trackState, setTrackState] = useState<TrackState>(INITIAL_TRACK_STATE);
+  const [liveAvailability, setLiveAvailability] = useState<Record<string, LiveAvailability>>(() => Object.fromEntries(menu.products.map((product) => [product.id, {
+    isAvailable: product.isAvailable,
+    availabilityReason: product.availabilityReason,
+    availableQty: product.availableQty,
+  }])));
+  const [liveCategoryAvailability, setLiveCategoryAvailability] = useState<Record<string, boolean>>(() => Object.fromEntries(menu.categories.map((category) => [category.id, category.isAvailable])));
 
+  const liveProducts = useMemo(() => menu.products.map((product) => ({ ...product, ...(liveAvailability[product.id] ?? {}) })), [liveAvailability, menu.products]);
+  const liveCategories = useMemo(() => menu.categories.map((category) => ({ ...category, isAvailable: liveCategoryAvailability[category.id] ?? category.isAvailable })), [liveCategoryAvailability, menu.categories]);
   const filteredProducts = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
-    return menu.products.filter((product) => {
+    return liveProducts.filter((product) => {
       const matchesCategory = category === "all" || product.categoryId === category;
       const matchesSearch = !normalizedSearch || product.name.toLowerCase().includes(normalizedSearch) || product.categoryName?.toLowerCase().includes(normalizedSearch);
       return matchesCategory && matchesSearch;
     });
-  }, [category, menu.products, search]);
+  }, [category, liveProducts, search]);
   const cartTotal = cart.reduce((sum, line) => sum + line.product.price * line.qty, 0);
   const cartCount = cart.reduce((sum, line) => sum + line.qty, 0);
   const copy = menu.settings.copy;
   const branding = menu.settings.branding;
   const brandName = branding.brandName || menu.name;
   const themeStyle = getPublicMenuThemeVariables(menu.settings.theme, branding) as CSSProperties;
+
+  useEffect(() => {
+    let cancelled = false;
+    async function refreshAvailability() {
+      try {
+        const response = await fetch(`/api/menu/${encodeURIComponent(menu.slug)}/availability`, { cache: "no-store" });
+        if (!response.ok) return;
+        const data = await response.json() as { products?: Array<{ id: string; isAvailable?: boolean; availabilityReason?: LiveAvailability["availabilityReason"]; availableQty?: number | null }>; categories?: Array<{ id: string; isAvailable?: boolean }> };
+        if (cancelled || !Array.isArray(data.products)) return;
+        setLiveAvailability((current) => {
+          const next = { ...current };
+          for (const product of data.products ?? []) {
+            if (!product.id || typeof product.isAvailable !== "boolean") continue;
+            next[product.id] = {
+              isAvailable: product.isAvailable,
+              availabilityReason: product.availabilityReason ?? "available",
+              availableQty: typeof product.availableQty === "number" ? product.availableQty : null,
+            };
+          }
+          return next;
+        });
+        if (Array.isArray(data.categories)) {
+          setLiveCategoryAvailability((current) => {
+            const next = { ...current };
+            for (const category of data.categories ?? []) {
+              if (category.id && typeof category.isAvailable === "boolean") next[category.id] = category.isAvailable;
+            }
+            return next;
+          });
+        }
+      } catch {
+        // The server-side placement check remains authoritative if polling is offline.
+      }
+    }
+    refreshAvailability();
+    const interval = window.setInterval(refreshAvailability, 15_000);
+    window.addEventListener("focus", refreshAvailability);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshAvailability);
+    };
+  }, [menu.slug]);
 
   useEffect(() => {
     if (!orderState.ok || !orderState.orderId || orderState.orderId.startsWith("demo-")) return;
@@ -94,7 +159,7 @@ export function PublicMenuClient({ menu }: { menu: PublicMenuStore }) {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [menu.slug, orderState]);
+  }, [menu.slug, orderState.ok, orderState.orderId]);
 
   function openCheckout() {
     setCheckoutRequestId((current) => current || crypto.randomUUID());
@@ -102,9 +167,12 @@ export function PublicMenuClient({ menu }: { menu: PublicMenuStore }) {
   }
 
   function addToCart(product: PublicMenuProduct) {
+    if (!product.isAvailable) return;
+    const productLimit = product.availableQty === null ? menu.settings.maxItemQuantity : Math.min(menu.settings.maxItemQuantity, Math.floor(product.availableQty));
+    if (productLimit < 1) return;
     setCart((current) => {
       const existing = current.find((line) => line.product.id === product.id);
-      if (existing) return current.map((line) => line.product.id === product.id ? { ...line, qty: Math.min(20, line.qty + 1) } : line);
+      if (existing) return current.map((line) => line.product.id === product.id ? { ...line, product, qty: Math.min(productLimit, line.qty + 1) } : line);
       return [...current, { product, qty: 1 }];
     });
   }
@@ -113,7 +181,9 @@ export function PublicMenuClient({ menu }: { menu: PublicMenuStore }) {
     setCart((current) => current.flatMap((line) => {
       if (line.product.id !== productId) return [line];
       const qty = line.qty + direction;
-      return qty > 0 ? [{ ...line, qty: Math.min(20, qty) }] : [];
+      const liveProduct = liveProducts.find((product) => product.id === productId) ?? line.product;
+      const maxQty = liveProduct.availableQty === null ? menu.settings.maxItemQuantity : Math.min(menu.settings.maxItemQuantity, Math.floor(liveProduct.availableQty));
+      return qty > 0 ? [{ ...line, product: liveProduct, qty: Math.min(maxQty, qty) }] : [];
     }));
   }
 
@@ -197,8 +267,8 @@ export function PublicMenuClient({ menu }: { menu: PublicMenuStore }) {
         <div className="grid min-w-0 gap-6 lg:grid-cols-3 lg:items-start lg:gap-8">
           <section className="min-w-0 lg:col-span-2" aria-labelledby="menu-heading">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[var(--public-menu-accent-ink)]">{copy.menuEyebrow}</p><h2 id="menu-heading" className="mt-1 text-[1.65rem] font-black tracking-[-0.045em] text-[var(--public-menu-heading)] sm:text-3xl">{copy.menuHeading}</h2></div><label className="relative block w-full sm:w-56" htmlFor="menu-search"><span className="sr-only">{copy.searchPlaceholder}</span><input id="menu-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.searchPlaceholder} className="h-12 w-full rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3.5 text-sm font-semibold text-[var(--public-menu-raised-text)] outline-none transition placeholder:text-[var(--public-menu-subtle)] focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10" /></label></div>
-            <div className="public-menu__scrollbar-hidden -mx-3 mt-2 flex gap-2 overflow-x-auto px-3 pb-2 sm:mx-0 sm:mt-5 sm:px-0" role="tablist" aria-label="Menu categories"><CategoryButton label="All items" active={category === "all"} onClick={() => setCategory("all")} />{menu.categories.map((item) => <CategoryButton key={item.id} label={item.name} active={category === item.id} onClick={() => setCategory(item.id)} />)}</div>
-            {filteredProducts.length === 0 ? <div className="mt-4 rounded-[var(--public-menu-radius-card)] border border-dashed border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-5 py-12 text-center sm:mt-5 sm:rounded-[var(--public-menu-radius-card)] sm:px-6 sm:py-14"><p className="text-sm font-extrabold">No menu items match that search.</p><p className="mt-1 text-xs text-[var(--public-menu-muted)]">Try a different category or clear the search.</p></div> : <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-5 sm:gap-4 xl:grid-cols-3">{filteredProducts.map((product) => <ProductCard key={product.id} product={product} disabled={orderingPaused} onAdd={() => addToCart(product)} />)}</div>}
+             <div className="public-menu__scrollbar-hidden -mx-3 mt-2 flex gap-2 overflow-x-auto px-3 pb-2 sm:mx-0 sm:mt-5 sm:px-0" role="tablist" aria-label="Menu categories"><CategoryButton label="All items" active={category === "all"} onClick={() => setCategory("all")} />{liveCategories.map((item) => <CategoryButton key={item.id} label={item.isAvailable ? item.name : `${item.name} · paused`} active={category === item.id} disabled={!item.isAvailable} onClick={() => setCategory(item.id)} />)}</div>
+            {filteredProducts.length === 0 ? <div className="mt-4 rounded-[var(--public-menu-radius-card)] border border-dashed border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-5 py-12 text-center sm:mt-5 sm:rounded-[var(--public-menu-radius-card)] sm:px-6 sm:py-14"><p className="text-sm font-extrabold">No menu items match that search.</p><p className="mt-1 text-xs text-[var(--public-menu-muted)]">Try a different category or clear the search.</p></div> : <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-5 sm:gap-4 xl:grid-cols-3">{filteredProducts.map((product) => <ProductCard key={product.id} product={product} disabled={orderingPaused || !product.isAvailable} onAdd={() => addToCart(product)} />)}</div>}
           </section>
 
           <aside className="sticky top-[78px] hidden lg:block"><CartSummary cart={cart} cartCount={cartCount} cartTotal={cartTotal} onUpdateQuantity={updateQuantity} onCheckout={openCheckout} disabled={orderingPaused} /></aside>
@@ -209,7 +279,7 @@ export function PublicMenuClient({ menu }: { menu: PublicMenuStore }) {
 
       {trackOpen && <TrackOrderDialog orderNo={trackOrderNo} phone={trackPhone} state={trackState} onOrderNoChange={setTrackOrderNo} onPhoneChange={setTrackPhone} onSubmit={findOrder} onClose={() => setTrackOpen(false)} />}
 
-      {drawerOpen && <div className="fixed inset-0 z-40 flex items-end justify-center overscroll-contain bg-[var(--public-menu-primary)]/35 p-0 backdrop-blur-[2px] sm:items-center sm:p-5" role="dialog" aria-modal="true" aria-labelledby="checkout-heading"><div className="public-menu__sheet max-h-[92dvh] w-full max-w-xl overflow-y-auto rounded-t-[24px] bg-[var(--public-menu-raised)] p-4 shadow-[var(--public-menu-shadow-pop)] sm:rounded-[var(--public-menu-radius-card)] sm:p-7"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[var(--public-menu-accent-ink)]">{orderState.ok ? "Order received" : "Almost there"}</p><h2 id="checkout-heading" className="mt-1 text-[1.4rem] font-black leading-tight tracking-[-0.045em] text-[var(--public-menu-heading)] sm:text-2xl">{orderState.ok ? `${orderState.fulfillmentMethod === "delivery" ? "Your delivery" : "Your pickup"} is in the queue.` : "Set your order details."}</h2></div><button type="button" onClick={() => setDrawerOpen(false)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-[var(--public-menu-muted)] transition hover:bg-[var(--public-menu-sidebar)] hover:text-[var(--public-menu-heading)]" aria-label="Close checkout"><AdminIcon name="close" size={18} /></button></div>{orderState.ok ? <OrderConfirmation orderState={orderState} status={trackedStatus} etaAt={trackedEta ?? orderState.etaAt ?? null} queuePosition={trackedQueuePosition ?? orderState.queuePosition ?? null} copied={copied} onCopy={copyOrderNumber} /> : <CheckoutForm menu={menu} cart={cart} cartTotal={cartTotal} fulfillmentMethod={fulfillmentMethod} onFulfillmentMethodChange={setFulfillmentMethod} requestId={checkoutRequestId} action={formAction} pending={pending} orderState={orderState} />}</div></div>}
+      {drawerOpen && <div className="fixed inset-0 z-40 flex items-end justify-center overscroll-contain bg-[var(--public-menu-primary)]/35 p-0 backdrop-blur-[2px] sm:items-center sm:p-5" role="dialog" aria-modal="true" aria-labelledby="checkout-heading"><div className="public-menu__sheet max-h-[92dvh] w-full max-w-xl overflow-y-auto rounded-t-[24px] bg-[var(--public-menu-raised)] p-4 shadow-[var(--public-menu-shadow-pop)] sm:rounded-[var(--public-menu-radius-card)] sm:p-7"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[var(--public-menu-accent-ink)]">{orderState.ok ? "Order received" : "Almost there"}</p><h2 id="checkout-heading" className="mt-1 text-[1.4rem] font-black leading-tight tracking-[-0.045em] text-[var(--public-menu-heading)] sm:text-2xl">{orderState.ok ? `${orderState.fulfillmentMethod === "delivery" ? "Your delivery" : "Your pickup"} is in the queue.` : "Set your order details."}</h2></div><button type="button" onClick={() => setDrawerOpen(false)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-[var(--public-menu-muted)] transition hover:bg-[var(--public-menu-sidebar)] hover:text-[var(--public-menu-heading)]" aria-label="Close checkout"><AdminIcon name="close" size={18} /></button></div>{orderState.ok ? <OrderConfirmation orderState={orderState} status={trackedStatus} etaAt={trackedEta ?? orderState.etaAt ?? null} queuePosition={trackedQueuePosition ?? orderState.queuePosition ?? null} copied={copied} onCopy={copyOrderNumber} menu={menu} /> : <SmarterCheckoutForm menu={menu} cart={cart} cartTotal={cartTotal} fulfillmentMethod={fulfillmentMethod} onFulfillmentMethodChange={setFulfillmentMethod} requestId={checkoutRequestId} action={formAction} pending={pending} orderState={orderState} />}</div></div>}
 
       <footer className="border-t border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] px-4 py-7 text-center text-[11px] font-semibold text-[var(--public-menu-subtle)] sm:px-6"><span className="font-extrabold text-[var(--public-menu-heading)]">{brandName}</span> · order ahead with Dumala POS</footer>
     </main>
@@ -251,8 +321,8 @@ function OrderGuidanceStep({ icon, title, detail }: { icon: "bag" | "check" | "l
   return <div className="rounded-2xl border border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] p-3.5"><span className="grid h-8 w-8 place-items-center rounded-xl bg-[var(--public-menu-sidebar)] text-[var(--public-menu-sidebar-text)]"><AdminIcon name={icon} size={15} /></span><strong className="mt-3 block text-xs font-extrabold text-[var(--public-menu-heading)]">{title}</strong><p className="mt-1 text-[11px] leading-4.5 text-[var(--public-menu-muted)]">{detail}</p></div>;
 }
 
-function CategoryButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return <button type="button" role="tab" aria-selected={active} onClick={onClick} className={`min-h-11 shrink-0 rounded-full px-3.5 py-2 text-xs font-extrabold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--public-menu-primary)] ${active ? "bg-[var(--public-menu-primary)] text-[var(--public-menu-primary-text)]" : "bg-[var(--public-menu-raised)] text-[var(--public-menu-muted)] hover:bg-[var(--public-menu-primary-soft)] hover:text-[var(--public-menu-primary-soft-text)]"}`}>{label}</button>;
+function CategoryButton({ label, active, disabled = false, onClick }: { label: string; active: boolean; disabled?: boolean; onClick: () => void }) {
+  return <button type="button" role="tab" aria-selected={active} disabled={disabled} onClick={onClick} className={`min-h-11 shrink-0 rounded-full px-3.5 py-2 text-xs font-extrabold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--public-menu-primary)] ${active ? "bg-[var(--public-menu-primary)] text-[var(--public-menu-primary-text)]" : "bg-[var(--public-menu-raised)] text-[var(--public-menu-muted)] hover:bg-[var(--public-menu-primary-soft)] hover:text-[var(--public-menu-primary-soft-text)]"} disabled:cursor-not-allowed disabled:opacity-50`}>{label}</button>;
 }
 
 function TrackOrderDialog({ orderNo, phone, state, onOrderNoChange, onPhoneChange, onSubmit, onClose }: { orderNo: string; phone: string; state: TrackState; onOrderNoChange: (value: string) => void; onPhoneChange: (value: string) => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onClose: () => void }) {
@@ -304,7 +374,8 @@ function PublicBrandMark({ branding, name }: { branding: PublicMenuStore["settin
 
 function ProductCard({ product, disabled, onAdd }: { product: PublicMenuProduct; disabled: boolean; onAdd: () => void }) {
   const price = formatPeso(product.price).replace(/\.00$/, "");
-  return <article className="group overflow-hidden rounded-[var(--public-menu-radius-card)] border border-[var(--public-menu-border)] bg-[var(--public-menu-raised)] shadow-[var(--public-menu-shadow-card)] transition hover:-translate-y-0.5 hover:border-[var(--public-menu-border-strong)] hover:shadow-[var(--public-menu-shadow-card)] sm:rounded-[var(--public-menu-radius-card)]"><div className="relative aspect-square overflow-hidden bg-[var(--public-menu-sidebar)]"><Image src={product.imageUrl} alt="" fill sizes="(max-width: 640px) 50vw, (max-width: 1280px) 33vw, 280px" className="object-cover transition duration-500 group-hover:scale-[1.03]" /><span className="absolute left-2 top-2 rounded-full bg-[var(--public-menu-raised)]/90 px-2 py-1 text-[8px] font-extrabold uppercase tracking-[0.08em] text-[var(--public-menu-raised-text)] sm:left-3 sm:top-3 sm:px-2.5 sm:text-[9px] sm:tracking-[0.1em]">{product.categoryName || "Menu"}</span></div><div className="p-3 sm:p-4"><div className="flex items-start justify-between gap-2 sm:gap-3"><div className="min-w-0"><h3 className="min-h-10 line-clamp-2 text-[13px] font-extrabold leading-5 text-[var(--public-menu-heading)] sm:min-h-0 sm:truncate sm:text-sm">{product.name}</h3><p className="mt-1 text-[11px] text-[var(--public-menu-subtle)] sm:text-xs">{product.pricingMode === "per_kg" ? `${price} / kg` : `${price} · ${product.unit}`}</p></div><button type="button" onClick={onAdd} disabled={disabled} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[var(--public-menu-primary-soft)] text-[var(--public-menu-primary-soft-text)] transition hover:bg-[var(--public-menu-primary)] hover:text-[var(--public-menu-primary-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--public-menu-primary)] disabled:cursor-not-allowed disabled:bg-[var(--public-menu-border)] disabled:text-[var(--public-menu-subtle)]" aria-label={`Add ${product.name} to cart`}><AdminIcon name="plus" size={15} /></button></div></div></article>;
+  const availabilityLabel = product.availabilityReason === "sold_out" ? "Sold out" : product.availabilityReason === "category_paused" ? "Section paused" : product.availabilityReason === "product_paused" ? "Temporarily paused" : null;
+  return <article className={`group overflow-hidden rounded-[var(--public-menu-radius-card)] border border-[var(--public-menu-border)] bg-[var(--public-menu-raised)] shadow-[var(--public-menu-shadow-card)] transition hover:-translate-y-0.5 hover:border-[var(--public-menu-border-strong)] hover:shadow-[var(--public-menu-shadow-card)] sm:rounded-[var(--public-menu-radius-card)] ${!product.isAvailable ? "opacity-75" : ""}`}><div className="relative aspect-square overflow-hidden bg-[var(--public-menu-sidebar)]"><Image src={product.imageUrl} alt="" fill sizes="(max-width: 640px) 50vw, (max-width: 1280px) 33vw, 280px" className="object-cover transition duration-500 group-hover:scale-[1.03]" /><span className="absolute left-2 top-2 rounded-full bg-[var(--public-menu-raised)]/90 px-2 py-1 text-[8px] font-extrabold uppercase tracking-[0.08em] text-[var(--public-menu-raised-text)] sm:left-3 sm:top-3 sm:px-2.5 sm:text-[9px] sm:tracking-[0.1em]">{product.categoryName || "Menu"}</span>{availabilityLabel && <span className="absolute bottom-2 left-2 rounded-full bg-[var(--public-menu-danger-soft)] px-2 py-1 text-[8px] font-extrabold uppercase tracking-[0.08em] text-[var(--public-menu-danger-text)] sm:bottom-3 sm:left-3">{availabilityLabel}</span>}</div><div className="p-3 sm:p-4"><div className="flex items-start justify-between gap-2 sm:gap-3"><div className="min-w-0"><h3 className="min-h-10 line-clamp-2 text-[13px] font-extrabold leading-5 text-[var(--public-menu-heading)] sm:min-h-0 sm:truncate sm:text-sm">{product.name}</h3><p className="mt-1 text-[11px] text-[var(--public-menu-subtle)] sm:text-xs">{product.pricingMode === "per_kg" ? `${price} / kg` : `${price} · ${product.unit}`}</p>{product.isAvailable && product.availableQty !== null && product.availableQty <= 5 && <p className="mt-1 text-[10px] font-bold text-[var(--public-menu-accent-ink)]">Only {Math.floor(product.availableQty)} left</p>}</div><button type="button" onClick={onAdd} disabled={disabled} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[var(--public-menu-primary-soft)] text-[var(--public-menu-primary-soft-text)] transition hover:bg-[var(--public-menu-primary)] hover:text-[var(--public-menu-primary-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--public-menu-primary)] disabled:cursor-not-allowed disabled:bg-[var(--public-menu-border)] disabled:text-[var(--public-menu-subtle)]" aria-label={product.isAvailable ? `Add ${product.name} to cart` : `${product.name} is unavailable`}><AdminIcon name="plus" size={15} /></button></div></div></article>;
 }
 
 function CartSummary({ cart, cartCount, cartTotal, onUpdateQuantity, onCheckout, disabled }: { cart: CartLine[]; cartCount: number; cartTotal: number; onUpdateQuantity: (id: string, direction: -1 | 1) => void; onCheckout: () => void; disabled: boolean }) {
@@ -315,7 +386,9 @@ function CartLineRow({ line, onUpdateQuantity }: { line: CartLine; onUpdateQuant
   return <div className="flex items-center gap-2.5"><div className="flex shrink-0 items-center rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-surface)]"><button type="button" onClick={() => onUpdateQuantity(line.product.id, -1)} className="grid h-10 w-10 place-items-center text-[var(--public-menu-muted)] transition hover:bg-[var(--public-menu-primary-soft)] hover:text-[var(--public-menu-primary-soft-text)]" aria-label={`Remove one ${line.product.name}`}><span aria-hidden="true">−</span></button><span className="w-5 text-center text-xs font-extrabold tabular-nums text-[var(--public-menu-heading)]">{line.qty}</span><button type="button" onClick={() => onUpdateQuantity(line.product.id, 1)} className="grid h-10 w-10 place-items-center text-[var(--public-menu-heading)] transition hover:bg-[var(--public-menu-primary-soft)]" aria-label={`Add one ${line.product.name}`}><span aria-hidden="true">+</span></button></div><p className="min-w-0 flex-1 truncate text-xs font-bold text-[var(--public-menu-heading)]">{line.product.name}</p><strong className="text-xs font-extrabold tabular-nums text-[var(--public-menu-heading)]">{formatPeso(line.product.price * line.qty)}</strong></div>;
 }
 
-function CheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfillmentMethodChange, requestId, action, pending, orderState }: { menu: PublicMenuStore; cart: CartLine[]; cartTotal: number; fulfillmentMethod: OnlineOrderingFulfillmentMethod; onFulfillmentMethodChange: (value: OnlineOrderingFulfillmentMethod) => void; requestId: string; action: (payload: FormData) => void; pending: boolean; orderState: PublicOnlineOrderResult }) {
+// Legacy fallback retained for older embeds that may import this module directly.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function LegacyCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfillmentMethodChange, requestId, action, pending, orderState }: { menu: PublicMenuStore; cart: CartLine[]; cartTotal: number; fulfillmentMethod: OnlineOrderingFulfillmentMethod; onFulfillmentMethodChange: (value: OnlineOrderingFulfillmentMethod) => void; requestId: string; action: (payload: FormData) => void; pending: boolean; orderState: PublicOnlineOrderResult }) {
   const isDelivery = fulfillmentMethod === "delivery";
   const deliveryFee = isDelivery ? menu.settings.delivery.feeCentavos : 0;
   const orderTotal = cartTotal + deliveryFee;
@@ -360,11 +433,100 @@ function CheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfillmentM
   );
 }
 
+function SmarterCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfillmentMethodChange, requestId, action, pending, orderState }: { menu: PublicMenuStore; cart: CartLine[]; cartTotal: number; fulfillmentMethod: OnlineOrderingFulfillmentMethod; onFulfillmentMethodChange: (value: OnlineOrderingFulfillmentMethod) => void; requestId: string; action: (payload: FormData) => void; pending: boolean; orderState: PublicOnlineOrderResult }) {
+  const isDelivery = fulfillmentMethod === "delivery";
+  const paymentLabel = isDelivery ? "Pay on delivery" : "Pay at pickup";
+  const dateOptions = useMemo(() => generateOnlineOrderingDateOptions(menu.settings).filter((option) => generateOnlineOrderingSlots(menu.settings, option.value).length > 0), [menu.settings]);
+  const [pickupDate, setPickupDate] = useState(dateOptions[0]?.value ?? singaporeDateKey());
+  const [pickupSlot, setPickupSlot] = useState("asap");
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [deliveryNote, setDeliveryNote] = useState("");
+  const [note, setNote] = useState("");
+  const [reviewing, setReviewing] = useState(false);
+  const [formError, setFormError] = useState("");
+  const selectedPickupDate = dateOptions.some((option) => option.value === pickupDate) ? pickupDate : dateOptions[0]?.value ?? "";
+  const slots = useMemo(() => selectedPickupDate ? generateOnlineOrderingSlots(menu.settings, selectedPickupDate) : [], [menu.settings, selectedPickupDate]);
+  const selectedPickupSlot = slots.includes(pickupSlot) ? pickupSlot : slots[0] ?? "";
+  const totals = calculateOnlineOrderTotals(cartTotal, fulfillmentMethod, menu.settings, menu.vatRegistered, menu.vatRate);
+  const prepMinutes = menu.settings.averagePrepMinutes + (isDelivery ? menu.settings.delivery.etaMinutes : 0);
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    if (reviewing) return;
+    event.preventDefault();
+    setFormError("");
+    if (!event.currentTarget.reportValidity()) return;
+    if (!totals.minimumOrderMet) {
+      setFormError(`Orders start at ${formatPeso(totals.minimumOrderCentavos)}.`);
+      return;
+    }
+    if (isDelivery) {
+      const addressError = validateOnlineDeliveryAddress(deliveryAddress, menu.settings.delivery.serviceArea);
+      if (addressError) {
+        setFormError(addressError);
+        return;
+      }
+    }
+    setReviewing(true);
+  }
+
+  const whenLabel = selectedPickupSlot === "asap" ? `ASAP · about ${prepMinutes} min` : `${formatOnlineOrderingDate(selectedPickupDate)} · ${pickupSlotLabel(selectedPickupSlot)}`;
+
+  return (
+    <form action={action} onSubmit={handleSubmit} className="mt-6">
+      <input type="hidden" name="store_slug" value={menu.slug} />
+      <input type="hidden" name="request_id" value={requestId} />
+      <input type="hidden" name="items" value={JSON.stringify(cart.map((line) => ({ productId: line.product.id, qty: line.qty })))} />
+       <input type="hidden" name="pickup_date" value={selectedPickupDate} />
+       <input type="hidden" name="pickup_slot" value={selectedPickupSlot} />
+      {reviewing && <>
+        <input type="hidden" name="fulfillment_method" value={fulfillmentMethod} />
+        <input type="hidden" name="customer_name" value={customerName} />
+        <input type="hidden" name="customer_phone" value={customerPhone} />
+        <input type="hidden" name="delivery_address" value={isDelivery ? deliveryAddress : ""} />
+        <input type="hidden" name="delivery_note" value={isDelivery ? deliveryNote : ""} />
+        <input type="hidden" name="note" value={note} />
+      </>}
+
+       <div className="rounded-2xl border border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] p-4">
+        <div className="flex items-center justify-between gap-3"><span className="text-xs font-extrabold uppercase tracking-[0.1em] text-[var(--public-menu-muted)]">Order total</span><strong className="text-lg font-black tabular-nums text-[var(--public-menu-heading)]">{formatPeso(totals.total)}</strong></div>
+        <div className="mt-3 grid gap-2 text-xs text-[var(--public-menu-muted)]"><div className="flex justify-between gap-3"><span>Items</span><strong className="text-[var(--public-menu-heading)]">{formatPeso(totals.subtotal)}</strong></div>{isDelivery && <div className="flex justify-between gap-3"><span>Delivery fee</span><strong className="text-[var(--public-menu-heading)]">{formatPeso(totals.deliveryFee)}</strong></div>}{menu.vatRegistered && <div className="flex justify-between gap-3"><span>VAT included</span><strong className="text-[var(--public-menu-heading)]">{formatPeso(totals.taxAmount)}</strong></div>}</div>
+        <p className="mt-3 text-[11px] text-[var(--public-menu-subtle)]">{menu.settings.minimumOrderCentavos > 0 ? `Minimum order ${formatPeso(menu.settings.minimumOrderCentavos)} · ` : "No minimum order · "}{cart.length} menu item{cart.length === 1 ? "" : "s"}</p>
+        <div className="mt-3 rounded-xl border border-[var(--public-menu-success-soft)] bg-[var(--public-menu-success-soft)] px-3 py-2.5 text-[11px] leading-5 text-[var(--public-menu-success-ink)]"><strong className="font-extrabold">{paymentLabel}.</strong> {isDelivery ? "We’ll collect payment when your order arrives." : "We’ll collect payment at the store counter when your order is ready."}</div>
+      </div>
+
+       {dateOptions.length === 0 && <p role="alert" className="mt-4 rounded-xl border border-[var(--public-menu-danger-soft)] bg-[var(--public-menu-danger-soft)] px-3 py-2.5 text-xs font-semibold leading-5 text-[var(--public-menu-danger-text)]">No pickup or delivery slots remain in the current scheduling window. Please try again later.</p>}
+       {reviewing ? <ReviewPanel cart={cart} totals={totals} isDelivery={isDelivery} customerName={customerName} customerPhone={customerPhone} deliveryAddress={deliveryAddress} deliveryNote={deliveryNote} note={note} whenLabel={whenLabel} cancellationPolicy={menu.settings.cancellationPolicy} onBack={() => setReviewing(false)} /> : <>
+        <fieldset className="mt-5"><legend className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]">How would you like to receive it?</legend><div className="mt-2 grid gap-2 sm:grid-cols-2"><label className={`cursor-pointer rounded-2xl border p-3 transition ${!isDelivery ? "border-[var(--public-menu-primary)] bg-[var(--public-menu-primary-soft)]" : "border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] hover:border-[var(--public-menu-border-strong)]"}`}><input type="radio" name="fulfillment_method" value="pickup" checked={!isDelivery} onChange={() => onFulfillmentMethodChange("pickup")} className="sr-only" /><span className="flex items-start gap-2.5"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--public-menu-primary)] text-[var(--public-menu-primary-text)]"><AdminIcon name="bag" size={15} /></span><span><strong className="block text-sm font-extrabold text-[var(--public-menu-heading)]">Pick up</strong><small className="mt-0.5 block text-[11px] leading-4 text-[var(--public-menu-muted)]">Ready at the counter · pay when you arrive</small></span></span></label>{menu.settings.delivery.enabled && <label className={`cursor-pointer rounded-2xl border p-3 transition ${isDelivery ? "border-[var(--public-menu-primary)] bg-[var(--public-menu-primary-soft)]" : "border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] hover:border-[var(--public-menu-border-strong)]"}`}><input type="radio" name="fulfillment_method" value="delivery" checked={isDelivery} onChange={() => onFulfillmentMethodChange("delivery")} className="sr-only" /><span className="flex items-start gap-2.5"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--public-menu-accent)] text-[var(--public-menu-accent-text)]"><AdminIcon name="arrow" size={15} /></span><span><strong className="block text-sm font-extrabold text-[var(--public-menu-heading)]">Deliver to me</strong><small className="mt-0.5 block text-[11px] leading-4 text-[var(--public-menu-muted)]">{formatPeso(menu.settings.delivery.feeCentavos)} fee · about {menu.settings.delivery.etaMinutes} min</small></span></span></label>}</div></fieldset>
+        <div className="mt-5 grid gap-4 sm:grid-cols-2"><CheckoutField label="Your name" name="customer_name" placeholder="e.g. Mara Santos" autoComplete="name" required value={customerName} onChange={setCustomerName} /><CheckoutField label="Mobile number" name="customer_phone" placeholder="09XX XXX XXXX" type="tel" autoComplete="tel" required value={customerPhone} onChange={setCustomerPhone} /></div>
+        {isDelivery && <div className="mt-4 grid gap-4 sm:grid-cols-2"><CheckoutField label="Delivery address" name="delivery_address" placeholder="Street, building, barangay" autoComplete="street-address" maxLength={240} required value={deliveryAddress} onChange={setDeliveryAddress} /><CheckoutField label="Landmark or rider note" name="delivery_note" placeholder="Gate color, floor, nearby landmark" maxLength={160} value={deliveryNote} onChange={setDeliveryNote} /></div>}
+         <div className="mt-4 grid gap-4 sm:grid-cols-2"><label className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]" htmlFor="pickup-date">{isDelivery ? "Delivery date" : "Pickup date"}<select id="pickup-date" value={selectedPickupDate} onChange={(event) => setPickupDate(event.target.value)} className="mt-1.5 block h-11 w-full rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 text-sm font-bold normal-case tracking-normal text-[var(--public-menu-raised-text)] outline-none focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10">{dateOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]" htmlFor="pickup-slot">{isDelivery ? "Delivery time" : "Pickup time"}<select id="pickup-slot" value={selectedPickupSlot} onChange={(event) => setPickupSlot(event.target.value)} className="mt-1.5 block h-11 w-full rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 text-sm font-bold normal-case tracking-normal text-[var(--public-menu-raised-text)] outline-none focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10">{slots.map((slot) => <option key={slot} value={slot}>{pickupSlotLabel(slot)}{slot === "asap" ? ` · about ${prepMinutes} min` : ""}</option>)}</select></label></div>
+        <label className="mt-4 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]" htmlFor="order-note">Note for the store <span className="font-medium normal-case tracking-normal text-[var(--public-menu-subtle)]">optional</span><textarea id="order-note" name="note" rows={2} maxLength={240} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Less ice, extra sauce, etc." className="mt-1.5 block w-full resize-y rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-[var(--public-menu-raised-text)] outline-none placeholder:text-[var(--public-menu-subtle)] focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10" /></label>
+        {isDelivery && <p className="mt-3 rounded-xl bg-[var(--public-menu-primary-soft)] px-3 py-2.5 text-[11px] leading-5 text-[var(--public-menu-primary-soft-text)]">{menu.settings.delivery.note}{menu.settings.delivery.serviceArea && ` Service area: ${menu.settings.delivery.serviceArea}.`}</p>}
+      </>}
+      {formError && <p role="alert" className="mt-4 rounded-xl border border-[var(--public-menu-danger-soft)] bg-[var(--public-menu-danger-soft)] px-3 py-2.5 text-xs font-semibold leading-5 text-[var(--public-menu-danger-text)]">{formError}</p>}
+      {orderState.message && <p role="alert" className="mt-4 rounded-xl border border-[var(--public-menu-danger-soft)] bg-[var(--public-menu-danger-soft)] px-3 py-2.5 text-xs font-semibold leading-5 text-[var(--public-menu-danger-text)]">{orderState.message}</p>}
+      <div className="mt-4 flex items-start gap-2 rounded-xl border border-[var(--public-menu-danger-soft)] bg-[var(--public-menu-danger-soft)] px-3 py-2.5 text-[11px] leading-5 text-[var(--public-menu-danger-text)]"><AdminIcon name="lock" size={14} /><p><strong className="font-extrabold">Please check before placing.</strong> Submit only a genuine order with accurate information; fake, prank, duplicate, or fraudulent orders may be cancelled and reviewed by the store.</p></div>
+       <button type="submit" disabled={pending || cart.length === 0 || !requestId || dateOptions.length === 0 || !selectedPickupDate || !selectedPickupSlot} className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--public-menu-primary)] px-4 py-3 text-xs font-extrabold uppercase tracking-wide text-[var(--public-menu-primary-text)] transition hover:bg-[var(--public-menu-primary-hover)] disabled:cursor-not-allowed disabled:opacity-55">{pending ? "Placing your order…" : reviewing ? "Confirm and place order" : "Review order"}<AdminIcon name="arrow" size={14} /></button>
+      <p className="mt-3 text-center text-[10px] leading-4 text-[var(--public-menu-subtle)]">By placing this order, you agree to be contacted about {isDelivery ? "delivery" : "pickup"}. {menu.settings.cancellationPolicy}</p>
+    </form>
+  );
+}
+
+function ReviewPanel({ cart, totals, isDelivery, customerName, customerPhone, deliveryAddress, deliveryNote, note, whenLabel, cancellationPolicy, onBack }: { cart: CartLine[]; totals: ReturnType<typeof calculateOnlineOrderTotals>; isDelivery: boolean; customerName: string; customerPhone: string; deliveryAddress: string; deliveryNote: string; note: string; whenLabel: string; cancellationPolicy: string; onBack: () => void }) {
+  return <div className="mt-5 rounded-2xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-surface)] p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[var(--public-menu-accent-ink)]">Final review</p><h3 className="mt-1 text-xl font-black tracking-[-0.04em] text-[var(--public-menu-heading)]">Everything look right?</h3></div><span className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--public-menu-primary-soft)] text-[var(--public-menu-primary-soft-text)]"><AdminIcon name="check" size={16} /></span></div><div className="mt-4 grid gap-2 text-xs"><ReviewRow label="Items" value={cart.map((line) => `${line.product.name} × ${line.qty}`).join(" · ")} /><ReviewRow label={isDelivery ? "Delivery" : "Pickup"} value={whenLabel} /><ReviewRow label="Name" value={customerName} /><ReviewRow label="Mobile" value={customerPhone} />{isDelivery && <ReviewRow label="Address" value={`${deliveryAddress}${deliveryNote ? ` · ${deliveryNote}` : ""}`} />}{note && <ReviewRow label="Note" value={note} />}</div><div className="mt-4 border-t border-[var(--public-menu-border)] pt-3"><div className="flex justify-between text-xs text-[var(--public-menu-muted)]"><span>Items</span><strong className="text-[var(--public-menu-heading)]">{formatPeso(totals.subtotal)}</strong></div>{totals.deliveryFee > 0 && <div className="mt-1 flex justify-between text-xs text-[var(--public-menu-muted)]"><span>Delivery fee</span><strong className="text-[var(--public-menu-heading)]">{formatPeso(totals.deliveryFee)}</strong></div>}{totals.taxAmount > 0 && <div className="mt-1 flex justify-between text-xs text-[var(--public-menu-muted)]"><span>VAT included</span><strong className="text-[var(--public-menu-heading)]">{formatPeso(totals.taxAmount)}</strong></div>}<div className="mt-2 flex justify-between border-t border-[var(--public-menu-border)] pt-2 text-sm font-extrabold text-[var(--public-menu-heading)]"><span>Total</span><strong>{formatPeso(totals.total)}</strong></div></div><div className="mt-4 rounded-xl border border-[var(--public-menu-primary-soft)] bg-[var(--public-menu-primary-soft)] px-3 py-2.5 text-[11px] leading-5 text-[var(--public-menu-primary-soft-text)]"><strong className="font-extrabold">Cancellation policy.</strong> {cancellationPolicy}</div><button type="button" onClick={onBack} className="mt-4 min-h-10 w-full rounded-xl border border-[var(--public-menu-border-strong)] px-3 py-2.5 text-xs font-extrabold text-[var(--public-menu-heading)] transition hover:bg-[var(--public-menu-primary-soft)]">Edit details</button></div>;
+}
+
+function ReviewRow({ label, value }: { label: string; value: string }) {
+  return <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-3"><span className="font-extrabold uppercase tracking-[0.08em] text-[var(--public-menu-subtle)]">{label}</span><strong className="min-w-0 break-words text-right font-semibold text-[var(--public-menu-heading)]">{value}</strong></div>;
+}
+
 function CheckoutField({ label, name, placeholder, type = "text", required = false, value, onChange, autoComplete, maxLength = 80 }: { label: string; name: string; placeholder: string; type?: string; required?: boolean; value?: string; onChange?: (value: string) => void; autoComplete?: string; maxLength?: number }) {
   return <label className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]" htmlFor={name}>{label}<input id={name} name={name} type={type} placeholder={placeholder} required={required} maxLength={maxLength} autoComplete={autoComplete} value={value} onChange={onChange ? (event) => onChange(event.target.value) : undefined} className="mt-1.5 block h-11 w-full rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 text-sm font-semibold normal-case tracking-normal text-[var(--public-menu-raised-text)] outline-none placeholder:text-[var(--public-menu-subtle)] focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10" /></label>;
 }
 
-function OrderConfirmation({ orderState, status, etaAt, queuePosition, copied, onCopy }: { orderState: PublicOnlineOrderResult; status: OnlineOrderStatus; etaAt: string | null; queuePosition: number | null; copied: boolean; onCopy: () => void }) {
+function OrderConfirmation({ menu, orderState, status, etaAt, queuePosition, copied, onCopy }: { menu: PublicMenuStore; orderState: PublicOnlineOrderResult; status: OnlineOrderStatus; etaAt: string | null; queuePosition: number | null; copied: boolean; onCopy: () => void }) {
   const progress = status === "ready" || status === "picked_up" ? 3 : status === "preparing" ? 2 : 1;
   const progressLabels = ["Received", "Preparing", "Ready"];
   const isDelivery = orderState.fulfillmentMethod === "delivery";
@@ -393,7 +555,14 @@ function OrderConfirmation({ orderState, status, etaAt, queuePosition, copied, o
           <ConfirmationMetric label="Queue" value={queuePosition ? `#${queuePosition}` : "—"} />
           <ConfirmationMetric label="ETA" value={formatOnlineEta(etaAt)} />
         </div>
+        {orderState.scheduledFor && <p className="mt-4 rounded-xl bg-[var(--public-menu-primary-text)]/10 px-3 py-2.5 text-[11px] leading-5">Scheduled for {new Intl.DateTimeFormat("en-PH", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(orderState.scheduledFor))}.</p>}
       </div>
+
+      {orderState.deduplicated && <div className="mt-4 rounded-2xl border border-[var(--public-menu-success-soft)] bg-[var(--public-menu-success-soft)] px-4 py-3 text-xs leading-5 text-[var(--public-menu-success-ink)]"><strong className="font-extrabold">We found your earlier order.</strong> No duplicate order was created.</div>}
+
+      {orderState.phoneVerificationRequired && orderState.phoneVerificationStatus === "pending" && <PhoneVerificationPanel slug={menu.slug} orderId={orderState.orderId ?? ""} verificationId={orderState.verificationId ?? ""} sent={orderState.verificationSent === true} />}
+
+      {orderState.total !== undefined && <div className="mt-4 rounded-2xl border border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] p-4"><div className="flex items-center justify-between text-xs text-[var(--public-menu-muted)]"><span>Total due {isDelivery ? "on delivery" : "at pickup"}</span><strong className="text-lg font-black text-[var(--public-menu-heading)]">{formatPeso(orderState.total)}</strong></div><p className="mt-1 text-[10px] text-[var(--public-menu-subtle)]">{orderState.taxAmount ? `Includes ${formatPeso(orderState.taxAmount)} VAT` : "No tax added"}{orderState.deliveryFee ? ` · ${formatPeso(orderState.deliveryFee)} delivery fee` : ""}</p></div>}
 
       <div className="mt-4 rounded-2xl border border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] p-4">
         <div className="flex items-center justify-between gap-3">
@@ -428,6 +597,40 @@ function OrderConfirmation({ orderState, status, etaAt, queuePosition, copied, o
       </div>
     </div>
   );
+}
+
+function PhoneVerificationPanel({ slug, orderId, verificationId, sent }: { slug: string; orderId: string; verificationId: string; sent: boolean }) {
+  const [code, setCode] = useState("");
+  const [message, setMessage] = useState("");
+  const [verified, setVerified] = useState(false);
+  const [pending, setPending] = useState(false);
+
+  async function verify(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage("");
+    if (!/^\d{6}$/.test(code)) {
+      setMessage("Enter the six-digit code sent to your mobile.");
+      return;
+    }
+    setPending(true);
+    try {
+      const response = await fetch(`/api/menu/${encodeURIComponent(slug)}/orders/${encodeURIComponent(orderId)}/verify-phone`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ verificationId, code }),
+      });
+      const data = await response.json() as { ok?: boolean; message?: string };
+      if (!response.ok || !data.ok) throw new Error(data.message || "That code is invalid.");
+      setVerified(true);
+      setMessage("Phone verified. The store can now begin preparing your order.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "That code is invalid or has expired.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return <div className={`mt-4 rounded-2xl border p-4 ${verified ? "border-[var(--public-menu-success-soft)] bg-[var(--public-menu-success-soft)]" : "border-[var(--public-menu-danger-soft)] bg-[var(--public-menu-danger-soft)]"}`}><p className="text-[10px] font-extrabold uppercase tracking-[0.12em]">Phone verification</p>{verified ? <p className="mt-1 text-xs leading-5">{message}</p> : sent && verificationId ? <><p className="mt-1 text-xs leading-5">We sent a six-digit code to your mobile. Verify it before the store starts preparing.</p><form onSubmit={verify} className="mt-3 flex gap-2"><label className="sr-only" htmlFor="phone-verification-code">Phone verification code</label><input id="phone-verification-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} placeholder="000000" className="min-w-0 flex-1 rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 py-2.5 text-sm font-extrabold tracking-[0.25em] outline-none focus:border-[var(--public-menu-primary)]" /><button type="submit" disabled={pending} className="rounded-xl bg-[var(--public-menu-primary)] px-3 py-2.5 text-[10px] font-extrabold uppercase tracking-wide text-[var(--public-menu-primary-text)] disabled:opacity-60">{pending ? "Checking…" : "Verify"}</button></form>{message && <p role="alert" className="mt-2 text-[11px] leading-5">{message}</p>}</> : <p className="mt-1 text-xs leading-5">This order needs a quick phone check before preparation. The store will contact the number you provided.</p>}</div>;
 }
 function ConfirmationMetric({ label, value }: { label: string; value: string }) {
   return <div className="min-w-0 rounded-xl bg-[var(--public-menu-primary-text)]/10 px-3 py-2.5"><p className="text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--public-menu-primary-text)]">{label}</p><strong className="mt-1 block truncate text-sm font-extrabold tabular-nums">{value}</strong></div>;

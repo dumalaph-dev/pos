@@ -9,6 +9,7 @@ import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 import { OnlineOrderAlertBanner } from "@/components/online-ordering/OnlineOrderAlertBanner";
 import { useOnlineOrderAttention } from "@/components/online-ordering/useOnlineOrderAttention";
 import { OnlineMenuEditor } from "./OnlineMenuEditor";
+import { OnlineAvailabilityEditor } from "./OnlineAvailabilityEditor";
 import {
   formatOnlineEta,
   formatOrderStatusLabel,
@@ -21,7 +22,7 @@ import {
 } from "@/lib/online-ordering";
 import { ONLINE_ORDER_ALERT_POLL_MS } from "@/lib/online-order-alerts";
 import { formatPeso } from "@/lib/money";
-import { updateOnlineMenuSubdomain, updateOnlineOrderStatus, updateOnlineOrderingSettings } from "./actions";
+import { updateOnlineMenuSubdomain, updateOnlineOrderStatus, updateOnlineOrderingSettings, verifyOnlineOrderPhone } from "./actions";
 
 type QueueOrder = {
   id: string;
@@ -33,16 +34,25 @@ type QueueOrder = {
   deliveryNote: string | null;
   deliveryFee: number;
   pickupSlot: string;
+  pickupDate: string;
+  scheduledFor: string | null;
   status: OnlineOrderStatus;
   queuePosition: number;
+  subtotal: number;
+  taxAmount: number;
   total: number;
   etaAt: string;
+  riskLevel: "normal" | "high";
+  phoneVerificationStatus: "not_required" | "pending" | "verified" | "manual";
+  addressValidationStatus: "not_required" | "validated" | "manual_review";
+  cancelReason: string | null;
   createdAt: string;
+  history: Array<{ action: string; createdAt: string; after: Record<string, unknown> }>;
   itemSummary: string;
 };
 
 type QueueFilter = "attention" | "preparing" | "ready" | "all";
-type WorkspaceTab = "queue" | "appearance";
+type WorkspaceTab = "queue" | "availability" | "appearance";
 
 const ACTIVE_QUEUE_STATUSES: OnlineOrderStatus[] = ["new", "confirmed", "preparing"];
 
@@ -56,6 +66,8 @@ export function OnlineOrderingWorkspace({
   queryError,
   savedMessage,
   errorMessage,
+  availability,
+  availabilityError,
   canManage,
   canUploadLogo,
 }: {
@@ -68,6 +80,11 @@ export function OnlineOrderingWorkspace({
   queryError: string | null;
   savedMessage: string;
   errorMessage: string;
+  availability: {
+    categories: Array<{ id: string; name: string; onlineAvailable: boolean }>;
+    products: Array<{ id: string; name: string; categoryId: string | null; onlineAvailable: boolean; trackStock: boolean }>;
+  };
+  availabilityError: string | null;
   canManage: boolean;
   canUploadLogo: boolean;
 }) {
@@ -79,8 +96,8 @@ export function OnlineOrderingWorkspace({
   const [filter, setFilter] = useState<QueueFilter>("attention");
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>(() => savedMessage.toLowerCase().includes("appearance") ? "appearance" : "queue");
-  const tabRefs = useRef<Record<WorkspaceTab, HTMLButtonElement | null>>({ queue: null, appearance: null });
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>(() => savedMessage.toLowerCase().includes("appearance") ? "appearance" : savedMessage.toLowerCase().includes("availability") ? "availability" : "queue");
+  const tabRefs = useRef<Record<WorkspaceTab, HTMLButtonElement | null>>({ queue: null, availability: null, appearance: null });
   const {
     pendingOrders: newPickupOrders,
     announcement: attentionAnnouncement,
@@ -149,7 +166,8 @@ export function OnlineOrderingWorkspace({
   function handleWorkspaceTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, current: WorkspaceTab) {
     if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
     event.preventDefault();
-    const next = current === "queue" ? "appearance" : "queue";
+    const tabs: WorkspaceTab[] = ["queue", "availability", "appearance"];
+    const next = tabs[(tabs.indexOf(current) + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
     setActiveTab(next);
     window.setTimeout(() => tabRefs.current[next]?.focus(), 0);
   }
@@ -188,7 +206,7 @@ export function OnlineOrderingWorkspace({
       />
 
       <div className="mt-6 rounded-[20px] border border-line bg-surface p-1.5 shadow-[var(--shadow-card)]">
-        <div className="grid grid-cols-2 gap-1" role="tablist" aria-label="Online ordering workspace">
+        <div className="grid grid-cols-3 gap-1" role="tablist" aria-label="Online ordering workspace">
           <WorkspaceTabButton
             id="online-ordering-queue-tab"
             panelId="online-ordering-queue-panel"
@@ -199,6 +217,17 @@ export function OnlineOrderingWorkspace({
             onClick={() => setActiveTab("queue")}
             onKeyDown={(event) => handleWorkspaceTabKeyDown(event, "queue")}
             buttonRef={(node) => { tabRefs.current.queue = node; }}
+          />
+          <WorkspaceTabButton
+            id="online-ordering-availability-tab"
+            panelId="online-ordering-availability-panel"
+            label="Availability"
+            detail="Pause products or categories"
+            icon="pause"
+            active={activeTab === "availability"}
+            onClick={() => setActiveTab("availability")}
+            onKeyDown={(event) => handleWorkspaceTabKeyDown(event, "availability")}
+            buttonRef={(node) => { tabRefs.current.availability = node; }}
           />
           <WorkspaceTabButton
             id="online-ordering-appearance-tab"
@@ -243,6 +272,14 @@ export function OnlineOrderingWorkspace({
         qrCode={qrCode}
         downloadQrCode={downloadQrCode}
       />
+
+      <section id="online-ordering-availability-panel" role="tabpanel" aria-labelledby="online-ordering-availability-tab" tabIndex={0} hidden={activeTab !== "availability"} className="mt-5 outline-none">
+        {availabilityError ? (
+          <div className="rounded-[22px] border border-warning/30 bg-warning/10 px-5 py-5 text-sm leading-6 text-ink sm:px-6">{availabilityError} Apply the latest online-ordering migrations to enable product and category controls.</div>
+        ) : (
+          <OnlineAvailabilityEditor storeId={store.id} categories={availability.categories} products={availability.products} canManage={canManage} />
+        )}
+      </section>
 
       <section id="online-ordering-appearance-panel" role="tabpanel" aria-labelledby="online-ordering-appearance-tab" tabIndex={0} hidden={activeTab !== "appearance"} className="mt-5 outline-none">
         <div className="flex flex-col gap-4 rounded-[22px] border border-line bg-primary p-5 text-primary-fg shadow-[var(--shadow-card)] sm:flex-row sm:items-center sm:justify-between sm:p-6">
@@ -371,6 +408,8 @@ function QueueDashboard({ hidden, store, settings, publicMenuRootDomain, shareUr
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <SettingField label="Average prep time" name="average_prep_minutes" defaultValue={settings.averagePrepMinutes} suffix="min" min={5} max={180} />
               <SettingField label="Lead time" name="order_lead_minutes" defaultValue={settings.orderLeadMinutes} suffix="min" min={0} max={180} />
+              <SettingField label="Minimum order" name="minimum_order_amount" defaultValue={settings.minimumOrderCentavos / 100} suffix="₱" min={0} max={1000000} step={0.01} />
+              <SettingField label="Max quantity per item" name="max_item_quantity" defaultValue={settings.maxItemQuantity} suffix="items" min={1} max={100} />
             </div>
             <label className="mt-4 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted" htmlFor="pickup-note">Pickup note
               <textarea id="pickup-note" name="pickup_note" defaultValue={settings.pickupNote} rows={3} maxLength={240} className="mt-1.5 block w-full resize-y rounded-xl border border-line-strong bg-raised px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10" />
@@ -391,8 +430,23 @@ function QueueDashboard({ hidden, store, settings, publicMenuRootDomain, shareUr
               <label className="mt-3 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted" htmlFor="delivery-note">Delivery note
                 <textarea id="delivery-note" name="delivery_note" defaultValue={settings.delivery.note} rows={2} maxLength={240} className="mt-1.5 block w-full resize-y rounded-xl border border-line-strong bg-surface px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10" />
               </label>
+              <label className="mt-3 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted" htmlFor="delivery-service-area">Delivery service area <span className="font-semibold normal-case tracking-normal text-ink-subtle">(comma-separated places)</span>
+                <textarea id="delivery-service-area" name="delivery_service_area" defaultValue={settings.delivery.serviceArea} rows={2} maxLength={240} placeholder="Makati, Poblacion, Salcedo" className="mt-1.5 block w-full resize-y rounded-xl border border-line-strong bg-surface px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10" />
+              </label>
               <p className="mt-2 text-[11px] leading-4 text-ink-muted">Delivery uses pay-on-delivery for now. Online payments can be added later.</p>
             </div>
+            <div className="mt-4 rounded-2xl border border-line bg-raised p-3.5">
+              <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted">Scheduled orders</p><p className="mt-1 text-xs leading-5 text-ink-muted">Customers choose from slots inside these branch hours. ASAP remains available today.</p></div><AdminIcon name="calendar" size={17} /></div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <SettingField label="Slot interval" name="slot_interval_minutes" defaultValue={settings.schedule.slotIntervalMinutes} suffix="min" min={5} max={120} />
+                <SettingField label="Days ahead" name="max_days_ahead" defaultValue={settings.schedule.maxDaysAhead} suffix="days" min={0} max={14} />
+                <TimeField label="Opening time" name="opening_time" defaultValue={settings.schedule.openingTime} />
+                <TimeField label="Closing time" name="closing_time" defaultValue={settings.schedule.closingTime} />
+              </div>
+            </div>
+            <label className="mt-4 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted" htmlFor="cancellation-policy">Cancellation policy
+              <textarea id="cancellation-policy" name="cancellation_policy" defaultValue={settings.cancellationPolicy} rows={3} maxLength={360} className="mt-1.5 block w-full resize-y rounded-xl border border-line-strong bg-raised px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10" />
+            </label>
             <div className="mt-5 flex items-center justify-between gap-3 border-t border-line pt-4">
               <p className="max-w-[28ch] text-[11px] leading-4 text-ink-muted">ETAs use active orders, prep time, and the delivery buffer when applicable.</p>
               <SettingsSaveButton />
@@ -493,14 +547,14 @@ function QueueRow({ order, storeId, canManage }: { order: QueueOrder; storeId: s
         <div className="flex min-w-0 flex-1 items-start gap-3">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary text-sm font-extrabold text-primary-fg">{order.queuePosition}</span>
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1"><strong className="text-sm font-extrabold text-ink">{order.orderNo}</strong><span className={`rounded-full px-2 py-1 text-[9px] font-extrabold uppercase tracking-wide ${statusClass}`}>{formatOrderStatusLabel(order.status)}</span><span className="rounded-full bg-raised px-2 py-1 text-[9px] font-extrabold uppercase tracking-wide text-ink-muted">{order.fulfillmentMethod === "delivery" ? "Delivery" : "Pickup"}</span></div>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1"><strong className="text-sm font-extrabold text-ink">{order.orderNo}</strong><span className={`rounded-full px-2 py-1 text-[9px] font-extrabold uppercase tracking-wide ${statusClass}`}>{formatOrderStatusLabel(order.status)}</span><span className="rounded-full bg-raised px-2 py-1 text-[9px] font-extrabold uppercase tracking-wide text-ink-muted">{order.fulfillmentMethod === "delivery" ? "Delivery" : "Pickup"}</span>{order.riskLevel === "high" && <span className="rounded-full bg-danger-soft px-2 py-1 text-[9px] font-extrabold uppercase tracking-wide text-danger">Review</span>}{order.phoneVerificationStatus === "pending" && <span className="rounded-full bg-warning/15 px-2 py-1 text-[9px] font-extrabold uppercase tracking-wide text-warning">Phone check</span>}{order.addressValidationStatus === "manual_review" && <span className="rounded-full bg-warning/15 px-2 py-1 text-[9px] font-extrabold uppercase tracking-wide text-warning">Address review</span>}</div>
             <p className="mt-1 text-sm font-semibold text-ink">{order.customerName} <span className="font-normal text-ink-muted">· {order.customerPhone}</span></p>
             <p className="mt-1 max-w-[48ch] truncate text-xs text-ink-muted">{order.itemSummary}</p>
             {order.fulfillmentMethod === "delivery" && order.deliveryAddress && <p className="mt-1 max-w-[52ch] truncate text-xs font-semibold text-primary">Deliver to: {order.deliveryAddress}{order.deliveryNote ? ` · ${order.deliveryNote}` : ""}{order.deliveryFee > 0 ? ` · ${formatPeso(order.deliveryFee)} delivery` : ""}</p>}
           </div>
         </div>
         <div className="grid grid-cols-3 gap-3 border-t border-line pt-3 text-xs lg:min-w-[260px] lg:border-t-0 lg:pt-0">
-          <div><span className="block text-[9px] font-extrabold uppercase tracking-[0.1em] text-ink-subtle">{order.fulfillmentMethod === "delivery" ? "Delivery" : "Pickup"}</span><strong className="mt-1 block truncate text-xs font-extrabold text-ink">{pickupSlotLabel(order.pickupSlot)}</strong></div>
+          <div><span className="block text-[9px] font-extrabold uppercase tracking-[0.1em] text-ink-subtle">{order.fulfillmentMethod === "delivery" ? "Delivery" : "Pickup"}</span><strong className="mt-1 block truncate text-xs font-extrabold text-ink">{order.scheduledFor ? formatScheduledFor(order.scheduledFor) : pickupSlotLabel(order.pickupSlot)}</strong>{order.pickupDate && <small className="mt-0.5 block truncate text-[10px] font-semibold text-ink-muted">{formatOrderDate(order.pickupDate)}</small>}</div>
           <div><span className="block text-[9px] font-extrabold uppercase tracking-[0.1em] text-ink-subtle">ETA</span><strong className="mt-1 block text-xs font-extrabold text-success">{formatOnlineEta(order.etaAt)}</strong></div>
           <div><span className="block text-[9px] font-extrabold uppercase tracking-[0.1em] text-ink-subtle">Total</span><strong className="mt-1 block text-xs font-extrabold text-ink">{formatPeso(order.total)}</strong></div>
         </div>
@@ -508,16 +562,49 @@ function QueueRow({ order, storeId, canManage }: { order: QueueOrder; storeId: s
       {canManage && order.status !== "cancelled" && order.status !== "picked_up" && (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 pl-[52px]">
           <a href={`/pos?onlineOrder=${encodeURIComponent(order.id)}`} target="_blank" rel="noreferrer" className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line-strong bg-raised px-3 py-2 text-[10px] font-extrabold uppercase tracking-wide text-primary transition hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"><AdminIcon name="bag" size={12} />Open in POS</a>
-          {nextAction && <form action={updateOnlineOrderStatus} className="flex items-center gap-2">
-            <input type="hidden" name="store_id" value={storeId} />
-            <input type="hidden" name="order_id" value={order.id} />
-            {order.status === "new" && <button type="submit" name="status" value="cancelled" className="min-h-9 rounded-lg px-3 py-2 text-[10px] font-extrabold uppercase tracking-wide text-danger transition hover:bg-danger-soft">Cancel</button>}
-            <QueueActionButton label={nextAction.label} status={nextAction.status} />
-          </form>}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {order.phoneVerificationStatus === "pending" && <form action={verifyOnlineOrderPhone} className="flex items-center gap-2 rounded-xl border border-warning/25 bg-warning/10 px-2 py-1.5"><input type="hidden" name="store_id" value={storeId} /><input type="hidden" name="order_id" value={order.id} /><span className="text-[10px] font-bold text-warning">Confirm number before prep</span><button type="submit" className="inline-flex min-h-8 items-center gap-1 rounded-lg bg-warning px-2.5 py-1.5 text-[9px] font-extrabold uppercase tracking-wide text-white transition hover:brightness-95"><AdminIcon name="check" size={11} />Verify</button></form>}
+            {nextAction && <form action={updateOnlineOrderStatus} className="flex flex-wrap items-center justify-end gap-2">
+              <input type="hidden" name="store_id" value={storeId} />
+              <input type="hidden" name="order_id" value={order.id} />
+              <input type="text" name="cancel_reason" maxLength={240} placeholder="Cancellation reason (optional)" className="min-h-9 w-52 rounded-lg border border-line-strong bg-raised px-2.5 py-2 text-[10px] font-semibold text-ink outline-none placeholder:text-ink-subtle focus:border-primary focus:ring-2 focus:ring-primary/10" aria-label={`Cancellation reason for ${order.orderNo}`} />
+              <button type="submit" name="status" value="cancelled" className="min-h-9 rounded-lg px-3 py-2 text-[10px] font-extrabold uppercase tracking-wide text-danger transition hover:bg-danger-soft">Cancel</button>
+              {order.phoneVerificationStatus !== "pending" && <QueueActionButton label={nextAction.label} status={nextAction.status} />}
+            </form>}
+          </div>
         </div>
       )}
+      {order.history.length > 0 && <details className="mt-3 ml-[52px] rounded-xl border border-line bg-raised px-3 py-2"><summary className="cursor-pointer list-none text-[10px] font-extrabold uppercase tracking-wide text-primary">Audit history · {order.history.length} events</summary><div className="mt-2 space-y-2 border-t border-line pt-2">{order.history.map((event, index) => <div key={`${event.createdAt}-${index}`} className="flex items-start justify-between gap-3 text-[11px]"><span className="font-semibold text-ink">{formatAuditAction(event.action)}{formatAuditDetail(event.after) && <span className="ml-1 font-normal text-ink-muted">· {formatAuditDetail(event.after)}</span>}</span><time className="shrink-0 text-ink-subtle">{formatAuditTime(event.createdAt)}</time></div>)}</div></details>}
     </article>
   );
+}
+
+function formatScheduledFor(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Scheduled";
+  return new Intl.DateTimeFormat("en-PH", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Singapore" }).format(date);
+}
+
+function formatOrderDate(value: string) {
+  const date = new Date(`${value}T12:00:00Z`);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-PH", { weekday: "short", month: "short", day: "numeric", timeZone: "Asia/Singapore" }).format(date);
+}
+
+function formatAuditAction(action: string) {
+  return action.replace(/^online_order\./, "").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatAuditDetail(after: Record<string, unknown>) {
+  const status = typeof after.status === "string" ? after.status.replaceAll("_", " ") : "";
+  const reason = typeof after.reason === "string" && after.reason ? `Reason: ${after.reason}` : "";
+  return [status && `Status: ${status}`, reason].filter(Boolean).join(" · ");
+}
+
+function formatAuditTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-SG", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
 }
 
 function QueueActionButton({ label, status }: { label: string; status: OnlineOrderStatus }) {
@@ -533,6 +620,10 @@ function QueueEmptyState({ filter }: { filter: QueueFilter }) {
 
 function SettingField({ label, name, defaultValue, suffix, min, max, step = 1 }: { label: string; name: string; defaultValue: number; suffix: string; min: number; max: number; step?: number }) {
   return <label className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted" htmlFor={name}>{label}<span className="relative mt-1.5 block"><input id={name} name={name} type="number" defaultValue={defaultValue} min={min} max={max} step={step} required className="block w-full rounded-xl border border-line-strong bg-raised px-3 py-2.5 pr-12 text-sm font-extrabold normal-case tracking-normal text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10" /><span className="pointer-events-none absolute inset-y-0 right-3 grid place-items-center text-[10px] font-bold normal-case tracking-normal text-ink-muted">{suffix}</span></span></label>;
+}
+
+function TimeField({ label, name, defaultValue }: { label: string; name: string; defaultValue: string }) {
+  return <label className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted" htmlFor={name}>{label}<input id={name} name={name} type="time" defaultValue={defaultValue} required className="mt-1.5 block w-full rounded-xl border border-line-strong bg-raised px-3 py-2.5 text-sm font-extrabold normal-case tracking-normal text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10" /></label>;
 }
 
 function SettingsSaveButton() {

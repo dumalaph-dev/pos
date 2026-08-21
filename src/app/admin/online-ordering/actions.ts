@@ -118,6 +118,14 @@ export async function updateOnlineOrderingSettings(formData: FormData) {
   const deliveryFeePeso = Number(readText(formData, "delivery_fee"));
   const deliveryEtaMinutes = Number(readText(formData, "delivery_eta_minutes"));
   const deliveryNote = readText(formData, "delivery_note");
+  const serviceArea = readText(formData, "delivery_service_area");
+  const minimumOrderPeso = Number(readText(formData, "minimum_order_amount"));
+  const maxItemQuantity = Number(readText(formData, "max_item_quantity"));
+  const slotIntervalMinutes = Number(readText(formData, "slot_interval_minutes"));
+  const maxDaysAhead = Number(readText(formData, "max_days_ahead"));
+  const openingTime = readText(formData, "opening_time");
+  const closingTime = readText(formData, "closing_time");
+  const cancellationPolicy = readText(formData, "cancellation_policy");
   const enabled = formData.get("enabled") === "on";
 
   if (!Number.isInteger(averagePrepMinutes) || averagePrepMinutes < 5 || averagePrepMinutes > 180) {
@@ -134,25 +142,51 @@ export async function updateOnlineOrderingSettings(formData: FormData) {
     actionRedirect("Delivery ETA must be a whole number from 15 to 180 minutes.");
   }
   if (!deliveryNote || deliveryNote.length > 240) actionRedirect("Add a delivery note under 240 characters.");
+  if (!Number.isFinite(minimumOrderPeso) || minimumOrderPeso < 0 || minimumOrderPeso > 1000000) {
+    actionRedirect("Minimum order amount must be between ₱0 and ₱1,000,000.");
+  }
+  if (!Number.isInteger(maxItemQuantity) || maxItemQuantity < 1 || maxItemQuantity > 100) {
+    actionRedirect("The per-item quantity limit must be a whole number from 1 to 100.");
+  }
+  if (!Number.isInteger(slotIntervalMinutes) || slotIntervalMinutes < 5 || slotIntervalMinutes > 120) {
+    actionRedirect("Time-slot intervals must be a whole number from 5 to 120 minutes.");
+  }
+  if (!Number.isInteger(maxDaysAhead) || maxDaysAhead < 0 || maxDaysAhead > 14) {
+    actionRedirect("Scheduled orders can be offered from 0 to 14 days ahead.");
+  }
+  if (!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(openingTime) || !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(closingTime)) {
+    actionRedirect("Choose valid opening and closing times.");
+  }
+  if (openingTime >= closingTime) actionRedirect("Closing time must be later than opening time.");
+  if (serviceArea.length > 240) actionRedirect("Delivery service areas must be 240 characters or fewer.");
+  if (!cancellationPolicy || cancellationPolicy.length > 360) actionRedirect("Add a cancellation policy under 360 characters.");
 
-  const { error } = await supabase
-    .from("stores")
-    .update({
-      settings: mergeOnlineOrderingSettings(store.settings, {
-        enabled,
-        averagePrepMinutes,
-        orderLeadMinutes,
-        pickupNote,
-        delivery: {
-          enabled: deliveryEnabled,
-          feeCentavos: toCentavos(deliveryFeePeso),
-          etaMinutes: deliveryEtaMinutes,
-          note: deliveryNote,
-        },
-      }),
-    })
-    .eq("id", store.id)
-    .eq("org_id", profile.org_id);
+  const nextSettings = mergeOnlineOrderingSettings(store.settings, {
+    enabled,
+    averagePrepMinutes,
+    orderLeadMinutes,
+    pickupNote,
+    delivery: {
+      enabled: deliveryEnabled,
+      feeCentavos: toCentavos(deliveryFeePeso),
+      etaMinutes: deliveryEtaMinutes,
+      note: deliveryNote,
+      serviceArea,
+    },
+    minimumOrderCentavos: toCentavos(minimumOrderPeso),
+    maxItemQuantity,
+    cancellationPolicy,
+    schedule: {
+      slotIntervalMinutes,
+      maxDaysAhead,
+      openingTime,
+      closingTime,
+    },
+  });
+  const { error } = await supabase.rpc("set_online_ordering_settings", {
+    p_store_id: store.id,
+    p_settings: nextSettings,
+  });
 
   if (error) actionRedirect(error.message || "Online ordering settings could not be saved.");
 
@@ -241,6 +275,47 @@ export async function updateOnlineOrderingPresentation(formData: FormData) {
   redirect("/admin/online-ordering?saved=appearance");
 }
 
+export async function updateOnlineAvailability(formData: FormData) {
+  const { supabase, profile } = await requireOnlineOrderingUser();
+  const storeId = readText(formData, "store_id");
+  const store = await readStoreContext(supabase, profile.org_id, storeId);
+  const scope = readText(formData, "scope");
+  const entityId = readText(formData, "entity_id");
+  const availableValue = readText(formData, "available");
+
+  if ((scope !== "product" && scope !== "category") || !entityId || (availableValue !== "true" && availableValue !== "false")) {
+    actionRedirect("That online availability change is not valid.");
+  }
+
+  const { error } = await supabase.rpc("set_online_availability", {
+    p_scope: scope,
+    p_entity_id: entityId,
+    p_available: availableValue === "true",
+  });
+  if (error) actionRedirect(error.message || "Online availability could not be changed.");
+
+  revalidatePath("/admin/online-ordering");
+  revalidatePath(publicMenuPath(store.staff_login_slug));
+  redirect("/admin/online-ordering?saved=availability");
+}
+
+export async function verifyOnlineOrderPhone(formData: FormData) {
+  const { supabase, profile } = await requireOnlineOrderingUser();
+  const storeId = readText(formData, "store_id");
+  const orderId = readText(formData, "order_id");
+  const store = await readStoreContext(supabase, profile.org_id, storeId);
+  if (!orderId) actionRedirect("That online order could not be identified.");
+
+  const { error } = await supabase.rpc("mark_online_order_phone_verified", {
+    p_online_order_id: orderId,
+  });
+  if (error) actionRedirect(error.message || "The customer phone could not be verified.");
+
+  revalidatePath("/admin/online-ordering");
+  revalidatePath(publicMenuPath(store.staff_login_slug));
+  redirect("/admin/online-ordering?saved=phone");
+}
+
 export async function updateOnlineOrderStatus(formData: FormData) {
   const { supabase, profile } = await requireOnlineOrderingUser();
   const storeId = readText(formData, "store_id");
@@ -261,19 +336,11 @@ export async function updateOnlineOrderStatus(formData: FormData) {
     .maybeSingle();
   if (orderError || !order) actionRedirect("That online order is no longer in the pickup queue.");
 
-  const now = new Date().toISOString();
-  const update: Record<string, string> = { status: requestedStatus };
-  if (requestedStatus === "confirmed" || requestedStatus === "preparing") update.confirmed_at = now;
-  if (requestedStatus === "ready") update.ready_at = now;
-  if (requestedStatus === "picked_up") update.picked_up_at = now;
-  if (requestedStatus === "cancelled") update.cancelled_at = now;
-
-  const { error } = await supabase
-    .from("online_orders")
-    .update(update)
-    .eq("id", orderId)
-    .eq("org_id", profile.org_id)
-    .eq("store_id", store.id);
+  const { error } = await supabase.rpc("set_online_order_status", {
+    p_online_order_id: orderId,
+    p_next_status: requestedStatus,
+    p_cancel_reason: readText(formData, "cancel_reason") || null,
+  });
   if (error) actionRedirect(error.message || "The online order could not be updated.");
 
   revalidatePath("/admin/online-ordering");
