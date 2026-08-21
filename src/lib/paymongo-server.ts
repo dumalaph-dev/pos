@@ -250,6 +250,24 @@ export async function getPayMongoSubscription(subscriptionId: string) {
   return { response, attributes: resourceAttributes(response) };
 }
 
+export async function changePayMongoSubscriptionPlan(subscriptionId: string, planId: string) {
+  const response = await payMongoRequest(
+    `/v1/subscriptions/${encodeURIComponent(subscriptionId)}/plan`,
+    {
+      method: "PUT",
+      idempotencyKey: `pos-subscription-plan-${subscriptionId}-${planId}`,
+      body: {
+        data: {
+          attributes: {
+            plan_id: planId,
+          },
+        },
+      },
+    },
+  );
+  return { response, attributes: resourceAttributes(response) };
+}
+
 export async function getPayMongoPaymentIntent(paymentIntentId: string) {
   const response = await payMongoRequest(`/v1/payment_intents/${encodeURIComponent(paymentIntentId)}`);
   return { response, attributes: resourceAttributes(response) };

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { createAdminClient } from "@/lib/employee-auth";
-import { calculateBillingVariantPrice } from "@/lib/platform-operations";
+import { calculateCatalogVariantPriceQuote } from "@/lib/platform-operations";
 import { readPromotionQuote } from "@/lib/platform-promotions-server";
 import { readPlatformOperations } from "@/lib/platform-operations-server";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
@@ -30,12 +30,15 @@ export async function POST(request: NextRequest) {
 
     const variant = operations.catalog.variants.find((candidate) => candidate.id === variantId && candidate.isActive);
     if (!variant) return errorResponse("Choose an active plan before applying a promotion.", 400);
-    const baseAmountCentavos = calculateBillingVariantPrice(
-      operations.catalog.monthlyPriceCentavos,
-      variant.intervalUnit,
-      variant.intervalCount,
-      variant.discountPercent,
-    );
+    const activeBranchesResult = await admin
+      .from("stores")
+      .select("id")
+      .eq("org_id", profile.org_id)
+      .eq("is_active", true);
+    if (activeBranchesResult.error) return errorResponse("The active branch count could not be verified. Please try again later.", 503);
+    const activeBranchCount = Math.max(activeBranchesResult.data?.length ?? 0, 1);
+    const pricingQuote = calculateCatalogVariantPriceQuote(operations.catalog, variant, activeBranchCount);
+    const baseAmountCentavos = pricingQuote.termTotalCentavos;
     const quote = await readPromotionQuote(admin, {
       code,
       organizationId: profile.org_id,
@@ -53,6 +56,8 @@ export async function POST(request: NextRequest) {
       baseAmountCentavos: quote.baseAmountCentavos,
       discountAmountCentavos: quote.discountAmountCentavos,
       finalAmountCentavos: quote.finalAmountCentavos,
+      activeBranchCount,
+      billableBranchCount: pricingQuote.billableBranchCount,
       variantId,
     });
   } catch (error) {

@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
 import { createClient } from "@/lib/supabase/server";
 import { clearSelectedAdminBranch } from "@/lib/admin/branch-context";
+import { createAdminClient } from "@/lib/employee-auth";
+import { prepareBranchBillingChange, restoreBranchBillingPlan, type BranchBillingChange } from "@/lib/branch-billing-server";
 
 type BranchFields = {
   name: string;
@@ -42,10 +44,11 @@ function branchRedirect(message: string, editId = ""): never {
   redirect(`/admin/branches?${params.toString()}`);
 }
 
-function branchSaved(message: "created" | "updated", branchId = "", cloneFailed = false): never {
+function branchSaved(message: "created" | "updated", branchId = "", cloneFailed = false, billingStatus: BranchBillingChange["status"] = "unchanged"): never {
   const params = new URLSearchParams({ saved: message });
   if (branchId) params.set("edit", branchId);
   if (cloneFailed) params.set("clone", "failed");
+  if (billingStatus !== "unchanged") params.set("billing", billingStatus);
   redirect(`/admin/branches?${params.toString()}`);
 }
 
@@ -94,6 +97,7 @@ function refreshBranchViews() {
   revalidatePath("/admin/branches");
   revalidatePath("/admin/employees");
   revalidatePath("/admin/settings");
+  revalidatePath("/admin/billing");
   revalidatePath("/admin/pos");
   revalidatePath("/pos");
 }
@@ -127,6 +131,10 @@ export async function createBranch(formData: FormData) {
     if (sourceError || !sourceBranch) branchRedirect("Choose an active source branch for the menu clone.");
   }
 
+  const admin = createAdminClient();
+  const billingPreparation = await prepareBranchBillingChange(admin, actor.orgId, 1);
+  if (!billingPreparation.ok) branchRedirect(billingPreparation.message);
+
   const { data: branch, error } = await actor.supabase
     .from("stores")
     .insert({
@@ -142,7 +150,10 @@ export async function createBranch(formData: FormData) {
     .select("id")
     .maybeSingle();
 
-  if (error || !branch) branchRedirect(error?.message || "The branch could not be created.");
+  if (error || !branch) {
+    const restored = await restoreBranchBillingPlan(admin, billingPreparation.change);
+    branchRedirect(restored ? error?.message || "The branch could not be created." : "The branch could not be created, and the billing provider could not restore the previous plan. Contact support before trying again.");
+  }
 
   let cloneFailed = false;
   if (cloneFromStoreId) {
@@ -166,7 +177,7 @@ export async function createBranch(formData: FormData) {
   });
 
   refreshBranchViews();
-  branchSaved("created", branch.id, cloneFailed);
+  branchSaved("created", branch.id, cloneFailed, billingPreparation.change.status);
 }
 
 export async function updateBranch(formData: FormData) {
@@ -200,6 +211,13 @@ export async function updateBranch(formData: FormData) {
     if (!otherActiveBranches?.length) branchRedirect("Keep at least one active branch in your organization.", branchId);
   }
 
+  const branchCountDelta = isActive === current.is_active ? 0 : isActive ? 1 : -1;
+  const admin = createAdminClient();
+  const billingPreparation = branchCountDelta === 0
+    ? { ok: true as const, change: { status: "unchanged" as const, organizationId: actor.orgId, subscriptionId: null, previousPlanId: null, nextPlanId: null, currentActiveBranchCount: 0, nextActiveBranchCount: 0 } }
+    : await prepareBranchBillingChange(admin, actor.orgId, branchCountDelta);
+  if (!billingPreparation.ok) branchRedirect(billingPreparation.message, branchId);
+
   const { error } = await actor.supabase
     .from("stores")
     .update({
@@ -214,7 +232,10 @@ export async function updateBranch(formData: FormData) {
     .eq("id", branchId)
     .eq("org_id", actor.orgId);
 
-  if (error) branchRedirect(error.message || "The branch could not be updated.", branchId);
+  if (error) {
+    const restored = await restoreBranchBillingPlan(admin, billingPreparation.change);
+    branchRedirect(restored ? error.message || "The branch could not be updated." : "The branch could not be updated, and the billing provider could not restore the previous plan. Contact support before trying again.", branchId);
+  }
   if (!isActive) await clearSelectedAdminBranch(branchId);
 
   await writeAudit(actor.supabase, actor, branchId, isActive ? "branch.updated" : "branch.deactivated", {
@@ -236,5 +257,5 @@ export async function updateBranch(formData: FormData) {
   });
 
   refreshBranchViews();
-  branchSaved("updated");
+  branchSaved("updated", "", false, billingPreparation.change.status);
 }

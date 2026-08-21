@@ -10,7 +10,7 @@ import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
 import { isComplimentaryAccessCurrent } from "@/lib/platform-access";
 import { readCurrentComplimentaryAccess } from "@/lib/platform-access-server";
-import { billingVariantMonthlyEquivalent, billingVariantPriceLabel, calculateBillingVariantPrice, DEFAULT_MONTHLY_PRICE_CENTAVOS, DEFAULT_PLATFORM_POLICIES, hasSubscriptionPaymentMethod, isPolicyGateOpen, readPolicyNumber, type BillingCatalog, type BillingVariant } from "@/lib/platform-operations";
+import { calculateCatalogVariantPriceQuote, DEFAULT_ADDITIONAL_BRANCH_PRICE_CENTAVOS, DEFAULT_INCLUDED_BRANCH_COUNT, DEFAULT_MONTHLY_PRICE_CENTAVOS, DEFAULT_PLATFORM_POLICIES, hasSubscriptionPaymentMethod, isPolicyGateOpen, readPolicyNumber, type BillingCatalog, type BillingVariant } from "@/lib/platform-operations";
 import { payMongoConfiguration, readPayMongoSubscriptionReadiness, readPlatformOperations } from "@/lib/platform-operations-server";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { formatTrialRemaining, readTrialLifecycle, type TrialLifecycle } from "@/lib/trial";
@@ -93,7 +93,7 @@ export default async function BillingPage() {
   const operations = platformAdmin
     ? await readPlatformOperations(platformAdmin)
     : {
-      catalog: { currency: "PHP" as const, monthlyPriceCentavos: DEFAULT_MONTHLY_PRICE_CENTAVOS, variants: [], schemaAvailable: false },
+      catalog: { currency: "PHP" as const, monthlyPriceCentavos: DEFAULT_MONTHLY_PRICE_CENTAVOS, additionalBranchPriceCentavos: DEFAULT_ADDITIONAL_BRANCH_PRICE_CENTAVOS, includedBranchCount: DEFAULT_INCLUDED_BRANCH_COUNT, variants: [], schemaAvailable: false },
       policies: { ...DEFAULT_PLATFORM_POLICIES, schemaAvailable: false },
     };
   const catalog = operations.catalog.schemaAvailable
@@ -115,15 +115,20 @@ export default async function BillingPage() {
   const offeredVariants = catalog.variants.filter((variant) => variant.isActive && (variant.intervalUnit !== "year" || annualAutoRenewalAllowed));
   const checkoutVariants = offeredVariants
     .filter((variant): variant is typeof variant & { id: string } => Boolean(variant.id))
-    .map((variant) => ({
-      id: variant.id,
-      label: variant.label,
-      priceLabel: billingVariantPriceLabel(catalog, variant),
-      cadenceLabel: variant.intervalUnit === "month" ? "per month" : `for ${variant.intervalCount} ${variant.intervalCount === 1 ? "year" : "years"}`,
-      monthlyEquivalentLabel: formatPeso(billingVariantMonthlyEquivalent(catalog, variant)),
-      discountPercent: variant.discountPercent,
-      baseAmountCentavos: calculateBillingVariantPrice(catalog.monthlyPriceCentavos, variant.intervalUnit, variant.intervalCount, variant.discountPercent),
-    }));
+    .map((variant) => {
+      const quote = calculateCatalogVariantPriceQuote(catalog, variant, activeBranches);
+      return {
+        id: variant.id,
+        label: variant.label,
+        priceLabel: formatPeso(quote.termTotalCentavos),
+        cadenceLabel: variant.intervalUnit === "month" ? "per month" : `for ${variant.intervalCount} ${variant.intervalCount === 1 ? "year" : "years"}`,
+        monthlyEquivalentLabel: formatPeso(quote.monthlyEquivalentCentavos),
+        discountPercent: variant.discountPercent,
+        baseAmountCentavos: quote.termTotalCentavos,
+        activeBranchCount: quote.activeBranchCount,
+        billableBranchCount: quote.billableBranchCount,
+      };
+    });
   const trialDays = operations.policies.schemaAvailable
     ? readPolicyNumber(operations.policies.billing, "trialDays", 14)
     : 14;
@@ -258,8 +263,9 @@ function CurrentPlanCard({
       : accessEnded
         ? "Your Premium access has ended. Choose a plan below to continue using every feature."
         : "Review your billing details and choose a plan when you are ready.";
-  const totalPriceLabel = variant ? billingVariantPriceLabel(catalog, variant) : monthlyPriceLabel;
-  const monthlyEquivalentLabel = variant ? formatPeso(billingVariantMonthlyEquivalent(catalog, variant)) : monthlyPriceLabel;
+  const currentQuote = variant ? calculateCatalogVariantPriceQuote(catalog, variant, activeBranches) : null;
+  const totalPriceLabel = currentQuote ? formatPeso(currentQuote.termTotalCentavos) : monthlyPriceLabel;
+  const monthlyEquivalentLabel = currentQuote ? formatPeso(currentQuote.monthlyEquivalentCentavos) : monthlyPriceLabel;
   const variantLabel = variant?.label ?? "Monthly";
   const planCadence = variant?.intervalUnit === "year" ? `Paid for ${variant.intervalCount} ${variant.intervalCount === 1 ? "year" : "years"}` : "Billed monthly";
   const timingLabel = isComplimentary ? "Access through" : trialExpired ? "Trial ended" : isTrialing ? "Trial ends" : isRecurring ? "Next billing" : "Access through";

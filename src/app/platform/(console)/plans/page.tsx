@@ -22,17 +22,18 @@ export default async function PlatformPlansPage() {
         <PlatformPageHeader
           eyebrow="Revenue workspace"
           title="Plans & Pricing"
-          description="Shape the subscription catalog customers see, keep the monthly price as the source of truth, and create clear annual savings offers."
+          description="Shape the subscription catalog customers see: the base price includes the first active branch, while every additional branch is priced as a monthly add-on."
           actions={<>
             <Link href="/admin/billing" className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-line-strong bg-surface px-3.5 py-2.5 text-xs font-extrabold text-primary transition hover:border-primary hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"><AdminIcon name="eye" size={14} /> Preview checkout</Link>
             <Link href="/platform/operations" className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold text-primary-fg transition hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">Payment readiness <AdminIcon name="arrow" size={14} /></Link>
           </>}
         />
 
-        {!catalog.schemaAvailable && <div role="status" className="mt-6 rounded-[18px] border border-warning/35 bg-warning/10 px-5 py-4 text-sm font-semibold leading-6 text-ink">Pricing is showing safe defaults because the billing catalog tables are not available yet. Apply <code className="mx-1 font-extrabold">0027_platform_operations.sql</code> before saving changes.</div>}
+        {!catalog.schemaAvailable && <div role="status" className="mt-6 rounded-[18px] border border-warning/35 bg-warning/10 px-5 py-4 text-sm font-semibold leading-6 text-ink">Pricing is showing safe defaults because the latest billing catalog columns are not available yet. Apply <code className="mx-1 font-extrabold">0068_branch_billing_pricing.sql</code> before saving changes.</div>}
 
-        <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Pricing summary">
+        <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Pricing summary">
           <PlatformMetric label="Monthly base" value={formatPeso(catalog.monthlyPriceCentavos)} detail="Source price for all offers" icon="wallet" />
+          <PlatformMetric label="Additional branch" value={formatPeso(catalog.additionalBranchPriceCentavos)} detail={`Per branch beyond ${catalog.includedBranchCount} included`} icon="branches" />
           <PlatformMetric label="Live offers" value={activeVariants.length} detail="Visible to customers" icon="dashboard" />
           <PlatformMetric label="Annual options" value={annualVariants.length} detail="Duration-based savings" icon="refresh" />
           <PlatformMetric label="Currency" value={catalog.currency} detail="Philippine peso" icon="customers" />
@@ -44,10 +45,11 @@ export default async function PlatformPlansPage() {
 
         <section className="mt-8 rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6">
           <PlatformSectionHeading eyebrow="Pricing guardrails" title="Keep pricing changes easy to review" description="Pricing is intentionally separated from policy and provider configuration so a catalog edit stays focused." />
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
-            <GuidanceCard number="01" title="Set the base" detail="Start with the monthly amount. Annual prices are calculated from this reference." />
-            <GuidanceCard number="02" title="Add commitments" detail="Use annual variants to define the duration and the discount customers receive." />
-            <GuidanceCard number="03" title="Publish the rules" detail="Review the billing policy separately before enabling checkout actions." href="/platform/policies" />
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <GuidanceCard number="01" title="Set the base" detail="Start with the monthly amount. The first active branch is included." />
+            <GuidanceCard number="02" title="Price branches" detail="Set the monthly add-on for every active branch after the included branch." />
+            <GuidanceCard number="03" title="Add commitments" detail="Use annual variants to define duration and customer savings." />
+            <GuidanceCard number="04" title="Publish the rules" detail="Review the billing policy separately before enabling checkout actions." href="/platform/policies" />
           </div>
         </section>
       </div>

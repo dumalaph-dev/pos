@@ -6,6 +6,7 @@ import { AdminIcon } from "@/components/admin/AdminIcon";
 import {
   billingVariantPriceLabel,
   calculateBillingVariantPrice,
+  calculateSubscriptionPriceQuote,
   formatMonthlyPriceInput,
   type BillingCatalog,
   type BillingVariant,
@@ -20,6 +21,7 @@ const INITIAL_STATE: PlatformActionState = { ok: false, message: "" };
 const CONTROL_CLASS = "mt-1 w-full rounded-xl border border-line-strong bg-raised px-3 py-2.5 text-sm font-semibold text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-60";
 const FEATURE_LIST = [
   "Owner workspace and business page",
+  "One included active branch",
   "POS, inventory, and branch workflows",
   "Staff access and role controls",
   "Sales reports and export-ready records",
@@ -30,9 +32,11 @@ const FEATURE_LIST = [
 export function BillingCatalogEditor({ catalog }: { catalog: BillingCatalog }) {
   const [state, formAction, pending] = useActionState(saveBillingCatalog, INITIAL_STATE);
   const [monthlyPrice, setMonthlyPrice] = useState(formatMonthlyPriceInput(catalog.monthlyPriceCentavos));
+  const [additionalBranchPrice, setAdditionalBranchPrice] = useState(formatMonthlyPriceInput(catalog.additionalBranchPriceCentavos));
   const [previewMode, setPreviewMode] = useState<PreviewMode>("monthly");
   const [variants, setVariants] = useState<DraftVariant[]>(() => catalog.variants.map((variant, index) => ({ ...variant, localKey: variant.id ?? `new-${index}` })));
   const monthlyPriceCentavos = parseClientPrice(monthlyPrice) ?? catalog.monthlyPriceCentavos;
+  const additionalBranchPriceCentavos = parseClientPrice(additionalBranchPrice) ?? catalog.additionalBranchPriceCentavos;
   const monthlyVariant = variants.find((variant) => variant.intervalUnit === "month") ?? variants[0];
   const annualVariants = variants.filter((variant) => variant.intervalUnit === "year");
   const annualPreview = annualVariants.find((variant) => variant.isActive) ?? annualVariants[0];
@@ -89,7 +93,7 @@ export function BillingCatalogEditor({ catalog }: { catalog: BillingCatalog }) {
           <div>
             <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Subscription catalog</p>
             <h2 id="current-plan-structure-heading" className="mt-1 text-2xl font-extrabold tracking-[-0.04em] text-ink sm:text-[28px]">Current plan structure</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">Shape the plans customers see, keep monthly as the base offer, and use annual commitments to create a clear savings story.</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">Shape the plans customers see, keep the first branch in the base offer, and price every additional active branch consistently.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs font-extrabold">
             <span className="inline-flex items-center gap-2 rounded-full border border-line bg-raised px-3 py-2 text-ink-muted"><span className="grid h-5 w-5 place-items-center rounded-full bg-primary-soft text-primary"><AdminIcon name="eye" size={12} /></span>Customer visibility</span>
@@ -149,6 +153,13 @@ export function BillingCatalogEditor({ catalog }: { catalog: BillingCatalog }) {
               </div>
             </div>
             <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+              <SettingCopy label="Additional active branch price" detail={`Monthly charge for each active branch beyond the ${catalog.includedBranchCount} included branch${catalog.includedBranchCount === 1 ? "" : "es"}.`} />
+              <div className="relative w-full sm:max-w-[190px]">
+                <span className="pointer-events-none absolute inset-y-0 left-3 grid place-items-center text-sm font-extrabold text-ink-muted">₱</span>
+                <input id="platform-additional-branch-price" name="additional_branch_price" type="text" inputMode="decimal" value={additionalBranchPrice} onChange={(event) => setAdditionalBranchPrice(event.target.value)} className={`${CONTROL_CLASS} pl-7`} disabled={!catalog.schemaAvailable || pending} aria-describedby="monthly-price-help" />
+              </div>
+            </div>
+            <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
               <SettingCopy label="Annual discount strategy" detail="Longer commitments can receive a deeper discount." />
               <span className="rounded-xl border border-line bg-surface px-3 py-2.5 text-right text-xs font-extrabold text-ink">Duration-based savings</span>
             </div>
@@ -164,14 +175,15 @@ export function BillingCatalogEditor({ catalog }: { catalog: BillingCatalog }) {
               <div className="mt-4 divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
                 {variants.map((variant, index) => <BillingOptionRow key={variant.localKey} variant={variant} index={index} catalog={catalog} monthlyPriceCentavos={monthlyPriceCentavos} pending={pending} updateVariant={updateVariant} />)}
               </div>
-              {!catalog.schemaAvailable && <p role="status" className="mt-3 rounded-xl border border-warning/35 bg-warning/10 px-3 py-2.5 text-xs font-semibold leading-5 text-ink">Pricing controls are previewing the default catalog. Apply migration <code className="font-extrabold">0027_platform_operations.sql</code> to save changes.</p>}
+              {!catalog.schemaAvailable && <p role="status" className="mt-3 rounded-xl border border-warning/35 bg-warning/10 px-3 py-2.5 text-xs font-semibold leading-5 text-ink">Pricing controls are previewing the default catalog. Apply migration <code className="font-extrabold">0068_branch_billing_pricing.sql</code> to save changes.</p>}
             </div>
           </div>
 
-          <p id="monthly-price-help" className="border-t border-line px-4 py-3 text-xs leading-5 text-ink-muted sm:px-5">Price edits apply to new checkouts. Existing PayMongo subscriptions stay attached to their original provider plan until a migration is explicitly designed.</p>
+          <p id="monthly-price-help" className="border-t border-line px-4 py-3 text-xs leading-5 text-ink-muted sm:px-5">The base price includes {catalog.includedBranchCount} active branch. Additional branches use the add-on price above. Catalog and base-price edits apply to new quotes; a customer&apos;s explicit branch change schedules the shared branch-aware price for the next cycle.</p>
         </section>
 
         <aside className="space-y-4">
+          <BranchPricingPreview additionalBranchPriceCentavos={additionalBranchPriceCentavos} catalog={catalog} monthlyPriceCentavos={monthlyPriceCentavos} />
           <section className="rounded-[18px] border border-line bg-raised/55 p-4 sm:p-5" aria-labelledby="discount-structure-heading">
             <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-accent">Savings logic</p>
             <h3 id="discount-structure-heading" className="mt-1 text-lg font-extrabold tracking-[-0.025em] text-ink">Annual discount structure</h3>
@@ -208,7 +220,7 @@ export function BillingCatalogEditor({ catalog }: { catalog: BillingCatalog }) {
 
       {state.message && <p role={state.ok ? "status" : "alert"} className={`mx-4 mb-4 rounded-xl border px-4 py-3 text-sm font-semibold sm:mx-6 ${state.ok ? "border-success/25 bg-success/10 text-success" : "border-danger/25 bg-danger-soft text-danger"}`}>{state.message}</p>}
       <div className="flex flex-col gap-3 border-t border-line bg-panel/55 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-        <div className="flex items-start gap-2.5 text-xs leading-5 text-ink-muted"><span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border border-primary/30 text-primary"><AdminIcon name="history" size={12} /></span><p><strong className="text-ink">Changes are applied to new checkouts.</strong><br />Existing subscribers are not repriced automatically.</p></div>
+        <div className="flex items-start gap-2.5 text-xs leading-5 text-ink-muted"><span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border border-primary/30 text-primary"><AdminIcon name="history" size={12} /></span><p><strong className="text-ink">New quotes use the saved base and branch prices.</strong><br />Base-price edits do not reprice existing subscribers; branch changes schedule the updated add-on plan.</p></div>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Link href="#discount-structure-heading" className="inline-flex min-h-10 items-center justify-center rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-xs font-extrabold text-primary transition hover:border-primary hover:bg-primary-soft">Review discounts</Link>
           <button type="submit" disabled={!catalog.schemaAvailable || pending} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50">{pending ? "Saving pricing…" : "Save changes"}<AdminIcon name="check" size={14} /></button>
@@ -216,6 +228,33 @@ export function BillingCatalogEditor({ catalog }: { catalog: BillingCatalog }) {
       </div>
     </form>
   );
+}
+
+function BranchPricingPreview({ catalog, monthlyPriceCentavos, additionalBranchPriceCentavos }: { catalog: BillingCatalog; monthlyPriceCentavos: number; additionalBranchPriceCentavos: number }) {
+  const branchExamples = [catalog.includedBranchCount, catalog.includedBranchCount + 1, catalog.includedBranchCount + 2];
+
+  return <section className="rounded-[18px] border border-accent/25 bg-accent/5 p-4 sm:p-5" aria-labelledby="branch-pricing-preview-heading">
+    <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-accent">Branch add-on</p>
+    <h3 id="branch-pricing-preview-heading" className="mt-1 text-lg font-extrabold tracking-[-0.025em] text-ink">Scale by active branch</h3>
+    <p className="mt-1 text-xs leading-5 text-ink-muted">The first {catalog.includedBranchCount} active branch{catalog.includedBranchCount === 1 ? " is" : "es are"} included. Every branch after that adds {formatPeso(additionalBranchPriceCentavos)} per month.</p>
+    <div className="mt-4 divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
+      {branchExamples.map((activeBranchCount) => {
+        const quote = calculateSubscriptionPriceQuote({
+          monthlyPriceCentavos,
+          additionalBranchPriceCentavos,
+          includedBranchCount: catalog.includedBranchCount,
+          activeBranchCount,
+          intervalUnit: "month",
+          intervalCount: 1,
+          discountPercent: 0,
+        });
+        return <div key={activeBranchCount} className="flex items-center justify-between gap-3 px-3 py-3">
+          <div><p className="text-xs font-extrabold text-ink">{activeBranchCount} active branch{activeBranchCount === 1 ? "" : "es"}</p><p className="mt-0.5 text-[11px] font-semibold text-ink-muted">{quote.billableBranchCount === 0 ? "Included in base" : `+${quote.billableBranchCount} paid add-on${quote.billableBranchCount === 1 ? "" : "s"}`}</p></div>
+          <p className="text-right text-sm font-extrabold tabular-nums text-primary">{formatPeso(quote.monthlyTotalCentavos)}<span className="ml-1 text-[10px] font-bold text-ink-muted">/mo</span></p>
+        </div>;
+      })}
+    </div>
+  </section>;
 }
 
 function PlanCard({ variant, monthlyPriceCentavos, featured = false, onEdit }: { variant: BillingVariant | undefined; monthlyPriceCentavos: number; featured?: boolean; onEdit: () => void }) {
