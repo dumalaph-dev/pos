@@ -13,9 +13,7 @@ const NAV_LINKS: Array<{ section?: string; href?: string; label: string }> = [
   { section: "features", label: "Features" },
   { section: "playground", label: "Try the POS" },
   { section: "workspace", label: "Workspace" },
-  // The standalone page, not the landing section: it is the page built to rank
-  // for pricing queries, and every internal link to it counts.
-  { href: "/pricing", label: "Pricing" },
+  { section: "pricing", label: "Pricing" },
   { section: "faq", label: "FAQ" },
 ];
 

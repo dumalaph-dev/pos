@@ -5,6 +5,7 @@ import Link from "next/link";
 import LandingFooter from "@/components/landing/LandingFooter";
 import LandingHeader from "@/components/landing/LandingHeader";
 import LandingPricing from "@/components/landing/LandingPricing";
+import ScrollReveal from "@/components/landing/ScrollReveal";
 import { formatPeso } from "@/lib/money";
 import { socialMetadata } from "@/lib/page-metadata";
 import {
@@ -139,11 +140,15 @@ export default async function PricingPage() {
 
   return (
     <main className="lp min-h-screen bg-[#f8f3eb] text-[#102d21]">
+      <noscript>
+        <style nonce={nonce}>{`.lp [data-lp-reveal]{opacity:1;transform:none}`}</style>
+      </noscript>
       <script
         nonce={nonce}
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
       />
+      <ScrollReveal />
       <LandingHeader />
 
       {/* Hero ------------------------------------------------------------- */}

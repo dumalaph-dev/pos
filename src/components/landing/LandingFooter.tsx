@@ -48,7 +48,7 @@ export default function LandingFooter({
             <div>
               <p className="font-black uppercase tracking-[0.16em] text-[#173a2b]">Learn</p>
               <ul className="mt-3 grid gap-2 text-[#708076]">
-                <li><Link href="/pricing" className="lp-navlink hover:text-[#b18448]">Pricing</Link></li>
+                <li><SectionLink section="pricing" onLandingPage={onLandingPage} className="lp-navlink hover:text-[#b18448]">Pricing</SectionLink></li>
                 <li><SectionLink section="how-it-works" onLandingPage={onLandingPage} className="lp-navlink hover:text-[#b18448]">How it works</SectionLink></li>
                 <li><SectionLink section="for-teams" onLandingPage={onLandingPage} className="lp-navlink hover:text-[#b18448]">For teams</SectionLink></li>
                 <li><SectionLink section="faq" onLandingPage={onLandingPage} className="lp-navlink hover:text-[#b18448]">FAQ</SectionLink></li>
