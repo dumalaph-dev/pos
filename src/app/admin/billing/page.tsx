@@ -13,7 +13,7 @@ import { readCurrentComplimentaryAccess } from "@/lib/platform-access-server";
 import { calculateCatalogVariantPriceQuote, DEFAULT_ADDITIONAL_BRANCH_PRICE_CENTAVOS, DEFAULT_INCLUDED_BRANCH_COUNT, DEFAULT_MONTHLY_PRICE_CENTAVOS, DEFAULT_PLATFORM_POLICIES, hasSubscriptionPaymentMethod, isPolicyGateOpen, readPolicyNumber, type BillingCatalog, type BillingVariant } from "@/lib/platform-operations";
 import { payMongoConfiguration, readPayMongoSubscriptionReadiness, readPlatformOperations } from "@/lib/platform-operations-server";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
-import { formatTrialRemaining, readTrialLifecycle, type TrialLifecycle } from "@/lib/trial";
+import { readTrialLifecycle, type TrialLifecycle } from "@/lib/trial";
 import TrialCountdown from "./TrialCountdown";
 import TrialFeedbackForm from "./TrialFeedbackForm";
 import SubscriptionCheckout from "./SubscriptionCheckout";
@@ -279,62 +279,99 @@ function CurrentPlanCard({
   const currentQuote = variant ? calculateCatalogVariantPriceQuote(catalog, variant, activeBranches) : null;
   const totalPriceLabel = currentQuote ? formatPeso(currentQuote.termTotalCentavos) : monthlyPriceLabel;
   const monthlyEquivalentLabel = currentQuote ? formatPeso(currentQuote.monthlyEquivalentCentavos) : monthlyPriceLabel;
-  const variantLabel = variant?.label ?? "Monthly";
-  const planCadence = variant?.intervalUnit === "year" ? `Paid for ${variant.intervalCount} ${variant.intervalCount === 1 ? "year" : "years"}` : "Billed monthly";
   const timingLabel = isComplimentary ? "Access through" : trialExpired ? "Trial ended" : isTrialing ? "Trial ends" : isRecurring ? "Next billing" : "Access through";
   const timingValue = isComplimentary
     ? complimentaryAccessUntil ? formatBillingDate(complimentaryAccessUntil) : "Grant end date"
     : isTrialing
     ? trial.endsAt ? formatBillingDate(trial.endsAt) : "14 days included"
     : currentPeriodEnd ? formatBillingDate(currentPeriodEnd) : "Not scheduled";
+  const branchDirectoryTotal = Math.max(totalBranches, activeBranches, 1);
+  const branchCoverage = Math.min(Math.round((activeBranches / branchDirectoryTotal) * 100), 100);
+  const includedBranches = Math.min(activeBranches, catalog.includedBranchCount);
+  const addOnBranches = Math.max(activeBranches - catalog.includedBranchCount, 0);
+  const branchBillingDetail = addOnBranches > 0
+    ? `${includedBranches} included · ${addOnBranches} add-on${addOnBranches === 1 ? "" : "s"}`
+    : "Included with Premium";
   const cardTone = isActive || isComplimentary
-    ? "border-primary/20 bg-primary text-primary-fg shadow-[var(--shadow-pop)]"
+    ? "border-primary/20 bg-gradient-to-br from-primary via-primary to-primary-hover text-primary-fg shadow-[var(--shadow-pop)]"
     : isTrial
       ? "border-accent/30 bg-secondary text-ink shadow-[var(--shadow-card)]"
       : "border-line bg-surface text-ink shadow-[var(--shadow-card)]";
   const mutedTone = isActive || isComplimentary ? "text-primary-fg/72" : "text-ink-muted";
 
   return (
-    <section className={`relative mt-5 overflow-hidden rounded-card border ${cardTone}`} aria-labelledby="current-plan-heading">
-      <div className="grid gap-5 p-4 sm:p-5 lg:grid-cols-[minmax(0,1.12fr)_minmax(260px,0.88fr)]">
+    <section className={`relative mt-5 overflow-hidden rounded-[22px] border ${cardTone}`} aria-labelledby="current-plan-heading">
+      {(isActive || isComplimentary) && <>
+        <div aria-hidden="true" className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-accent/15 blur-3xl" />
+        <div aria-hidden="true" className="pointer-events-none absolute bottom-0 left-0 h-px w-2/3 bg-gradient-to-r from-accent/75 to-transparent" />
+      </>}
+      <div className="relative grid gap-0 lg:grid-cols-[minmax(0,1.12fr)_minmax(280px,0.88fr)]">
         <div>
-          <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="p-5 sm:p-6 lg:p-7">
+            <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-center gap-3">
-              <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${isActive ? "bg-accent text-accent-fg" : "bg-primary text-primary-fg"}`}><AdminIcon name="wallet" size={19} /></span>
+              <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${isActive || isComplimentary ? "bg-accent text-accent-fg shadow-[0_8px_20px_rgba(188,150,87,0.24)]" : "bg-primary text-primary-fg"}`}><AdminIcon name="wallet" size={20} /></span>
               <div>
                 <p className={`text-xs font-extrabold uppercase tracking-[0.16em] ${isActive ? "text-primary-fg/65" : "text-accent"}`}>Current plan</p>
                 <h2 id="current-plan-heading" className="mt-1 text-2xl font-extrabold tracking-[-0.04em]">{title}</h2>
               </div>
             </div>
-            <span className={`rounded-pill px-3 py-1.5 text-xs font-extrabold ${isActive || isComplimentary ? "bg-primary-fg/15 text-primary-fg" : isTrial ? "bg-primary/10 text-primary" : "bg-warning/15 text-ink"}`}>{statusLabel}</span>
+              <span className={`rounded-pill px-3 py-1.5 text-xs font-extrabold ${isActive || isComplimentary ? "bg-primary-fg/15 text-primary-fg ring-1 ring-inset ring-primary-fg/15" : isTrial ? "bg-primary/10 text-primary" : "bg-warning/15 text-ink"}`}>{statusLabel}</span>
+            </div>
+
+            <p className={`mt-4 max-w-xl text-sm leading-6 ${mutedTone}`}>{summary}</p>
+
+            <div className={`mt-6 grid gap-3 border-t pt-5 sm:grid-cols-3 ${isActive || isComplimentary ? "border-primary-fg/15" : "border-line"}`}>
+              <BranchUsageMetric activeBranches={activeBranches} totalBranches={totalBranches} directoryTotal={branchDirectoryTotal} coverage={branchCoverage} detail={branchBillingDetail} inverse={isActive || isComplimentary} />
+              <PlanMetric inverse={isActive || isComplimentary} label={isComplimentary ? "Plan" : isTrialing ? "Starting price" : "Monthly equivalent"} value={isComplimentary ? "Premium" : isTrialing ? monthlyPriceLabel : monthlyEquivalentLabel} detail={isComplimentary ? "No provider charge" : isTrialing ? "Monthly billing" : variant?.discountPercent ? `${variant.discountPercent}% plan savings` : "Premium rate"} />
+              <PlanMetric inverse={isActive || isComplimentary} label={timingLabel} value={timingValue} detail={isComplimentary ? "Subscribe before this date" : isTrialing ? "All features included" : isRecurring ? "Automatic renewal" : "Renew before this date"} />
+            </div>
+
+            {isTrialing && trial.known && trial.endsAt && trial.remainingMs !== null && <TrialCountdown endsAt={trial.endsAt} initialRemainingMs={trial.remainingMs} inverse={isActive} />}
+
+            {isActive && <div className={`mt-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-5 ${mutedTone}`}><span>Current plan total</span><strong className="text-primary-fg">{totalPriceLabel}</strong><span>{variant?.intervalUnit === "year" ? `for ${variant.intervalCount} ${variant.intervalCount === 1 ? "year" : "years"}` : "per month"}</span><span className="text-primary-fg/40" aria-hidden="true">·</span><span>{activeBranches} active branch{activeBranches === 1 ? "" : "es"}</span></div>}
+            {isComplimentary && <p className={`mt-5 text-xs leading-5 ${mutedTone}`}>Complimentary access covers {activeBranches} of {totalBranches} active branches. Subscription checkout remains available before the grant ends.</p>}
           </div>
-
-          <p className={`mt-3 max-w-xl text-sm leading-5 ${mutedTone}`}>{summary}</p>
-
-          <div className={`mt-4 grid gap-2 border-t pt-3 sm:grid-cols-3 ${isActive || isComplimentary ? "border-primary-fg/15" : "border-line"}`}>
-            <PlanMetric inverse={isActive || isComplimentary} label={isComplimentary ? "Access" : isTrialing ? "Trial remaining" : "Plan"} value={isComplimentary ? "Complimentary" : isTrialing ? formatTrialRemaining(trial.remainingMs) : variantLabel} detail={isComplimentary ? "Platform grant" : isTrialing ? "Included branch covered" : planCadence} />
-            <PlanMetric inverse={isActive || isComplimentary} label={isComplimentary ? "Plan" : isTrialing ? "Starting price" : "Monthly equivalent"} value={isComplimentary ? "Premium" : isTrialing ? monthlyPriceLabel : monthlyEquivalentLabel} detail={isComplimentary ? "No provider charge" : isTrialing ? "Monthly billing" : variant?.discountPercent ? `${variant.discountPercent}% plan savings` : "Premium rate"} />
-            <PlanMetric inverse={isActive || isComplimentary} label={timingLabel} value={timingValue} detail={isComplimentary ? "Subscribe before this date" : isTrialing ? "All features included" : isRecurring ? "Automatic renewal" : "Renew before this date"} />
-          </div>
-
-          {isTrialing && trial.known && trial.endsAt && trial.remainingMs !== null && <TrialCountdown endsAt={trial.endsAt} initialRemainingMs={trial.remainingMs} inverse={isActive} />}
-
-          {isActive && <p className={`mt-5 text-xs leading-5 ${mutedTone}`}>Current total: <strong className={isActive ? "text-primary-fg" : "text-ink"}>{totalPriceLabel}</strong>{variant?.intervalUnit === "year" ? ` for ${variant.intervalCount} ${variant.intervalCount === 1 ? "year" : "years"}` : " per month"} · {activeBranches} of {totalBranches} branches active.</p>}
-          {isComplimentary && <p className={`mt-5 text-xs leading-5 ${mutedTone}`}>Complimentary access covers {activeBranches} of {totalBranches} active branches. Subscription checkout remains available before the grant ends.</p>}
         </div>
 
-        <aside className="rounded-xl border border-primary/10 bg-primary/5 p-4" aria-label="Premium plan features">
-          <div className="flex items-center justify-between gap-3">
-            <p className={`text-xs font-extrabold uppercase tracking-[0.14em] ${isActive || isComplimentary ? "text-primary-fg/65" : "text-accent"}`}>Included with Premium</p>
-            <AdminIcon name="star" size={17} />
+        <aside className={`border-t p-5 sm:p-6 lg:border-l lg:border-t-0 lg:p-7 ${isActive || isComplimentary ? "border-primary-fg/15" : "border-primary/10"}`} aria-label="Premium plan features">
+          <div className={`rounded-2xl border p-4 sm:p-5 ${isActive || isComplimentary ? "border-primary-fg/12 bg-primary-fg/10" : "border-primary/10 bg-primary/5"}`}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className={`text-xs font-extrabold uppercase tracking-[0.14em] ${isActive || isComplimentary ? "text-primary-fg/65" : "text-accent"}`}>Included with Premium</p>
+                <p className={`mt-1 text-sm font-extrabold ${isActive || isComplimentary ? "text-primary-fg" : "text-ink"}`}>Everything your team needs to operate.</p>
+              </div>
+              <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${isActive || isComplimentary ? "bg-accent text-accent-fg" : "bg-primary text-primary-fg"}`}><AdminIcon name="star" size={17} /></span>
+            </div>
+            <ul className={`mt-4 grid gap-2.5 text-sm leading-5 ${mutedTone}`}>
+              {plan.features.map((feature) => <li key={feature} className="flex gap-2.5"><AdminIcon name="check" size={16} /><span>{feature}</span></li>)}
+            </ul>
           </div>
-          <ul className={`mt-3 grid gap-2 text-sm leading-5 ${mutedTone}`}>
-            {plan.features.map((feature) => <li key={feature} className="flex gap-2.5"><AdminIcon name="check" size={16} /><span>{feature}</span></li>)}
-          </ul>
         </aside>
       </div>
     </section>
   );
+}
+
+function BranchUsageMetric({ activeBranches, totalBranches, directoryTotal, coverage, detail, inverse }: { activeBranches: number; totalBranches: number; directoryTotal: number; coverage: number; detail: string; inverse: boolean }) {
+  const labelTone = inverse ? "text-primary-fg/70" : "text-accent";
+  const detailTone = inverse ? "text-primary-fg/65" : "text-ink-muted";
+  const shellTone = inverse ? "border-accent/40 bg-accent/12" : "border-accent/30 bg-accent/10";
+  const iconTone = inverse ? "bg-accent text-accent-fg" : "bg-accent/15 text-accent";
+
+  return <div className={`rounded-2xl border p-3.5 sm:p-4 ${shellTone}`}>
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className={`text-[10px] font-extrabold uppercase tracking-[0.12em] ${labelTone}`}>Branches active</p>
+        <p className="mt-1 flex items-baseline gap-1 whitespace-nowrap"><strong className="text-2xl font-extrabold tracking-[-0.04em]">{activeBranches}</strong><span className={`text-sm font-bold ${detailTone}`}>/ {totalBranches}</span></p>
+      </div>
+      <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl ${iconTone}`}><AdminIcon name="branches" size={16} /></span>
+    </div>
+    <div className={`mt-3 h-1.5 overflow-hidden rounded-full ${inverse ? "bg-primary-fg/15" : "bg-accent/15"}`} role="progressbar" aria-label={`${activeBranches} of ${directoryTotal} branches active`} aria-valuemin={0} aria-valuemax={directoryTotal} aria-valuenow={Math.min(activeBranches, directoryTotal)}>
+      <span className="block h-full rounded-full bg-accent transition-[width] duration-500" style={{ width: `${coverage}%` }} />
+    </div>
+    <p className={`mt-2 truncate text-[10px] font-semibold ${detailTone}`}>{detail}</p>
+  </div>;
 }
 
 function TrialReminder({ trial, monthlyPriceLabel }: { trial: TrialLifecycle; monthlyPriceLabel: string }) {
