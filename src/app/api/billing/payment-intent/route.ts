@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
     const organizationResult = await admin
       .from("organizations")
-      .select("id, subscription_status, subscription_provider_payment_intent_id, subscription_provider_subscription_id")
+      .select("id, subscription_status, subscription_provider_payment_intent_id, subscription_provider_subscription_id, subscription_pending_branch_count")
       .eq("id", profile.org_id)
       .maybeSingle();
     if (organizationResult.error) return responseError("Apply Supabase migrations 0025 and 0027 before checking payment status.", 503);
@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
       subscription_status: string | null;
       subscription_provider_payment_intent_id: string | null;
       subscription_provider_subscription_id: string | null;
+      subscription_pending_branch_count: number | null;
     } | null;
     if (!organization || organization.subscription_provider_payment_intent_id !== paymentIntentId) {
       return responseError("That payment intent is not associated with this organization.", 404);
@@ -42,13 +43,28 @@ export async function GET(request: NextRequest) {
     const paymentIntent = await getPayMongoPaymentIntent(paymentIntentId);
     const status = readPayMongoString(paymentIntent.attributes, "status") || "awaiting_payment_method";
     if (status === "succeeded") {
+      const activeBranchesResult = await admin
+        .from("stores")
+        .select("id")
+        .eq("org_id", organization.id)
+        .eq("is_active", true);
+      if (activeBranchesResult.error) throw new Error("The payment was confirmed but the active branch entitlement could not be verified.");
+      const activeBranchCount = Math.max(activeBranchesResult.data?.length ?? 0, 1);
+      const paidBranchEntitlement = Math.max(Number(organization.subscription_pending_branch_count) || activeBranchCount, activeBranchCount);
       if (organization.subscription_status !== "active") {
         const update = await admin
           .from("organizations")
-          .update({ subscription_status: "active", subscription_updated_at: new Date().toISOString() })
+          .update({ subscription_status: "active", subscription_entitled_branch_count: paidBranchEntitlement, subscription_pending_branch_count: null, subscription_updated_at: new Date().toISOString() })
           .eq("id", organization.id)
           .eq("subscription_provider_payment_intent_id", paymentIntentId);
         if (update.error) throw new Error("The payment was confirmed but the organization billing record could not be updated.");
+      } else {
+        const entitlement = await admin
+          .from("organizations")
+          .update({ subscription_entitled_branch_count: paidBranchEntitlement, subscription_pending_branch_count: null, subscription_updated_at: new Date().toISOString() })
+          .eq("id", organization.id)
+          .eq("subscription_provider_payment_intent_id", paymentIntentId);
+        if (entitlement.error) throw new Error("The payment was confirmed but the paid branch entitlement could not be updated.");
       }
       invalidateAdminProfile(user.id);
       if (organization.subscription_provider_subscription_id) {

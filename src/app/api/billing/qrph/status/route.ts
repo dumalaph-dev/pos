@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
         paymentIntentId: payment.paymentIntentId,
         accessActivated: true,
         periodEnd: activated.periodEnd,
+        additionalBranch: metadata.purpose === "additional_branch",
       });
     }
 

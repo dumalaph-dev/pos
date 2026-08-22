@@ -215,7 +215,7 @@ export async function updateBranch(formData: FormData) {
   const branchCountDelta = isActive === current.is_active ? 0 : isActive ? 1 : -1;
   const admin = createAdminClient();
   const billingPreparation = branchCountDelta === 0
-    ? { ok: true as const, change: { status: "unchanged" as const, organizationId: actor.orgId, subscriptionId: null, previousPlanId: null, nextPlanId: null, currentActiveBranchCount: 0, nextActiveBranchCount: 0 } }
+    ? { ok: true as const, change: { status: "unchanged" as const, organizationId: actor.orgId, subscriptionId: null, previousPlanId: null, nextPlanId: null, currentActiveBranchCount: 0, nextActiveBranchCount: 0, previousEntitledBranchCount: 1, nextEntitledBranchCount: 1 } }
     : await prepareBranchBillingChange(admin, actor.orgId, branchCountDelta);
   if (!billingPreparation.ok) branchRedirect(billingPreparation.message, branchId, billingPreparation.code === "payment_required" ? "required" : "");
 

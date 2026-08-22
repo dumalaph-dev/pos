@@ -2,7 +2,7 @@ import { normalizeSubscriptionStatus } from "@/lib/billing";
 import { readCurrentComplimentaryAccess } from "@/lib/platform-access-server";
 import {
   DEFAULT_INCLUDED_BRANCH_COUNT,
-  requiresAdditionalBranchPayment,
+  decideBranchActivation,
 } from "@/lib/branch-billing-pricing";
 import { createAdminClient } from "@/lib/employee-auth";
 import { calculateCatalogVariantPriceQuote } from "@/lib/platform-operations";
@@ -21,6 +21,8 @@ type OrganizationBillingRecord = {
   subscription_billing_variant_id: string | null;
   subscription_provider_plan_id: string | null;
   subscription_provider_subscription_id: string | null;
+  subscription_current_period_end: string | null;
+  subscription_entitled_branch_count: number | null;
 };
 
 export type BranchBillingChange = {
@@ -31,6 +33,8 @@ export type BranchBillingChange = {
   nextPlanId: string | null;
   currentActiveBranchCount: number;
   nextActiveBranchCount: number;
+  previousEntitledBranchCount: number;
+  nextEntitledBranchCount: number;
 };
 
 export type BranchBillingFailureCode = "payment_required" | "billing_unavailable";
@@ -54,7 +58,7 @@ export async function prepareBranchBillingChange(
   const [organizationResult, branchesResult] = await Promise.all([
     admin
       .from("organizations")
-      .select("subscription_status, subscription_billing_mode, subscription_billing_variant_id, subscription_provider_plan_id, subscription_provider_subscription_id")
+      .select("subscription_status, subscription_billing_mode, subscription_billing_variant_id, subscription_provider_plan_id, subscription_provider_subscription_id, subscription_current_period_end, subscription_entitled_branch_count")
       .eq("id", organizationId)
       .maybeSingle(),
     admin
@@ -75,6 +79,17 @@ export async function prepareBranchBillingChange(
   const nextActiveBranchCount = currentActiveBranchCount + branchCountDelta;
   if (nextActiveBranchCount < 1) return { ok: false, message: "Keep at least one active branch in your organization." };
 
+  const subscriptionStatus = normalizeSubscriptionStatus(organization.subscription_status);
+  const temporaryAccessCurrent = subscriptionStatus === "active"
+    && organization.subscription_billing_mode === "temporary_qrph"
+    && isBillingPeriodCurrent(organization.subscription_current_period_end);
+  const paidAccessMode = temporaryAccessCurrent
+    ? "prepaid" as const
+    : subscriptionStatus === "active" && Boolean(organization.subscription_provider_subscription_id)
+      ? "recurring" as const
+      : "none" as const;
+  const paidBranchEntitlement = Math.max(Number(organization.subscription_entitled_branch_count) || DEFAULT_INCLUDED_BRANCH_COUNT, DEFAULT_INCLUDED_BRANCH_COUNT);
+
   const unchanged = (status: BranchBillingChange["status"] = "unchanged"): BranchBillingResult => ({
     ok: true,
     change: {
@@ -85,19 +100,17 @@ export async function prepareBranchBillingChange(
       nextPlanId: organization.subscription_provider_plan_id,
       currentActiveBranchCount,
       nextActiveBranchCount,
+      previousEntitledBranchCount: paidBranchEntitlement,
+      nextEntitledBranchCount: paidBranchEntitlement,
     },
   });
 
-  const subscriptionStatus = normalizeSubscriptionStatus(organization.subscription_status);
-  const hasPaidAccess = subscriptionStatus === "active"
-    && (Boolean(organization.subscription_provider_subscription_id) || organization.subscription_billing_mode === "temporary_qrph");
   let operations: Awaited<ReturnType<typeof readPlatformOperations>> | null = null;
 
-  // Trial, paused, and otherwise unconnected organizations may keep their
-  // included branch, but an additional active branch must be covered before
-  // the branch row is written. Complimentary platform grants are an explicit
-  // exception because they already carry Premium access.
-  if (branchCountDelta === 1 && nextActiveBranchCount > DEFAULT_INCLUDED_BRANCH_COUNT && !hasPaidAccess) {
+  // Trial, unpaid, and active prepaid organizations must have the next branch
+  // covered before the row is written. Recurring subscriptions can schedule
+  // the provider price change, while complimentary grants remain exempt.
+  if (branchCountDelta === 1) {
     const [candidateOperations, complimentaryAccess] = await Promise.all([
       readPlatformOperations(admin),
       readCurrentComplimentaryAccess(admin, organizationId),
@@ -107,19 +120,27 @@ export async function prepareBranchBillingChange(
       ? candidateOperations.catalog.includedBranchCount
       : DEFAULT_INCLUDED_BRANCH_COUNT;
 
-    if (requiresAdditionalBranchPayment({
+    const activationDecision = decideBranchActivation({
       branchCountDelta,
       nextActiveBranchCount,
-      includedBranchCount,
-      hasPaidAccess,
+      paidBranchEntitlement: paidAccessMode === "none"
+        ? includedBranchCount
+        : Math.max(paidBranchEntitlement, includedBranchCount),
+      paidAccessMode,
       hasComplimentaryAccess: Boolean(complimentaryAccess),
-    })) {
+    });
+
+    if (activationDecision === "payment_required") {
       if (!candidateOperations.catalog.schemaAvailable) {
         return { ok: false, code: "billing_unavailable", message: "The branch pricing catalog is not available. Apply the latest billing migrations before adding another active branch." };
       }
 
-      const branchLabel = `${includedBranchCount} active branch${includedBranchCount === 1 ? "" : "es"}`;
-      return { ok: false, code: "payment_required", message: `Your current access includes ${branchLabel}. Complete payment in Billing & Plan before adding another active branch.` };
+      const coveredBranchCount = paidAccessMode === "prepaid" ? paidBranchEntitlement : includedBranchCount;
+      const branchLabel = `${coveredBranchCount} active branch${coveredBranchCount === 1 ? "" : "es"}`;
+      const detail = paidAccessMode === "prepaid"
+        ? "Pay for the additional branch in Billing & Plan before creating it."
+        : `Your current access includes ${branchLabel}. Complete payment in Billing & Plan before adding another active branch.`;
+      return { ok: false, code: "payment_required", message: detail };
     }
   }
 
@@ -154,7 +175,12 @@ export async function prepareBranchBillingChange(
     await changePayMongoSubscriptionPlan(organization.subscription_provider_subscription_id, plan.id);
     const localUpdate = await admin
       .from("organizations")
-      .update({ subscription_billing_variant_id: variant.id, subscription_provider_plan_id: plan.id, subscription_updated_at: new Date().toISOString() })
+      .update({
+        subscription_billing_variant_id: variant.id,
+        subscription_provider_plan_id: plan.id,
+        subscription_entitled_branch_count: nextActiveBranchCount,
+        subscription_updated_at: new Date().toISOString(),
+      })
       .eq("id", organizationId);
     if (localUpdate.error) {
       await restoreBranchBillingPlan(admin, {
@@ -165,6 +191,8 @@ export async function prepareBranchBillingChange(
         nextPlanId: plan.id,
         currentActiveBranchCount,
         nextActiveBranchCount,
+        previousEntitledBranchCount: paidBranchEntitlement,
+        nextEntitledBranchCount: nextActiveBranchCount,
       });
       return { ok: false, message: "The provider price change could not be recorded locally. The branch was not changed." };
     }
@@ -179,6 +207,8 @@ export async function prepareBranchBillingChange(
         nextPlanId: plan.id,
         currentActiveBranchCount,
         nextActiveBranchCount,
+        previousEntitledBranchCount: paidBranchEntitlement,
+        nextEntitledBranchCount: nextActiveBranchCount,
       },
     };
   } catch (error) {
@@ -193,7 +223,11 @@ export async function restoreBranchBillingPlan(admin: PlatformAdminClient | null
     await changePayMongoSubscriptionPlan(change.subscriptionId, change.previousPlanId);
     const localUpdate = await admin
       .from("organizations")
-      .update({ subscription_provider_plan_id: change.previousPlanId, subscription_updated_at: new Date().toISOString() })
+      .update({
+        subscription_provider_plan_id: change.previousPlanId,
+        subscription_entitled_branch_count: change.previousEntitledBranchCount,
+        subscription_updated_at: new Date().toISOString(),
+      })
       .eq("id", change.organizationId);
     return !localUpdate.error;
   } catch (error) {
@@ -205,4 +239,10 @@ export async function restoreBranchBillingPlan(admin: PlatformAdminClient | null
 function providerErrorMessage(error: unknown) {
   if (error instanceof PayMongoApiError) return "The billing provider could not schedule the branch price change. Try again or contact support.";
   return error instanceof Error ? error.message : "The branch billing change could not be prepared.";
+}
+
+function isBillingPeriodCurrent(value: string | null) {
+  if (!value) return false;
+  const end = new Date(value);
+  return !Number.isNaN(end.getTime()) && end.getTime() > Date.now();
 }

@@ -12,6 +12,7 @@
     "test:referrals": "node --experimental-strip-types --test scripts/referrals.test.ts",
     "test:trial": "node --experimental-strip-types --test scripts/trial-lifecycle.test.ts",
     "test:branch-billing": "node --experimental-strip-types --test scripts/branch-billing-pricing.test.ts",
+    "branch:entitlement:validate": "npx supabase db query --linked --file scripts/branch-entitlement-smoke.sql --output json",
     "test:pos": "node --experimental-strip-types --test scripts/pos-business.property.test.ts",
     "test:pos:accessibility": "node --experimental-strip-types --test scripts/pos-accessibility.test.ts",
     "test:online-order-alerts": "node --experimental-strip-types --test scripts/online-order-alerts.test.ts",

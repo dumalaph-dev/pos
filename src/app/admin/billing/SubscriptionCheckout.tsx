@@ -14,6 +14,7 @@ type SubscriptionCheckoutProps = {
   publicKey: string | null;
   apiBaseUrl: string;
   ownerEmail: string;
+  targetActiveBranchCount?: number;
 };
 
 type PaymentIntentResponse = {
@@ -34,7 +35,7 @@ type PromotionValidationResponse = {
   variantId?: string;
 };
 
-export default function SubscriptionCheckout({ variants, policyGateOpen, providerReady, providerDetail, publicKey, apiBaseUrl, ownerEmail }: SubscriptionCheckoutProps) {
+export default function SubscriptionCheckout({ variants, policyGateOpen, providerReady, providerDetail, publicKey, apiBaseUrl, ownerEmail, targetActiveBranchCount }: SubscriptionCheckoutProps) {
   const [selectedId, setSelectedId] = useState(variants[0]?.id ?? "");
   const [cardholderName, setCardholderName] = useState("");
   const [cardNumber, setCardNumber] = useState("");
@@ -114,7 +115,7 @@ export default function SubscriptionCheckout({ variants, policyGateOpen, provide
       const response = await fetch("/api/billing/promotion/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ code, variantId: selectedVariant.id }),
+        body: JSON.stringify({ code, variantId: selectedVariant.id, targetActiveBranchCount }),
       });
       const payload = await response.json() as PromotionValidationResponse;
       if (!response.ok || !payload.ok || !payload.code || typeof payload.finalAmountCentavos !== "number" || typeof payload.discountAmountCentavos !== "number") {
@@ -150,7 +151,7 @@ export default function SubscriptionCheckout({ variants, policyGateOpen, provide
 
     setPending(true);
     try {
-      const intent = await startSubscription(selectedVariant.id, promoQuote?.code ?? "");
+      const intent = await startSubscription(selectedVariant.id, promoQuote?.code ?? "", targetActiveBranchCount);
       if (!intent.paymentIntentId) throw new Error(intent.message || "We could not start the payment. Please try again.");
       if (intent.paymentIntentStatus === "succeeded") {
         setCheckoutSuccess("Payment confirmed. Your Premium plan is now active.");
@@ -174,6 +175,7 @@ export default function SubscriptionCheckout({ variants, policyGateOpen, provide
         paymentIntentId: intent.paymentIntentId,
         clientKey: intent.clientKey,
         paymentMethodId,
+        targetActiveBranchCount,
       });
       const attachedAttributes = readAttributes(attached);
       const status = readString(attachedAttributes, "status");
@@ -257,11 +259,11 @@ export default function SubscriptionCheckout({ variants, policyGateOpen, provide
   }
 }
 
-async function startSubscription(variantId: string, promoCode: string) {
+async function startSubscription(variantId: string, promoCode: string, targetActiveBranchCount?: number) {
   const response = await fetch("/api/billing/subscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ variantId, promoCode }),
+    body: JSON.stringify({ variantId, promoCode, targetActiveBranchCount }),
   });
   const payload = await response.json() as PaymentIntentResponse;
   if (!response.ok || !payload.ok) throw new Error(payload.message || "Checkout could not be started.");
@@ -281,9 +283,10 @@ async function createPaymentMethod(input: { publicKey: string; apiBaseUrl: strin
   return id;
 }
 
-async function attachPaymentMethod(input: { publicKey: string; apiBaseUrl: string; paymentIntentId: string; clientKey: string; paymentMethodId: string }) {
+async function attachPaymentMethod(input: { publicKey: string; apiBaseUrl: string; paymentIntentId: string; clientKey: string; paymentMethodId: string; targetActiveBranchCount?: number }) {
   const returnUrl = new URL("/admin/billing", window.location.origin);
   returnUrl.searchParams.set("payment_intent_id", input.paymentIntentId);
+  if (input.targetActiveBranchCount !== undefined) returnUrl.searchParams.set("reason", "additional_branch");
   const response = await fetch(`${input.apiBaseUrl.replace(/\/$/, "")}/v1/payment_intents/${encodeURIComponent(input.paymentIntentId)}/attach`, {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: `Basic ${window.btoa(`${input.publicKey}:`)}` },

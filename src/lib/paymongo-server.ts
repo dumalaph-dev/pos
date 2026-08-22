@@ -181,7 +181,7 @@ export async function createPayMongoCustomer(input: CustomerInput) {
   return { id, created: true };
 }
 
-export async function createPayMongoQrPhCheckoutSession(input: HostedCheckoutInput) {
+export async function createPayMongoHostedCheckoutSession(input: HostedCheckoutInput, paymentMethodTypes: string[] = ["qrph"]) {
   const response = await payMongoRequest(
     "/v2/checkout_sessions",
     {
@@ -198,7 +198,7 @@ export async function createPayMongoQrPhCheckoutSession(input: HostedCheckoutInp
                 quantity: 1,
               },
             ],
-            payment_method_types: ["qrph"],
+            payment_method_types: paymentMethodTypes,
             description: input.description,
             success_url: input.successUrl,
             cancel_url: input.cancelUrl,
@@ -215,8 +215,12 @@ export async function createPayMongoQrPhCheckoutSession(input: HostedCheckoutInp
   );
   const id = resourceId(response);
   const checkoutUrl = readPayMongoString(resourceAttributes(response), "checkout_url");
-  if (!id || !checkoutUrl) throw new Error("PayMongo did not return a QR Ph checkout URL.");
+  if (!id || !checkoutUrl) throw new Error("PayMongo did not return a hosted checkout URL.");
   return { id, checkoutUrl, response, attributes: resourceAttributes(response) };
+}
+
+export async function createPayMongoQrPhCheckoutSession(input: HostedCheckoutInput) {
+  return createPayMongoHostedCheckoutSession(input, ["qrph"]);
 }
 
 export async function getPayMongoCheckoutSession(checkoutSessionId: string) {

@@ -30,6 +30,7 @@ type OrganizationRecord = {
   subscription_updated_at: string | null;
   subscription_current_period_end: string | null;
   subscription_billing_mode: "recurring" | "temporary_qrph" | null;
+  subscription_pending_branch_count: number | null;
 };
 
 type CheckoutPaymentIntent = {
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     const organizationResult = await admin
       .from("organizations")
-      .select("id, account_status, subscription_status, subscription_plan, subscription_provider_customer_id, subscription_provider_plan_id, subscription_provider_subscription_id, subscription_provider_payment_intent_id, subscription_updated_at, subscription_current_period_end, subscription_billing_mode")
+      .select("id, account_status, subscription_status, subscription_plan, subscription_provider_customer_id, subscription_provider_plan_id, subscription_provider_subscription_id, subscription_provider_payment_intent_id, subscription_updated_at, subscription_current_period_end, subscription_billing_mode, subscription_pending_branch_count")
       .eq("id", profile.org_id)
       .maybeSingle();
     let organizationData = organizationResult.data;
@@ -120,7 +121,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const pricingQuote = calculateCatalogVariantPriceQuote(operations.catalog, variant, activeBranchCount);
+    const requestedTargetBranchCount = isRecord(body) && Number.isSafeInteger(body.targetActiveBranchCount) ? Number(body.targetActiveBranchCount) : null;
+    if (requestedTargetBranchCount !== null && requestedTargetBranchCount !== activeBranchCount + 1) {
+      return errorResponse("The branch count changed. Refresh Billing & Plan before starting checkout.", 409);
+    }
+    const billingBranchCount = requestedTargetBranchCount ?? activeBranchCount;
+    const pricingQuote = calculateCatalogVariantPriceQuote(operations.catalog, variant, billingBranchCount);
     const baseAmountCentavos = pricingQuote.termTotalCentavos;
     const promotionQuote = await readPromotionQuote(admin, {
       code: promoCode,
@@ -134,21 +140,21 @@ export async function POST(request: NextRequest) {
     if (amountCentavos < 2_000) return errorResponse("The selected price is below PayMongo's minimum subscription amount.", 400);
 
     if (status === "incomplete" && organization.subscription_provider_subscription_id) {
-      const existing = await resumeIncompleteSubscription(organization, variant, amountCentavos, hasPromotion || activeBranchCount !== operations.catalog.includedBranchCount ? null : variant.paymongoPlanId);
+      const existing = await resumeIncompleteSubscription(organization, variant, amountCentavos, hasPromotion || billingBranchCount !== operations.catalog.includedBranchCount ? null : variant.paymongoPlanId);
       if (existing instanceof NextResponse) return existing;
       if (existing) return NextResponse.json(existing);
     }
 
     const plan = await ensurePayMongoPlan({
-      existingPlanId: hasPromotion || activeBranchCount !== operations.catalog.includedBranchCount ? null : variant.paymongoPlanId,
-      variantId: providerPlanVariantId(variant.id, activeBranchCount, hasPromotion ? promotionQuote.code : null),
-      label: providerPlanLabel(variant.label, activeBranchCount, hasPromotion ? promotionQuote.code : null),
+      existingPlanId: hasPromotion || billingBranchCount !== operations.catalog.includedBranchCount ? null : variant.paymongoPlanId,
+      variantId: providerPlanVariantId(variant.id, billingBranchCount, hasPromotion ? promotionQuote.code : null),
+      label: providerPlanLabel(variant.label, billingBranchCount, hasPromotion ? promotionQuote.code : null),
       amountCentavos,
       intervalUnit: variant.intervalUnit,
       intervalCount: variant.intervalCount,
     });
 
-    if (!hasPromotion && activeBranchCount === operations.catalog.includedBranchCount && plan.id !== variant.paymongoPlanId) {
+    if (!hasPromotion && billingBranchCount === operations.catalog.includedBranchCount && plan.id !== variant.paymongoPlanId) {
       const planUpdate = await admin
         .from("platform_billing_variants")
         .update({ paymongo_plan_id: plan.id, updated_at: new Date().toISOString() })
@@ -181,6 +187,9 @@ export async function POST(request: NextRequest) {
       subscription_provider_subscription_id: subscription.id,
       subscription_provider_payment_intent_id: paymentIntent.id,
       ...(periodEnd ? { subscription_current_period_end: periodEnd } : {}),
+      ...(localStatus === "active"
+        ? { subscription_entitled_branch_count: billingBranchCount, subscription_pending_branch_count: null }
+        : { subscription_pending_branch_count: billingBranchCount }),
     });
     if (!saved) throw new Error("The subscription was created but the organization billing record could not be saved.");
 
@@ -229,7 +238,7 @@ export async function POST(request: NextRequest) {
       baseAmountCentavos: promotionQuote.baseAmountCentavos,
       discountAmountCentavos: promotionQuote.discountAmountCentavos,
       promotionCode: promotionQuote.code,
-      activeBranchCount,
+      activeBranchCount: billingBranchCount,
       billableBranchCount: pricingQuote.billableBranchCount,
       currency: "PHP",
     });
@@ -287,7 +296,7 @@ async function checkoutPaymentIntent(subscriptionId: string, subscriptionAttribu
   return { id: paymentIntentId, clientKey, status };
 }
 
-async function saveOrganizationBilling(admin: NonNullable<ReturnType<typeof createAdminClient>>, organizationId: string, values: Record<string, string | null>) {
+async function saveOrganizationBilling(admin: NonNullable<ReturnType<typeof createAdminClient>>, organizationId: string, values: Record<string, string | number | null>) {
   const result = await admin
     .from("organizations")
     .update({ ...values, subscription_updated_at: new Date().toISOString() })
