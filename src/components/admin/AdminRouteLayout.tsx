@@ -32,7 +32,7 @@ import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/br
 import { getAdminBranchOptions, getAdminBranches } from "@/lib/admin/branches";
 import { getAdminConnection } from "@/lib/admin/connection";
 import { readAdminBranding } from "@/lib/admin/branding";
-import { isSubscriptionAccessCurrent } from "@/lib/trial";
+import { getBillingAccessReason, isSubscriptionAccessCurrent } from "@/lib/trial";
 import type { OfflineProfileSnapshot } from "@/lib/offline";
 
 type AdminRole = "admin" | "manager" | "cashier";
@@ -51,6 +51,8 @@ type ShellProfile = {
     subscription_trial_ends_at?: string | null;
     subscription_current_period_end?: string | null;
     subscription_billing_mode?: string | null;
+    subscription_provider_subscription_id?: string | null;
+    subscription_provider_payment_intent_id?: string | null;
     complimentary_access_until?: string | null;
   } | null;
 };
@@ -78,18 +80,23 @@ export default async function AdminRouteLayout({ children }: { children: ReactNo
   if (profile?.password_change_required) redirect("/account/password?required=1");
   const requestPath = (await headers()).get(REQUEST_PATH_HEADER);
   const isBillingRoute = requestPath === "/admin/billing" || requestPath === "/admin/referrals" || !requestPath;
-  const subscriptionAccess = profile?.organizations
-    ? isSubscriptionAccessCurrent({
+  const subscriptionInput = profile?.organizations
+    ? {
       status: profile.organizations.subscription_status,
       trialStartedAt: profile.organizations.subscription_trial_started_at,
       trialEndsAt: profile.organizations.subscription_trial_ends_at,
       currentPeriodEnd: profile.organizations.subscription_current_period_end,
       billingMode: profile.organizations.subscription_billing_mode,
+      providerSubscriptionId: profile.organizations.subscription_provider_subscription_id,
+      providerPaymentIntentId: profile.organizations.subscription_provider_payment_intent_id,
       complimentaryAccessUntil: profile.organizations.complimentary_access_until,
-    })
+    }
     : null;
-  if (subscriptionAccess === false && !isBillingRoute) {
-    redirect(profile?.role === "admin" ? "/admin/billing" : "/account/billing-required");
+  const subscriptionAccess = subscriptionInput ? isSubscriptionAccessCurrent(subscriptionInput) : null;
+  if (subscriptionAccess === false && subscriptionInput && !isBillingRoute) {
+    redirect(profile?.role === "admin"
+      ? `/admin/billing?reason=${getBillingAccessReason(subscriptionInput)}&source=admin`
+      : "/account/billing-required");
   }
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile) return children;

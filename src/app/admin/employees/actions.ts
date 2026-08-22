@@ -10,7 +10,7 @@ import {
 } from "@/lib/employee-auth";
 import { toCentavos } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
-import { isSubscriptionAccessCurrent } from "@/lib/trial";
+import { getBillingAccessReason, isSubscriptionAccessCurrent } from "@/lib/trial";
 
 type AccessRole = "admin" | "manager" | "cashier";
 type AttendanceStatus = "present" | "absent" | "late" | "on_leave";
@@ -143,17 +143,22 @@ async function getActor(): Promise<{ supabase: Awaited<ReturnType<typeof createC
   if (!actor || !readRole(actor.role)) employeesRedirect("Your employee profile is not ready.");
 
   const profile = await getAdminProfile(user.id);
-  const subscriptionAccess = profile?.organizations
-    ? isSubscriptionAccessCurrent({
+  const subscriptionInput = profile?.organizations
+    ? {
       status: profile.organizations.subscription_status,
       trialStartedAt: profile.organizations.subscription_trial_started_at,
       trialEndsAt: profile.organizations.subscription_trial_ends_at,
       currentPeriodEnd: profile.organizations.subscription_current_period_end,
       billingMode: profile.organizations.subscription_billing_mode,
+      providerSubscriptionId: profile.organizations.subscription_provider_subscription_id,
+      providerPaymentIntentId: profile.organizations.subscription_provider_payment_intent_id,
       complimentaryAccessUntil: profile.organizations.complimentary_access_until,
-    })
+    }
     : null;
-  if (subscriptionAccess === false) employeesRedirect("Your organization needs an active billing plan before staff records can be changed.");
+  const subscriptionAccess = subscriptionInput ? isSubscriptionAccessCurrent(subscriptionInput) : null;
+  if (subscriptionAccess === false && subscriptionInput) {
+    redirect(`/admin/billing?reason=${getBillingAccessReason(subscriptionInput)}&source=employees`);
+  }
 
   return { supabase, userId: user.id, actor: { id: user.id, org_id: actor.org_id, role: actor.role } };
 }

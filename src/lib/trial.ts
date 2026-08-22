@@ -109,8 +109,25 @@ export type SubscriptionAccessInput = {
   currentPeriodEnd?: string | null;
   trialDays?: number;
   billingMode?: string | null;
+  providerSubscriptionId?: string | null;
+  providerPaymentIntentId?: string | null;
   complimentaryAccessUntil?: string | null;
 };
+
+export type BillingAccessReason = "trial_expired" | "access_ended";
+
+/**
+ * Selects the message to show when a protected route sends an owner to Billing.
+ * A paused subscription with a known historical trial end is the persisted
+ * representation of an expired trial; every other known non-current state is
+ * a general access-ending event.
+ */
+export function getBillingAccessReason(input: SubscriptionAccessInput, now = Date.now()): BillingAccessReason {
+  const trial = readTrialLifecycle(input, now);
+  return input.status === TRIAL_EXPIRED_SUBSCRIPTION_STATUS && trial.isExpired
+    ? "trial_expired"
+    : "access_ended";
+}
 
 /**
  * Returns whether tenant-scoped POS/backoffice access is current.

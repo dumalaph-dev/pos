@@ -40,6 +40,7 @@ type OrganizationRecord = {
 
 type BranchRecord = { id: string; is_active: boolean };
 type QueryValue = string | string[] | undefined;
+type BillingNoticeReason = "theme_edit" | "trial_expired" | "access_ended";
 
 function readParam(value: QueryValue) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
@@ -55,10 +56,13 @@ export const dynamic = "force-dynamic";
 export default async function BillingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ reason?: QueryValue; target?: QueryValue }>;
+  searchParams: Promise<{ reason?: QueryValue; source?: QueryValue; target?: QueryValue }>;
 }) {
   const params = await searchParams;
-  const additionalBranchRequested = readParam(params.reason) === "additional_branch";
+  const billingReason = readParam(params.reason);
+  const billingSource = readParam(params.source);
+  const themeEditRequested = billingReason === "theme_edit";
+  const additionalBranchRequested = billingReason === "additional_branch";
   const requestedTargetBranchCount = readBranchCount(readParam(params.target));
   const user = await getAuthenticatedUser();
   if (!user) redirect("/");
@@ -187,6 +191,15 @@ export default async function BillingPage({
     || trialAccessIsCurrent
     || complimentaryAccessIsCurrent
   );
+  const expiredTrial = (status === "paused" || status === "trialing") && trial.isExpired && !complimentaryAccessIsCurrent;
+  const accessEnded = status !== null && !currentAccessIsValid && !complimentaryAccessIsCurrent;
+  const upgradeNoticeReason: BillingNoticeReason | null = themeEditRequested
+    ? "theme_edit"
+    : expiredTrial || billingReason === "trial_expired"
+      ? "trial_expired"
+      : billingReason === "access_ended" || accessEnded
+        ? "access_ended"
+        : null;
   const showCheckout = branchCheckout || status !== "active" || !currentAccessIsValid;
   const temporaryQrPhReady = subscriptionFieldsAvailable
     && policyGateOpen
@@ -236,6 +249,7 @@ export default async function BillingPage({
           complimentaryAccessUntil={complimentaryAccessIsCurrent ? complimentaryAccess?.until ?? null : null}
         />
 
+        {upgradeNoticeReason && <BillingUpgradeNotice reason={upgradeNoticeReason} source={billingSource} showCheckout={showCheckout} />}
         {trial.reminder && !complimentaryAccessIsCurrent && <TrialReminder trial={trial} monthlyPriceLabel={monthlyPriceLabel} />}
         {(trial.isLastDay || trial.isExpired) && <TrialFeedbackForm submitted={feedbackSubmitted} />}
 
@@ -295,7 +309,7 @@ function CurrentPlanCard({
   complimentaryAccessUntil: string | null;
 }) {
   const complimentaryAccessIsCurrent = isComplimentaryAccessCurrent(complimentaryAccessUntil);
-  const trialExpired = status === "paused" && trial.isExpired && !complimentaryAccessIsCurrent;
+  const trialExpired = (status === "paused" || status === "trialing") && trial.isExpired && !complimentaryAccessIsCurrent;
   const isTrialing = !complimentaryAccessIsCurrent && (status === null || status === "trialing" || trialExpired);
   const isTrial = isTrialing && !trialExpired;
   const isActive = status === "active" && accessIsCurrent;
@@ -430,6 +444,45 @@ function TrialReminder({ trial, monthlyPriceLabel }: { trial: TrialLifecycle; mo
           </div>
         </div>
         <Link href="#checkout-heading" className="inline-flex shrink-0 items-center justify-center rounded-btn bg-primary px-4 py-2.5 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover">Choose Premium</Link>
+      </div>
+    </section>
+  );
+}
+
+function BillingUpgradeNotice({ reason, source, showCheckout }: { reason: BillingNoticeReason; source: string; showCheckout: boolean }) {
+  const copy = reason === "theme_edit"
+    ? {
+      title: "Upgrade to keep editing your workspace.",
+      detail: "Theme previews are still available, but saving shared dashboard settings requires an active Premium plan. Upgrade to keep personalizing Dumala for your team.",
+    }
+    : reason === "trial_expired"
+      ? {
+        title: "Your free trial has ended.",
+        detail: "Choose Premium below to restore the complete dashboard, POS, and team workspace for your business.",
+      }
+      : {
+        title: source === "pos" ? "Restore your POS access." : source === "setup" ? "Finish setup with Premium." : source === "employees" ? "Keep your team workspace active." : "Restore your Premium access.",
+        detail: source === "pos"
+          ? "Your organization's plan no longer includes POS access. Choose Premium below to reopen the counter and keep selling."
+          : source === "setup"
+            ? "Tablet setup is available again once your organization has an active Premium plan."
+            : source === "employees"
+              ? "Staff, payroll, and attendance tools require an active Premium plan. Choose Premium below to keep your team workspace available."
+              : "Your organization's Premium access has ended. Choose Premium below to restore the dashboard and POS workspace.",
+      };
+
+  return (
+    <section className="mt-5 overflow-hidden rounded-[18px] border border-accent/35 bg-gradient-to-br from-secondary via-secondary to-surface p-4 shadow-[var(--shadow-card)] sm:p-5" role="alert" aria-live="assertive">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-accent text-accent-fg shadow-[0_8px_20px_rgba(188,150,87,0.22)]"><AdminIcon name="lock" size={18} /></span>
+          <div>
+            <p className="text-xs font-extrabold uppercase tracking-[0.15em] text-accent">Premium access</p>
+            <h2 className="mt-1 text-lg font-extrabold tracking-[-0.025em]">{copy.title}</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-5 text-ink-muted">{copy.detail}</p>
+          </div>
+        </div>
+        {showCheckout && <Link href="#checkout-heading" className="inline-flex shrink-0 items-center justify-center rounded-btn bg-primary px-4 py-2.5 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">Upgrade to Premium</Link>}
       </div>
     </section>
   );
