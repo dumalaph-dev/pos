@@ -4,7 +4,7 @@ import { AdminIcon } from "@/components/admin/AdminIcon";
 import { SignOutButton } from "@/components/SignOutButton";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
-import { isSubscriptionAccessCurrent } from "@/lib/trial";
+import { getBillingAccessReason, isSubscriptionAccessCurrent } from "@/lib/trial";
 import { SetupWizard } from "./SetupWizard";
 
 type ProfileRecord = {
@@ -18,6 +18,8 @@ type ProfileRecord = {
     subscription_trial_ends_at?: string | null;
     subscription_current_period_end?: string | null;
     subscription_billing_mode?: string | null;
+    subscription_provider_subscription_id?: string | null;
+    subscription_provider_payment_intent_id?: string | null;
     complimentary_access_until?: string | null;
   } | null;
 };
@@ -30,17 +32,24 @@ export default async function SetupPage() {
 
   const profile = await getAdminProfile(user.id) as ProfileRecord | null;
   if (profile?.organizations?.account_status === "suspended") redirect("/account/suspended");
-  const subscriptionAccess = profile?.organizations
-    ? isSubscriptionAccessCurrent({
+  const subscriptionInput = profile?.organizations
+    ? {
       status: profile.organizations.subscription_status,
       trialStartedAt: profile.organizations.subscription_trial_started_at,
       trialEndsAt: profile.organizations.subscription_trial_ends_at,
       currentPeriodEnd: profile.organizations.subscription_current_period_end,
       billingMode: profile.organizations.subscription_billing_mode,
+      providerSubscriptionId: profile.organizations.subscription_provider_subscription_id,
+      providerPaymentIntentId: profile.organizations.subscription_provider_payment_intent_id,
       complimentaryAccessUntil: profile.organizations.complimentary_access_until,
-    })
+    }
     : null;
-  if (subscriptionAccess === false) redirect(profile?.role === "admin" ? "/admin/billing" : "/account/billing-required");
+  const subscriptionAccess = subscriptionInput ? isSubscriptionAccessCurrent(subscriptionInput) : null;
+  if (subscriptionAccess === false && subscriptionInput) {
+    redirect(profile?.role === "admin"
+      ? `/admin/billing?reason=${getBillingAccessReason(subscriptionInput)}&source=setup`
+      : "/account/billing-required");
+  }
   if (profile?.password_change_required) redirect("/account/password?required=1");
   if (profile?.role === "cashier") redirect("/pos");
   if (!profile || profile.role !== "admin") return <SetupNotAllowed />;

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  getBillingAccessReason,
   isSubscriptionAccessCurrent,
   readTrialLifecycle,
   TRIAL_EXPIRED_SUBSCRIPTION_STATUS,
@@ -50,6 +51,16 @@ test("a successful payment restores protected access immediately", () => {
     status: "active",
     trialEndsAt: TRIAL_END,
   }, end), true);
+});
+
+test("protected-route billing redirects distinguish expired trials from other access endings", () => {
+  const end = Date.parse(TRIAL_END);
+
+  assert.equal(getBillingAccessReason({
+    status: TRIAL_EXPIRED_SUBSCRIPTION_STATUS,
+    trialEndsAt: TRIAL_END,
+  }, end), "trial_expired");
+  assert.equal(getBillingAccessReason({ status: "canceled" }, end), "access_ended");
 });
 
 test("temporary QR Ph access is bounded by its prepaid period", () => {

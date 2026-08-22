@@ -8,14 +8,19 @@ import {
   removeOrganizationImage,
   uploadOrganizationImage,
 } from "@/lib/admin/image-storage";
-import { invalidateAdminProfile } from "@/lib/admin/profile";
+import { getAdminProfile, invalidateAdminProfile } from "@/lib/admin/profile";
 import { isAdminThemeId, mergeAdminBrandingSettings, readAdminBranding } from "@/lib/admin/branding";
 import { mergeAdminInventorySettings, readAdminInventorySettings } from "@/lib/admin/inventory-settings";
 import { DEFAULT_ADMIN_DISCOUNT_SETTINGS, mergeAdminDiscountSettings, readAdminDiscountSettings } from "@/lib/admin/discount-settings";
 import { createClient } from "@/lib/supabase/server";
+import { isSubscriptionAccessCurrent } from "@/lib/trial";
 
 function settingsRedirect(message: string): never {
   redirect(`/admin/settings?error=${encodeURIComponent(message)}`);
+}
+
+function billingRedirect(): never {
+  redirect("/admin/billing?reason=theme_edit&source=settings");
 }
 
 function readText(formData: FormData, name: string) {
@@ -35,14 +40,22 @@ async function requireAdmin() {
 
   if (!user) redirect("/");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("org_id, role")
-    .eq("id", user.id)
-    .single();
+  const profile = await getAdminProfile(user.id);
 
   if (!profile || profile.role !== "admin") settingsRedirect("Only organization admins can change organization settings.");
-  return { supabase, orgId: profile.org_id, userId: user.id };
+
+  const subscriptionAccess = profile.organizations
+    ? isSubscriptionAccessCurrent({
+      status: profile.organizations.subscription_status,
+      trialStartedAt: profile.organizations.subscription_trial_started_at,
+      trialEndsAt: profile.organizations.subscription_trial_ends_at,
+      currentPeriodEnd: profile.organizations.subscription_current_period_end,
+      billingMode: profile.organizations.subscription_billing_mode,
+      complimentaryAccessUntil: profile.organizations.complimentary_access_until,
+    })
+    : null;
+
+  return { supabase, orgId: profile.org_id, userId: user.id, subscriptionAccess };
 }
 
 function refreshSettings() {
@@ -59,7 +72,9 @@ function refreshSettings() {
 }
 
 export async function updateOrganizationSettings(formData: FormData) {
-  const { supabase, orgId, userId } = await requireAdmin();
+  const { supabase, orgId, userId, subscriptionAccess } = await requireAdmin();
+  if (subscriptionAccess === false) billingRedirect();
+
   const name = readText(formData, "name");
   const currency = readText(formData, "currency").toUpperCase();
   const brandName = readText(formData, "brand_name");
