@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { formatBillingDate } from "@/lib/billing";
 import { formatPeso } from "@/lib/money";
-import { CheckoutPlanPicker, type CheckoutVariant } from "./CheckoutPlanPicker";
+import { BranchAddonPicker, CheckoutPlanPicker, priceCheckoutVariants, type CheckoutBranchPricing, type CheckoutVariant } from "./CheckoutPlanPicker";
 import { PromotionCodeInput, type PromotionQuoteState } from "./PromotionCodeInput";
 
 type TemporaryQrPhCheckoutProps = {
   variants: CheckoutVariant[];
+  branchPricing: CheckoutBranchPricing;
   policyGateOpen: boolean;
   providerReady: boolean;
   providerDetail: string;
@@ -43,8 +44,13 @@ type PromotionValidationResponse = {
 
 const SESSION_STORAGE_KEY = "dumala:temporary-qrph-checkout-session";
 
-export default function TemporaryQrPhCheckout({ variants, policyGateOpen, providerReady, providerDetail, purpose = "subscription", targetActiveBranchCount }: TemporaryQrPhCheckoutProps) {
+export default function TemporaryQrPhCheckout({ variants, branchPricing, policyGateOpen, providerReady, providerDetail, purpose = "subscription", targetActiveBranchCount: initialTargetActiveBranchCount }: TemporaryQrPhCheckoutProps) {
   const isAdditionalBranch = purpose === "additional_branch";
+  const defaultTargetBranchCount = isAdditionalBranch
+    ? Math.max(branchPricing.activeBranchCount, branchPricing.entitledBranchCount, 1) + 1
+    : Math.max(branchPricing.activeBranchCount, 1);
+  const initialTargetBranchCount = Math.min(Math.max(initialTargetActiveBranchCount ?? defaultTargetBranchCount, isAdditionalBranch ? defaultTargetBranchCount : branchPricing.activeBranchCount), branchPricing.maxBranchCount);
+  const [targetBranchCount, setTargetBranchCount] = useState(initialTargetBranchCount);
   const [selectedId, setSelectedId] = useState(variants[0]?.id ?? "");
   const [promoCode, setPromoCode] = useState("");
   const [promoQuote, setPromoQuote] = useState<PromotionQuoteState | null>(null);
@@ -98,7 +104,7 @@ export default function TemporaryQrPhCheckout({ variants, policyGateOpen, provid
           clearStoredSession();
           setMessageKind("success");
           setMessage(isAdditionalBranch
-            ? `Payment confirmed. Paid capacity now covers up to ${payload.targetActiveBranchCount ?? targetActiveBranchCount ?? "the selected"} active branches. Return to Branches to create the new locations.`
+            ? `Payment confirmed. Paid capacity now covers up to ${payload.targetActiveBranchCount ?? targetBranchCount} active branches. Return to Branches to create the new locations.`
             : `Payment confirmed. Your Premium access is active${payload.periodEnd ? ` through ${formatBillingDate(payload.periodEnd)}` : ""}.`);
           setPending(false);
           return;
@@ -130,15 +136,24 @@ export default function TemporaryQrPhCheckout({ variants, policyGateOpen, provid
       cancelled = true;
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [isAdditionalBranch, targetActiveBranchCount]);
+  }, [isAdditionalBranch, targetBranchCount]);
 
-  const selectedVariant = variants.find((variant) => variant.id === selectedId) ?? variants[0];
+  const checkoutTarget = isAdditionalBranch || targetBranchCount > branchPricing.activeBranchCount ? targetBranchCount : undefined;
+  const pricedVariants = useMemo(() => priceCheckoutVariants(variants, branchPricing, targetBranchCount), [branchPricing, targetBranchCount, variants]);
+  const selectedVariant = pricedVariants.find((variant) => variant.id === selectedId) ?? pricedVariants[0];
   const discountedAmount = promoQuote?.variantId === selectedId ? promoQuote.finalAmountCentavos : selectedVariant?.baseAmountCentavos ?? 0;
 
   function selectVariant(id: string) {
     setSelectedId(id);
     setPromoQuote(null);
     setPromoMessage(null);
+  }
+
+  function selectTarget(value: number) {
+    setTargetBranchCount(value);
+    setPromoQuote(null);
+    setPromoMessage(null);
+    setMessage(null);
   }
 
   async function applyPromotion() {
@@ -152,7 +167,7 @@ export default function TemporaryQrPhCheckout({ variants, policyGateOpen, provid
       const response = await fetch("/api/billing/promotion/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ code, variantId: selectedVariant.id, purpose, targetActiveBranchCount }),
+        body: JSON.stringify({ code, variantId: selectedVariant.id, purpose, targetActiveBranchCount: checkoutTarget }),
       });
       const payload = await response.json() as PromotionValidationResponse;
       if (!response.ok || !payload.ok || !payload.code || typeof payload.finalAmountCentavos !== "number" || typeof payload.discountAmountCentavos !== "number") {
@@ -182,7 +197,7 @@ export default function TemporaryQrPhCheckout({ variants, policyGateOpen, provid
       const response = await fetch("/api/billing/qrph", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ variantId: selectedVariant.id, promoCode: promoQuote?.code ?? "", purpose, targetActiveBranchCount }),
+        body: JSON.stringify({ variantId: selectedVariant.id, promoCode: promoQuote?.code ?? "", purpose, targetActiveBranchCount: checkoutTarget }),
       });
       const payload = await response.json() as CheckoutResponse;
       if (!response.ok || !payload.ok || !payload.checkoutSessionId || !payload.checkoutUrl) throw new Error(payload.message || "Secure checkout could not be started.");
@@ -200,7 +215,7 @@ export default function TemporaryQrPhCheckout({ variants, policyGateOpen, provid
 
   if (!policyGateOpen) return <CheckoutNotice title="Online payment is unavailable" detail="Please try again later or contact support if you need help starting your plan." tone="warning" />;
   if (!providerReady) return <CheckoutNotice title="Online payment is unavailable" detail={providerDetail} tone="neutral" />;
-  if (variants.length === 0) return <CheckoutNotice title="No plans are available" detail="Please contact support to continue." tone="neutral" />;
+  if (pricedVariants.length === 0) return <CheckoutNotice title="No plans are available" detail="Please contact support to continue." tone="neutral" />;
 
   return (
     <div className="mt-5 border-t border-line pt-5">
@@ -216,12 +231,13 @@ export default function TemporaryQrPhCheckout({ variants, policyGateOpen, provid
       <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.18fr)_minmax(260px,0.82fr)]">
         <div className="space-y-4">
           <div className="rounded-xl border border-warning/25 bg-warning/10 px-3 py-2.5 text-xs leading-5 text-ink">{isAdditionalBranch ? "Pay once for this branch entitlement. Your current prepaid period and renewal date stay unchanged." : "Pay once for the selected term. Your Premium access remains active through the date shown on the billing page."}</div>
-          <CheckoutPlanPicker variants={variants} selectedId={selectedId} onChange={selectVariant} inputName="temporary_qrph_variant" legendLabel={isAdditionalBranch ? "Current prepaid term" : "Choose a plan"} />
+          <CheckoutPlanPicker variants={pricedVariants} selectedId={selectedId} onChange={selectVariant} inputName="temporary_qrph_variant" legendLabel={isAdditionalBranch ? "Current prepaid term" : "Choose a plan"} />
+          <BranchAddonPicker pricing={branchPricing} targetActiveBranchCount={targetBranchCount} onChange={selectTarget} />
         </div>
 
         <aside className="h-fit rounded-[16px] border border-line bg-surface-raised p-4" aria-label="QR Ph checkout summary">
           <div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-accent">Order summary</p><h4 className="mt-1 text-base font-extrabold">{isAdditionalBranch ? "Additional branch" : "Premium access"}</h4></div><AdminIcon name="wallet" size={17} /></div>
-          <div className="mt-4 space-y-2 text-sm"><div className="flex items-center justify-between gap-3"><span className="text-ink-muted">{selectedVariant?.label ?? "Selected plan"}</span><span className="font-extrabold tabular-nums text-ink">{formatPeso(selectedVariant?.baseAmountCentavos ?? 0)}</span></div>{promoQuote?.variantId === selectedId && <div className="flex items-center justify-between gap-3 text-success"><span>{promoQuote.code} discount</span><span className="font-extrabold tabular-nums">-{formatPeso(promoQuote.discountAmountCentavos)}</span></div>}</div>
+          <div className="mt-4 space-y-2 text-sm"><div className="flex items-center justify-between gap-3"><span className="text-ink-muted">{selectedVariant?.label ?? "Selected plan"}</span><span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-subtle">Selected</span></div>{promoQuote?.variantId === selectedId && <div className="flex items-center justify-between gap-3 text-success"><span>{promoQuote.code} discount</span><span className="font-extrabold tabular-nums">-{formatPeso(promoQuote.discountAmountCentavos)}</span></div>}</div>
           {selectedVariant && <p className="mt-2 text-[11px] leading-4 text-ink-muted">{selectedVariant.activeBranchCount} active branch{selectedVariant.activeBranchCount === 1 ? "" : "es"} · {selectedVariant.billableBranchCount === 0 ? "first branch included" : `${selectedVariant.billableBranchCount} additional branch add-on${selectedVariant.billableBranchCount === 1 ? "" : "s"}`}</p>}
           <div className="mt-4 border-t border-dashed border-line pt-3"><div className="flex items-end justify-between gap-3"><span className="text-xs font-extrabold uppercase tracking-wide text-ink-muted">{isAdditionalBranch ? "Additional branch total" : "Pay once"}</span><strong className="text-2xl font-extrabold tracking-[-0.04em] tabular-nums text-primary">{formatPeso(discountedAmount)}</strong></div><p className="mt-1 text-[11px] leading-4 text-ink-muted">{selectedVariant?.cadenceLabel ?? "Selected term"}</p></div>
           <div className="mt-4"><PromotionCodeInput value={promoCode} onChange={(value) => { setPromoCode(value); setPromoQuote(null); setPromoMessage(null); }} onApply={() => void applyPromotion()} pending={promoPending} quote={promoQuote?.variantId === selectedId ? promoQuote : null} message={promoMessage} /></div>

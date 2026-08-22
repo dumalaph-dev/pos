@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { formatPeso } from "@/lib/money";
-import { CheckoutPlanPicker, type CheckoutVariant } from "./CheckoutPlanPicker";
+import { BranchAddonPicker, CheckoutPlanPicker, priceCheckoutVariants, type CheckoutBranchPricing, type CheckoutVariant } from "./CheckoutPlanPicker";
 import { PromotionCodeInput, type PromotionQuoteState } from "./PromotionCodeInput";
 
 type SubscriptionCheckoutProps = {
   variants: CheckoutVariant[];
+  branchPricing: CheckoutBranchPricing;
   policyGateOpen: boolean;
   providerReady: boolean;
   providerDetail: string;
@@ -35,7 +36,10 @@ type PromotionValidationResponse = {
   variantId?: string;
 };
 
-export default function SubscriptionCheckout({ variants, policyGateOpen, providerReady, providerDetail, publicKey, apiBaseUrl, ownerEmail, targetActiveBranchCount }: SubscriptionCheckoutProps) {
+export default function SubscriptionCheckout({ variants, branchPricing, policyGateOpen, providerReady, providerDetail, publicKey, apiBaseUrl, ownerEmail, targetActiveBranchCount: initialTargetActiveBranchCount }: SubscriptionCheckoutProps) {
+  const defaultTargetBranchCount = Math.max(initialTargetActiveBranchCount ?? branchPricing.activeBranchCount, branchPricing.activeBranchCount, 1);
+  const initialTargetBranchCount = Math.min(defaultTargetBranchCount, branchPricing.maxBranchCount);
+  const [targetBranchCount, setTargetBranchCount] = useState(initialTargetBranchCount);
   const [selectedId, setSelectedId] = useState(variants[0]?.id ?? "");
   const [cardholderName, setCardholderName] = useState("");
   const [cardNumber, setCardNumber] = useState("");
@@ -94,13 +98,22 @@ export default function SubscriptionCheckout({ variants, policyGateOpen, provide
     };
   }, []);
 
-  const selectedVariant = variants.find((variant) => variant.id === selectedId) ?? variants[0];
+  const checkoutTarget = targetBranchCount > branchPricing.activeBranchCount ? targetBranchCount : undefined;
+  const pricedVariants = useMemo(() => priceCheckoutVariants(variants, branchPricing, targetBranchCount), [branchPricing, targetBranchCount, variants]);
+  const selectedVariant = pricedVariants.find((variant) => variant.id === selectedId) ?? pricedVariants[0];
   const discountedAmount = promoQuote?.variantId === selectedId ? promoQuote.finalAmountCentavos : selectedVariant?.baseAmountCentavos ?? 0;
 
   function selectVariant(id: string) {
     setSelectedId(id);
     setPromoQuote(null);
     setPromoMessage(null);
+  }
+
+  function selectTarget(value: number) {
+    setTargetBranchCount(value);
+    setPromoQuote(null);
+    setPromoMessage(null);
+    setMessage(null);
   }
 
   async function applyPromotion() {
@@ -115,7 +128,7 @@ export default function SubscriptionCheckout({ variants, policyGateOpen, provide
       const response = await fetch("/api/billing/promotion/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ code, variantId: selectedVariant.id, targetActiveBranchCount }),
+        body: JSON.stringify({ code, variantId: selectedVariant.id, targetActiveBranchCount: checkoutTarget }),
       });
       const payload = await response.json() as PromotionValidationResponse;
       if (!response.ok || !payload.ok || !payload.code || typeof payload.finalAmountCentavos !== "number" || typeof payload.discountAmountCentavos !== "number") {
@@ -151,7 +164,7 @@ export default function SubscriptionCheckout({ variants, policyGateOpen, provide
 
     setPending(true);
     try {
-      const intent = await startSubscription(selectedVariant.id, promoQuote?.code ?? "", targetActiveBranchCount);
+      const intent = await startSubscription(selectedVariant.id, promoQuote?.code ?? "", checkoutTarget);
       if (!intent.paymentIntentId) throw new Error(intent.message || "We could not start the payment. Please try again.");
       if (intent.paymentIntentStatus === "succeeded") {
         setCheckoutSuccess("Payment confirmed. Your Premium plan is now active.");
@@ -175,7 +188,7 @@ export default function SubscriptionCheckout({ variants, policyGateOpen, provide
         paymentIntentId: intent.paymentIntentId,
         clientKey: intent.clientKey,
         paymentMethodId,
-        targetActiveBranchCount,
+        targetActiveBranchCount: checkoutTarget,
       });
       const attachedAttributes = readAttributes(attached);
       const status = readString(attachedAttributes, "status");
@@ -207,7 +220,7 @@ export default function SubscriptionCheckout({ variants, policyGateOpen, provide
 
   if (!policyGateOpen) return <CheckoutNotice title="Online payment is unavailable" detail="Please try again later or contact support if you need help starting your plan." tone="warning" />;
   if (!providerReady) return <CheckoutNotice title="Online payment is unavailable" detail={providerDetail} tone="neutral" />;
-  if (variants.length === 0) return <CheckoutNotice title="No plans are available" detail="Please contact support to continue." tone="neutral" />;
+  if (pricedVariants.length === 0) return <CheckoutNotice title="No plans are available" detail="Please contact support to continue." tone="neutral" />;
 
   return (
     <div className="mt-5 border-t border-line pt-5">
@@ -223,7 +236,8 @@ export default function SubscriptionCheckout({ variants, policyGateOpen, provide
       <form className="mt-5" onSubmit={submit}>
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1.18fr)_minmax(260px,0.82fr)]">
           <div className="space-y-4">
-            <CheckoutPlanPicker variants={variants} selectedId={selectedId} onChange={selectVariant} inputName="subscription_variant" />
+            <CheckoutPlanPicker variants={pricedVariants} selectedId={selectedId} onChange={selectVariant} inputName="subscription_variant" />
+            <BranchAddonPicker pricing={branchPricing} targetActiveBranchCount={targetBranchCount} onChange={selectTarget} />
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block text-xs font-extrabold text-ink sm:col-span-2" htmlFor="checkout-cardholder">Cardholder name<input id="checkout-cardholder" value={cardholderName} onChange={(event) => setCardholderName(event.target.value)} autoComplete="cc-name" className="mt-1 w-full rounded-xl border border-line-strong bg-raised px-3 py-2.5 text-sm font-semibold text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10" placeholder="Juan Dela Cruz" /></label>
               <label className="block text-xs font-extrabold text-ink sm:col-span-2" htmlFor="checkout-card-number">Card number<input id="checkout-card-number" value={cardNumber} onChange={(event) => setCardNumber(event.target.value)} inputMode="numeric" autoComplete="cc-number" className="mt-1 w-full rounded-xl border border-line-strong bg-raised px-3 py-2.5 text-sm font-semibold tabular-nums text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10" placeholder="4120 0000 0000 0007" /></label>
@@ -235,7 +249,7 @@ export default function SubscriptionCheckout({ variants, policyGateOpen, provide
 
           <aside className="h-fit rounded-[16px] border border-line bg-surface-raised p-4" aria-label="Checkout summary">
             <div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-accent">Order summary</p><h4 className="mt-1 text-base font-extrabold">Premium plan</h4></div><AdminIcon name="wallet" size={17} /></div>
-            <div className="mt-4 space-y-2 text-sm"><div className="flex items-center justify-between gap-3"><span className="text-ink-muted">{selectedVariant?.label ?? "Selected plan"}</span><span className="font-extrabold tabular-nums text-ink">{formatPeso(selectedVariant?.baseAmountCentavos ?? 0)}</span></div>{promoQuote?.variantId === selectedId && <div className="flex items-center justify-between gap-3 text-success"><span>{promoQuote.code} discount</span><span className="font-extrabold tabular-nums">-{formatPeso(promoQuote.discountAmountCentavos)}</span></div>}</div>
+            <div className="mt-4 space-y-2 text-sm"><div className="flex items-center justify-between gap-3"><span className="text-ink-muted">{selectedVariant?.label ?? "Selected plan"}</span><span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-subtle">Selected</span></div>{promoQuote?.variantId === selectedId && <div className="flex items-center justify-between gap-3 text-success"><span>{promoQuote.code} discount</span><span className="font-extrabold tabular-nums">-{formatPeso(promoQuote.discountAmountCentavos)}</span></div>}</div>
             {selectedVariant && <p className="mt-2 text-[11px] leading-4 text-ink-muted">{selectedVariant.activeBranchCount} active branch{selectedVariant.activeBranchCount === 1 ? "" : "es"} · {selectedVariant.billableBranchCount === 0 ? "first branch included" : `${selectedVariant.billableBranchCount} additional branch add-on${selectedVariant.billableBranchCount === 1 ? "" : "s"}`}</p>}
             <div className="mt-4 border-t border-dashed border-line pt-3"><div className="flex items-end justify-between gap-3"><span className="text-xs font-extrabold uppercase tracking-wide text-ink-muted">Due today</span><strong className="text-2xl font-extrabold tracking-[-0.04em] tabular-nums text-primary">{formatPeso(discountedAmount)}</strong></div><p className="mt-1 text-[11px] leading-4 text-ink-muted">{selectedVariant?.cadenceLabel === "per month" ? "Billed monthly" : "One payment for the selected term"}</p></div>
             <div className="mt-4"><PromotionCodeInput value={promoCode} onChange={(value) => { setPromoCode(value); setPromoQuote(null); setPromoMessage(null); }} onApply={() => void applyPromotion()} pending={promoPending} quote={promoQuote?.variantId === selectedId ? promoQuote : null} message={promoMessage} /></div>

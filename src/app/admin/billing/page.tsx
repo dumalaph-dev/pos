@@ -16,7 +16,6 @@ import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { readTrialLifecycle, type TrialLifecycle } from "@/lib/trial";
 import TrialCountdown from "./TrialCountdown";
 import TrialFeedbackForm from "./TrialFeedbackForm";
-import BranchCapacityCard from "./BranchCapacityCard";
 import SubscriptionCheckout from "./SubscriptionCheckout";
 import TemporaryQrPhCheckout from "./TemporaryQrPhCheckout";
 
@@ -135,24 +134,29 @@ export default async function BillingPage({
   const offeredVariants = catalog.variants.filter((variant) => variant.isActive && (variant.intervalUnit !== "year" || annualAutoRenewalAllowed));
   const prepaidAccessIsCurrent = status === "active" && billingMode === "temporary_qrph" && isBillingPeriodCurrent(currentPeriodEnd);
   const paidBranchEntitlement = Math.max(Number(organization?.subscription_entitled_branch_count) || catalog.includedBranchCount, catalog.includedBranchCount);
+  const prepaidCapacityBase = Math.max(paidBranchEntitlement, activeBranches, 1);
   const targetActiveBranchCount = additionalBranchRequested
     ? Math.min(Math.max(activeBranches, 1) + 1, Math.max(requestedTargetBranchCount ?? 0, Math.max(activeBranches, 1) + 1), MAX_BRANCH_ENTITLEMENT)
-    : Math.max(activeBranches, 1);
+    : prepaidAccessIsCurrent
+      ? Math.min(prepaidCapacityBase + 1, MAX_BRANCH_ENTITLEMENT)
+      : Math.max(activeBranches, 1);
   const additionalBranchAlreadyCovered = additionalBranchRequested && targetActiveBranchCount <= paidBranchEntitlement;
   const additionalBranchCheckout = additionalBranchRequested && prepaidAccessIsCurrent && targetActiveBranchCount > paidBranchEntitlement;
+  const prepaidCapacityCheckout = prepaidAccessIsCurrent && targetActiveBranchCount > paidBranchEntitlement;
+  const branchCheckout = additionalBranchCheckout || prepaidCapacityCheckout;
   const prepaidTermVariants = currentVariant?.id ? [currentVariant] : [];
-  const checkoutSourceVariants = additionalBranchCheckout && prepaidTermVariants.length > 0 ? prepaidTermVariants : offeredVariants;
+  const checkoutSourceVariants = branchCheckout && prepaidTermVariants.length > 0 ? prepaidTermVariants : offeredVariants;
   const checkoutVariants = checkoutSourceVariants
       .filter((variant): variant is typeof variant & { id: string } => Boolean(variant.id))
     .map((variant) => {
-      const quote = additionalBranchCheckout
+      const quote = branchCheckout
         ? calculateAdditionalBranchPriceQuote(catalog, variant, Math.max(paidBranchEntitlement, activeBranches), targetActiveBranchCount)
         : calculateCatalogVariantPriceQuote(catalog, variant, additionalBranchRequested ? targetActiveBranchCount : activeBranches);
       return {
         id: variant.id,
         label: variant.label,
         priceLabel: formatPeso(quote.termTotalCentavos),
-        cadenceLabel: additionalBranchCheckout
+        cadenceLabel: branchCheckout
           ? "one-time for prepaid term"
           : variant.intervalUnit === "month" ? "per month" : `for ${variant.intervalCount} ${variant.intervalCount === 1 ? "year" : "years"}`,
         monthlyEquivalentLabel: formatPeso(quote.monthlyEquivalentCentavos),
@@ -160,6 +164,8 @@ export default async function BillingPage({
         baseAmountCentavos: quote.termTotalCentavos,
         activeBranchCount: quote.activeBranchCount,
         billableBranchCount: quote.billableBranchCount,
+        intervalUnit: variant.intervalUnit,
+        intervalCount: variant.intervalCount,
       };
     });
   const trialDays = operations.policies.schemaAvailable
@@ -181,28 +187,13 @@ export default async function BillingPage({
     || trialAccessIsCurrent
     || complimentaryAccessIsCurrent
   );
-  const showCheckout = additionalBranchCheckout || status !== "active" || !currentAccessIsValid;
+  const showCheckout = branchCheckout || status !== "active" || !currentAccessIsValid;
   const temporaryQrPhReady = subscriptionFieldsAvailable
     && policyGateOpen
     && paymongo.secretKeyConfigured
     && paymongo.webhookSecretConfigured
     && paymongo.temporaryQrPhEnabled
-    && (additionalBranchCheckout ? qrPhCapabilityReady || cardCapabilityReady : qrPhCapabilityReady);
-  const additionalBranchPaymentReady = subscriptionFieldsAvailable
-    && policyGateOpen
-    && paymongo.secretKeyConfigured
-    && paymongo.webhookSecretConfigured
-    && paymongo.temporaryQrPhEnabled
-    && (qrPhCapabilityReady || cardCapabilityReady);
-  const branchCapacityMode = complimentaryAccessIsCurrent
-    ? "complimentary" as const
-    : prepaidAccessIsCurrent
-      ? "prepaid" as const
-      : status === "active" && currentAccessIsValid
-        ? "recurring" as const
-        : trialAccessIsCurrent
-          ? "trial" as const
-          : "setup" as const;
+    && (branchCheckout ? qrPhCapabilityReady || cardCapabilityReady : qrPhCapabilityReady);
   const feedbackResult = trial.isLastDay || trial.isExpired
     ? await supabase.from("trial_feedback").select("id").eq("org_id", profile.org_id).maybeSingle()
     : null;
@@ -245,19 +236,6 @@ export default async function BillingPage({
           complimentaryAccessUntil={complimentaryAccessIsCurrent ? complimentaryAccess?.until ?? null : null}
         />
 
-        <BranchCapacityCard
-          key={`${branchCapacityMode}-${additionalBranchRequested ? targetActiveBranchCount : "default"}`}
-          mode={branchCapacityMode}
-          activeBranches={activeBranches}
-          branchEntitlement={paidBranchEntitlement}
-          catalog={catalog}
-          currentVariant={currentVariant}
-          offeredVariants={offeredVariants}
-          currentPeriodLabel={currentPeriodEnd ? formatBillingDate(currentPeriodEnd) : null}
-          paymentReady={branchCapacityMode === "prepaid" ? additionalBranchPaymentReady : providerReady || temporaryQrPhReady}
-          initialTargetBranchCount={additionalBranchRequested ? targetActiveBranchCount : undefined}
-        />
-
         {trial.reminder && !complimentaryAccessIsCurrent && <TrialReminder trial={trial} monthlyPriceLabel={monthlyPriceLabel} />}
         {(trial.isLastDay || trial.isExpired) && <TrialFeedbackForm submitted={feedbackSubmitted} />}
 
@@ -266,17 +244,17 @@ export default async function BillingPage({
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Secure payment</p>
-                <h2 id="checkout-heading" className="mt-1 text-xl font-extrabold">{additionalBranchCheckout ? "Pay for your additional branch." : "Start your Premium plan."}</h2>
-                <p className="mt-1 max-w-2xl text-sm leading-5 text-ink-muted">{additionalBranchCheckout ? "Your current prepaid period stays unchanged. Pay the exact one-time add-on before the new branch is activated." : "Choose a plan, apply a code if you have one, and pay securely. Every branch and staff account stays covered."}</p>
+                <h2 id="checkout-heading" className="mt-1 text-xl font-extrabold">{branchCheckout ? "Add branch capacity." : "Start your Premium plan."}</h2>
+                <p className="mt-1 max-w-2xl text-sm leading-5 text-ink-muted">{branchCheckout ? "Choose your prepaid term and add the branch slots you need. Your current prepaid period stays unchanged." : "Choose a plan, add branch slots if needed, and pay securely. The order summary below shows the one amount due."}</p>
               </div>
               {!annualAutoRenewalAllowed && <span className="rounded-full bg-warning/15 px-3 py-1.5 text-xs font-extrabold text-ink">Annual renewal is currently manual</span>}
             </div>
-            {additionalBranchCheckout ? (
-              <TemporaryQrPhCheckout variants={checkoutVariants} policyGateOpen={policyGateOpen} providerReady={temporaryQrPhReady} providerDetail={temporaryQrPhDetail} purpose="additional_branch" targetActiveBranchCount={targetActiveBranchCount} />
+            {branchCheckout ? (
+              <TemporaryQrPhCheckout variants={checkoutVariants} branchPricing={{ catalog, activeBranchCount: activeBranches, entitledBranchCount: paidBranchEntitlement, mode: "additional_branch", maxBranchCount: MAX_BRANCH_ENTITLEMENT }} policyGateOpen={policyGateOpen} providerReady={temporaryQrPhReady} providerDetail={temporaryQrPhDetail} purpose="additional_branch" targetActiveBranchCount={targetActiveBranchCount} />
             ) : providerReady ? (
-              <SubscriptionCheckout variants={checkoutVariants} policyGateOpen={policyGateOpen} providerReady={providerReady} providerDetail={providerDetail} publicKey={paymongo.publicKey} apiBaseUrl={paymongo.apiBaseUrl} ownerEmail={user.email ?? ""} targetActiveBranchCount={additionalBranchRequested ? targetActiveBranchCount : undefined} />
+              <SubscriptionCheckout variants={checkoutVariants} branchPricing={{ catalog, activeBranchCount: activeBranches, entitledBranchCount: paidBranchEntitlement, mode: "subscription", maxBranchCount: MAX_BRANCH_ENTITLEMENT }} policyGateOpen={policyGateOpen} providerReady={providerReady} providerDetail={providerDetail} publicKey={paymongo.publicKey} apiBaseUrl={paymongo.apiBaseUrl} ownerEmail={user.email ?? ""} targetActiveBranchCount={additionalBranchRequested ? targetActiveBranchCount : undefined} />
             ) : (
-              <TemporaryQrPhCheckout variants={checkoutVariants} policyGateOpen={policyGateOpen} providerReady={temporaryQrPhReady} providerDetail={temporaryQrPhDetail} purpose="subscription" targetActiveBranchCount={additionalBranchRequested ? targetActiveBranchCount : undefined} />
+              <TemporaryQrPhCheckout variants={checkoutVariants} branchPricing={{ catalog, activeBranchCount: activeBranches, entitledBranchCount: paidBranchEntitlement, mode: "subscription", maxBranchCount: MAX_BRANCH_ENTITLEMENT }} policyGateOpen={policyGateOpen} providerReady={temporaryQrPhReady} providerDetail={temporaryQrPhDetail} purpose="subscription" targetActiveBranchCount={additionalBranchRequested ? targetActiveBranchCount : undefined} />
             )}
           </section>
         )}
@@ -338,7 +316,6 @@ function CurrentPlanCard({
         ? "Your Premium access has ended. Choose a plan below to continue using every feature."
         : "Review your billing details and choose a plan when you are ready.";
   const currentQuote = variant ? calculateCatalogVariantPriceQuote(catalog, variant, activeBranches) : null;
-  const totalPriceLabel = currentQuote ? formatPeso(currentQuote.termTotalCentavos) : monthlyPriceLabel;
   const monthlyEquivalentLabel = currentQuote ? formatPeso(currentQuote.monthlyEquivalentCentavos) : monthlyPriceLabel;
   const timingLabel = isComplimentary ? "Access through" : trialExpired ? "Trial ended" : isTrialing ? "Trial ends" : isRecurring ? "Next billing" : "Access through";
   const timingValue = isComplimentary
@@ -350,18 +327,9 @@ function CurrentPlanCard({
   const effectiveBranchEntitlement = Math.max(branchEntitlement, activeBranches, 1);
   const branchCoverage = Math.min(Math.round((activeBranches / effectiveBranchEntitlement) * 100), 100);
   const paidAddOnBranches = Math.max(effectiveBranchEntitlement - catalog.includedBranchCount, 0);
-  const nextBranchQuote = variant && (isActive || isTrialing)
-    ? calculateAdditionalBranchPriceQuote(catalog, variant, effectiveBranchEntitlement, effectiveBranchEntitlement + 1)
-    : null;
-  const nextBranchPriceLabel = nextBranchQuote
-    ? formatPeso(nextBranchQuote.termTotalCentavos)
-    : formatPeso(catalog.additionalBranchPriceCentavos);
-  const nextBranchCadence = nextBranchQuote
-    ? variant?.intervalUnit === "year"
-      ? `for ${variant.intervalCount} ${variant.intervalCount === 1 ? "year" : "years"}`
-      : "per month"
-    : "per month";
-  const branchBillingDetail = `${paidAddOnBranches > 0 ? `${catalog.includedBranchCount} included · ${paidAddOnBranches} paid add-on${paidAddOnBranches === 1 ? "" : "s"}` : "Included with Premium"} · Next branch ${nextBranchPriceLabel} ${nextBranchCadence}`;
+  const branchBillingDetail = paidAddOnBranches > 0
+    ? `${catalog.includedBranchCount} included · ${paidAddOnBranches} paid add-on${paidAddOnBranches === 1 ? "" : "s"}`
+    : "Included with Premium · add slots in checkout";
   const cardTone = isActive || isComplimentary
     ? "border-primary/20 bg-gradient-to-br from-primary via-primary to-primary-hover text-primary-fg shadow-[var(--shadow-pop)]"
     : isTrial
@@ -399,7 +367,7 @@ function CurrentPlanCard({
 
             {isTrialing && trial.known && trial.endsAt && trial.remainingMs !== null && <TrialCountdown endsAt={trial.endsAt} initialRemainingMs={trial.remainingMs} inverse={isActive} />}
 
-            {isActive && <div className={`mt-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-5 ${mutedTone}`}><span>Current plan total</span><strong className="text-primary-fg">{totalPriceLabel}</strong><span>{variant?.intervalUnit === "year" ? `for ${variant.intervalCount} ${variant.intervalCount === 1 ? "year" : "years"}` : "per month"}</span><span className="text-primary-fg/40" aria-hidden="true">·</span><span>{activeBranches} active branch{activeBranches === 1 ? "" : "es"}</span></div>}
+            {isActive && <div className={`mt-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-5 ${mutedTone}`}><span>{activeBranches} active branch{activeBranches === 1 ? "" : "es"}</span><span className="text-primary-fg/40" aria-hidden="true">·</span><span>{effectiveBranchEntitlement} paid capacity{effectiveBranchEntitlement === 1 ? " slot" : " slots"}</span><span className="text-primary-fg/40" aria-hidden="true">·</span><span>Manage add-ons below</span></div>}
             {isComplimentary && <p className={`mt-5 text-xs leading-5 ${mutedTone}`}>Complimentary access covers {activeBranches} of {totalBranches} active branches. Subscription checkout remains available before the grant ends.</p>}
           </div>
         </div>
