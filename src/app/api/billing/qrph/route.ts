@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { normalizeSubscriptionStatus } from "@/lib/billing";
 import { createAdminClient } from "@/lib/employee-auth";
-import { calculateAdditionalBranchPriceQuote, calculateCatalogVariantPriceQuote, isPolicyGateOpen } from "@/lib/platform-operations";
+import { calculateAdditionalBranchPriceQuote, calculateCatalogVariantPriceQuote, isPolicyGateOpen, MAX_BRANCH_ENTITLEMENT } from "@/lib/platform-operations";
 import { readPromotionQuote, recordPromotionRedemption } from "@/lib/platform-promotions-server";
 import {
   createPayMongoHostedCheckoutSession,
@@ -86,18 +86,16 @@ export async function POST(request: NextRequest) {
     const temporaryAccessCurrent = organization.subscription_billing_mode === "temporary_qrph" && periodEnd && !Number.isNaN(periodEnd.getTime()) && periodEnd.getTime() > Date.now();
     const temporaryAccessExpired = organization.subscription_billing_mode === "temporary_qrph" && periodEnd && !Number.isNaN(periodEnd.getTime()) && periodEnd.getTime() <= Date.now();
     const currentEntitledBranchCount = Math.max(Number(organization.subscription_entitled_branch_count) || operations.catalog.includedBranchCount, operations.catalog.includedBranchCount);
-    const targetActiveBranchCount = activeBranchCount + 1;
+    const minimumTargetBranchCount = activeBranchCount + 1;
     const isAdditionalBranchCheckout = purpose === "additional_branch";
-    if (!isAdditionalBranchCheckout && requestedTargetBranchCount !== null && requestedTargetBranchCount !== targetActiveBranchCount) {
-      return errorResponse("The branch count changed. Refresh Billing & Plan before starting checkout.", 409);
+    if (requestedTargetBranchCount !== null && (requestedTargetBranchCount < minimumTargetBranchCount || requestedTargetBranchCount > MAX_BRANCH_ENTITLEMENT)) {
+      return errorResponse("Choose a branch capacity between your current active count and the supported maximum, then refresh Billing & Plan.", 409);
     }
+    const targetActiveBranchCount = requestedTargetBranchCount ?? minimumTargetBranchCount;
 
     if (isAdditionalBranchCheckout) {
       if (status !== "active" || !temporaryAccessCurrent) {
         return errorResponse("Additional branch payment is available only while your prepaid QR Ph plan is active.", 409);
-      }
-      if (requestedTargetBranchCount !== targetActiveBranchCount) {
-        return errorResponse("The branch count changed. Refresh Billing & Plan before starting this payment.", 409);
       }
       if (targetActiveBranchCount <= currentEntitledBranchCount) {
         return errorResponse("Your current paid branch entitlement already covers this branch.", 409);
@@ -134,7 +132,7 @@ export async function POST(request: NextRequest) {
 
     const billingBranchCount = isAdditionalBranchCheckout ? activeBranchCount : requestedTargetBranchCount ?? activeBranchCount;
     const pricingQuote = isAdditionalBranchCheckout
-      ? calculateAdditionalBranchPriceQuote(operations.catalog, variant, currentEntitledBranchCount, targetActiveBranchCount)
+      ? calculateAdditionalBranchPriceQuote(operations.catalog, variant, Math.max(currentEntitledBranchCount, activeBranchCount), targetActiveBranchCount)
       : calculateCatalogVariantPriceQuote(operations.catalog, variant, billingBranchCount);
     const baseAmountCentavos = pricingQuote.termTotalCentavos;
     const promotionQuote = await readPromotionQuote(admin, {
@@ -166,15 +164,27 @@ export async function POST(request: NextRequest) {
       entitled_branch_count: String(currentEntitledBranchCount),
       billable_branch_count: String(pricingQuote.billableBranchCount),
     };
-    const successUrl = new URL(`/admin/billing?qrph=success${branchRequest ? "&reason=additional_branch" : ""}`, request.nextUrl.origin).toString();
-    const cancelUrl = new URL(`/admin/billing?qrph=cancelled${branchRequest ? "&reason=additional_branch" : ""}`, request.nextUrl.origin).toString();
+    const successUrlObject = new URL("/admin/billing", request.nextUrl.origin);
+    successUrlObject.searchParams.set("qrph", "success");
+    if (branchRequest) {
+      successUrlObject.searchParams.set("reason", "additional_branch");
+      successUrlObject.searchParams.set("target", String(isAdditionalBranchCheckout ? targetActiveBranchCount : billingBranchCount));
+    }
+    const cancelUrlObject = new URL("/admin/billing", request.nextUrl.origin);
+    cancelUrlObject.searchParams.set("qrph", "cancelled");
+    if (branchRequest) {
+      cancelUrlObject.searchParams.set("reason", "additional_branch");
+      cancelUrlObject.searchParams.set("target", String(isAdditionalBranchCheckout ? targetActiveBranchCount : billingBranchCount));
+    }
+    const successUrl = successUrlObject.toString();
+    const cancelUrl = cancelUrlObject.toString();
     const checkoutInput = {
       amountCentavos,
       itemName: isAdditionalBranchCheckout
         ? `Dumala POS additional branch · ${variant.label}`
         : `Dumala POS Premium · ${variant.label} · ${billingBranchCount} branch${billingBranchCount === 1 ? "" : "es"}`,
       description: isAdditionalBranchCheckout
-        ? `One-time additional branch entitlement · ${variant.label} · branch ${targetActiveBranchCount}`
+         ? `One-time additional branch capacity · ${variant.label} · up to ${targetActiveBranchCount} branches`
         : `Prepaid Dumala POS Premium access · ${variant.label} · ${billingBranchCount} active branch${billingBranchCount === 1 ? "" : "es"}`,
       successUrl,
       cancelUrl,

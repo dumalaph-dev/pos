@@ -28,6 +28,7 @@ export type SubscriptionPriceQuote = {
 export const DEFAULT_MONTHLY_PRICE_CENTAVOS = 59_900;
 export const DEFAULT_ADDITIONAL_BRANCH_PRICE_CENTAVOS = 29_900;
 export const DEFAULT_INCLUDED_BRANCH_COUNT = 1;
+export const MAX_BRANCH_ENTITLEMENT = 1_000;
 
 export type AdditionalBranchPaymentInput = {
   branchCountDelta: 1 | -1;

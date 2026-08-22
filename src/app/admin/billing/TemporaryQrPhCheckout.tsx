@@ -29,6 +29,7 @@ type StatusResponse = {
   message?: string;
   periodEnd?: string;
   additionalBranch?: boolean;
+  targetActiveBranchCount?: number;
 };
 
 type PromotionValidationResponse = {
@@ -97,7 +98,7 @@ export default function TemporaryQrPhCheckout({ variants, policyGateOpen, provid
           clearStoredSession();
           setMessageKind("success");
           setMessage(isAdditionalBranch
-            ? "Payment confirmed. Your additional branch entitlement is active. Return to Branches to create the new location."
+            ? `Payment confirmed. Paid capacity now covers up to ${payload.targetActiveBranchCount ?? targetActiveBranchCount ?? "the selected"} active branches. Return to Branches to create the new locations.`
             : `Payment confirmed. Your Premium access is active${payload.periodEnd ? ` through ${formatBillingDate(payload.periodEnd)}` : ""}.`);
           setPending(false);
           return;
@@ -129,7 +130,7 @@ export default function TemporaryQrPhCheckout({ variants, policyGateOpen, provid
       cancelled = true;
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [isAdditionalBranch]);
+  }, [isAdditionalBranch, targetActiveBranchCount]);
 
   const selectedVariant = variants.find((variant) => variant.id === selectedId) ?? variants[0];
   const discountedAmount = promoQuote?.variantId === selectedId ? promoQuote.finalAmountCentavos : selectedVariant?.baseAmountCentavos ?? 0;

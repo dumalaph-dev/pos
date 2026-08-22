@@ -286,7 +286,10 @@ async function createPaymentMethod(input: { publicKey: string; apiBaseUrl: strin
 async function attachPaymentMethod(input: { publicKey: string; apiBaseUrl: string; paymentIntentId: string; clientKey: string; paymentMethodId: string; targetActiveBranchCount?: number }) {
   const returnUrl = new URL("/admin/billing", window.location.origin);
   returnUrl.searchParams.set("payment_intent_id", input.paymentIntentId);
-  if (input.targetActiveBranchCount !== undefined) returnUrl.searchParams.set("reason", "additional_branch");
+  if (input.targetActiveBranchCount !== undefined) {
+    returnUrl.searchParams.set("reason", "additional_branch");
+    returnUrl.searchParams.set("target", String(input.targetActiveBranchCount));
+  }
   const response = await fetch(`${input.apiBaseUrl.replace(/\/$/, "")}/v1/payment_intents/${encodeURIComponent(input.paymentIntentId)}/attach`, {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: `Basic ${window.btoa(`${input.publicKey}:`)}` },

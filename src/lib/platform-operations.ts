@@ -5,6 +5,7 @@ export {
   DEFAULT_ADDITIONAL_BRANCH_PRICE_CENTAVOS,
   DEFAULT_INCLUDED_BRANCH_COUNT,
   DEFAULT_MONTHLY_PRICE_CENTAVOS,
+  MAX_BRANCH_ENTITLEMENT,
   calculateAdditionalBranchPriceQuote,
   calculateBillableBranchCount,
   calculateCatalogVariantPriceQuote,

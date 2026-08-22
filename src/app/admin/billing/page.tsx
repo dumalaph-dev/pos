@@ -10,12 +10,13 @@ import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
 import { isComplimentaryAccessCurrent } from "@/lib/platform-access";
 import { readCurrentComplimentaryAccess } from "@/lib/platform-access-server";
-import { calculateAdditionalBranchPriceQuote, calculateCatalogVariantPriceQuote, DEFAULT_ADDITIONAL_BRANCH_PRICE_CENTAVOS, DEFAULT_INCLUDED_BRANCH_COUNT, DEFAULT_MONTHLY_PRICE_CENTAVOS, DEFAULT_PLATFORM_POLICIES, hasSubscriptionPaymentMethod, isPolicyGateOpen, readPolicyNumber, type BillingCatalog, type BillingVariant } from "@/lib/platform-operations";
+import { calculateAdditionalBranchPriceQuote, calculateCatalogVariantPriceQuote, DEFAULT_ADDITIONAL_BRANCH_PRICE_CENTAVOS, DEFAULT_INCLUDED_BRANCH_COUNT, DEFAULT_MONTHLY_PRICE_CENTAVOS, DEFAULT_PLATFORM_POLICIES, hasSubscriptionPaymentMethod, isPolicyGateOpen, MAX_BRANCH_ENTITLEMENT, readPolicyNumber, type BillingCatalog, type BillingVariant } from "@/lib/platform-operations";
 import { payMongoConfiguration, readPayMongoSubscriptionReadiness, readPlatformOperations } from "@/lib/platform-operations-server";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { readTrialLifecycle, type TrialLifecycle } from "@/lib/trial";
 import TrialCountdown from "./TrialCountdown";
 import TrialFeedbackForm from "./TrialFeedbackForm";
+import BranchCapacityCard from "./BranchCapacityCard";
 import SubscriptionCheckout from "./SubscriptionCheckout";
 import TemporaryQrPhCheckout from "./TemporaryQrPhCheckout";
 
@@ -45,15 +46,21 @@ function readParam(value: QueryValue) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
 }
 
+function readBranchCount(value: string) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= MAX_BRANCH_ENTITLEMENT ? parsed : null;
+}
+
 export const dynamic = "force-dynamic";
 
 export default async function BillingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ reason?: QueryValue }>;
+  searchParams: Promise<{ reason?: QueryValue; target?: QueryValue }>;
 }) {
   const params = await searchParams;
   const additionalBranchRequested = readParam(params.reason) === "additional_branch";
+  const requestedTargetBranchCount = readBranchCount(readParam(params.target));
   const user = await getAuthenticatedUser();
   if (!user) redirect("/");
 
@@ -128,12 +135,12 @@ export default async function BillingPage({
   const offeredVariants = catalog.variants.filter((variant) => variant.isActive && (variant.intervalUnit !== "year" || annualAutoRenewalAllowed));
   const prepaidAccessIsCurrent = status === "active" && billingMode === "temporary_qrph" && isBillingPeriodCurrent(currentPeriodEnd);
   const paidBranchEntitlement = Math.max(Number(organization?.subscription_entitled_branch_count) || catalog.includedBranchCount, catalog.includedBranchCount);
-  const targetActiveBranchCount = Math.max(activeBranches, 1) + 1;
+  const targetActiveBranchCount = additionalBranchRequested
+    ? Math.min(Math.max(activeBranches, 1) + 1, Math.max(requestedTargetBranchCount ?? 0, Math.max(activeBranches, 1) + 1), MAX_BRANCH_ENTITLEMENT)
+    : Math.max(activeBranches, 1);
   const additionalBranchAlreadyCovered = additionalBranchRequested && targetActiveBranchCount <= paidBranchEntitlement;
   const additionalBranchCheckout = additionalBranchRequested && prepaidAccessIsCurrent && targetActiveBranchCount > paidBranchEntitlement;
-  const prepaidTermVariants = currentVariant?.id
-    ? offeredVariants.filter((variant) => variant.id === currentVariant.id)
-    : [];
+  const prepaidTermVariants = currentVariant?.id ? [currentVariant] : [];
   const checkoutSourceVariants = additionalBranchCheckout && prepaidTermVariants.length > 0 ? prepaidTermVariants : offeredVariants;
   const checkoutVariants = checkoutSourceVariants
       .filter((variant): variant is typeof variant & { id: string } => Boolean(variant.id))
@@ -181,6 +188,21 @@ export default async function BillingPage({
     && paymongo.webhookSecretConfigured
     && paymongo.temporaryQrPhEnabled
     && (additionalBranchCheckout ? qrPhCapabilityReady || cardCapabilityReady : qrPhCapabilityReady);
+  const additionalBranchPaymentReady = subscriptionFieldsAvailable
+    && policyGateOpen
+    && paymongo.secretKeyConfigured
+    && paymongo.webhookSecretConfigured
+    && paymongo.temporaryQrPhEnabled
+    && (qrPhCapabilityReady || cardCapabilityReady);
+  const branchCapacityMode = complimentaryAccessIsCurrent
+    ? "complimentary" as const
+    : prepaidAccessIsCurrent
+      ? "prepaid" as const
+      : status === "active" && currentAccessIsValid
+        ? "recurring" as const
+        : trialAccessIsCurrent
+          ? "trial" as const
+          : "setup" as const;
   const feedbackResult = trial.isLastDay || trial.isExpired
     ? await supabase.from("trial_feedback").select("id").eq("org_id", profile.org_id).maybeSingle()
     : null;
@@ -203,7 +225,7 @@ export default async function BillingPage({
           <div className="flex items-center gap-2 rounded-pill bg-primary-soft px-3 py-2 text-xs font-extrabold text-primary"><AdminIcon name="wallet" size={15} /> {organization?.name ?? "Your business"}</div>
         </section>
 
-        {additionalBranchRequested && <section role="alert" className={`mt-5 rounded-card border px-4 py-4 text-sm text-ink shadow-[var(--shadow-card)] ${additionalBranchAlreadyCovered ? "border-success/30 bg-success/10" : "border-warning/30 bg-warning/10"}`}><p className="text-xs font-extrabold uppercase tracking-[0.14em] text-accent">{additionalBranchAlreadyCovered ? "Additional branch paid" : "Additional branch payment required"}</p><h2 className="mt-1 text-base font-extrabold">{additionalBranchAlreadyCovered ? "Your next branch is ready to create." : "Complete billing before adding another active location."}</h2><p className="mt-1 max-w-2xl leading-5 text-ink-muted">{additionalBranchAlreadyCovered ? <>Your paid entitlement covers {paidBranchEntitlement} active branch{paidBranchEntitlement === 1 ? "" : "es"}. Return to Branches to create the location.</> : additionalBranchCheckout ? <>Your prepaid plan covers {paidBranchEntitlement} active branch{paidBranchEntitlement === 1 ? "" : "es"}. Pay <strong className="text-ink">{checkoutVariants[0]?.priceLabel ?? formatPeso(catalog.additionalBranchPriceCentavos)}</strong> for the next branch entitlement, then return to Branches to create it.</> : "Your current access does not cover another active branch. Choose a Premium plan and complete payment below, then return to Branches to create the location. Paid subscriptions apply the additional-branch charge to the next billing cycle."}</p>{additionalBranchAlreadyCovered ? <Link href="/admin/branches" className="mt-3 inline-flex rounded-btn bg-primary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover">Return to Branches</Link> : showCheckout && <Link href="#checkout-heading" className="mt-3 inline-flex rounded-btn bg-primary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover">Continue to payment</Link>}</section>}
+        {additionalBranchRequested && <section role="alert" className={`mt-5 rounded-card border px-4 py-4 text-sm text-ink shadow-[var(--shadow-card)] ${additionalBranchAlreadyCovered ? "border-success/30 bg-success/10" : "border-warning/30 bg-warning/10"}`}><p className="text-xs font-extrabold uppercase tracking-[0.14em] text-accent">{additionalBranchAlreadyCovered ? "Branch capacity available" : "Branch capacity payment required"}</p><h2 className="mt-1 text-base font-extrabold">{additionalBranchAlreadyCovered ? "Your next branch is ready to create." : "Complete billing before adding another active location."}</h2><p className="mt-1 max-w-2xl leading-5 text-ink-muted">{additionalBranchAlreadyCovered ? <>Your paid entitlement covers {paidBranchEntitlement} active branch{paidBranchEntitlement === 1 ? "" : "es"}. Return to Branches to create the location.</> : additionalBranchCheckout ? <>Your prepaid plan covers {paidBranchEntitlement} active branch{paidBranchEntitlement === 1 ? "" : "es"}. Pay <strong className="text-ink">{checkoutVariants[0]?.priceLabel ?? formatPeso(catalog.additionalBranchPriceCentavos)}</strong> to bring paid capacity to {targetActiveBranchCount} branches, then return to Branches to create them.</> : "Your current access does not cover another active branch. Choose a Premium plan and complete payment below, then return to Branches to create the location. Paid subscriptions apply the additional-branch charge to the next billing cycle."}</p>{additionalBranchAlreadyCovered ? <Link href="/admin/branches" className="mt-3 inline-flex rounded-btn bg-primary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover">Return to Branches</Link> : showCheckout && <Link href="#checkout-heading" className="mt-3 inline-flex rounded-btn bg-primary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover">Continue to payment</Link>}</section>}
 
         {(!subscriptionFieldsAvailable || !catalog.schemaAvailable) && <div role="status" className="mt-4 rounded-xl border border-warning/35 bg-warning/10 px-4 py-3 text-sm font-semibold text-ink">Billing details are still being set up. Please contact support if this message continues.</div>}
 
@@ -221,6 +243,19 @@ export default async function BillingPage({
           branchEntitlement={paidBranchEntitlement}
           monthlyPriceLabel={monthlyPriceLabel}
           complimentaryAccessUntil={complimentaryAccessIsCurrent ? complimentaryAccess?.until ?? null : null}
+        />
+
+        <BranchCapacityCard
+          key={`${branchCapacityMode}-${additionalBranchRequested ? targetActiveBranchCount : "default"}`}
+          mode={branchCapacityMode}
+          activeBranches={activeBranches}
+          branchEntitlement={paidBranchEntitlement}
+          catalog={catalog}
+          currentVariant={currentVariant}
+          offeredVariants={offeredVariants}
+          currentPeriodLabel={currentPeriodEnd ? formatBillingDate(currentPeriodEnd) : null}
+          paymentReady={branchCapacityMode === "prepaid" ? additionalBranchPaymentReady : providerReady || temporaryQrPhReady}
+          initialTargetBranchCount={additionalBranchRequested ? targetActiveBranchCount : undefined}
         />
 
         {trial.reminder && !complimentaryAccessIsCurrent && <TrialReminder trial={trial} monthlyPriceLabel={monthlyPriceLabel} />}

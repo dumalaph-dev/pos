@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { normalizeSubscriptionStatus } from "@/lib/billing";
 import { createAdminClient } from "@/lib/employee-auth";
-import { calculateAdditionalBranchPriceQuote, calculateCatalogVariantPriceQuote } from "@/lib/platform-operations";
+import { calculateAdditionalBranchPriceQuote, calculateCatalogVariantPriceQuote, MAX_BRANCH_ENTITLEMENT } from "@/lib/platform-operations";
 import { readPromotionQuote } from "@/lib/platform-promotions-server";
 import { readPlatformOperations } from "@/lib/platform-operations-server";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
@@ -58,16 +58,17 @@ export async function POST(request: NextRequest) {
       subscription_entitled_branch_count: number | null;
     } | null;
     const entitlement = Math.max(Number(organization?.subscription_entitled_branch_count) || operations.catalog.includedBranchCount, operations.catalog.includedBranchCount);
-    const targetActiveBranchCount = activeBranchCount + 1;
-    if (!additionalBranchCheckout && requestedTargetBranchCount !== null && requestedTargetBranchCount !== targetActiveBranchCount) {
-      return errorResponse("The branch count changed. Refresh Billing & Plan before applying a promotion.", 409);
+    const minimumTargetBranchCount = activeBranchCount + 1;
+    if (requestedTargetBranchCount !== null && (requestedTargetBranchCount < minimumTargetBranchCount || requestedTargetBranchCount > MAX_BRANCH_ENTITLEMENT)) {
+      return errorResponse("The selected branch capacity is no longer valid. Refresh Billing & Plan and try again.", 409);
     }
+    const targetActiveBranchCount = requestedTargetBranchCount ?? minimumTargetBranchCount;
     if (additionalBranchCheckout) {
       const periodEnd = organization?.subscription_current_period_end ? new Date(organization.subscription_current_period_end) : null;
       const prepaidCurrent = normalizeSubscriptionStatus(organization?.subscription_status) === "active"
         && organization?.subscription_billing_mode === "temporary_qrph"
         && Boolean(periodEnd && !Number.isNaN(periodEnd.getTime()) && periodEnd.getTime() > Date.now());
-      if (!prepaidCurrent || requestedTargetBranchCount !== targetActiveBranchCount || targetActiveBranchCount <= entitlement) {
+      if (!prepaidCurrent || targetActiveBranchCount <= entitlement) {
         return errorResponse("The additional branch entitlement changed. Refresh Billing & Plan before applying a promotion.", 409);
       }
       if (organization?.subscription_billing_variant_id && organization.subscription_billing_variant_id !== variant.id) {
@@ -76,7 +77,7 @@ export async function POST(request: NextRequest) {
     }
     const billingBranchCount = additionalBranchCheckout ? activeBranchCount : requestedTargetBranchCount ?? activeBranchCount;
     const pricingQuote = additionalBranchCheckout
-      ? calculateAdditionalBranchPriceQuote(operations.catalog, variant, entitlement, targetActiveBranchCount)
+      ? calculateAdditionalBranchPriceQuote(operations.catalog, variant, Math.max(entitlement, activeBranchCount), targetActiveBranchCount)
       : calculateCatalogVariantPriceQuote(operations.catalog, variant, billingBranchCount);
     const baseAmountCentavos = pricingQuote.termTotalCentavos;
     const quote = await readPromotionQuote(admin, {

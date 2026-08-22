@@ -10,6 +10,7 @@ import {
   DEFAULT_ADDITIONAL_BRANCH_PRICE_CENTAVOS,
   DEFAULT_INCLUDED_BRANCH_COUNT,
   DEFAULT_MONTHLY_PRICE_CENTAVOS,
+  MAX_BRANCH_ENTITLEMENT,
   decideBranchActivation,
   requiresAdditionalBranchPayment,
 } from "../src/lib/branch-billing-pricing.ts";
@@ -191,4 +192,20 @@ test("the additional branch quote is exactly the difference between covered term
   );
   assert.equal(annual.termTotalCentavos, 322_920);
   assert.equal(annual.monthlyEquivalentCentavos, 26_910);
+});
+
+test("one prepaid checkout can buy multiple additional branch slots", () => {
+  const quote = calculateAdditionalBranchPriceQuote(
+    { monthlyPriceCentavos: 59_900, additionalBranchPriceCentavos: 29_900, includedBranchCount: 1 },
+    { intervalUnit: "year", intervalCount: 1, discountPercent: 10 },
+    2,
+    5,
+  );
+
+  assert.equal(quote.currentEntitledBranchCount, 2);
+  assert.equal(quote.targetActiveBranchCount, 5);
+  assert.equal(quote.additionalBranchCount, 3);
+  assert.equal(quote.termTotalCentavos, 968_760);
+  assert.equal(quote.monthlyEquivalentCentavos, 80_730);
+  assert.equal(MAX_BRANCH_ENTITLEMENT, 1_000);
 });

@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
         accessActivated: true,
         periodEnd: activated.periodEnd,
         additionalBranch: metadata.purpose === "additional_branch",
+        targetActiveBranchCount: metadata.purpose === "additional_branch" ? metadata.targetActiveBranchCount : undefined,
       });
     }
 

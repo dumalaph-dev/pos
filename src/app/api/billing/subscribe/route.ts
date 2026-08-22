@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getAdminProfile, invalidateAdminProfile } from "@/lib/admin/profile";
 import { normalizeSubscriptionStatus } from "@/lib/billing";
 import { createAdminClient } from "@/lib/employee-auth";
-import { calculateCatalogVariantPriceQuote, isPolicyGateOpen, type BillingVariant } from "@/lib/platform-operations";
+import { calculateCatalogVariantPriceQuote, isPolicyGateOpen, MAX_BRANCH_ENTITLEMENT, type BillingVariant } from "@/lib/platform-operations";
 import { readPromotionQuote, recordPromotionRedemption } from "@/lib/platform-promotions-server";
 import { payMongoConfiguration, readPlatformOperations } from "@/lib/platform-operations-server";
 import {
@@ -122,8 +122,8 @@ export async function POST(request: NextRequest) {
     }
 
     const requestedTargetBranchCount = isRecord(body) && Number.isSafeInteger(body.targetActiveBranchCount) ? Number(body.targetActiveBranchCount) : null;
-    if (requestedTargetBranchCount !== null && requestedTargetBranchCount !== activeBranchCount + 1) {
-      return errorResponse("The branch count changed. Refresh Billing & Plan before starting checkout.", 409);
+    if (requestedTargetBranchCount !== null && (requestedTargetBranchCount < activeBranchCount + 1 || requestedTargetBranchCount > MAX_BRANCH_ENTITLEMENT)) {
+      return errorResponse("The selected branch capacity is no longer valid. Refresh Billing & Plan before starting checkout.", 409);
     }
     const billingBranchCount = requestedTargetBranchCount ?? activeBranchCount;
     const pricingQuote = calculateCatalogVariantPriceQuote(operations.catalog, variant, billingBranchCount);

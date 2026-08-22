@@ -1,4 +1,5 @@
 import { normalizeSubscriptionStatus } from "@/lib/billing";
+import { MAX_BRANCH_ENTITLEMENT } from "@/lib/branch-billing-pricing";
 import { markPromotionRedemptionConverted } from "@/lib/platform-promotions-server";
 import { readNestedResourceId, type PayMongoResourceAttributes } from "@/lib/paymongo-server";
 
@@ -119,7 +120,7 @@ export async function activateTemporaryQrPhCheckout(
     if (branchesResult.error) throw new Error("The paid branch entitlement could not be verified.");
     const activeBranchCount = Math.max(branchesResult.data?.length ?? 0, 1);
     const currentEntitlement = Math.max(Number(organization.subscription_entitled_branch_count) || input.metadata.entitledBranchCount, 1);
-    if (input.metadata.targetActiveBranchCount !== activeBranchCount + 1 && input.metadata.targetActiveBranchCount > currentEntitlement) {
+    if (input.metadata.targetActiveBranchCount < activeBranchCount + 1 || input.metadata.targetActiveBranchCount > MAX_BRANCH_ENTITLEMENT) {
       throw new Error("The branch count changed while this payment was processing. Refresh Billing & Plan.");
     }
     if (input.metadata.targetActiveBranchCount <= currentEntitlement) {
