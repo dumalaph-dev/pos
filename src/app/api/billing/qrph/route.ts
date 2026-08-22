@@ -2,9 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getAdminProfile } from "@/lib/admin/profile";
 import { normalizeSubscriptionStatus } from "@/lib/billing";
 import { createAdminClient } from "@/lib/employee-auth";
-import { calculateCatalogVariantPriceQuote, isPolicyGateOpen } from "@/lib/platform-operations";
+import { calculateAdditionalBranchPriceQuote, calculateCatalogVariantPriceQuote, isPolicyGateOpen } from "@/lib/platform-operations";
 import { readPromotionQuote, recordPromotionRedemption } from "@/lib/platform-promotions-server";
 import {
+  createPayMongoHostedCheckoutSession,
   createPayMongoQrPhCheckoutSession,
   PayMongoApiError,
 } from "@/lib/paymongo-server";
@@ -39,17 +40,13 @@ export async function POST(request: NextRequest) {
     }
 
     const readiness = await readPayMongoSubscriptionReadiness();
-    const qrPhAvailable = readiness.subscriptionPaymentMethods?.some((method) => method.toLowerCase() === "qrph") === true;
     if (readiness.subscriptionPaymentMethods === null) {
       return errorResponse("PayMongo payment methods could not be checked. Run the PayMongo preflight and try again.", 503);
-    }
-    if (!qrPhAvailable) {
-      return errorResponse("QR Ph is not active on this PayMongo account yet. Activate the account, then rerun the PayMongo preflight.", 503);
     }
 
     const organizationResult = await admin
       .from("organizations")
-      .select("id, account_status, subscription_status, subscription_current_period_end, subscription_billing_mode, subscription_provider_subscription_id, subscription_provider_payment_intent_id")
+      .select("id, account_status, subscription_status, subscription_current_period_end, subscription_billing_mode, subscription_billing_variant_id, subscription_entitled_branch_count, subscription_provider_subscription_id, subscription_provider_payment_intent_id")
       .eq("id", profile.org_id)
       .maybeSingle();
     if (organizationResult.error) return errorResponse("Apply migration 0036_temporary_qrph_checkout.sql before enabling temporary QR Ph checkout.", 503);
@@ -60,6 +57,8 @@ export async function POST(request: NextRequest) {
       subscription_status: string | null;
       subscription_current_period_end: string | null;
       subscription_billing_mode: "recurring" | "temporary_qrph" | null;
+      subscription_billing_variant_id: string | null;
+      subscription_entitled_branch_count: number | null;
       subscription_provider_subscription_id: string | null;
       subscription_provider_payment_intent_id: string | null;
     } | null;
@@ -77,6 +76,8 @@ export async function POST(request: NextRequest) {
     const body = await readJson(request);
     const variantId = isRecord(body) && typeof body.variantId === "string" ? body.variantId.trim() : "";
     const promoCode = isRecord(body) && typeof body.promoCode === "string" ? body.promoCode.trim() : "";
+    const purpose = isRecord(body) && body.purpose === "additional_branch" ? "additional_branch" as const : "subscription" as const;
+    const requestedTargetBranchCount = isRecord(body) && Number.isSafeInteger(body.targetActiveBranchCount) ? Number(body.targetActiveBranchCount) : null;
     const variant = operations.catalog.variants.find((candidate) => candidate.id === variantId && candidate.isActive);
     if (!variant || !variant.id) return errorResponse("Choose an active payment option from the current pricing catalog.", 400);
 
@@ -84,10 +85,44 @@ export async function POST(request: NextRequest) {
     const periodEnd = organization.subscription_current_period_end ? new Date(organization.subscription_current_period_end) : null;
     const temporaryAccessCurrent = organization.subscription_billing_mode === "temporary_qrph" && periodEnd && !Number.isNaN(periodEnd.getTime()) && periodEnd.getTime() > Date.now();
     const temporaryAccessExpired = organization.subscription_billing_mode === "temporary_qrph" && periodEnd && !Number.isNaN(periodEnd.getTime()) && periodEnd.getTime() <= Date.now();
+    const currentEntitledBranchCount = Math.max(Number(organization.subscription_entitled_branch_count) || operations.catalog.includedBranchCount, operations.catalog.includedBranchCount);
+    const targetActiveBranchCount = activeBranchCount + 1;
+    const isAdditionalBranchCheckout = purpose === "additional_branch";
+    if (!isAdditionalBranchCheckout && requestedTargetBranchCount !== null && requestedTargetBranchCount !== targetActiveBranchCount) {
+      return errorResponse("The branch count changed. Refresh Billing & Plan before starting checkout.", 409);
+    }
+
+    if (isAdditionalBranchCheckout) {
+      if (status !== "active" || !temporaryAccessCurrent) {
+        return errorResponse("Additional branch payment is available only while your prepaid QR Ph plan is active.", 409);
+      }
+      if (requestedTargetBranchCount !== targetActiveBranchCount) {
+        return errorResponse("The branch count changed. Refresh Billing & Plan before starting this payment.", 409);
+      }
+      if (targetActiveBranchCount <= currentEntitledBranchCount) {
+        return errorResponse("Your current paid branch entitlement already covers this branch.", 409);
+      }
+      if (organization.subscription_billing_variant_id && organization.subscription_billing_variant_id !== variant.id) {
+        return errorResponse("Use the billing term from your current prepaid plan for this additional branch.", 409);
+      }
+    }
+
+    const configuredPaymentMethods = (readiness.subscriptionPaymentMethods ?? []).map((method) => method.toLowerCase());
+    const checkoutPaymentMethods = isAdditionalBranchCheckout
+      ? ["qrph", "card"].filter((method) => method === "card" ? configuredPaymentMethods.includes("card") || configuredPaymentMethods.includes("cards") : configuredPaymentMethods.includes(method))
+      : ["qrph"];
+    const branchRequest = isAdditionalBranchCheckout || requestedTargetBranchCount !== null;
+    if (isAdditionalBranchCheckout && checkoutPaymentMethods.length === 0) {
+      return errorResponse("QR Ph or card is not active on this PayMongo account yet. Activate one of these payment methods, then rerun the PayMongo preflight.", 503);
+    }
+    if (!isAdditionalBranchCheckout && !configuredPaymentMethods.includes("qrph")) {
+      return errorResponse("QR Ph is not active on this PayMongo account yet. Activate the account, then rerun the PayMongo preflight.", 503);
+    }
+
     const expiredTrialCanStartBilling = status === "paused"
       && !organization.subscription_provider_subscription_id
       && !organization.subscription_provider_payment_intent_id;
-    if (status === "active" || status === "past_due" || (status === "paused" && !expiredTrialCanStartBilling)) {
+    if (!isAdditionalBranchCheckout && (status === "active" || status === "past_due" || (status === "paused" && !expiredTrialCanStartBilling))) {
       if (temporaryAccessExpired && status === "active") {
         // A completed temporary period can be renewed with another one-time QR Ph checkout.
       } else if (temporaryAccessCurrent) {
@@ -97,7 +132,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const pricingQuote = calculateCatalogVariantPriceQuote(operations.catalog, variant, activeBranchCount);
+    const billingBranchCount = isAdditionalBranchCheckout ? activeBranchCount : requestedTargetBranchCount ?? activeBranchCount;
+    const pricingQuote = isAdditionalBranchCheckout
+      ? calculateAdditionalBranchPriceQuote(operations.catalog, variant, currentEntitledBranchCount, targetActiveBranchCount)
+      : calculateCatalogVariantPriceQuote(operations.catalog, variant, billingBranchCount);
     const baseAmountCentavos = pricingQuote.termTotalCentavos;
     const promotionQuote = await readPromotionQuote(admin, {
       code: promoCode,
@@ -113,6 +151,7 @@ export async function POST(request: NextRequest) {
     const referenceNumber = `DUMALA-QRPH-${organization.id.slice(0, 8)}-${attemptId.slice(0, 12)}`;
     const metadata = {
       pos_temporary_qrph: "true",
+      checkout_purpose: purpose,
       organization_id: organization.id,
       variant_id: variant.id,
       interval_unit: variant.intervalUnit,
@@ -122,27 +161,36 @@ export async function POST(request: NextRequest) {
       base_amount_centavos: String(promotionQuote.baseAmountCentavos),
       discount_amount_centavos: String(promotionQuote.discountAmountCentavos),
       amount_centavos: String(amountCentavos),
-      active_branch_count: String(activeBranchCount),
+      active_branch_count: String(billingBranchCount),
+      target_active_branch_count: String(isAdditionalBranchCheckout ? targetActiveBranchCount : billingBranchCount),
+      entitled_branch_count: String(currentEntitledBranchCount),
       billable_branch_count: String(pricingQuote.billableBranchCount),
     };
-    const successUrl = new URL("/admin/billing?qrph=success", request.nextUrl.origin).toString();
-    const cancelUrl = new URL("/admin/billing?qrph=cancelled", request.nextUrl.origin).toString();
-    const checkout = await createPayMongoQrPhCheckoutSession({
+    const successUrl = new URL(`/admin/billing?qrph=success${branchRequest ? "&reason=additional_branch" : ""}`, request.nextUrl.origin).toString();
+    const cancelUrl = new URL(`/admin/billing?qrph=cancelled${branchRequest ? "&reason=additional_branch" : ""}`, request.nextUrl.origin).toString();
+    const checkoutInput = {
       amountCentavos,
-      itemName: `Dumala POS Premium · ${variant.label} · ${activeBranchCount} branch${activeBranchCount === 1 ? "" : "es"}`,
-      description: `Prepaid Dumala POS Premium access · ${variant.label} · ${activeBranchCount} active branch${activeBranchCount === 1 ? "" : "es"}`,
+      itemName: isAdditionalBranchCheckout
+        ? `Dumala POS additional branch · ${variant.label}`
+        : `Dumala POS Premium · ${variant.label} · ${billingBranchCount} branch${billingBranchCount === 1 ? "" : "es"}`,
+      description: isAdditionalBranchCheckout
+        ? `One-time additional branch entitlement · ${variant.label} · branch ${targetActiveBranchCount}`
+        : `Prepaid Dumala POS Premium access · ${variant.label} · ${billingBranchCount} active branch${billingBranchCount === 1 ? "" : "es"}`,
       successUrl,
       cancelUrl,
       referenceNumber,
       email: user.email ?? null,
       metadata,
       idempotencyKey: `pos-qrph-${organization.id}-${attemptId}`,
-    });
+    };
+    const checkout = isAdditionalBranchCheckout
+      ? await createPayMongoHostedCheckoutSession(checkoutInput, checkoutPaymentMethods)
+      : await createPayMongoQrPhCheckoutSession(checkoutInput);
 
     const saved = await admin
       .from("organizations")
       .update({
-        subscription_billing_mode: "temporary_qrph",
+        ...(isAdditionalBranchCheckout ? {} : { subscription_billing_mode: "temporary_qrph" }),
         subscription_provider_checkout_session_id: checkout.id,
         subscription_updated_at: new Date().toISOString(),
       })
@@ -171,8 +219,11 @@ export async function POST(request: NextRequest) {
       baseAmountCentavos: promotionQuote.baseAmountCentavos,
       discountAmountCentavos: promotionQuote.discountAmountCentavos,
       promotionCode: promotionQuote.code,
-      activeBranchCount,
+      activeBranchCount: billingBranchCount,
+      targetActiveBranchCount: isAdditionalBranchCheckout || requestedTargetBranchCount !== null ? (isAdditionalBranchCheckout ? targetActiveBranchCount : billingBranchCount) : null,
       billableBranchCount: pricingQuote.billableBranchCount,
+      paymentMethodTypes: checkoutPaymentMethods,
+      purpose,
       currency: "PHP",
       variantId: variant.id,
     });

@@ -37,16 +37,47 @@ export type AdditionalBranchPaymentInput = {
   hasComplimentaryAccess: boolean;
 };
 
+export type BranchBillingAccessMode = "none" | "recurring" | "prepaid";
+
+export type BranchActivationDecisionInput = {
+  branchCountDelta: 1 | -1;
+  nextActiveBranchCount: number;
+  paidBranchEntitlement: number;
+  paidAccessMode: BranchBillingAccessMode;
+  hasComplimentaryAccess: boolean;
+};
+
+export type AdditionalBranchPriceQuote = SubscriptionPriceQuote & {
+  currentEntitledBranchCount: number;
+  targetActiveBranchCount: number;
+  additionalBranchCount: number;
+};
+
 /**
  * An extra active branch is an entitlement change, not just a directory write.
  * Deactivations are always allowed to reduce an existing branch commitment.
  */
 export function requiresAdditionalBranchPayment(input: AdditionalBranchPaymentInput) {
-  if (input.branchCountDelta !== 1 || input.hasPaidAccess || input.hasComplimentaryAccess) return false;
+  return decideBranchActivation({
+    branchCountDelta: input.branchCountDelta,
+    nextActiveBranchCount: input.nextActiveBranchCount,
+    paidBranchEntitlement: input.includedBranchCount,
+    paidAccessMode: input.hasPaidAccess ? "recurring" : "none",
+    hasComplimentaryAccess: input.hasComplimentaryAccess,
+  }) === "payment_required";
+}
+
+/**
+ * Decide whether an activation is covered, needs a prepaid purchase, or can
+ * be scheduled against an active recurring subscription.
+ */
+export function decideBranchActivation(input: BranchActivationDecisionInput) {
+  if (input.branchCountDelta !== 1 || input.hasComplimentaryAccess) return "allowed" as const;
 
   const nextActiveBranchCount = normalizeWholeNumber(input.nextActiveBranchCount);
-  const includedBranchCount = normalizeMinimumWholeNumber(input.includedBranchCount, 1);
-  return nextActiveBranchCount > includedBranchCount;
+  const paidBranchEntitlement = normalizeMinimumWholeNumber(input.paidBranchEntitlement, 1);
+  if (nextActiveBranchCount <= paidBranchEntitlement) return "allowed" as const;
+  return input.paidAccessMode === "recurring" ? "schedule_recurring" as const : "payment_required" as const;
 }
 
 export function calculateBillableBranchCount(activeBranchCount: number, includedBranchCount = DEFAULT_INCLUDED_BRANCH_COUNT) {
@@ -100,6 +131,40 @@ export function calculateCatalogVariantPriceQuote(
     ...variant,
     activeBranchCount,
   });
+}
+
+/**
+ * Price only the next branch for a prepaid term. The subtraction is performed
+ * on the full term quote so annual discounts and configured branch pricing are
+ * reflected in the exact amount shown to the owner and sent to PayMongo.
+ */
+export function calculateAdditionalBranchPriceQuote(
+  pricing: SubscriptionCatalogPricing,
+  variant: SubscriptionVariantInput,
+  currentEntitledBranchCount: number,
+  targetActiveBranchCount: number,
+): AdditionalBranchPriceQuote {
+  const currentCount = normalizeMinimumWholeNumber(currentEntitledBranchCount, 1);
+  const targetCount = Math.max(normalizeMinimumWholeNumber(targetActiveBranchCount, 1), currentCount);
+  const currentQuote = calculateCatalogVariantPriceQuote(pricing, variant, currentCount);
+  const targetQuote = calculateCatalogVariantPriceQuote(pricing, variant, targetCount);
+  const months = variant.intervalUnit === "year" ? Math.max(normalizeMinimumWholeNumber(variant.intervalCount, 1) * 12, 1) : Math.max(normalizeMinimumWholeNumber(variant.intervalCount, 1), 1);
+  const additionalBranchCount = Math.max(targetQuote.billableBranchCount - currentQuote.billableBranchCount, 0);
+  const termTotalCentavos = Math.max(targetQuote.termTotalCentavos - currentQuote.termTotalCentavos, 0);
+
+  return {
+    ...targetQuote,
+    activeBranchCount: targetCount,
+    billableBranchCount: additionalBranchCount,
+    monthlyBaseCentavos: 0,
+    monthlyAddOnCentavos: Math.max(targetQuote.monthlyAddOnCentavos - currentQuote.monthlyAddOnCentavos, 0),
+    monthlyTotalCentavos: Math.max(targetQuote.monthlyTotalCentavos - currentQuote.monthlyTotalCentavos, 0),
+    termTotalCentavos,
+    monthlyEquivalentCentavos: Math.round(termTotalCentavos / months),
+    currentEntitledBranchCount: currentCount,
+    targetActiveBranchCount: targetCount,
+    additionalBranchCount,
+  };
 }
 
 export function calculateSubscriptionVariantPrice(input: SubscriptionPriceInput) {

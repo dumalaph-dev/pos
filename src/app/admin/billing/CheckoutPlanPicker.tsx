@@ -14,10 +14,10 @@ export type CheckoutVariant = {
   billableBranchCount: number;
 };
 
-export function CheckoutPlanPicker({ variants, selectedId, onChange, inputName }: { variants: CheckoutVariant[]; selectedId: string; onChange: (id: string) => void; inputName: string }) {
+export function CheckoutPlanPicker({ variants, selectedId, onChange, inputName, legendLabel = "Choose a plan" }: { variants: CheckoutVariant[]; selectedId: string; onChange: (id: string) => void; inputName: string; legendLabel?: string }) {
   return (
     <fieldset>
-      <legend className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-ink-muted">Choose a plan</legend>
+      <legend className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-ink-muted">{legendLabel}</legend>
       <div className="mt-2 grid gap-2 sm:grid-cols-2">
         {variants.map((variant) => {
           const selected = selectedId === variant.id;

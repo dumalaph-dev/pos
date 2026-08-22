@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   calculateBillableBranchCount,
+  calculateAdditionalBranchPriceQuote,
   calculateCatalogVariantPriceQuote,
   calculateSubscriptionMonthlyTotal,
   calculateSubscriptionPriceQuote,
@@ -9,6 +10,7 @@ import {
   DEFAULT_ADDITIONAL_BRANCH_PRICE_CENTAVOS,
   DEFAULT_INCLUDED_BRANCH_COUNT,
   DEFAULT_MONTHLY_PRICE_CENTAVOS,
+  decideBranchActivation,
   requiresAdditionalBranchPayment,
 } from "../src/lib/branch-billing-pricing.ts";
 
@@ -121,4 +123,72 @@ test("a full discount cannot produce a negative term price", () => {
 
   assert.equal(quote.monthlyTotalCentavos, 119_700);
   assert.equal(quote.termTotalCentavos, 0);
+});
+
+test("trial access stops at the included branch until payment is completed", () => {
+  assert.equal(decideBranchActivation({
+    branchCountDelta: 1,
+    nextActiveBranchCount: 2,
+    paidBranchEntitlement: 1,
+    paidAccessMode: "none",
+    hasComplimentaryAccess: false,
+  }), "payment_required");
+});
+
+test("an active recurring plan schedules the additional branch for its next cycle", () => {
+  assert.equal(decideBranchActivation({
+    branchCountDelta: 1,
+    nextActiveBranchCount: 2,
+    paidBranchEntitlement: 1,
+    paidAccessMode: "recurring",
+    hasComplimentaryAccess: false,
+  }), "schedule_recurring");
+});
+
+test("an active prepaid plan requires a paid entitlement before the branch is activated", () => {
+  assert.equal(decideBranchActivation({
+    branchCountDelta: 1,
+    nextActiveBranchCount: 3,
+    paidBranchEntitlement: 2,
+    paidAccessMode: "prepaid",
+    hasComplimentaryAccess: false,
+  }), "payment_required");
+  assert.equal(decideBranchActivation({
+    branchCountDelta: 1,
+    nextActiveBranchCount: 2,
+    paidBranchEntitlement: 2,
+    paidAccessMode: "prepaid",
+    hasComplimentaryAccess: false,
+  }), "allowed");
+});
+
+test("complimentary access bypasses the paid branch check", () => {
+  assert.equal(decideBranchActivation({
+    branchCountDelta: 1,
+    nextActiveBranchCount: 10,
+    paidBranchEntitlement: 1,
+    paidAccessMode: "none",
+    hasComplimentaryAccess: true,
+  }), "allowed");
+});
+
+test("the additional branch quote is exactly the difference between covered terms", () => {
+  const monthly = calculateAdditionalBranchPriceQuote(
+    { monthlyPriceCentavos: 59_900, additionalBranchPriceCentavos: 29_900, includedBranchCount: 1 },
+    { intervalUnit: "month", intervalCount: 1, discountPercent: 0 },
+    1,
+    2,
+  );
+  assert.equal(monthly.termTotalCentavos, 29_900);
+  assert.equal(monthly.monthlyEquivalentCentavos, 29_900);
+  assert.equal(monthly.additionalBranchCount, 1);
+
+  const annual = calculateAdditionalBranchPriceQuote(
+    { monthlyPriceCentavos: 59_900, additionalBranchPriceCentavos: 29_900, includedBranchCount: 1 },
+    { intervalUnit: "year", intervalCount: 1, discountPercent: 10 },
+    1,
+    2,
+  );
+  assert.equal(annual.termTotalCentavos, 322_920);
+  assert.equal(annual.monthlyEquivalentCentavos, 26_910);
 });

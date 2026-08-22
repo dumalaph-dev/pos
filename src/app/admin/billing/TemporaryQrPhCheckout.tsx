@@ -12,6 +12,8 @@ type TemporaryQrPhCheckoutProps = {
   policyGateOpen: boolean;
   providerReady: boolean;
   providerDetail: string;
+  purpose?: "subscription" | "additional_branch";
+  targetActiveBranchCount?: number;
 };
 
 type CheckoutResponse = {
@@ -26,6 +28,7 @@ type StatusResponse = {
   status?: "paid" | "pending" | "failed";
   message?: string;
   periodEnd?: string;
+  additionalBranch?: boolean;
 };
 
 type PromotionValidationResponse = {
@@ -39,7 +42,8 @@ type PromotionValidationResponse = {
 
 const SESSION_STORAGE_KEY = "dumala:temporary-qrph-checkout-session";
 
-export default function TemporaryQrPhCheckout({ variants, policyGateOpen, providerReady, providerDetail }: TemporaryQrPhCheckoutProps) {
+export default function TemporaryQrPhCheckout({ variants, policyGateOpen, providerReady, providerDetail, purpose = "subscription", targetActiveBranchCount }: TemporaryQrPhCheckoutProps) {
+  const isAdditionalBranch = purpose === "additional_branch";
   const [selectedId, setSelectedId] = useState(variants[0]?.id ?? "");
   const [promoCode, setPromoCode] = useState("");
   const [promoQuote, setPromoQuote] = useState<PromotionQuoteState | null>(null);
@@ -53,7 +57,9 @@ export default function TemporaryQrPhCheckout({ variants, policyGateOpen, provid
     const result = new URLSearchParams(window.location.search).get("qrph");
     if (!result) return;
 
-    window.history.replaceState(null, "", window.location.pathname);
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete("qrph");
+    window.history.replaceState(null, "", `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
     if (result === "cancelled") {
       clearStoredSession();
       window.setTimeout(() => {
@@ -90,7 +96,9 @@ export default function TemporaryQrPhCheckout({ variants, policyGateOpen, provid
         if (payload.status === "paid") {
           clearStoredSession();
           setMessageKind("success");
-          setMessage(`Payment confirmed. Your Premium access is active${payload.periodEnd ? ` through ${formatBillingDate(payload.periodEnd)}` : ""}.`);
+          setMessage(isAdditionalBranch
+            ? "Payment confirmed. Your additional branch entitlement is active. Return to Branches to create the new location."
+            : `Payment confirmed. Your Premium access is active${payload.periodEnd ? ` through ${formatBillingDate(payload.periodEnd)}` : ""}.`);
           setPending(false);
           return;
         }
@@ -121,7 +129,7 @@ export default function TemporaryQrPhCheckout({ variants, policyGateOpen, provid
       cancelled = true;
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, []);
+  }, [isAdditionalBranch]);
 
   const selectedVariant = variants.find((variant) => variant.id === selectedId) ?? variants[0];
   const discountedAmount = promoQuote?.variantId === selectedId ? promoQuote.finalAmountCentavos : selectedVariant?.baseAmountCentavos ?? 0;
@@ -143,7 +151,7 @@ export default function TemporaryQrPhCheckout({ variants, policyGateOpen, provid
       const response = await fetch("/api/billing/promotion/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ code, variantId: selectedVariant.id }),
+        body: JSON.stringify({ code, variantId: selectedVariant.id, purpose, targetActiveBranchCount }),
       });
       const payload = await response.json() as PromotionValidationResponse;
       if (!response.ok || !payload.ok || !payload.code || typeof payload.finalAmountCentavos !== "number" || typeof payload.discountAmountCentavos !== "number") {
@@ -173,7 +181,7 @@ export default function TemporaryQrPhCheckout({ variants, policyGateOpen, provid
       const response = await fetch("/api/billing/qrph", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ variantId: selectedVariant.id, promoCode: promoQuote?.code ?? "" }),
+        body: JSON.stringify({ variantId: selectedVariant.id, promoCode: promoQuote?.code ?? "", purpose, targetActiveBranchCount }),
       });
       const payload = await response.json() as CheckoutResponse;
       if (!response.ok || !payload.ok || !payload.checkoutSessionId || !payload.checkoutUrl) throw new Error(payload.message || "Secure checkout could not be started.");
@@ -198,27 +206,28 @@ export default function TemporaryQrPhCheckout({ variants, policyGateOpen, provid
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-accent">Secure payment</p>
-          <h3 className="mt-1 text-xl font-extrabold tracking-[-0.025em]">Pay with QR Ph</h3>
-          <p className="mt-1 max-w-xl text-sm leading-5 text-ink-muted">Scan with GCash, Maya, or your banking app. No card details are required.</p>
+          <h3 className="mt-1 text-xl font-extrabold tracking-[-0.025em]">{isAdditionalBranch ? "Pay for an additional branch" : "Pay with QR Ph"}</h3>
+          <p className="mt-1 max-w-xl text-sm leading-5 text-ink-muted">{isAdditionalBranch ? "Continue to PayMongo to choose QR Ph or card. Your branch entitlement is activated only after payment is confirmed." : "Scan with GCash, Maya, or your banking app. No card details are required."}</p>
         </div>
-        <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-warning/15 px-3 py-1.5 text-xs font-extrabold text-ink"><AdminIcon name="lock" size={13} /> Secure one-time payment</span>
+        <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-warning/15 px-3 py-1.5 text-xs font-extrabold text-ink"><AdminIcon name="lock" size={13} /> {isAdditionalBranch ? "QR Ph or card" : "Secure one-time payment"}</span>
       </div>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.18fr)_minmax(260px,0.82fr)]">
         <div className="space-y-4">
-          <div className="rounded-xl border border-warning/25 bg-warning/10 px-3 py-2.5 text-xs leading-5 text-ink">Pay once for the selected term. Your Premium access remains active through the date shown on the billing page.</div>
-          <CheckoutPlanPicker variants={variants} selectedId={selectedId} onChange={selectVariant} inputName="temporary_qrph_variant" />
+          <div className="rounded-xl border border-warning/25 bg-warning/10 px-3 py-2.5 text-xs leading-5 text-ink">{isAdditionalBranch ? "Pay once for this branch entitlement. Your current prepaid period and renewal date stay unchanged." : "Pay once for the selected term. Your Premium access remains active through the date shown on the billing page."}</div>
+          <CheckoutPlanPicker variants={variants} selectedId={selectedId} onChange={selectVariant} inputName="temporary_qrph_variant" legendLabel={isAdditionalBranch ? "Current prepaid term" : "Choose a plan"} />
         </div>
 
         <aside className="h-fit rounded-[16px] border border-line bg-surface-raised p-4" aria-label="QR Ph checkout summary">
-          <div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-accent">Order summary</p><h4 className="mt-1 text-base font-extrabold">Premium access</h4></div><AdminIcon name="wallet" size={17} /></div>
+          <div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-accent">Order summary</p><h4 className="mt-1 text-base font-extrabold">{isAdditionalBranch ? "Additional branch" : "Premium access"}</h4></div><AdminIcon name="wallet" size={17} /></div>
           <div className="mt-4 space-y-2 text-sm"><div className="flex items-center justify-between gap-3"><span className="text-ink-muted">{selectedVariant?.label ?? "Selected plan"}</span><span className="font-extrabold tabular-nums text-ink">{formatPeso(selectedVariant?.baseAmountCentavos ?? 0)}</span></div>{promoQuote?.variantId === selectedId && <div className="flex items-center justify-between gap-3 text-success"><span>{promoQuote.code} discount</span><span className="font-extrabold tabular-nums">-{formatPeso(promoQuote.discountAmountCentavos)}</span></div>}</div>
           {selectedVariant && <p className="mt-2 text-[11px] leading-4 text-ink-muted">{selectedVariant.activeBranchCount} active branch{selectedVariant.activeBranchCount === 1 ? "" : "es"} · {selectedVariant.billableBranchCount === 0 ? "first branch included" : `${selectedVariant.billableBranchCount} additional branch add-on${selectedVariant.billableBranchCount === 1 ? "" : "s"}`}</p>}
-          <div className="mt-4 border-t border-dashed border-line pt-3"><div className="flex items-end justify-between gap-3"><span className="text-xs font-extrabold uppercase tracking-wide text-ink-muted">Pay once</span><strong className="text-2xl font-extrabold tracking-[-0.04em] tabular-nums text-primary">{formatPeso(discountedAmount)}</strong></div><p className="mt-1 text-[11px] leading-4 text-ink-muted">{selectedVariant?.cadenceLabel ?? "Selected term"}</p></div>
+          <div className="mt-4 border-t border-dashed border-line pt-3"><div className="flex items-end justify-between gap-3"><span className="text-xs font-extrabold uppercase tracking-wide text-ink-muted">{isAdditionalBranch ? "Additional branch total" : "Pay once"}</span><strong className="text-2xl font-extrabold tracking-[-0.04em] tabular-nums text-primary">{formatPeso(discountedAmount)}</strong></div><p className="mt-1 text-[11px] leading-4 text-ink-muted">{selectedVariant?.cadenceLabel ?? "Selected term"}</p></div>
           <div className="mt-4"><PromotionCodeInput value={promoCode} onChange={(value) => { setPromoCode(value); setPromoQuote(null); setPromoMessage(null); }} onApply={() => void applyPromotion()} pending={promoPending} quote={promoQuote?.variantId === selectedId ? promoQuote : null} message={promoMessage} /></div>
           {message && <p role="status" aria-live="polite" className={`mt-4 rounded-xl border px-3 py-2.5 text-xs font-semibold leading-5 ${messageKind === "success" ? "border-success/25 bg-success/10 text-success" : messageKind === "neutral" ? "border-line bg-raised text-ink-muted" : "border-danger/25 bg-danger-soft text-danger"}`}>{message}</p>}
-          <button type="button" onClick={() => void submit()} disabled={pending} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-xs font-extrabold uppercase tracking-wide text-accent-fg transition hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50">{pending ? "Opening secure checkout…" : `Continue · ${formatPeso(discountedAmount)}`}<AdminIcon name="arrow" size={14} /></button>
-          <p className="mt-3 text-[11px] leading-4 text-ink-muted">Payment is securely confirmed before Premium access is enabled.</p>
+          {message && <>{isAdditionalBranch && messageKind === "success" && <a href="/admin/branches" className="mt-4 inline-flex rounded-xl border border-success/30 bg-success/10 px-3 py-2.5 text-xs font-extrabold text-success">Return to Branches <AdminIcon name="arrow" size={14} /></a>}</>}
+          <button type="button" onClick={() => void submit()} disabled={pending} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-xs font-extrabold uppercase tracking-wide text-accent-fg transition hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50">{pending ? "Opening secure checkout…" : `${isAdditionalBranch ? "Pay additional branch" : "Continue"} · ${formatPeso(discountedAmount)}`}<AdminIcon name="arrow" size={14} /></button>
+          <p className="mt-3 text-[11px] leading-4 text-ink-muted">{isAdditionalBranch ? "Your paid entitlement is recorded before the branch can be activated." : "Payment is securely confirmed before Premium access is enabled."}</p>
         </aside>
       </div>
     </div>

@@ -25,6 +25,7 @@ type OrganizationBillingRecord = {
   id: string;
   subscription_status: string | null;
   subscription_provider_subscription_id: string | null;
+  subscription_pending_branch_count: number | null;
 };
 
 export const runtime = "nodejs";
@@ -104,7 +105,7 @@ async function applyProviderEvent(admin: NonNullable<ReturnType<typeof createAdm
   const status = eventSubscriptionStatus(eventType, readPayMongoString(attributes, "status"), organization.subscription_status);
   if (!status) return;
 
-  const update: Record<string, string> = {
+  const update: Record<string, string | number | null> = {
     subscription_status: status,
     subscription_updated_at: new Date().toISOString(),
   };
@@ -116,6 +117,17 @@ async function applyProviderEvent(admin: NonNullable<ReturnType<typeof createAdm
   const dueDate = readPayMongoString(attributes, "due_date");
   const periodEnd = periodEndValue(nextBillingSchedule || (eventType === "subscription.invoice.paid" ? dueDate : null));
   if (periodEnd) update.subscription_current_period_end = periodEnd;
+  if (status === "active") {
+    const activeBranchesResult = await admin
+      .from("stores")
+      .select("id")
+      .eq("org_id", organization.id)
+      .eq("is_active", true);
+    if (activeBranchesResult.error) throw new Error("The subscription is active but its branch entitlement could not be verified.");
+    const activeBranchCount = Math.max(activeBranchesResult.data?.length ?? 0, 1);
+    update.subscription_entitled_branch_count = Math.max(Number(organization.subscription_pending_branch_count) || activeBranchCount, activeBranchCount);
+    update.subscription_pending_branch_count = null;
+  }
 
   const result = await admin.from("organizations").update(update).eq("id", organization.id);
   if (result.error) throw new Error("Organization billing status could not be updated.");
@@ -162,7 +174,7 @@ async function findOrganization(admin: NonNullable<ReturnType<typeof createAdmin
   if (subscriptionId) {
     const result = await admin
       .from("organizations")
-      .select("id, subscription_status, subscription_provider_subscription_id")
+      .select("id, subscription_status, subscription_provider_subscription_id, subscription_pending_branch_count")
       .eq("subscription_provider_subscription_id", subscriptionId)
       .limit(1);
     if (result.error) throw new Error("Subscription provider fields are not available.");
@@ -173,7 +185,7 @@ async function findOrganization(admin: NonNullable<ReturnType<typeof createAdmin
   if (customerId) {
     const result = await admin
       .from("organizations")
-      .select("id, subscription_status, subscription_provider_subscription_id")
+      .select("id, subscription_status, subscription_provider_subscription_id, subscription_pending_branch_count")
       .eq("subscription_provider_customer_id", customerId)
       .limit(1);
     if (result.error) throw new Error("Customer provider fields are not available.");
@@ -184,7 +196,7 @@ async function findOrganization(admin: NonNullable<ReturnType<typeof createAdmin
   if (paymentIntentId) {
     const result = await admin
       .from("organizations")
-      .select("id, subscription_status, subscription_provider_subscription_id")
+      .select("id, subscription_status, subscription_provider_subscription_id, subscription_pending_branch_count")
       .eq("subscription_provider_payment_intent_id", paymentIntentId)
       .limit(1);
     if (result.error) throw new Error("Payment intent provider fields are not available.");

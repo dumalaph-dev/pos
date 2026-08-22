@@ -5,9 +5,13 @@ import { readNestedResourceId, type PayMongoResourceAttributes } from "@/lib/pay
 export type TemporaryQrPhCheckoutMetadata = {
   organizationId: string;
   variantId: string;
+  purpose: "subscription" | "additional_branch";
   intervalUnit: "month" | "year";
   intervalCount: number;
   amountCentavos: number;
+  activeBranchCount: number;
+  targetActiveBranchCount: number;
+  entitledBranchCount: number;
   promotionId: string | null;
 };
 
@@ -17,6 +21,7 @@ type TemporaryQrPhOrganization = {
   subscription_current_period_end: string | null;
   subscription_billing_mode: string | null;
   subscription_provider_checkout_session_id: string | null;
+  subscription_entitled_branch_count: number | null;
 };
 
 type TemporaryQrPhActivationInput = {
@@ -35,9 +40,13 @@ export function readTemporaryQrPhCheckoutMetadata(attributes: PayMongoResourceAt
   const intervalUnit = metadata.interval_unit === "month" || metadata.interval_unit === "year" ? metadata.interval_unit : null;
   const intervalCount = readInteger(metadata.interval_count);
   const amountCentavos = readInteger(metadata.amount_centavos);
-  if (!organizationId || !variantId || !intervalUnit || !intervalCount || !amountCentavos || amountCentavos < 100) return null;
+  const purpose = metadata.checkout_purpose === "additional_branch" ? "additional_branch" as const : "subscription" as const;
+  const activeBranchCount = readInteger(metadata.active_branch_count) ?? 1;
+  const targetActiveBranchCount = readInteger(metadata.target_active_branch_count) ?? activeBranchCount;
+  const entitledBranchCount = readInteger(metadata.entitled_branch_count) ?? 1;
+  if (!organizationId || !variantId || !intervalUnit || !intervalCount || !amountCentavos || amountCentavos < 100 || activeBranchCount < 1 || targetActiveBranchCount < 1 || entitledBranchCount < 1) return null;
 
-  return { organizationId, variantId, intervalUnit, intervalCount, amountCentavos, promotionId: readString(metadata.promotion_id) };
+  return { organizationId, variantId, purpose, intervalUnit, intervalCount, amountCentavos, activeBranchCount, targetActiveBranchCount, entitledBranchCount, promotionId: readString(metadata.promotion_id) };
 }
 
 export function readCheckoutPaymentStatus(attributes: PayMongoResourceAttributes) {
@@ -85,18 +94,59 @@ export async function activateTemporaryQrPhCheckout(
 ) {
   const result = await admin
     .from("organizations")
-    .select("id, subscription_status, subscription_current_period_end, subscription_billing_mode, subscription_provider_checkout_session_id")
+    .select("id, subscription_status, subscription_current_period_end, subscription_billing_mode, subscription_provider_checkout_session_id, subscription_entitled_branch_count")
     .eq("id", input.metadata.organizationId)
     .maybeSingle();
-  if (result.error) throw new Error("Temporary QR Ph billing fields are not available. Apply migration 0036_temporary_qrph_checkout.sql.");
+  if (result.error) throw new Error("Temporary QR Ph billing fields are not available. Apply migrations 0036_temporary_qrph_checkout.sql and 0070_paid_branch_entitlements.sql.");
 
   const organization = result.data as TemporaryQrPhOrganization | null;
   if (!organization) throw new Error("The organization linked to this QR Ph checkout could not be found.");
   if (input.paidAmountCentavos !== null && input.paidAmountCentavos !== input.metadata.amountCentavos) {
-    throw new Error("The QR Ph payment amount did not match the selected plan.");
+    throw new Error("The payment amount did not match the selected billing action.");
   }
 
   const currentStatus = normalizeSubscriptionStatus(organization.subscription_status);
+  if (input.metadata.purpose === "additional_branch") {
+    if (currentStatus !== "active" || organization.subscription_billing_mode !== "temporary_qrph" || !isBillingPeriodCurrent(organization.subscription_current_period_end)) {
+      throw new Error("The prepaid QR Ph period is no longer active for this branch payment.");
+    }
+
+    const branchesResult = await admin
+      .from("stores")
+      .select("id")
+      .eq("org_id", organization.id)
+      .eq("is_active", true);
+    if (branchesResult.error) throw new Error("The paid branch entitlement could not be verified.");
+    const activeBranchCount = Math.max(branchesResult.data?.length ?? 0, 1);
+    const currentEntitlement = Math.max(Number(organization.subscription_entitled_branch_count) || input.metadata.entitledBranchCount, 1);
+    if (input.metadata.targetActiveBranchCount !== activeBranchCount + 1 && input.metadata.targetActiveBranchCount > currentEntitlement) {
+      throw new Error("The branch count changed while this payment was processing. Refresh Billing & Plan.");
+    }
+    if (input.metadata.targetActiveBranchCount <= currentEntitlement) {
+      await persistBillingVariant(admin, organization.id, input.metadata.variantId);
+      await markPromotionRedemptionConverted(admin, input.checkoutSessionId);
+      return { periodEnd: organization.subscription_current_period_end, duplicate: true, additionalBranch: true };
+    }
+
+    const update = await admin
+      .from("organizations")
+      .update({
+        subscription_status: "active",
+        subscription_plan: "premium",
+        subscription_billing_mode: "temporary_qrph",
+        subscription_entitled_branch_count: input.metadata.targetActiveBranchCount,
+        subscription_provider_checkout_session_id: input.checkoutSessionId,
+        subscription_provider_payment_intent_id: input.paymentIntentId,
+        subscription_updated_at: new Date().toISOString(),
+      })
+      .eq("id", organization.id);
+    if (update.error) throw new Error("The payment was confirmed but the paid branch entitlement could not be updated.");
+
+    await persistBillingVariant(admin, organization.id, input.metadata.variantId);
+    await markPromotionRedemptionConverted(admin, input.checkoutSessionId);
+    return { periodEnd: organization.subscription_current_period_end, duplicate: false, additionalBranch: true };
+  }
+
   if (
     organization.subscription_billing_mode === "temporary_qrph" &&
     organization.subscription_provider_checkout_session_id === input.checkoutSessionId &&
@@ -123,6 +173,7 @@ export async function activateTemporaryQrPhCheckout(
       subscription_provider_checkout_session_id: input.checkoutSessionId,
       subscription_provider_payment_intent_id: input.paymentIntentId,
       subscription_provider_subscription_id: null,
+      subscription_entitled_branch_count: Math.max(input.metadata.activeBranchCount, 1),
       subscription_updated_at: now.toISOString(),
     })
     .eq("id", organization.id);
@@ -163,6 +214,12 @@ function readString(value: unknown) {
 function readInteger(value: unknown) {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+function isBillingPeriodCurrent(value: string | null) {
+  if (!value) return false;
+  const end = new Date(value);
+  return !Number.isNaN(end.getTime()) && end.getTime() > Date.now();
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
