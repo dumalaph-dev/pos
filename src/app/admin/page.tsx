@@ -4,6 +4,7 @@ import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { AdminMenu } from "@/components/admin/AdminMenu";
+import { DailySalesReportPanel } from "@/components/admin/DailySalesReportPanel";
 import { OrderDialogController } from "@/components/admin/OrderDialogController";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatPeso } from "@/lib/money";
@@ -18,6 +19,8 @@ import { readAdminBranding } from "@/lib/admin/branding";
 import { dashboardLowStockThreshold, readAdminInventorySettings } from "@/lib/admin/inventory-settings";
 import { buildOwnerOnboardingState, hasConfiguredOwnerBusinessProfile, hasConfiguredOwnerDashboardSettings } from "@/lib/admin/onboarding";
 import { loadReversedOrderIds, selectNetSales } from "@/lib/admin/sales-reports";
+import type { DashboardShiftReport } from "@/lib/admin/shift-reports";
+import { parseShiftReading } from "@/lib/shifts";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { formatTrialRemaining, readTrialLifecycle } from "@/lib/trial";
 import { OwnerGuidance, OwnerOnboardingPanel } from "@/components/admin/OwnerOnboardingPanel";
@@ -105,6 +108,21 @@ type OrderItemRecord = {
   line_total: number;
 };
 
+type ShiftReportRecord = {
+  id: string;
+  shift_id: string;
+  store_id: string;
+  z_number: number | string;
+  business_date: string;
+  cashier_id: string;
+  opened_at: string;
+  closed_at: string;
+  grand_total_after: number | string;
+  reading: unknown;
+  note: string | null;
+  generated_at: string;
+};
+
 type StockRow = {
   store_id: string;
   product_id: string;
@@ -124,6 +142,7 @@ type TrialOrganizationRecord = {
 
 const ORDER_LIST_FIELDS = "id, order_no, store_id, cashier_id, status, subtotal, discount_amount, discount_ref, vatable_sale, vat_amount, vat_exempt_sale, total, payment_method, payment_ref, amount_tendered, change_due, note, created_at, created_at_device, reversal_of";
 const ORDER_SUMMARY_FIELDS = "id, order_no, store_id, cashier_id, status, subtotal, discount_amount, vat_amount, total, payment_method, created_at, reversal_of";
+const SHIFT_REPORT_FIELDS = "id, shift_id, store_id, z_number, business_date, cashier_id, opened_at, closed_at, grand_total_after, reading, note, generated_at";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SINGAPORE_DAY_FORMATTER = new Intl.DateTimeFormat("en-CA", {
@@ -227,6 +246,7 @@ export default async function AdminPage({
 
   const { start, end } = getSingaporeDayBounds();
   const weekStart = new Date(start.getTime() - DAY_MS * 6);
+  const todayBusinessDate = dayKey(start);
   const profile = await getAdminProfile(user.id) as ProfileRecord | null;
 
   if (profile?.password_change_required) redirect("/account/password?required=1");
@@ -271,6 +291,13 @@ export default async function AdminPage({
     .eq("org_id", profile.org_id)
     .limit(100);
   let cashiersQuery = supabase.from("profiles").select("id, full_name, role").eq("org_id", profile.org_id);
+  let shiftReportsQuery = supabase
+    .from("z_readings")
+    .select(SHIFT_REPORT_FIELDS)
+    .eq("org_id", profile.org_id)
+    .eq("business_date", todayBusinessDate)
+    .order("closed_at", { ascending: false })
+    .limit(100);
   const subscriptionQuery = supabase
     .from("organizations")
     .select("created_at, subscription_status, subscription_trial_ends_at, subscription_current_period_end")
@@ -300,6 +327,7 @@ export default async function AdminPage({
     itemsQuery = itemsQuery.eq("orders.store_id", selectedBranchId);
     devicesQuery = devicesQuery.eq("store_id", selectedBranchId);
     cashiersQuery = cashiersQuery.eq("store_id", selectedBranchId);
+    shiftReportsQuery = shiftReportsQuery.eq("store_id", selectedBranchId);
   }
 
   productsQuery = productsQuery.order("name").limit(1000);
@@ -310,7 +338,7 @@ export default async function AdminPage({
     .order("created_at", { ascending: false })
     .limit(2000);
 
-  const [productsResult, categoriesResult, ordersResult, stockResult, itemsResult, devicesResult, cashiersResult, subscriptionResult, onboardingStaffResult, onboardingInventoryResult, onboardingDevicesResult, onboardingCategoriesResult, onboardingProductsResult] = await Promise.all([
+  const [productsResult, categoriesResult, ordersResult, stockResult, itemsResult, devicesResult, cashiersResult, shiftReportsResult, subscriptionResult, onboardingStaffResult, onboardingInventoryResult, onboardingDevicesResult, onboardingCategoriesResult, onboardingProductsResult] = await Promise.all([
     productsQuery,
     categoriesQuery,
     ordersQuery,
@@ -323,6 +351,7 @@ export default async function AdminPage({
     itemsQuery,
     devicesQuery,
     cashiersQuery.order("full_name").limit(200),
+    shiftReportsQuery,
     subscriptionQuery,
     onboardingStaffQuery ?? Promise.resolve({ data: [], error: null }),
     onboardingInventoryQuery ?? Promise.resolve({ data: [], error: null }),
@@ -354,6 +383,8 @@ export default async function AdminPage({
   });
   const orderItems = (itemsResult.data ?? []) as OrderItemRecord[];
   const orderItemsError = Boolean(itemsResult.error);
+  const shiftReportRows = (shiftReportsResult.data ?? []) as ShiftReportRecord[];
+  const shiftReports: DashboardShiftReport[] = [];
   const onboardingStaff = (onboardingStaffResult.data ?? []) as Array<{ id: string; role: string }>;
   const onboardingQueries = [onboardingStaffResult, onboardingInventoryResult, onboardingDevicesResult, onboardingCategoriesResult, onboardingProductsResult];
   const onboardingState = profile.role === "admin" && onboardingQueries.every((result) => !result.error)
@@ -383,23 +414,25 @@ export default async function AdminPage({
   const productById = new Map(products.map((product) => [product.id, product]));
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
   const cashierById = new Map(cashiers.map((cashier) => [cashier.id, cashier]));
+  for (const row of shiftReportRows) {
+    const reading = parseShiftReading(row.reading);
+    if (!reading || reading.isOpen) continue;
+    shiftReports.push({
+      id: row.id,
+      shiftId: row.shift_id,
+      zNumber: Number(row.z_number),
+      businessDate: row.business_date,
+      generatedAt: row.generated_at,
+      grandTotalAfter: Number(row.grand_total_after),
+      note: row.note,
+      cashierName: cashierById.get(row.cashier_id)?.full_name ?? "Unknown cashier",
+      branchName: branchById.get(row.store_id)?.name ?? "Unknown branch",
+      reading,
+    });
+  }
   const completedOrders = selectNetSales(todayOrders, reversedIds);
   const totalSales = completedOrders.reduce((sum, order) => sum + Number(order.total), 0);
   const averageTicket = completedOrders.length ? Math.round(totalSales / completedOrders.length) : 0;
-  const tenderTotals = {
-    cash: { orders: 0, total: 0 },
-    eWallet: { orders: 0, total: 0 },
-    card: { orders: 0, total: 0 },
-  };
-  for (const order of completedOrders) {
-    const bucket = order.payment_method === "cash"
-      ? tenderTotals.cash
-      : order.payment_method === "card"
-        ? tenderTotals.card
-        : tenderTotals.eWallet;
-    bucket.orders += 1;
-    bucket.total += Number(order.total);
-  }
   const activeBranches = visibleBranches.filter((branch) => branch.is_active).length;
   const activeDevices = devices.filter((device) => device.is_active).length;
 
@@ -447,7 +480,6 @@ export default async function AdminPage({
   const completedOrderIds = new Set(completedOrders.map((order) => order.id));
   const topItemsByName = new Map<string, { name: string; qty: number; unit: string; total: number }>();
   const categorySalesById = new Map<string, { id: string; name: string; qty: number; total: number }>();
-  let itemsSold = 0;
   let kgSold = 0;
   for (const item of orderItems) {
     if (!completedOrderIds.has(item.order_id)) continue;
@@ -463,7 +495,6 @@ export default async function AdminPage({
     categoryItem.qty += salesQuantity(item);
     categoryItem.total += Number(item.line_total);
     categorySalesById.set(categoryKey, categoryItem);
-    itemsSold += salesQuantity(item);
     const weightKg = Number(item.weight_kg);
     if (Number.isFinite(weightKg) && weightKg > 0) kgSold += weightKg;
   }
@@ -488,9 +519,6 @@ export default async function AdminPage({
   });
   const weekPeak = Math.max(...weekSeries.map((point) => point.value), 1);
 
-  const discountsGiven = completedOrders.reduce((sum, order) => sum + Number(order.discount_amount), 0);
-  const taxCollected = completedOrders.reduce((sum, order) => sum + Number(order.vat_amount), 0);
-  const returnsAndVoids = todayOrders.filter((order) => order.status !== "completed").reduce((sum, order) => sum + Number(order.total), 0);
   const branchTotalsById = new Map<string, { orderCount: number; sales: number }>();
   for (const order of completedOrders) {
     const branch = branchTotalsById.get(order.store_id) ?? { orderCount: 0, sales: 0 };
@@ -507,6 +535,8 @@ export default async function AdminPage({
     : "All branches";
   const branchQuery = selectedBranchId ? `&branch=${encodeURIComponent(selectedBranchId)}` : "";
   const reportHref = `/admin/reports?range=7d${branchQuery}`;
+  const todayReportHref = `/admin/reports?from=${encodeURIComponent(todayBusinessDate)}&to=${encodeURIComponent(todayBusinessDate)}&grouping=day${branchQuery}`;
+  const shiftReportsHref = `/admin/shifts?from=${encodeURIComponent(todayBusinessDate)}&to=${encodeURIComponent(todayBusinessDate)}`;
   const ordersHref = `/admin/orders?range=today${branchQuery}`;
   const exportHref = `/admin/report?range=7d${branchQuery}`;
   const firstName = shortName(profile.full_name, shortName(user.email ?? null, "Admin"));
@@ -544,7 +574,7 @@ export default async function AdminPage({
     return detail ? [detail] : [];
   });
   const queryWarning = Boolean(
-    branchesResult.error || productsResult.error || categoriesResult.error || ordersResult.error || dashboardReceiptDetailsResult.error || stockResult.error || devicesResult.error || cashiersResult.error || orderItemsError || reversalLookup.failed,
+    branchesResult.error || productsResult.error || categoriesResult.error || ordersResult.error || dashboardReceiptDetailsResult.error || stockResult.error || devicesResult.error || cashiersResult.error || shiftReportsResult.error || orderItemsError || reversalLookup.failed,
   );
   const dashboardReceipts: OrderReceiptData[] = dashboardReceiptDetailOrders.map((order) => {
     const branch = branchById.get(order.store_id);
@@ -741,24 +771,7 @@ export default async function AdminPage({
               <div className="mt-3">{profile.role === "admin" && <OwnerGuidance topic="low-stock" compact />}{!inventorySettings.lowStockAlertsEnabled ? <div className="rounded-btn border border-dashed border-line-strong bg-surface-raised px-4 py-5"><p className="text-sm font-extrabold text-ink">Alerts are turned off</p><p className="mt-1 text-xs leading-5 text-ink-muted">Low-stock notifications are disabled for this dashboard. Inventory counts remain available.</p><Link href="/admin/settings#dashboard-settings" className="mt-3 inline-flex text-xs font-extrabold text-primary hover:underline">Configure alert settings <AdminIcon name="arrow" size={13} /></Link></div> : lowStockRows.length === 0 ? <EmptyState title="Stock levels look good" detail="Tracked products will appear here when they reach their configured minimum." /> : lowStockRows.map((row) => <StockAlert key={`${row.branch.id}:${row.product.id}`} name={row.product.name} detail={`${row.branch.name} · Stock: ${formatStockQuantity(row.onHand)} ${row.product.unit}`} minimum={`Min: ${formatStockQuantity(dashboardLowStockThreshold(row.product.min_stock, inventorySettings.defaultLowStockThreshold))} ${row.product.unit}`} threshold={dashboardLowStockThreshold(row.product.min_stock, inventorySettings.defaultLowStockThreshold)} onHand={row.onHand} image={productImage(row.product)} danger={row.status === "out"} />)}</div>
             </section>
 
-            <section aria-labelledby="today-heading" className="admin-panel min-w-0 p-5">
-              <div className="admin-panel__header"><div><h2 id="today-heading" className="admin-panel__title">Today&apos;s Overview</h2><p className="admin-panel__subtitle">Key business metrics at a glance</p></div></div>
-              <div className="mt-4 grid gap-2">
-                <OverviewMetric icon="chart" label="Average order value" value={displayPeso(averageTicket)} />
-                <OverviewMetric icon="bag" label="Items sold" value={String(itemsSold)} />
-                <OverviewMetric icon="promotions" label="Discounts given" value={displayPeso(discountsGiven)} />
-                <OverviewMetric icon="orders" label="Returns & voids" value={displayPeso(returnsAndVoids)} />
-                <OverviewMetric icon="wallet" label="Tax collected" value={displayPeso(taxCollected)} />
-              </div>
-              <div className="mt-5 border-t border-line pt-4">
-                <div className="flex items-center justify-between gap-3"><p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted">Tender mix</p><Link href={reportHref} className="text-[10px] font-extrabold text-primary hover:underline">Open report</Link></div>
-                <div className="mt-3 grid gap-3">
-                  <TenderMetric label="Cash" orders={tenderTotals.cash.orders} value={tenderTotals.cash.total} total={totalSales} tone="bg-primary" />
-                  <TenderMetric label="E-wallet" orders={tenderTotals.eWallet.orders} value={tenderTotals.eWallet.total} total={totalSales} tone="bg-success" />
-                  <TenderMetric label="Card" orders={tenderTotals.card.orders} value={tenderTotals.card.total} total={totalSales} tone="bg-accent" />
-                </div>
-              </div>
-            </section>
+            <DailySalesReportPanel reports={shiftReports} salesReportHref={todayReportHref} shiftReportsHref={shiftReportsHref} />
           </div>
 
           <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.8fr)]">
@@ -823,19 +836,6 @@ function SalesChart({ series }: { series: Array<{ label: string; value: number }
 function StockAlert({ name, detail, minimum, threshold, onHand, image, danger }: { name: string; detail: string; minimum: string; threshold: number; onHand: number; image: string; danger: boolean }) {
   const percentage = Math.max(8, Math.min(100, (onHand / Math.max(threshold, 1)) * 100));
   return <div className="admin-stock-alert"><span className="admin-stock-alert__image"><Image src={image} alt="" width={38} height={38} /></span><span className="admin-stock-alert__copy"><strong>{name}</strong><small>{detail}</small></span><span className="admin-stock-alert__bar"><small>{minimum}</small><div><span className={danger ? "is-danger" : ""} style={{ width: `${percentage}%` }} /></div></span></div>;
-}
-
-function OverviewMetric({ icon, label, value }: { icon: "chart" | "bag" | "promotions" | "orders" | "wallet"; label: string; value: string }) {
-  return <div className="flex items-center gap-2 rounded-btn border border-line bg-surface-raised px-3 py-2.5"><span className="grid h-7 w-7 place-items-center rounded-full bg-primary-soft text-primary"><AdminIcon name={icon} size={14} /></span><span className="min-w-0 flex-1 text-[10px] font-semibold text-ink-muted">{label}</span><strong className="tnums text-[11px] font-extrabold text-ink">{value}</strong></div>;
-}
-
-function TenderMetric({ label, orders, value, total, tone }: { label: string; orders: number; value: number; total: number; tone: string }) {
-  const share = total > 0 ? Math.round((value / total) * 100) : 0;
-  return <div>
-    <div className="flex items-center justify-between gap-3 text-xs"><span className="flex items-center gap-2 font-extrabold text-ink"><i className={`h-2.5 w-2.5 rounded-full ${tone}`} />{label}</span><span className="text-right"><strong className="tnums font-extrabold text-ink">{displayPeso(value)}</strong><small className="ml-1.5 text-[10px] text-ink-muted">{share}%</small></span></div>
-    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-secondary"><span className={`block h-full rounded-full ${tone}`} style={{ width: `${share}%` }} /></div>
-    <p className="mt-1 text-[10px] text-ink-muted">{orders} order{orders === 1 ? "" : "s"}</p>
-  </div>;
 }
 
 function SystemStatus({ name, status, warning = false }: { name: string; status: string; warning?: boolean }) {

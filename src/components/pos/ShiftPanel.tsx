@@ -224,7 +224,7 @@ export default function ShiftPanel({
       setClosedReading(finalReading);
       setReading(finalReading);
       onShiftChange(null);
-      onToast("Shift closed. Give the slip to your admin for the Z-reading.");
+      onToast("Shift closed. The daily sales report is now available in the owner dashboard.");
     } catch (closeError) {
       setError(closeError instanceof Error ? closeError.message : "The shift could not be closed.");
     } finally {
