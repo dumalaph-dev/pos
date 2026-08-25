@@ -8,8 +8,9 @@ const execFileAsync = promisify(execFile);
 
 export const DEFAULT_EXPECTED_SUPABASE_PROJECT_REF = "uzavkjftwcuixidxyopr";
 export const BRANCH_ENTITLEMENT_SCHEMA_FILE = "scripts/branch-entitlement-schema-check.sql";
+export const SUPABASE_CLI_VERSION = "2.114.0";
 const LINKED_PROJECT_REF_FILES = ["supabase/.temp/project-ref", ".supabase/project-ref"];
-const READ_ONLY_SCHEMA_QUERY = `npx supabase db query --linked --agent yes --file ${BRANCH_ENTITLEMENT_SCHEMA_FILE} --output json`;
+const READ_ONLY_SCHEMA_QUERY = `npx --yes supabase@${SUPABASE_CLI_VERSION} db query --linked --agent yes --file ${BRANCH_ENTITLEMENT_SCHEMA_FILE} --output json`;
 
 export async function runProductionPreflight({
   args = process.argv.slice(2),
@@ -138,7 +139,7 @@ export async function runLinkedSchemaQuery({
   const relativeSchemaFile = path.relative(cwd, schemaFile) || BRANCH_ENTITLEMENT_SCHEMA_FILE;
   const cliArgs = [
     "--yes",
-    "supabase",
+    `supabase@${SUPABASE_CLI_VERSION}`,
     "db",
     "query",
     "--linked",
@@ -155,6 +156,7 @@ export async function runLinkedSchemaQuery({
       cwd,
       env,
       windowsHide: true,
+      shell: process.platform === "win32",
       timeout: 20_000,
       maxBuffer: 1_000_000,
     });

@@ -8,6 +8,7 @@ import {
   printPreflightResult,
   runLinkedSchemaQuery,
   runProductionPreflight,
+  SUPABASE_CLI_VERSION,
 } from "./production-preflight.mjs";
 
 const PROJECT_REF = "uzavkjftwcuixidxyopr";
@@ -57,7 +58,7 @@ test("the linked schema command uses a read-only SQL file and the linked project
   const capturedInvocation = invocation as { executable: string; args: string[]; options: Record<string, unknown> };
   assert.deepEqual(capturedInvocation.args, [
     "--yes",
-    "supabase",
+    `supabase@${SUPABASE_CLI_VERSION}`,
     "db",
     "query",
     "--linked",
@@ -70,6 +71,7 @@ test("the linked schema command uses a read-only SQL file and the linked project
   ]);
   assert.equal(capturedInvocation.options.cwd, ROOT);
   assert.equal(capturedInvocation.options.windowsHide, true);
+  assert.equal(capturedInvocation.options.shell, process.platform === "win32");
 });
 
 test("the migration 0070 schema check is catalog-only", () => {
