@@ -352,7 +352,7 @@ export default async function ShiftsPage({
               </div>
             </div>
             {zReadings.length === 0 ? (
-              <ShiftsEmpty label="No Z-readings yet" detail="Close a shift, then generate its Z-reading to start the archive." />
+               <ShiftsEmpty label="No Z-readings yet" detail="New closeouts are sealed automatically. Older closed shifts can be sealed from their detail view." />
             ) : (
               <ul className="mt-4 divide-y divide-line/70">
                 {zReadings.slice(0, 12).map((reading) => (

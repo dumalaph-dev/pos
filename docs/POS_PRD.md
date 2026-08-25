@@ -211,6 +211,7 @@ Standardize every branch on a **Wi-Fi / Ethernet (LAN) 80mm thermal receipt prin
 - Cashier opens a shift with a declared opening cash amount. Shifts are per branch (and per cashier/tablet).
 - Close shift: declare counted cash → app shows **expected cash** (opening + cash sales − refunds), **variance**, and requires a note if variance exceeds a configurable amount.
 - X-reading (mid-shift summary, non-resetting) available to the cashier; Z-reading (end-of-day) is Admin-only and can be viewed per branch.
+- Every successful shift close automatically seals a dashboard-ready daily sales report; the owner can open it from the dashboard and inspect the shift snapshot, tender mix, and cash reconciliation.
 
 ### 6.6 Admin Backoffice
 
