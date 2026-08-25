@@ -20,6 +20,7 @@
     "test:public-menu-domain": "node --experimental-strip-types --test scripts/public-menu-domain.test.ts",
     "test:site-url": "node --experimental-strip-types --test scripts/site-url.test.ts",
     "test:metadata": "node --experimental-strip-types --test scripts/page-metadata.test.ts",
+    "test:production-preflight": "node --experimental-strip-types --test scripts/production-preflight.test.ts",
     "trial:validate": "npx supabase db query --linked --file scripts/trial-lifecycle-smoke.sql --output json",
     "pos:void:validate": "npx supabase db query --linked --file scripts/pos-void-smoke.sql --output json",
     "paymongo:preflight": "node scripts/paymongo-preflight.mjs",
