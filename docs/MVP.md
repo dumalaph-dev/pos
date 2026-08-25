@@ -6,6 +6,12 @@
 
 This file is the **cut line**: what ships as the MVP, what's explicitly deferred, and how we know it's done. When in doubt, the PRD is the detail; this is the boundary.
 
+## Current acceptance status — 2026-08-25
+
+The application implementation, hosted schema, automated POS/accessibility checks, production build, PWA shell, customer display browser pass, online menu flow, and owner backoffice are in place. The MVP is **not yet signed off in a real store** because the real tablet, printer/display, approved menu/staff data, backup restore, monitoring notifications, pilot week, and second-branch acceptance still require operator evidence. The authoritative checklist and evidence log are in [tasks.md](tasks.md).
+
+The 2026-08-25 production preflight also repaired and verified the paid-branch entitlement guard through hosted migration `0072`; this removes a schema-drift blocker but does not itself count as the branch-2 acceptance.
+
 ---
 
 ## 1. What the MVP is (and isn't)
@@ -24,7 +30,7 @@ The MVP is the **full loop that makes the product real for a growing owner**: se
 **Not in the MVP** (see PRD §4, §7, §8)
 - BIR-accredited official receipts (order slips only)
 - Pre-orders / reservations / customer records
-- Online *ordering* app for customers (the display is passive, not an ordering surface)
+- Online ordering is a separately shipped extension (public menu, pickup/delivery configuration, and POS handoff); it is not required for the core POS go/no-go bars below.
 - Cross-branch inventory transfers / central commissary
 - Weighing-scale integration, split payment, dark theme, promos on the display *(all P1)*
 - Full inventory reconciliation depth and rich reports *(basic versions in MVP; full in fast-follow)*
@@ -33,7 +39,16 @@ The MVP is the **full loop that makes the product real for a growing owner**: se
 
 ## 2. MVP feature list & done-criteria
 
-Each item is "done" when its box can be checked in a real store, not a demo.
+Each item is "done" when its box can be checked in a real store, not a demo. The code-delivery status below is informative; it does not replace the real-store acceptance boxes.
+
+| Slice | Code / hosted status | Real-store acceptance still required |
+|---|---|---|
+| Auth and branch-bound tablet | Implemented; hosted employee login and forced-password-change QA passed | Actual tablet setup, real staff credentials, offline unlock, and branch-scope handoff |
+| Sell, offline, and sync | Implemented; automated POS/property checks pass | 15-sale airplane-mode drill and exactly-once SQL verification |
+| Printing | Adapter, receipt builder, settings, reprint, and failure handling implemented | Real LAN printer slip and receipt inspection |
+| Multi-branch | Backoffice flow and entitlement schema are implemented; hosted preflight/smoke pass | Owner creates branch #2 and signs off against the success bars |
+| Customer display | Hosted paired-browser flow passes | Physical second-screen pairing and disconnect pass |
+| Backoffice and shifts | Implemented; hosted QA and real-day report reconciliation passed | Real-menu sale, shift open/close, X/Z, and report reconciliation during pilot |
 
 ### 2.1 Auth & branch-bound tablet
 - [ ] Email + password login (Supabase Auth); role + branch from `profiles`.

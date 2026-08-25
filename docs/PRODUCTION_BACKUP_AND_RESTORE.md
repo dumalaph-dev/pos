@@ -2,7 +2,11 @@
 
 **Owner:** Dumala production operator
 **Project:** Supabase `uzavkjftwcuixidxyopr`
-**Last checked:** 2026-08-15 (Asia/Singapore)
+**Last checked:** 2026-08-25 (Asia/Singapore)
+
+## Latest logical checkpoint
+
+`npm run backup:production` completed successfully on 2026-08-25 at `2026-08-25T08-19-50Z`, exporting 35/35 application tables, 621 rows, and 290 KB to `backups/2026-08-25T08-19-50Z`. The manifest and every NDJSON row were re-parsed and count-checked successfully. The checkpoint is gitignored and contains production data; copy it to restricted off-machine storage before treating it as operationally useful. A restore rehearsal has not yet been completed.
 
 ## Verified posture
 
@@ -62,7 +66,7 @@ It reads through the API rather than `pg_dump` on purpose: `supabase db dump` ru
 ### Restore from a logical backup
 
 1. Create the target Supabase project and record its ref.
-2. Apply the schema: `npx supabase db push --linked`. Confirm the ledger matches the migration set the backup was taken against (`manifest.json` records the run timestamp; match it to the migration state in Git at that commit).
+2. Apply the schema: `npx --yes supabase@2.114.0 db push --linked`. Confirm the ledger matches the migration set the backup was taken against (`manifest.json` records the run timestamp; match it to the migration state in Git at that commit).
 3. Load each `*.ndjson` **in the order listed in `manifest.json`** — it is ordered parents-first so foreign keys resolve. Insert with the service role key so RLS does not reject the load.
 4. Append-only tables (`orders`, `order_items`, `stock_movements`, `audit_logs`, `z_readings`) are protected by triggers that block UPDATE and DELETE. Load them into an empty project; do not attempt to merge into a project that already holds rows.
 5. Re-provision employee Auth users, then re-upload Storage objects.
@@ -99,7 +103,7 @@ The plan decides which of these applies. Step 1 is how you confirm which one you
 9. Verify it took effect from the CLI — `pitr_enabled` should now read `true`:
 
 ```bash
-npx supabase backups list --project-ref uzavkjftwcuixidxyopr
+npx --yes supabase@2.114.0 backups list --project-ref uzavkjftwcuixidxyopr
 ```
 
 10. Store a screenshot or Dashboard export in the restricted operations folder; do not commit it to Git.

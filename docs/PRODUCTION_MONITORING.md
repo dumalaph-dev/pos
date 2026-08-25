@@ -1,6 +1,10 @@
 # Production monitoring runbook
 
-**Last updated:** 2026-08-12
+**Last updated:** 2026-08-25
+
+## Current status
+
+The repository-side monitoring path is implemented and verified: `src/instrumentation.ts` emits structured `server_request_error` records, handled application errors and deduplicated offline-sync failures go through `src/lib/monitoring.ts`, and the live production preflight passed on 2026-08-25. The remaining monitoring gate is external to the repository: confirm the Vercel production Logs view, configure the available notification rules, and record the pilot alert recipient before the first pilot week.
 
 Dumala POS does not require a paid third-party error-monitoring service. Production diagnostics use three layers:
 

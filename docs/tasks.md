@@ -7,7 +7,7 @@
 
 ## Current project status
 
-**Last updated:** 2026-08-20
+**Last updated:** 2026-08-25
 
 This section is the current source of truth for delivered work and the next gate. Keep it updated in the same change as every feature, migration, QA pass, commit, or deployment.
 
@@ -16,19 +16,23 @@ This section is the current source of truth for delivered work and the next gate
 | Foundation and infrastructure | Complete (9/9 checklist items) | Keep CI and preview deployments green |
 | POS online core | Complete | Pilot validation |
 | Offline layer | Complete | Full 15-sale pilot drill |
-| Printing | In progress (6/7) | Physical LAN printer slip validation |
+| Printing | In progress (6/7) | Physical LAN printer slip validation on the real branch LAN |
 | Multi-branch | Complete | Production second-branch sign-off |
-| Customer display | Hosted migration `0042` applied; RLS/grants verified; one real Main Branch promotion is active; paired browser two-screen QA passed for cart, weight, discount, payment/change, thank-you, rotation, and disconnect | Keep the separate physical display/LAN and offline pilot gate moving |
+| Customer display | Hosted migration `0042` applied; RLS/grants verified; one real Main Branch promotion is active; paired browser two-screen QA passed for cart, weight, discount, payment/change, thank-you, rotation, and disconnect | Complete the separate physical display/LAN and offline pilot gate |
 | Online ordering and public menu | Deployed; pay-at-pickup queue/ETA, QR link, POS pickup handoff, mobile-first customer menu, and owner copy/theme editor are implemented; production preflight and public-menu smoke check pass | Owner acceptance with one real pickup order; keep the physical pilot gate moving |
-| Admin backoffice | Complete (9/9 checklist items; hosted Employee ID login and forced-password-change QA passed 2026-08-09; hosted migration ledger synchronized through `0049` and disposable account/PIN UI rechecked 2026-08-14) | Maintain regression coverage |
+| Admin backoffice | Complete (9/9 checklist items; hosted Employee ID login and forced-password-change QA passed 2026-08-09; hosted migration ledger synchronized through `0072` and disposable account/PIN UI rechecked 2026-08-14) | Maintain regression coverage |
 | Inventory workflow | Complete | Maintain regression coverage |
 | Inventory reporting and exports | Authenticated admin and manager QA passed | Reconciliation against broader live data |
 | Shifts, till, and Z-readings | Complete; hosted authenticated RPC, manual open/close QA, and real-day report reconciliation passed 2026-08-12; shift-label collision fixed and verified 2026-08-09 | Keep regression coverage green |
 | Store-owner onboarding and guidance | Implemented | Verify first-run and mobile behavior on the deployed app |
 | Admin workspace themes | Live main deployment previews verified 2026-08-09 | Maintain regression coverage |
-| Production pilot | In progress; `dumala.store` is live, production identity/deployment preflight passed 2026-08-12, and P9 readiness work is underway | Complete the physical-device pilot gates, PITR/restore confirmation, Vercel log/alert setup, real data intake, pilot week, and branch #2 |
+| Production pilot | In progress; `dumala.store` is live, production identity/deployment preflight passed 2026-08-25, and the paid-branch entitlement drift was repaired in hosted migration `0072` | Complete the physical-device pilot gates, restore rehearsal/backup decision, Vercel log/alert setup, real data intake, pilot week, and branch #2 |
 
 ### Recent delivery log
+
+- **2026-08-25 - Production readiness verification and entitlement repair:** The repository-wide validation pass passed typecheck, lint, all available platform/POS/accessibility/contract/public-menu/site/metadata/preflight tests, and the production build. A fresh logical production backup exported **35/35 tables, 621 rows, 290 KB** to `backups/2026-08-25T08-19-50Z`; its manifest and every NDJSON row were re-parsed and count-checked, but it is still only a checkpoint until it is copied off-machine and restored into a scratch project. The live preflight initially found migration `0070` recorded as applied while its trigger still contained the older `0069` function. Added and applied hosted migration `0072_repair_paid_branch_entitlement_guard.sql`; the read-only schema preflight and rollback-scoped entitlement smoke test now pass. The linked validation scripts are pinned to Supabase CLI `2.114.0` for Windows portability. Physical tablet, real-data, Vercel notification, pilot-week, and branch-owner sign-off gates remain open.
+
+- **2026-08-25 - Product surface updates:** The landing page now promotes the deployed online menu, and automatic shift sales reports are present in the dashboard flow. These are code-delivered; real owner pickup-order acceptance and physical pilot validation remain operational gates.
 
 - **2026-08-20 - Public menu editor merged and production smoke coverage added:** Merged `codex/online-menu-editor` into `main` as `f47783b` (feature commit `7d99f42`). The customer-facing menu now supports owner-editable copy and POS-synced themes, while the POS install prompt remains excluded from public routes. `node scripts/production-preflight.mjs --remote --menu-slug dumala-main` now checks the public menu route for HTTP 200, the rendered public-menu shell, and the absence of the `Install Dumala PWA` label without placing an order. Production preflight, typecheck, lint, POS business tests, accessibility tests, and the public route smoke check passed. Final acceptance still requires the owner's real pay-at-pickup order and the physical pilot gates below.
 
@@ -371,19 +375,19 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 ## P9 — Pilot & Production Readiness
 *Goal: live in a real store, then a second branch as the true multi-branch test.*
 
-**Current state (2026-08-12):** Production deployment and the PWA foundation are already live, and the remote production preflight passed for `dumala.store`, hosted Supabase project `uzavkjftwcuixidxyopr`, `/manifest.webmanifest`, and `/sw.js`. The linked migration ledger is synchronized through `0043`. P9 is active rather than not started: the onboarding/device checklist and secure real-data intake packet are ready; the remaining P9 work is physical-device verification and production-use configuration.
+**Current state (2026-08-25):** Production deployment and the PWA foundation are live. The remote production preflight passes for `dumala.store`, hosted Supabase project `uzavkjftwcuixidxyopr`, `/manifest.webmanifest`, `/sw.js`, and the paid-branch entitlement schema after hosted migration `0072` repaired drift recorded against `0070`. P9 is active rather than not started: the onboarding/device checklist, secure real-data intake packet, logical backup exporter, restore runbook, structured runtime diagnostics, and offline-drill verification are ready; the remaining P9 work is physical-device verification, owner data/configuration, external monitoring setup, backup restore rehearsal, and production use.
 
-- [x] Production Supabase (separate project from dev); run migrations; verify RLS in prod. *(Hosted project is connected; local and hosted migration ledgers match through `0043`; hosted RLS, privileges, and authenticated QA are recorded above.)*
+- [x] Production Supabase (separate project from dev); run migrations; verify RLS in prod. *(Hosted project is connected; local and hosted migration ledgers match through `0072`; hosted RLS, privileges, and authenticated QA are recorded above. Migration `0072` repaired the paid-branch guard drift and the read-only preflight now passes.)*
 - [x] Vercel production deployment + custom domain. *(`https://dumala.store` is live and serving the connected GitHub deployment.)*
 - [x] PWA foundation and install UX. *(Manifest, standalone display mode, production service worker, offline shell, update prompt, and compact dismissible install control are implemented.)*
 - [ ] PWA install verified on the actual tablet(s); "Add to Home Screen" and confirm the installed app does not show the install control.
 - [ ] Seed the real org, first branch, real menu/prices, staff accounts + PINs.
 - [x] Prepare the production onboarding/device checklist and secure real-data intake packet. *(See `docs/PRODUCTION_ONBOARDING_CHECKLIST.md` and `docs/PRODUCTION_DATA_INTAKE.md`; the actual owner data is still required.)*
 - [ ] On-device checklist: printer paired, customer display paired, offline drill passed, receipt looks right.
-- [ ] Backups: confirm Supabase PITR/backups on; document restore steps. *(Corrected 2026-08-15: the project is on the **Free** plan, so `backups: []` is literal — Supabase takes no automated backups at all, and PITR is unavailable without first upgrading to Pro. Managed backups are therefore a billing decision, not a configuration one. A no-cost logical backup now exists as the interim recovery path: `npm run backup:production` exported all 35 application tables, 376 rows, verified. Restore procedure and pilot cadence are in [PRODUCTION_BACKUP_AND_RESTORE.md](PRODUCTION_BACKUP_AND_RESTORE.md). The gate stays open until a restore has been rehearsed and the owner decides on the plan.)*
-- [ ] Basic monitoring: Vercel runtime error logging and sync-failure alerting. *(Structured server logs and POS sync UI/alerts are ready; configure Vercel log access/notifications before the pilot.)*
+- [ ] Backups: confirm Supabase PITR/backups on; document restore steps. *(Corrected 2026-08-15: the project is on the **Free** plan, so `backups: []` is literal — Supabase takes no automated backups at all, and PITR is unavailable without first upgrading to Pro. Managed backups are therefore a billing decision, not a configuration one. A fresh no-cost logical checkpoint on 2026-08-25 exported all 35 application tables, 621 rows, and 290 KB. Restore procedure and pilot cadence are in [PRODUCTION_BACKUP_AND_RESTORE.md](PRODUCTION_BACKUP_AND_RESTORE.md). The gate stays open until the checkpoint is copied off-machine, restored into a scratch project, and the owner decides on the plan.)*
+- [ ] Basic monitoring: Vercel runtime error logging and sync-failure alerting. *(Structured `server_request_error`, handled-error, and deduplicated offline-sync events are implemented and the live site/preflight are healthy; configure Vercel log access/notifications and name the pilot alert recipient.)*
 - [ ] **Pilot week:** run one branch alongside the notebook; log every issue; fix fast.
-- [ ] **Add branch #2** from the account as the real multi-branch validation; sign off against MVP success bars.
+- [ ] **Add branch #2** from the account as the real multi-branch validation; sign off against MVP success bars. *(The entitlement schema preflight and rollback-scoped smoke test pass after hosted migration `0072`; actual branch creation still waits for owner billing/data approval and the pilot.)*
 
 ### Future product plan
 
@@ -421,7 +425,7 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 - [ ] Audit-logging on every sensitive action as features land (don't retrofit).
 - [ ] Accessibility & tap-target sizing on every POS screen.
 - [x] Test data: keep a two-branch, multi-cashier fixture for every RLS/scope test. *(✅ `supabase/seed.sql` + `scripts/rls-fixture.mjs`, 18/18 §1 assertions green 2026-07-31)*
-- [ ] Update [MVP.md](MVP.md) done-criteria and this tracker as phases complete.
+- [x] Update [MVP.md](MVP.md) done-criteria and this tracker as phases complete. *(MVP acceptance status and the 2026-08-25 verification/entitlement repair are recorded in this pass; physical and owner-controlled gates remain unchecked.)*
 
 ### Hosted Supabase product-image migration and authenticated flow - 2026-08-06
 
