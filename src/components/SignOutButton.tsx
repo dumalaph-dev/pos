@@ -2,7 +2,7 @@
 
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
-import { signOut } from "@/app/actions";
+import { signOut, type SignOutDestination } from "@/app/actions";
 import { clearOfflineCaches } from "@/lib/offline-cache";
 import { clearOfflineSession } from "@/lib/offline";
 import { clearAdminLocalFirstCache } from "@/lib/admin/local-first-store";
@@ -50,17 +50,24 @@ function SignOutSubmit({ className, variant }: { className: string; variant: "bu
 /**
  * Client component so the app-shell caches are wiped *before* the session ends
  * — Cache Storage is origin-scoped, survives sign-out, and this is a shared
- * terminal. `signOut` redirects to "/?signed-out=1" as a backstop for the
- * sign-outs that never run this handler (see src/app/page.tsx).
+ * terminal. The server action returns the intended internal destination so
+ * the expected sign-out navigation is not mistaken for a failed action.
  */
 export function SignOutButton({
   className = "",
   variant = "button",
+  destination = "login",
+  fallbackHref,
 }: {
   className?: string;
   variant?: "button" | "menu";
+  destination?: SignOutDestination;
+  fallbackHref?: string;
 }) {
   const router = useRouter();
+  const safeFallbackHref = fallbackHref && fallbackHref.startsWith("/") && !fallbackHref.startsWith("//")
+    ? fallbackHref
+    : "/login?signed-out=1";
 
   return (
     <form
@@ -77,11 +84,12 @@ export function SignOutButton({
           // session from being ended on a shared terminal.
         }
         try {
-          await signOut();
+          const result = await signOut(destination);
+          router.replace(result.redirectPath);
         } catch {
           // A cashier must be able to leave a shared terminal while offline;
           // the local session/cache wipe above is the important boundary.
-          router.replace("/?signed-out=1");
+          router.replace(safeFallbackHref);
         }
       }}
     >

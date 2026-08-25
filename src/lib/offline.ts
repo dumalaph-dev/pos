@@ -54,6 +54,9 @@ export type OfflineProfileSnapshot = {
   store_name: string | null;
   store_address: string | null;
   store_tin: string | null;
+  /** Public branch login identifiers used to return a POS cashier after sign-out. */
+  staff_login_slug?: string | null;
+  staff_login_key?: string | null;
   brand_logo_url: string | null;
   full_name: string | null;
   role: "admin" | "manager" | "cashier" | null;
@@ -131,6 +134,8 @@ function isOfflineProfileSnapshot(value: unknown): value is OfflineProfileSnapsh
     isNullableString(value.store_name) &&
     isNullableString(value.store_address) &&
     isNullableString(value.store_tin) &&
+    (value.staff_login_slug === undefined || isNullableString(value.staff_login_slug)) &&
+    (value.staff_login_key === undefined || isNullableString(value.staff_login_key)) &&
     isNullableString(value.brand_logo_url) &&
     isNullableString(value.full_name) &&
     (role === null || role === "admin" || role === "manager" || role === "cashier") &&

@@ -7,7 +7,13 @@ import {
   normalizeEmployeeCode,
 } from "@/lib/employee-auth";
 import { createClient } from "@/lib/supabase/server";
-import { getStoreByStaffKey, isStaffAccessValue, normalizeStaffAccessValue } from "@/lib/store-access";
+import {
+  getStoreByStaffKey,
+  isStaffAccessValue,
+  legacyStaffLoginPath,
+  normalizeStaffAccessValue,
+  staffLoginPath,
+} from "@/lib/store-access";
 import {
   checkEmployeeLoginLock,
   clearEmployeeLoginAttempts,
@@ -31,6 +37,10 @@ type EmployeeLoginProfile = {
 };
 
 const INVALID_LOGIN_MESSAGE = "Employee ID or password is incorrect.";
+const DEFAULT_SIGN_OUT_PATH = "/login?signed-out=1";
+
+export type SignOutDestination = "login" | "staff";
+export type SignOutResult = { redirectPath: string };
 
 export async function loginWithEmployeeId(_previousState: LoginState, formData: FormData): Promise<LoginState> {
   const employeeCode = normalizeEmployeeCode(String(formData.get("employee_code") ?? ""));
@@ -104,13 +114,47 @@ export async function loginWithEmployeeId(_previousState: LoginState, formData: 
   redirect(profile.role === "cashier" ? "/pos" : "/admin");
 }
 
-export async function signOut() {
+async function resolveSignOutPath(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  destination: SignOutDestination,
+): Promise<string> {
+  if (destination !== "staff") return DEFAULT_SIGN_OUT_PATH;
+
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+    if (!userId) return DEFAULT_SIGN_OUT_PATH;
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("store_id")
+      .eq("id", userId)
+      .maybeSingle();
+    const storeId = typeof profile?.store_id === "string" ? profile.store_id : null;
+    if (!storeId) return DEFAULT_SIGN_OUT_PATH;
+
+    const { data: store } = await supabase
+      .from("stores")
+      .select("staff_login_slug, staff_login_key")
+      .eq("id", storeId)
+      .maybeSingle();
+    const slug = typeof store?.staff_login_slug === "string" ? store.staff_login_slug.trim() : "";
+    if (slug) return `${staffLoginPath(slug)}?signed-out=1`;
+
+    const legacyKey = typeof store?.staff_login_key === "string" ? store.staff_login_key.trim() : "";
+    return legacyKey ? `${legacyStaffLoginPath(legacyKey)}?signed-out=1` : DEFAULT_SIGN_OUT_PATH;
+  } catch {
+    // Sign-out must still complete if the branch lookup is unavailable.
+    return DEFAULT_SIGN_OUT_PATH;
+  }
+}
+
+export async function signOut(destination: SignOutDestination = "login"): Promise<SignOutResult> {
   const supabase = await createClient();
+  const redirectPath = await resolveSignOutPath(supabase, destination);
   await supabase.auth.signOut();
-  // Cache Storage lives on the client and outlives the session, so the server
-  // cannot clear it here. Flag the landing so the login page wipes the
-  // app-shell caches even when sign-out did not come from SignOutButton
-  // (expired session, a redirect, JS-disabled fallback). See
-  // src/lib/offline-cache.ts.
-  redirect("/login?signed-out=1");
+  // Browser-side cache cleanup happens before this action in SignOutButton.
+  // Return the path so the client can navigate after the session is ended
+  // without mistaking Next's redirect control flow for an action failure.
+  return { redirectPath };
 }

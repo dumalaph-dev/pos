@@ -259,6 +259,16 @@ function readStorePosConfig(value: unknown): { name: string | null; address: str
   };
 }
 
+function staffLoginRedirectPath(profile: Pick<OfflineProfileSnapshot, "staff_login_slug" | "staff_login_key">): string {
+  const slug = profile.staff_login_slug?.trim();
+  if (slug) return `/staff/${encodeURIComponent(slug)}?signed-out=1`;
+
+  const legacyKey = profile.staff_login_key?.trim();
+  return legacyKey
+    ? `/store/${encodeURIComponent(legacyKey)}/login?signed-out=1`
+    : "/login?signed-out=1";
+}
+
 function readDevicePrinterSettings(value: unknown): PrinterSettings | null {
   if (!isRecord(value)) return null;
   const config = isRecord(value.printer_config) ? value.printer_config : {};
@@ -487,6 +497,8 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
       store_name: nextProfile.store_name,
       store_address: nextProfile.store_address ?? null,
       store_tin: nextProfile.store_tin ?? null,
+      staff_login_slug: nextProfile.staff_login_slug ?? null,
+      staff_login_key: nextProfile.staff_login_key ?? null,
       brand_logo_url: nextProfile.brand_logo_url ?? null,
       full_name: nextProfile.full_name,
       role: nextProfile.role,
@@ -594,7 +606,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
       if (session) {
         const { data: prof } = await supabase
           .from("profiles")
-          .select("id, org_id, store_id, organizations!profiles_org_id_fkey(settings), stores(name, address, tin, vat_registered, vat_rate, settings), full_name, role")
+          .select("id, org_id, store_id, organizations!profiles_org_id_fkey(settings), stores(name, address, tin, vat_registered, vat_rate, settings, staff_login_slug, staff_login_key), full_name, role")
           .eq("id", session.user.id)
           .single();
         if (prof) {
@@ -604,7 +616,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
           if (binding) {
             const { data: boundDevice } = await supabase
               .from("devices")
-              .select("id, store_id, paired_display_id, printer_transport, printer_config, stores(name, address, tin, vat_registered, vat_rate, settings)")
+              .select("id, store_id, paired_display_id, printer_transport, printer_config, stores(name, address, tin, vat_registered, vat_rate, settings, staff_login_slug, staff_login_key)")
               .eq("id", binding.deviceId)
               .eq("org_id", prof.org_id)
               .eq("is_active", true)
@@ -664,6 +676,8 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
             store_name: store.name,
             store_address: store.address,
             store_tin: store.tin,
+            staff_login_slug: isRecord(effectiveStore) && typeof effectiveStore.staff_login_slug === "string" ? effectiveStore.staff_login_slug : null,
+            staff_login_key: isRecord(effectiveStore) && typeof effectiveStore.staff_login_key === "string" ? effectiveStore.staff_login_key : null,
             brand_logo_url: branding.logoUrl,
             full_name: (prof.full_name as string | null) ?? null,
             role: (prof.role as ProfileData["role"]) ?? null,
@@ -1683,7 +1697,12 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                   <Icon name="settings" size={16} />
                   <span>Account settings</span>
                 </a>
-                <SignOutButton variant="menu" className="pos-account-menu__signout" />
+                <SignOutButton
+                  variant="menu"
+                  className="pos-account-menu__signout"
+                  destination={profile?.role === "admin" ? "login" : "staff"}
+                  fallbackHref={profile && profile.role !== "admin" ? staffLoginRedirectPath(profile) : undefined}
+                />
               </AdminMenu>
               <button
                 type="button"
