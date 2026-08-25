@@ -124,6 +124,22 @@
   animation: lp-pulse 2.4s ease-out infinite;
 }
 
+.lp-domain-name {
+  display: inline-block;
+  animation: lp-domain-name-in 520ms var(--lp-ease);
+}
+
+@keyframes lp-domain-name-in {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @keyframes lp-pulse {
   0% {
     box-shadow: 0 0 0 0 rgba(209, 160, 91, 0.6);
@@ -408,6 +424,7 @@
   .lp-float,
   .lp-float-slow,
   .lp-spin-slow,
+  .lp-domain-name,
   .lp-marquee__track,
   .lp-dot-pulse::before {
     animation: none;
@@ -592,6 +609,15 @@
   background-size: 46px 46px, 46px 46px, 100% 100%;
 }
 
+.lp-sec--online-menu {
+  background-color: #f1eadc;
+  background-image:
+    radial-gradient(rgba(23, 58, 43, 0.06) 1px, transparent 1px),
+    linear-gradient(135deg, rgba(195, 151, 86, 0.06) 0 1px, transparent 1px 18px),
+    linear-gradient(180deg, #f7f1e5 0%, #f1eadc 100%);
+  background-size: 24px 24px, 18px 18px, 100% 100%;
+}
+
 .lp-sec--interfaces {
   background-color: #f4eee1;
   background-image: radial-gradient(rgba(23, 58, 43, 0.075) 1px, transparent 1px);
@@ -645,6 +671,7 @@
 }
 
 .lp-sec--features,
+.lp-sec--online-menu,
 .lp-sec--playground,
 .lp-sec--interfaces,
 .lp-sec--offline,

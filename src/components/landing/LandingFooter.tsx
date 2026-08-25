@@ -38,6 +38,7 @@ export default function LandingFooter({
               <p className="font-black uppercase tracking-[0.16em] text-[#173a2b]">Product</p>
               <ul className="mt-3 grid gap-2 text-[#708076]">
                 <li><SectionLink section="features" onLandingPage={onLandingPage} className="lp-navlink hover:text-[#b18448]">Features</SectionLink></li>
+                <li><SectionLink section="online-menu" onLandingPage={onLandingPage} className="lp-navlink hover:text-[#b18448]">Online Menu</SectionLink></li>
                 <li><SectionLink section="playground" onLandingPage={onLandingPage} className="lp-navlink hover:text-[#b18448]">Try the POS</SectionLink></li>
                 <li><SectionLink section="interfaces" onLandingPage={onLandingPage} className="lp-navlink hover:text-[#b18448]">Counter POS &amp; dashboard</SectionLink></li>
                 <li><SectionLink section="offline" onLandingPage={onLandingPage} className="lp-navlink hover:text-[#b18448]">Offline first</SectionLink></li>

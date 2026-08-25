@@ -10,6 +10,7 @@
 /** The bullet list inside the price card. Kept short — the detail is below. */
 export const PRICING_INCLUDES = [
   "The complete counter POS and owner workspace",
+  "Public mobile menus with order-ahead flows",
   "Selling through internet interruptions with automatic sync",
   "Unlimited branches, staff, and products",
   "ESC/POS order-slip printing over Bluetooth, Wi-Fi, or USB",
@@ -25,6 +26,11 @@ export const PRICING_INCLUDES = [
  * which is most of what makes the page worth its own URL.
  */
 export const PRICING_DETAIL: Array<{ title: string; detail: string }> = [
+  {
+    title: "The online menu",
+    detail:
+      "Publish a mobile-first menu for each branch, accept pickup or enabled delivery orders, let customers schedule ahead, and share the menu through a public link, QR code, or custom branch subdomain.",
+  },
   {
     title: "The counter POS",
     detail:

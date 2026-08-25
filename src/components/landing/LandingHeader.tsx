@@ -11,6 +11,7 @@ import SectionLink from "./SectionLink";
 // and a section link that works on one breaks on the other. See SectionLink.
 const NAV_LINKS: Array<{ section?: string; href?: string; label: string }> = [
   { section: "features", label: "Features" },
+  { section: "online-menu", label: "Online Menu" },
   { section: "playground", label: "Try the POS" },
   { section: "workspace", label: "Workspace" },
   { section: "pricing", label: "Pricing" },
@@ -70,7 +71,7 @@ export default function LandingHeader() {
           />
         </Link>
 
-        <nav className="hidden items-center gap-9 text-sm font-semibold text-[#20372c] lg:flex" aria-label="Primary">
+        <nav className="hidden items-center gap-7 text-sm font-semibold text-[#20372c] lg:flex xl:gap-9" aria-label="Primary">
           {NAV_LINKS.map((link) =>
             link.section ? (
               <SectionLink key={link.label} section={link.section} onLandingPage={onLandingPage} className="lp-navlink hover:text-[#b18448] focus-visible:outline-none">

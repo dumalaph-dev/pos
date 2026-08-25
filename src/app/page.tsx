@@ -6,6 +6,7 @@ import Link from "next/link";
 import LandingFooter from "@/components/landing/LandingFooter";
 import LandingHeader from "@/components/landing/LandingHeader";
 import LandingPricing from "@/components/landing/LandingPricing";
+import LandingOnlineMenuDomain from "@/components/landing/LandingOnlineMenuDomain";
 import LandingPosPlaygroundLazy from "@/components/landing/LandingPosPlaygroundLazy";
 import ScrollReveal from "@/components/landing/ScrollReveal";
 import { formatPeso } from "@/lib/money";
@@ -18,7 +19,7 @@ import { PRICING_INCLUDES } from "@/lib/pricing-content";
 
 const LANDING_TITLE = "POS for Cafes, Restaurants & Food Businesses | Dumala POS";
 const LANDING_DESCRIPTION =
-  "A practical POS and owner workspace for Philippine cafes, restaurants, coffee shops, bakeshops, and other counter-service businesses.";
+  "A practical POS, online menu, and owner workspace for Philippine cafes, restaurants, coffee shops, bakeshops, and other counter-service businesses.";
 
 export const metadata: Metadata = {
   // `absolute` opts out of the root layout's "%s | Dumala POS" template, which
@@ -63,6 +64,30 @@ const featureCards: Array<{
     title: "Offline-first, cloud-ready",
     description: "The counter keeps working without internet, then syncs to the cloud whenever a connection is available.",
     points: ["Sale saves on the device first", "Background cloud sync", "Install on tablet or desktop"],
+  },
+];
+
+const onlineMenuFeatures = [
+  {
+    number: "01",
+    title: "A menu customers can use anywhere",
+    description:
+      "Give customers a fast, mobile-first way to browse categories, search products, build a cart, and see the menu your branch is actually serving.",
+    detail: "Public mobile menu",
+  },
+  {
+    number: "02",
+    title: "Order ahead without the back-and-forth",
+    description:
+      "Customers can choose pickup or an enabled delivery option, add their details, select a time, and receive an order number with queue and ETA updates.",
+    detail: "Pickup, delivery, and scheduling",
+  },
+  {
+    number: "03",
+    title: "A shareable address for every branch",
+    description:
+      "Publish a public menu link, share it as a QR code, or give each branch a custom address that is easy to say, print, and remember.",
+    detail: "Links and custom subdomains",
   },
 ];
 
@@ -216,6 +241,11 @@ function buildFaqs(premiumPrice: string, annualVariants: BillingVariant[]): Arra
       "Yes. Each branch keeps its own catalog, settings, printer, and staff, and orders stay scoped to the branch they were rung up in. Owners get a consolidated view across all of them.",
   },
   {
+    question: "Can customers order from the menu online?",
+    answer:
+      "Yes. Each branch can publish a mobile-first menu at a shareable link or custom address such as morning-ritual.dumala.store. Customers can browse the available menu, choose pickup or an enabled delivery option, schedule an order ahead, and receive an order number with queue and ETA updates.",
+  },
+  {
     question: "Which receipt printers are supported?",
     answer:
       "ESC/POS printers over Bluetooth, Wi-Fi, or USB, in 52mm, 58mm, and 80mm widths. The printer is configured per device, so each tablet can pair with the printer sitting next to it.",
@@ -277,7 +307,7 @@ function buildStructuredData(faqs: Array<{ question: string; answer: string }>, 
         url: origin,
         logo: absoluteUrl("/logo.png"),
         description:
-          "Dumala POS builds point-of-sale and back-office software for Philippine cafes, restaurants, bakeshops, and other counter-service food businesses.",
+          "Dumala POS builds point-of-sale, online menu, and back-office software for Philippine cafes, restaurants, bakeshops, and other counter-service food businesses.",
         areaServed: { "@type": "Country", name: "Philippines" },
       },
       {
@@ -290,7 +320,7 @@ function buildStructuredData(faqs: Array<{ question: string; answer: string }>, 
         operatingSystem: "Web browser (Android, iOS, Windows, macOS)",
         url: origin,
         description:
-          "An offline-first point-of-sale and owner workspace for Philippine cafes, restaurants, coffee shops, and bakeshops. Sales are written to the device first and sync to the cloud when a connection is available.",
+          "An offline-first point-of-sale, online menu, and owner workspace for Philippine cafes, restaurants, coffee shops, and bakeshops. Sales are written to the device first and sync to the cloud when a connection is available.",
         publisher: { "@id": organizationId },
         offers: {
           "@type": "Offer",
@@ -773,6 +803,115 @@ export default async function LandingPage() {
                       </li>
                     ))}
                   </ul>
+                </article>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Online Menu — shareable, mobile-first, and connected to the counter */}
+      <section id="online-menu" className="lp-sec--online-menu scroll-mt-24 border-y border-[#e1d9ca] py-14 sm:py-20">
+        <div className="mx-auto max-w-[1380px] px-6 sm:px-10 lg:px-16">
+          <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)] lg:gap-16">
+            <div data-lp-reveal="left">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">Online menu · built into Dumala</p>
+              <h2 className="mt-3 max-w-xl text-3xl font-black tracking-[-0.05em] text-[#173a2b] sm:text-[2.6rem] sm:leading-[1.05]">
+                Let customers order before they arrive.
+              </h2>
+              <p className="mt-5 max-w-xl text-sm leading-7 text-[#657168] sm:text-base">
+                Give every branch a mobile-first menu that feels like your storefront. Customers browse, choose a pickup time, and order ahead from a link you can share anywhere.
+              </p>
+
+              <div className="mt-6 flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-[0.12em] text-[#657168]">
+                <span className="rounded-full border border-[#d8d0c1] bg-[#fbf8f1] px-3 py-2">Mobile-first</span>
+                <span className="rounded-full border border-[#d8d0c1] bg-[#fbf8f1] px-3 py-2">Order ahead</span>
+                <span className="rounded-full border border-[#d8d0c1] bg-[#fbf8f1] px-3 py-2">Branch-ready</span>
+              </div>
+
+              <Link
+                href="/signup"
+                className="lp-btn mt-7 inline-flex items-center gap-2.5 rounded-xl bg-[#15382a] px-5 py-3.5 text-sm font-bold text-[#fffaf1] shadow-[0_12px_24px_rgba(21,56,42,0.16)] hover:bg-[#0e2a20] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#bc9657]"
+              >
+                Set up your public menu <ArrowIcon />
+              </Link>
+            </div>
+
+            <div data-lp-reveal="right">
+              <div className="relative mx-auto max-w-xl">
+                <div className="lp-glow pointer-events-none absolute -right-10 -top-10 h-48 w-48 rounded-full bg-[#c39756]/15 blur-3xl" />
+                <div aria-hidden="true" className="relative rounded-[28px] border border-[#d8d0c1] bg-[#fdfaf3] p-3 shadow-[0_26px_56px_rgba(23,58,43,0.13)] sm:p-4">
+                  <LandingOnlineMenuDomain />
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)]">
+                    <div className="rounded-[20px] border border-[#e0d9ca] bg-[#fffdf8] p-4 shadow-[0_10px_24px_rgba(23,58,43,0.06)]">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-black uppercase tracking-[0.15em] text-[#173a2b]">Morning Ritual</span>
+                        <span className="grid h-7 w-7 place-items-center rounded-lg bg-[#e0ebdf] text-[#356341]">
+                          <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M4 8.2h12M5.2 8.2v7.3h9.6V8.2M3.5 8.2 5.2 4h9.6l1.7 4.2" />
+                            <path d="M8 15.5v-3.2h4v3.2" />
+                          </svg>
+                        </span>
+                      </div>
+                      <div className="mt-4 rounded-xl bg-[#eef3eb] p-3">
+                        <span className="block text-[9px] font-black uppercase tracking-[0.14em] text-[#5a7b60]">Pickup in 15–20 min</span>
+                        <strong className="mt-1 block text-base font-black tracking-[-0.03em] text-[#173a2b]">Order ahead</strong>
+                      </div>
+                      <div className="mt-4 grid gap-2.5">
+                        {["Iced latte", "Garlic rice meal", "Banana bread"].map((item, index) => (
+                          <div key={item} className="flex items-center gap-2.5">
+                            <span className={`h-8 w-8 shrink-0 rounded-lg ${index === 0 ? "bg-[#d5e1d1]" : index === 1 ? "bg-[#ead8b9]" : "bg-[#e7d8d0]"}`} />
+                            <span className="min-w-0 flex-1 truncate text-[10px] font-bold text-[#58665b]">{item}</span>
+                            <span className="text-[10px] font-black tabular-nums text-[#173a2b]">₱{[140, 280, 95][index]}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex min-h-[218px] flex-col justify-between rounded-[20px] bg-[#15382a] p-4 text-[#fffaf1] shadow-[0_14px_28px_rgba(21,56,42,0.14)]">
+                      <div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-black uppercase tracking-[0.15em] text-[#d1a05b]">New online order</span>
+                          <span className="rounded-full bg-[#1f4a36] px-2 py-1 text-[9px] font-black text-[#a9c4ae]">#2048</span>
+                        </div>
+                        <p className="mt-3 text-[1.8rem] font-black leading-none tracking-[-0.06em]">₱420</p>
+                        <p className="mt-2 text-[10px] leading-4 text-[#c8d4c9]">Pickup · 10:30 AM<br />2 items · confirmation shown</p>
+                      </div>
+                      <div className="rounded-xl border border-[#3f604c] bg-[#1b4532] px-3 py-2.5">
+                        <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.12em] text-[#dbe6d9]">
+                          <span className="h-1.5 w-1.5 rounded-full bg-[#d1a05b]" /> Queue and ETA stay visible
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="lp-chip absolute -bottom-4 right-2 flex items-center gap-2.5 rounded-2xl border border-[#e2ddd0] bg-[#fffdf8]/95 px-3.5 py-2.5 shadow-[0_16px_34px_rgba(23,58,43,0.14)] backdrop-blur-sm sm:right-8">
+                  <span className="grid h-8 w-8 place-items-center rounded-xl bg-[#dfe7dc] text-[#356341]">
+                    <svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m3.2 8.3 3 3 6.6-6.7" />
+                    </svg>
+                  </span>
+                  <span className="leading-tight">
+                    <strong className="block text-[11px] font-black text-[#173a2b]">Order received</strong>
+                    <span className="block text-[9px] font-semibold text-[#798478]">Ready for the counter queue</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-12 grid gap-3 md:grid-cols-3">
+            {onlineMenuFeatures.map((feature, index) => (
+              <div key={feature.number} data-lp-reveal style={{ "--lp-delay": `${index * 100}ms` } as React.CSSProperties}>
+                <article className="lp-card h-full rounded-[22px] border border-[#ded7c8] bg-[#fbf8f1] p-5 shadow-[0_10px_26px_rgba(35,48,37,0.04)] sm:p-6">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#15382a] text-[11px] font-black text-[#d2a15c]">{feature.number}</span>
+                    <span className="text-right text-[9px] font-black uppercase tracking-[0.13em] text-[#8a795a]">{feature.detail}</span>
+                  </div>
+                  <h3 className="mt-5 text-lg font-black leading-5 tracking-[-0.03em] text-[#173a2b]">{feature.title}</h3>
+                  <p className="mt-3 text-sm leading-6 text-[#68736a]">{feature.description}</p>
                 </article>
               </div>
             ))}
