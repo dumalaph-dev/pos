@@ -60,16 +60,6 @@ const adminNavGroups: AdminNavGroup[] = [
     ],
   },
   {
-    id: "growth",
-    label: "Customers & growth",
-    icon: "customers",
-    items: [
-      { label: "Customers", href: "/admin/customers", icon: "customers", active: "customers" },
-      { label: "Promotions", href: "/admin/promotions", icon: "promotions", active: "promotions" },
-      { label: "Referral program", href: "/admin/referrals", icon: "tag", active: "referrals", adminOnly: true },
-    ],
-  },
-  {
     id: "insights",
     label: "Insights & finance",
     icon: "chart",
@@ -77,6 +67,16 @@ const adminNavGroups: AdminNavGroup[] = [
       { label: "Sales", href: "/admin/sales", icon: "sales", active: "sales" },
       { label: "Reports", href: "/admin/reports", icon: "reports", active: "reports" },
       { label: "Expenses", href: "/admin/expenses", icon: "expenses", active: "expenses" },
+    ],
+  },
+  {
+    id: "growth",
+    label: "Customers & growth",
+    icon: "customers",
+    items: [
+      { label: "Customers", href: "/admin/customers", icon: "customers", active: "customers" },
+      { label: "Promotions", href: "/admin/promotions", icon: "promotions", active: "promotions" },
+      { label: "Referral program", href: "/admin/referrals", icon: "tag", active: "referrals", adminOnly: true },
     ],
   },
   {
