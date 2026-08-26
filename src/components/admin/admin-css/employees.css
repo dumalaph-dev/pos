@@ -827,6 +827,7 @@
   color: var(--text);
   background: var(--surface);
   font-family: var(--font-ui, var(--font-sans));
+  font-weight: 400;
   color-scheme: inherit;
 }
 
@@ -874,7 +875,7 @@
   color: var(--primary-fg);
   background: var(--primary);
   font-size: 14px;
-  font-weight: 850;
+  font-weight: 750;
   letter-spacing: 0.02em;
 }
 
@@ -882,7 +883,7 @@
 .employee-dialog__section-kicker {
   color: var(--primary);
   font-size: 10px;
-  font-weight: 850;
+  font-weight: 650;
   letter-spacing: 0.1em;
   line-height: 1.25;
   text-transform: uppercase;
@@ -893,7 +894,7 @@
   overflow-wrap: anywhere;
   color: var(--text);
   font-size: clamp(21px, 2.2vw, 27px);
-  font-weight: 850;
+  font-weight: 750;
   letter-spacing: -0.045em;
   line-height: 1.05;
 }
@@ -921,7 +922,7 @@
   color: var(--text-muted);
   background: var(--surface-raised);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -965,13 +966,16 @@
   padding: 16px;
 }
 
-.employee-record-form,
-.employee-access-panel {
+.employee-record-form {
   min-width: 0;
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--surface);
   box-shadow: var(--shadow-card);
+}
+
+.employee-access-panel {
+  min-width: 0;
 }
 
 .employee-record-form {
@@ -1002,7 +1006,7 @@
   margin-top: 4px;
   color: var(--text);
   font-size: 16px;
-  font-weight: 850;
+  font-weight: 700;
   letter-spacing: -0.025em;
   line-height: 1.2;
 }
@@ -1024,7 +1028,7 @@
 .employee-pin-field > span {
   color: var(--text-muted);
   font-size: 10px;
-  font-weight: 850;
+  font-weight: 600;
   letter-spacing: 0.065em;
   line-height: 1.25;
   text-transform: uppercase;
@@ -1033,6 +1037,7 @@
 .employee-dialog__field input:not([type="checkbox"]):not([type="hidden"]),
 .employee-dialog__field select {
   width: 100%;
+  min-width: 0;
   min-height: 43px;
   padding: 0 11px;
   border: 1px solid var(--border-strong);
@@ -1042,7 +1047,7 @@
   background: var(--surface-raised);
   font: inherit;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 500;
   transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
 }
 
@@ -1074,10 +1079,11 @@
 .employee-dialog__schedule {
   min-width: 0;
   margin: 0;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--surface-raised) 68%, var(--surface));
+  padding: 14px 0 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
 }
 
 .employee-dialog__schedule legend {
@@ -1086,10 +1092,14 @@
 
 .employee-dialog__schedule-layout {
   display: grid;
-  grid-template-columns: minmax(150px, 0.72fr) minmax(0, 1.28fr);
-  align-items: end;
+  grid-template-columns: minmax(165px, 0.78fr) minmax(0, 1.22fr);
+  align-items: start;
   gap: 14px;
   margin-top: 10px;
+}
+
+.employee-dialog__schedule-layout > * {
+  min-width: 0;
 }
 
 .employee-dialog__time-grid {
@@ -1099,45 +1109,88 @@
 }
 
 .employee-dialog__day-checkboxes {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 5px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 5px;
   margin-top: 6px;
 }
 
 .employee-dialog__day-checkboxes label {
-  display: flex;
-  min-height: 35px;
+  display: inline-flex;
+  position: relative;
+  min-width: 0;
+  min-height: 31px;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 0 4px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
   color: var(--text-muted);
-  background: var(--surface-raised);
+  background: transparent;
   cursor: pointer;
   font-size: 10px;
-  font-weight: 750;
-  transition: border-color 150ms ease, color 150ms ease, background 150ms ease;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  transition: color 150ms ease, background 150ms ease, outline-color 150ms ease;
 }
 
-.employee-dialog__day-checkboxes label:hover,
+.employee-dialog__day-checkboxes label > span {
+  min-width: 0;
+}
+
+.employee-dialog__day-checkboxes label::before {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: transparent;
+  content: "";
+  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+
+.employee-dialog__day-checkboxes label:hover {
+  color: var(--text);
+  background: var(--surface-panel);
+}
+
 .employee-dialog__day-checkboxes label:focus-within {
-  border-color: var(--border-strong);
+  outline: 2px solid color-mix(in srgb, var(--primary) 42%, transparent);
+  outline-offset: 2px;
 }
 
 .employee-dialog__day-checkboxes label:has(input:checked) {
-  border-color: color-mix(in srgb, var(--primary) 48%, var(--border));
   color: var(--primary);
   background: var(--primary-soft);
 }
 
-.employee-dialog__day-checkboxes input,
+.employee-dialog__day-checkboxes label:has(input:checked)::before {
+  border-color: var(--primary);
+  background: var(--primary);
+  box-shadow: inset 0 0 0 2px var(--primary-soft);
+}
+
+.employee-dialog__day-checkboxes input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .employee-dialog__active-toggle input {
   width: 15px;
   height: 15px;
   flex: 0 0 auto;
+  margin: 0;
   accent-color: var(--primary);
 }
 
@@ -1164,7 +1217,7 @@
 .employee-dialog__active-toggle strong {
   color: var(--text);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .employee-dialog__active-toggle small {
@@ -1185,7 +1238,7 @@
   min-height: 41px;
   border-radius: 9px;
   font-size: 11px;
-  font-weight: 850;
+  font-weight: 650;
 }
 
 .employee-dialog .employee-tool-button {
@@ -1232,8 +1285,11 @@
   display: grid;
   align-content: start;
   gap: 12px;
-  padding: 18px;
-  background: color-mix(in srgb, var(--primary) 3%, var(--surface));
+  padding: 2px 0 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .employee-access-panel__header {
@@ -1252,7 +1308,7 @@
   height: 32px;
   flex: 0 0 auto;
   place-items: center;
-  border-radius: 9px;
+  border-radius: 50%;
   color: var(--primary);
   background: var(--primary-soft);
 }
@@ -1262,8 +1318,11 @@
 }
 
 .employee-access-panel__status {
-  min-height: 25px;
-  padding: 0 8px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   font-size: 9px;
 }
 
@@ -1275,7 +1334,7 @@
 
 .employee-access-panel__stack {
   display: grid;
-  gap: 10px;
+  gap: 0;
 }
 
 .employee-access-panel__notice {
@@ -1283,11 +1342,12 @@
   align-items: flex-start;
   gap: 8px;
   margin: 0;
-  padding: 10px 11px;
-  border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--border));
-  border-radius: 9px;
+  padding: 8px 0 8px 10px;
+  border: 0;
+  border-left: 2px solid color-mix(in srgb, var(--warning) 55%, var(--border));
+  border-radius: 0;
   color: var(--warning);
-  background: color-mix(in srgb, var(--warning) 10%, var(--surface));
+  background: transparent;
   font-size: 10px;
   line-height: 1.4;
 }
@@ -1298,20 +1358,27 @@
 }
 
 .employee-access-panel__notice--muted {
-  border-color: var(--border);
+  border-left-color: var(--border-strong);
   color: var(--text-muted);
-  background: var(--surface-panel);
+  background: transparent;
 }
 
 .employee-access-card {
   display: grid;
   min-width: 0;
-  gap: 13px;
+  gap: 12px;
   margin: 0;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface-raised);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.employee-access-card + .employee-access-card {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
 }
 
 .employee-access-card__heading {
@@ -1326,7 +1393,7 @@
   display: block;
   color: var(--text);
   font-size: 13px;
-  font-weight: 850;
+  font-weight: 700;
   line-height: 1.25;
 }
 
@@ -1340,13 +1407,13 @@
 .employee-access-card__heading > span:last-child:not(.employee-access-card__check) {
   color: var(--text-muted);
   font-size: 9px;
-  font-weight: 800;
+  font-weight: 600;
   white-space: nowrap;
 }
 
 .employee-access-card__employee-id {
   color: var(--text);
-  font-weight: 850;
+  font-weight: 650;
 }
 
 .employee-access-card--account > form {
@@ -1354,11 +1421,12 @@
 }
 
 .employee-access-card--account .employee-outline-button {
-  width: 100%;
-  border: 1px solid var(--border-strong);
+  width: auto;
+  min-height: 36px;
+  border: 1px solid var(--border);
   padding: 0 12px;
-  color: var(--primary);
-  background: var(--primary-soft);
+  color: var(--text);
+  background: transparent;
 }
 
 .employee-access-card__check {
@@ -1370,9 +1438,7 @@
 }
 
 .employee-access-card--pin {
-  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
-  background: color-mix(in srgb, var(--primary) 8%, var(--surface-raised));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 9%, transparent);
+  border-top-color: color-mix(in srgb, var(--primary) 45%, var(--border));
 }
 
 .employee-access-card__heading--pin {
@@ -1387,31 +1453,33 @@
 .employee-access-card__title .employee-access-card__icon {
   width: 29px;
   height: 29px;
-  border-radius: 8px;
+  border-radius: 50%;
 }
 
 .employee-access-card__required {
-  min-height: 24px;
-  border-color: color-mix(in srgb, var(--primary) 28%, var(--border));
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
   color: var(--primary);
-  background: var(--primary-soft);
+  background: transparent;
   font-size: 9px;
 }
 
 .employee-void-pin-fields {
   min-width: 0;
   margin: 0;
-  padding: 11px;
-  border: 1px solid color-mix(in srgb, var(--primary) 27%, var(--border));
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--surface-raised) 78%, var(--primary-soft));
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .employee-void-pin-fields legend {
   padding: 0 4px;
   color: var(--text);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
   line-height: 1.25;
 }
 
@@ -1437,14 +1505,16 @@
 .employee-pin-field > span {
   color: var(--text);
   font-size: 10px;
+  font-weight: 600;
   letter-spacing: 0.035em;
+  text-transform: none;
 }
 
 .employee-dialog .employee-pin-input {
   width: 100%;
   min-height: 49px;
   padding: 0 12px;
-  border: 2px solid var(--border-strong);
+  border: 1px solid var(--border-strong);
   border-radius: 10px;
   outline: none;
   color: var(--text);
@@ -1452,7 +1522,7 @@
   caret-color: var(--primary);
   font: inherit;
   font-size: 18px;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0.18em;
   line-height: 1;
   transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
@@ -1538,9 +1608,12 @@
     padding: 10px;
   }
 
-  .employee-record-form,
-  .employee-access-panel {
+  .employee-record-form {
     padding: 14px;
+  }
+
+  .employee-access-panel {
+    padding: 14px 0;
   }
 
   .employee-dialog__field-grid,
@@ -1548,10 +1621,6 @@
   .employee-dialog__time-grid,
   .employee-pin-field-grid {
     grid-template-columns: 1fr;
-  }
-
-  .employee-dialog__day-checkboxes {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .employee-dialog__form-footer {
