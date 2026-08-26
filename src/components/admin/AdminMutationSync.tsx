@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { refreshAdminInventoryViews } from "@/app/admin/inventory/actions";
 import { createClient } from "@/lib/supabase/client";
 import {
   createAdminCacheScopeKey,
@@ -47,7 +48,15 @@ export function AdminMutationSync({ scope }: { scope: AdminCacheScope }) {
       clientRef.current ??= createClient();
       setState({ phase: "syncing", pending: status.pending, failed: status.failed, conflicts: status.conflicts, message: null });
       const result = await flushAdminMutationOutbox(clientRef.current, scope);
-      if (result.synced > 0) router.refresh();
+      if (result.synced > 0) {
+        try {
+          await refreshAdminInventoryViews();
+        } catch {
+          // The mutation is already committed; the next report visit still
+          // reads the ledger directly if route invalidation is unavailable.
+        }
+        router.refresh();
+      }
       setState({
         phase: result.failed > 0 || result.conflicts > 0 ? "error" : result.pending > 0 ? "waiting" : "synced",
         pending: result.pending,

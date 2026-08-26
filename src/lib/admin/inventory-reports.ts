@@ -327,6 +327,8 @@ type MovementRecord = {
   created_at: string;
 };
 
+type LegacyMovementRecord = Omit<MovementRecord, "inventory_item_id">;
+
 type CurrentStockRecord = {
   store_id: string;
   product_id: string;
@@ -425,7 +427,29 @@ export async function loadInventoryReport(
   const suppliers = (suppliersResult.data ?? []) as InventoryReportSupplier[];
   const products = (productsResult.data ?? []) as InventoryReportProduct[];
   const inventoryItems = (inventoryItemsResult.data ?? []) as InventoryReportItem[];
-  const movements = (movementsResult.data ?? []) as MovementRecord[];
+  let movements = (movementsResult.data ?? []) as MovementRecord[];
+  let movementQueryError = Boolean(movementsResult.error);
+  if (movementsResult.error) {
+    // Keep product-level movements visible while older deployments finish
+    // applying the inventory-item columns to stock_movements.
+    let legacyMovementsQuery = supabase
+      .from("stock_movements")
+      .select("id, store_id, product_id, type, qty, unit, reason, created_at")
+      .eq("org_id", profile.org_id)
+      .gte("created_at", reportDateStart(initialFilters.from).toISOString())
+      .lt("created_at", reportDateEnd(initialFilters.to).toISOString())
+      .order("created_at", { ascending: false })
+      .limit(10000);
+    if (branchId) legacyMovementsQuery = legacyMovementsQuery.eq("store_id", branchId);
+    const legacyMovementsResult = await legacyMovementsQuery;
+    if (!legacyMovementsResult.error) {
+      movements = ((legacyMovementsResult.data ?? []) as LegacyMovementRecord[]).map((movement) => ({
+        ...movement,
+        inventory_item_id: null,
+      }));
+      movementQueryError = false;
+    }
+  }
   const counts = (countsResult.data ?? []) as CountRecord[];
   const categoryById = new Map(categories.map((category) => [category.id, category]));
   const supplierById = new Map(suppliers.map((supplier) => [supplier.id, supplier]));
@@ -653,7 +677,7 @@ export async function loadInventoryReport(
       overLines,
       balancedLines,
     },
-    queryWarning: Boolean(branchesResult.error || categoriesResult.error || suppliersResult.error || productsResult.error || movementsResult.error || countsResult.error),
+    queryWarning: Boolean(branchesResult.error || categoriesResult.error || suppliersResult.error || productsResult.error || movementQueryError || countsResult.error),
     stockWarning,
   };
 }

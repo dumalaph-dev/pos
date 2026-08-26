@@ -13,6 +13,23 @@ function inventoryRedirect(message: string): never {
   redirect(`/admin/inventory?error=${encodeURIComponent(message)}`);
 }
 
+export async function refreshAdminInventoryViews() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profile?.role !== "admin") return;
+
+  revalidatePath("/admin/inventory");
+  revalidatePath("/admin/reports/inventory");
+  revalidatePath("/admin");
+}
+
 function readText(formData: FormData, name: string) {
   const value = formData.get(name);
   return typeof value === "string" ? value.trim() : "";
@@ -152,6 +169,7 @@ export async function recordStockMovement(formData: FormData) {
   if (error) inventoryRedirect(error.message || "The stock movement could not be recorded.");
 
   revalidatePath("/admin/inventory");
+  revalidatePath("/admin/reports/inventory");
   revalidatePath("/admin");
   redirect("/admin/inventory?saved=1");
 }
@@ -304,6 +322,7 @@ export async function recordInventoryItemMovement(formData: FormData) {
 
   revalidatePath("/admin/inventory");
   revalidatePath("/products");
+  revalidatePath("/admin/reports/inventory");
   revalidatePath("/admin");
   redirect("/admin/inventory?saved=1");
 }
@@ -374,6 +393,7 @@ export async function recordYieldEntry(formData: FormData) {
   if (error) yieldRedirect(error.message || "The yield entry could not be recorded.");
 
   revalidatePath("/admin/inventory");
+  revalidatePath("/admin/reports/inventory");
   revalidatePath("/admin");
   redirect("/admin/inventory?yield=1&saved=yield#yield-entry");
 }
@@ -429,6 +449,7 @@ export async function recordInventoryCount(formData: FormData) {
 
     revalidatePath("/admin/inventory");
     revalidatePath("/admin/inventory/variance");
+    revalidatePath("/admin/reports/inventory");
     revalidatePath("/admin");
     redirect(`/admin/inventory/variance?date=${encodeURIComponent(countDate)}&branch=${encodeURIComponent(storeId)}&saved=1`);
   }
@@ -463,6 +484,7 @@ export async function recordInventoryCount(formData: FormData) {
 
   revalidatePath("/admin/inventory");
   revalidatePath("/admin/inventory/variance");
+  revalidatePath("/admin/reports/inventory");
   revalidatePath("/admin");
   redirect(`/admin/inventory/variance?date=${encodeURIComponent(countDate)}&branch=${encodeURIComponent(storeId)}&saved=1`);
 }

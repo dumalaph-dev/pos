@@ -23,12 +23,13 @@ export function AdminBranchSwitcher({
   const pathname = usePathname() || "/admin";
   const searchParams = useSearchParams();
   // The top-bar selection owns branch context. Preserve the other filters and
-  // pagination, but drop a page-local `branch` filter so choosing All branches
-  // cannot leave the page silently pinned to the previous branch.
+  // pagination, but drop page-local branch filters so navigation stays within
+  // the selected workspace branch.
   const contextualParams = new URLSearchParams(searchParams.toString());
   contextualParams.delete("branch");
   const query = contextualParams.toString();
   const returnPath = query ? `${pathname}?${query}` : pathname;
+  const activeBranches = branches.filter((branch) => branch.is_active);
 
   if (!canSwitch) {
     return (
@@ -55,16 +56,8 @@ export function AdminBranchSwitcher({
       }
     >
       <p className="admin-branch-menu__hint">Choose the branch context for backoffice work.</p>
-      <form action={selectAdminBranch}>
-        <input type="hidden" name="store_id" value="" />
-        <input type="hidden" name="return_to" value={returnPath} />
-        <button type="submit" className={`admin-menu__item admin-branch-menu__item ${selectedBranchId === null ? "is-selected" : ""}`}>
-          <AdminIcon name="dashboard" size={16} />
-          <span>All branches</span>
-          {selectedBranchId === null && <AdminIcon name="check" size={15} />}
-        </button>
-      </form>
-      {branches.filter((branch) => branch.is_active).map((branch) => (
+      {activeBranches.length === 0 && <p className="admin-branch-menu__hint">No active branches are available.</p>}
+      {activeBranches.map((branch) => (
         <form action={selectAdminBranch} key={branch.id}>
           <input type="hidden" name="store_id" value={branch.id} />
           <input type="hidden" name="return_to" value={returnPath} />

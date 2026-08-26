@@ -372,7 +372,7 @@ export async function enqueueAdminMutation(
   id = createAdminMutationId(),
 ): Promise<string> {
   if (!scope.userId || !scope.orgId || !scope.storeId) {
-    throw new Error("Select a branch before saving an offline admin change.");
+    throw new Error("Select an active branch before saving an offline admin change.");
   }
   assertMutationPayload(kind, payload);
   const payloadStoreId = (payload as AdminInventoryMovementPayload | AdminInventoryCountPayload).storeId;

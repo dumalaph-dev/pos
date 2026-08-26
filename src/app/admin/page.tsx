@@ -532,7 +532,7 @@ export default async function AdminPage({
   });
   const currentBranchName = selectedBranchId
     ? branches.find((branch) => branch.id === selectedBranchId)?.name ?? "Selected branch"
-    : "All branches";
+    : "No active branch";
   const branchQuery = selectedBranchId ? `&branch=${encodeURIComponent(selectedBranchId)}` : "";
   const reportHref = `/admin/reports?range=7d${branchQuery}`;
   const todayReportHref = `/admin/reports?from=${encodeURIComponent(todayBusinessDate)}&to=${encodeURIComponent(todayBusinessDate)}&grouping=day${branchQuery}`;
