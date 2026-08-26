@@ -51,7 +51,7 @@ export async function GET(request: Request) {
     ...employees.map((employee) => [
       employee.employee_code,
       employee.full_name,
-      roleNames.get(employee.role_id) ?? employee.role,
+      roleNames.get(employee.role_id) ?? employee.role ?? "None",
       employee.job_title ?? "",
       onLeave.has(employee.id) ? "On Leave" : employee.is_active ? "Active" : "Inactive",
       employee.email ?? "",

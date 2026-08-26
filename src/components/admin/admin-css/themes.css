@@ -2420,6 +2420,11 @@
   background: color-mix(in srgb, var(--warning) 13%, var(--surface));
 }
 
+.employee-page[data-admin-theme] .employee-role--muted {
+  color: var(--text-muted);
+  background: var(--surface-raised);
+}
+
 .employee-page[data-admin-theme] .employee-role--green,
 .employee-page[data-admin-theme] .employee-status--green {
   color: var(--success);

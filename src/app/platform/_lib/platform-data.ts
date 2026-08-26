@@ -52,7 +52,7 @@ export type StoreRecord = {
 export type EmployeeRecord = {
   id: string;
   org_id: string;
-  role: string;
+  role: string | null;
   is_active: boolean;
   employee_code?: string | null;
   full_name?: string | null;
@@ -411,8 +411,8 @@ export function getInitials(value: string | null | undefined) {
   return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "PA";
 }
 
-export function humanizeRole(role: string) {
-  return role
+export function humanizeRole(role: string | null | undefined) {
+  return (role ?? "none")
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }

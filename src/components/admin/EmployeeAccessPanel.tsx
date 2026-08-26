@@ -13,7 +13,7 @@ export type EmployeeAccessRecord = {
   profile_id: string | null;
   employee_code: string;
   full_name: string;
-  role: AccessRole;
+  role: AccessRole | null;
   store_id: string | null;
   is_active: boolean;
 };
@@ -23,6 +23,7 @@ function ReturnFields({ values }: { values: ReturnState }) {
 }
 
 export function EmployeeAccessPanel({ employee, canWrite, returnState = {} }: { employee: EmployeeAccessRecord; canWrite: boolean; returnState?: ReturnState }) {
+  const hasSystemAccess = employee.role !== null;
   const canApproveVoids = employee.role === "admin" || employee.role === "manager";
   const approvalLabel = employee.role === "manager" ? "Manager void PIN" : "Admin void PIN";
   const accountButtonLabel = canApproveVoids ? "Create account & PIN" : "Create employee account";
@@ -36,14 +37,20 @@ export function EmployeeAccessPanel({ employee, canWrite, returnState = {} }: { 
           <h3 id={`employee-access-heading-${employee.id}`}>Sign-in and POS access</h3>
         </div>
       </div>
-      <span className="employee-access-panel__status">{employee.profile_id ? "Account linked" : "Not set up"}</span>
+      <span className="employee-access-panel__status">{employee.role === null ? (employee.profile_id ? "Access disabled" : "No system access") : employee.profile_id ? "Account linked" : "Not set up"}</span>
     </header>
-    <p className="employee-access-panel__intro">Login access and the void approval PIN are separate. The PIN is used by an admin or manager to approve completed-order voids.</p>
+    <p className="employee-access-panel__intro">Login access and the void approval PIN are separate. Choose None for attendance and payroll-only employees. The PIN is used by an admin or manager to approve completed-order voids.</p>
 
     {!employee.is_active && <p className="employee-access-panel__notice"><AdminIcon name="alert" size={15} /> Activate this employee before setting up access.</p>}
 
     <div className="employee-access-panel__stack">
-      {!employee.profile_id ? <form action={provisionEmployeeAccess} className="employee-access-card">
+      {!hasSystemAccess ? <div className="employee-access-card employee-access-card--account">
+        <div className="employee-access-card__heading">
+          <div><strong>No system access</strong><p>This employee stays available for attendance and payroll without an admin dashboard or POS login.</p></div>
+          <span>Directory only</span>
+        </div>
+        {employee.profile_id && <p className="employee-access-panel__notice employee-access-panel__notice--muted">Any linked login is disabled while System access is set to None.</p>}
+      </div> : !employee.profile_id ? <form action={provisionEmployeeAccess} className="employee-access-card">
         <input type="hidden" name="employee_id" value={employee.id} />
         <ReturnFields values={returnState} />
         <div className="employee-access-card__heading">
@@ -71,7 +78,7 @@ export function EmployeeAccessPanel({ employee, canWrite, returnState = {} }: { 
         </form>
       </div>}
 
-      {canApproveVoids && employee.profile_id ? <form action={setEmployeePin} className="employee-access-card employee-access-card--pin">
+      {hasSystemAccess && canApproveVoids && employee.profile_id ? <form action={setEmployeePin} className="employee-access-card employee-access-card--pin">
         <input type="hidden" name="employee_id" value={employee.id} />
         <ReturnFields values={returnState} />
         <div className="employee-access-card__heading employee-access-card__heading--pin">
@@ -87,7 +94,7 @@ export function EmployeeAccessPanel({ employee, canWrite, returnState = {} }: { 
           </div>
         </fieldset>
         <button type="submit" disabled={!canWrite || !employee.is_active} className="employee-primary-button">Save void PIN</button>
-      </form> : !canApproveVoids ? <p className="employee-access-panel__notice employee-access-panel__notice--muted">This access level does not hold a void PIN. An active manager or admin can approve completed-order voids.</p> : <p className="employee-access-panel__notice employee-access-panel__notice--muted">Create the employee account above first. The combined setup action creates the login and void PIN.</p>}
+      </form> : !hasSystemAccess ? null : !canApproveVoids ? <p className="employee-access-panel__notice employee-access-panel__notice--muted">This access level does not hold a void PIN. An active manager or admin can approve completed-order voids.</p> : <p className="employee-access-panel__notice employee-access-panel__notice--muted">Create the employee account above first. The combined setup action creates the login and void PIN.</p>}
     </div>
   </section>;
 }
