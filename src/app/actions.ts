@@ -25,6 +25,7 @@ export type LoginState = { message: string };
 type EmployeeLoginRecord = {
   org_id: string;
   profile_id: string | null;
+  store_id: string | null;
   employee_code: string;
   is_active: boolean;
 };
@@ -59,10 +60,9 @@ export async function loginWithEmployeeId(_previousState: LoginState, formData: 
 
   const { data: employeeRows, error: employeeError } = await admin
     .from("employee_records")
-    .select("org_id, profile_id, employee_code, is_active")
+    .select("org_id, profile_id, store_id, employee_code, is_active")
     .eq("employee_code", employeeCode)
     .eq("org_id", store.org_id)
-    .eq("store_id", store.id)
     .eq("is_active", true)
     .limit(2);
   const employees = (employeeRows ?? []) as EmployeeLoginRecord[];
@@ -84,14 +84,11 @@ export async function loginWithEmployeeId(_previousState: LoginState, formData: 
   ]);
   const profile = profileData as EmployeeLoginProfile | null;
   const authEmail = authUserData?.user?.email;
-  if (authUserError || authEmail === undefined || profileError || !profile || !profile.is_active || profile.store_id !== store.id) {
+  const assignedToBranch = employee.store_id === store.id && profile?.store_id === store.id;
+  const unassignedAdmin = profile?.role === "admin" && employee.store_id === null && profile.store_id === null;
+  if (authUserError || authEmail === undefined || profileError || !profile || !profile.is_active || (!assignedToBranch && !unassignedAdmin)) {
     return { message: INVALID_LOGIN_MESSAGE };
   }
-
-  // Organization owners use the owner login. A store link is only for
-  // branch-assigned managers and cashiers, so it cannot become an alternate
-  // path into organization-wide admin access.
-  if (profile.role === "admin") return { message: "Use the owner login for administrator access." };
 
   // Throttle only once the code resolves to a real active employee, so guessing
   // random codes cannot fill the table. Checked before the password round trip
@@ -111,6 +108,9 @@ export async function loginWithEmployeeId(_previousState: LoginState, formData: 
   await clearEmployeeLoginAttempts(admin, store.id, employee.employee_code);
 
   if (profile.password_change_required) redirect("/account/password?required=1");
+  // Admin employees have the same organization-wide dashboard access as the
+  // owner. Managers use the same dashboard shell with their existing read-only
+  // permissions, while cashiers go straight to the POS.
   redirect(profile.role === "cashier" ? "/pos" : "/admin");
 }
 

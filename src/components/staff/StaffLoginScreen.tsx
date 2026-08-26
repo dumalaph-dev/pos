@@ -10,7 +10,7 @@ export default function StaffLoginScreen({ storeName, storeKey }: { storeName: s
         <p className="mt-2 text-sm leading-6 text-ink-muted">Use your Employee ID and private password to open this store workspace.</p>
         <StaffLoginForm storeKey={storeKey} />
         <div className="mt-7 border-t border-line pt-5 text-center">
-          <p className="text-xs leading-5 text-ink-muted">This link is for managers and staff assigned to this store. Ask your owner if you need access.</p>
+          <p className="text-xs leading-5 text-ink-muted">Admins can use an active branch link to open the admin dashboard. Managers and staff should use their assigned store link.</p>
           <Link href="/login" className="mt-3 inline-flex text-sm font-bold text-primary hover:underline">Owner sign in</Link>
         </div>
       </div>
