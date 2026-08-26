@@ -19,6 +19,7 @@ import { loadReversedOrderIds, selectNetSales } from "@/lib/admin/sales-reports"
 import { readAdminBranding } from "@/lib/admin/branding";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
+import { isInventoryMode, type InventoryItemOption, type InventoryMode, type RecipeLineRecord } from "@/lib/inventory-recipes";
 import {
   bulkUpdateProducts,
   createCategory,
@@ -29,7 +30,7 @@ import {
 
 type AdminRole = "admin" | "manager" | "cashier";
 type PricingMode = "fixed" | "per_kg";
-type ProductStatusFilter = "all" | "active" | "inactive" | "in_stock" | "low" | "out";
+type ProductStatusFilter = "all" | "active" | "inactive" | "in_stock" | "low" | "out" | "needs_recipe" | "recipe_alert";
 type ProductColumn = "category" | "sku" | "price" | "status" | "pos" | "stock";
 type ProductStockStatus = "untracked" | "in_stock" | "low" | "out";
 type ProductAction = "product" | "category" | "import" | "bulk" | "edit" | "none";
@@ -70,9 +71,11 @@ type ProductRecord = {
   unit: string;
   supplier_id: string | null;
   track_stock: boolean;
+  inventory_mode: InventoryMode;
   image_url: string | null;
   is_active: boolean;
   sort_order: number;
+  recipe_lines: RecipeLineRecord[];
 };
 
 type LegacyProductRecord = Omit<ProductRecord, "sku" | "barcode" | "cost_price" | "min_stock" | "supplier_id">;
@@ -108,12 +111,27 @@ type StockRecord = {
   qty: number;
 };
 
+type InventoryStockRecord = {
+  store_id: string;
+  inventory_item_id: string;
+  qty: number;
+};
+
+type RecipeRecord = {
+  id: string;
+  product_id: string;
+  version: number;
+  product_recipe_items: RecipeLineRecord[];
+};
+
 
 type ProductRow = {
   product: ProductRecord;
   categoryName: string;
   onHand: number | null;
   stockStatus: ProductStockStatus;
+  recipeLineCount: number;
+  recipeAlertCount: number;
 };
 
 type TopSellingProduct = {
@@ -155,6 +173,8 @@ const statusOptions: Array<{ value: ProductStatusFilter; label: string }> = [
   { value: "in_stock", label: "In stock" },
   { value: "low", label: "Low stock" },
   { value: "out", label: "Out of stock" },
+  { value: "needs_recipe", label: "Needs recipe" },
+  { value: "recipe_alert", label: "Ingredient alert" },
 ];
 
 const columnOptions: Array<{ value: ProductColumn; label: string }> = [
@@ -166,7 +186,7 @@ const columnOptions: Array<{ value: ProductColumn; label: string }> = [
   { value: "stock", label: "Stock" },
 ];
 
-const OPTIONAL_PRODUCT_COLUMNS = ["sku", "barcode", "cost_price", "min_stock", "supplier_id"] as const;
+const OPTIONAL_PRODUCT_COLUMNS = ["sku", "barcode", "cost_price", "min_stock", "supplier_id", "inventory_mode"] as const;
 
 function readParam(value: QueryValue) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
@@ -256,6 +276,8 @@ function statusMatches(row: ProductRow, filter: ProductStatusFilter) {
   if (filter === "all") return true;
   if (filter === "active") return row.product.is_active;
   if (filter === "inactive") return !row.product.is_active;
+  if (filter === "needs_recipe") return row.product.inventory_mode === "recipe" && row.recipeLineCount === 0;
+  if (filter === "recipe_alert") return row.product.inventory_mode === "recipe" && row.recipeLineCount > 0 && row.recipeAlertCount > 0;
   return row.stockStatus === filter;
 }
 
@@ -407,7 +429,7 @@ export default async function ProductsPage({
     .order("name");
   let productsQuery = supabase
     .from("products")
-    .select("id, store_id, category_id, name, sku, barcode, pricing_mode, price, cost_price, min_stock, unit, supplier_id, track_stock, image_url, is_active, sort_order")
+    .select("id, store_id, category_id, name, sku, barcode, pricing_mode, price, cost_price, min_stock, unit, supplier_id, track_stock, inventory_mode, image_url, is_active, sort_order")
     .eq("org_id", profile.org_id)
     .order("sort_order")
     .order("name")
@@ -420,19 +442,38 @@ export default async function ProductsPage({
     .is("orders.reversal_of", null)
     .gte("orders.created_at", currentStart.toISOString())
     .lt("orders.created_at", todayEnd.toISOString());
+  let inventoryItemsQuery = supabase
+    .from("inventory_items")
+    .select("id, store_id, name, item_type, unit, cost_per_unit, min_stock, supplier_id, is_active")
+    .eq("org_id", profile.org_id)
+    .eq("is_active", true)
+    .order("name")
+    .limit(2000);
+  let recipesQuery = supabase
+    .from("product_recipes")
+    .select("id, product_id, version, product_recipe_items(id, recipe_id, inventory_item_id, quantity_per_unit, waste_percent, note, sort_order)")
+    .eq("org_id", profile.org_id)
+    .eq("is_active", true)
+    .order("version", { ascending: false })
+    .limit(1000);
   if (selectedBranchId) {
     currentOrdersQuery = currentOrdersQuery.eq("store_id", selectedBranchId);
     previousOrdersQuery = previousOrdersQuery.eq("store_id", selectedBranchId);
     categoriesQuery = categoriesQuery.eq("store_id", selectedBranchId);
     productsQuery = productsQuery.eq("store_id", selectedBranchId);
     orderItemsQuery = orderItemsQuery.eq("orders.store_id", selectedBranchId);
+    inventoryItemsQuery = inventoryItemsQuery.eq("store_id", selectedBranchId);
+    recipesQuery = recipesQuery.eq("store_id", selectedBranchId);
   }
 
-  const [categoriesResult, productsResult, suppliersResult, stockResult, currentOrdersResult, previousOrdersResult, orderItemsResult] = await Promise.all([
+  const [categoriesResult, productsResult, suppliersResult, stockResult, inventoryStockResult, inventoryItemsResult, recipesResult, currentOrdersResult, previousOrdersResult, orderItemsResult] = await Promise.all([
     categoriesQuery,
     productsQuery,
     supabase.from("suppliers").select("id, name, is_active").eq("org_id", profile.org_id).order("name").limit(1000),
     supabase.rpc("current_stock", { p_org_id: profile.org_id }),
+    supabase.rpc("current_inventory_stock", { p_org_id: profile.org_id }),
+    inventoryItemsQuery,
+    recipesQuery,
     currentOrdersQuery,
     previousOrdersQuery,
     orderItemsQuery,
@@ -458,7 +499,16 @@ export default async function ProductsPage({
     const fallbackProductsResult = await fallbackProductsQuery;
     fallbackProductsError = Boolean(fallbackProductsResult.error);
     const fallbackProducts = (fallbackProductsResult.data ?? []) as LegacyProductRecord[];
-    products = fallbackProducts.map((product) => ({ ...product, sku: null, barcode: null, cost_price: null, min_stock: 2, supplier_id: null }));
+    products = fallbackProducts.map((product) => ({
+      ...product,
+      sku: null,
+      barcode: null,
+      cost_price: null,
+      min_stock: 2,
+      supplier_id: null,
+      inventory_mode: product.track_stock ? "direct" : "none",
+      recipe_lines: [],
+    }));
   }
 
   if (selectedBranchId) {
@@ -466,6 +516,25 @@ export default async function ProductsPage({
   }
 
   const suppliers = (suppliersResult.data ?? []) as SupplierRecord[];
+  const inventoryItems = (inventoryItemsResult.data ?? []) as InventoryItemOption[];
+  const recipeRecords = (recipesResult.data ?? []) as RecipeRecord[];
+  const recipeLinesByProduct = new Map<string, RecipeLineRecord[]>();
+  for (const recipe of recipeRecords) {
+    if (!recipeLinesByProduct.has(recipe.product_id)) {
+      recipeLinesByProduct.set(recipe.product_id, (recipe.product_recipe_items ?? []).map((line) => ({
+        ...line,
+        quantity_per_unit: Number(line.quantity_per_unit),
+        waste_percent: Number(line.waste_percent),
+      })));
+    }
+  }
+  products = products.map((product) => ({
+    ...product,
+    inventory_mode: isInventoryMode(String(product.inventory_mode))
+      ? product.inventory_mode
+      : product.track_stock ? "direct" : "none",
+    recipe_lines: recipeLinesByProduct.get(product.id) ?? [],
+  }));
   let fallbackMovements: MovementRecord[] = [];
   let stockFallbackError = false;
   if (stockResult.error) {
@@ -501,13 +570,31 @@ export default async function ProductsPage({
     }
   }
 
+  const inventoryStockByKey = new Map<string, number>();
+  if (!inventoryStockResult.error) {
+    for (const stock of (inventoryStockResult.data ?? []) as InventoryStockRecord[]) {
+      inventoryStockByKey.set(`${stock.store_id}:${stock.inventory_item_id}`, Number(stock.qty));
+    }
+  }
+
   const productRows: ProductRow[] = products.map((product) => {
     const onHand = product.track_stock ? stockByKey.get(`${product.store_id}:${product.id}`) ?? 0 : null;
+    const recipeLines = recipeLinesByProduct.get(product.id) ?? product.recipe_lines;
+    const recipeAlertCount = product.inventory_mode === "recipe"
+      ? recipeLines.filter((line) => {
+        const item = inventoryItems.find((candidate) => candidate.id === line.inventory_item_id);
+        if (!item) return true;
+        const stock = inventoryStockByKey.get(`${product.store_id}:${item.id}`) ?? 0;
+        return stock <= Number(item.min_stock);
+      }).length
+      : 0;
     return {
       product,
       categoryName: product.category_id ? categoryById.get(product.category_id)?.name ?? "Unknown category" : "Uncategorized",
       onHand,
       stockStatus: productStockStatus(product, onHand),
+      recipeLineCount: recipeLines.length,
+      recipeAlertCount,
     };
   });
   const normalizedQuery = searchQuery.toLowerCase();
@@ -576,7 +663,7 @@ export default async function ProductsPage({
   const userInitial = firstName.charAt(0).toUpperCase();
   const branding = readAdminBranding(profile.organizations?.settings);
   const dataWarning = Boolean(
-    branchesResult.error || categoriesResult.error || Boolean(productsResult.error && !productsSchemaWarning) || fallbackProductsError || (suppliersResult.error && !suppliersSchemaWarning) || stockFallbackError || currentOrdersResult.error || previousOrdersResult.error || orderItemsError,
+    branchesResult.error || categoriesResult.error || Boolean(productsResult.error && !productsSchemaWarning) || fallbackProductsError || (suppliersResult.error && !suppliersSchemaWarning) || stockFallbackError || inventoryStockResult.error || inventoryItemsResult.error || recipesResult.error || currentOrdersResult.error || previousOrdersResult.error || orderItemsError,
   );
   const canWrite = profile.role === "admin";
   const formBranches = visibleBranches.filter((branch) => branch.is_active);
@@ -584,7 +671,7 @@ export default async function ProductsPage({
   const baseHref = { q: searchQuery, category: categoryFilter, status, posOnly, range, pageSize, columns };
 
   return (
-    <ProductEditDialogController products={products} branches={visibleBranches} categories={categories} suppliers={suppliers} canWrite={canWrite} initialProductId={selectedProductId || null}>
+    <ProductEditDialogController products={products} branches={visibleBranches} categories={categories} suppliers={suppliers} inventoryItems={inventoryItems} canWrite={canWrite} initialProductId={selectedProductId || null}>
     <main data-admin-theme={branding.theme} className="admin-page products-page text-ink">
       <div className="min-w-0 px-4 pb-10 sm:px-6 lg:px-8">
           <header className="admin-topbar products-topbar">
@@ -617,7 +704,7 @@ export default async function ProductsPage({
                 </div>
               </details>
               <Link href="#product-filters" className="products-secondary-button"><AdminIcon name="filter" size={15} /> Filters{(searchQuery || categoryFilter !== "all" || status !== "all" || posOnly) && <span className="products-filter-count">!</span>}</Link>
-              <ProductCreateDialog key={action === "product" ? "product-create-open" : "product-create-closed"} branches={formBranches} categories={categories} suppliers={suppliers} defaultBranch={formDefaultBranch} canWrite={canWrite} orgName={orgName} fromInventory={fromInventory} initialOpen={action === "product"} />
+              <ProductCreateDialog key={action === "product" ? "product-create-open" : "product-create-closed"} branches={formBranches} categories={categories} suppliers={suppliers} inventoryItems={inventoryItems} defaultBranch={formDefaultBranch} canWrite={canWrite} orgName={orgName} fromInventory={fromInventory} initialOpen={action === "product"} />
               <MultiProductModal key={formDefaultBranch} storeId={formDefaultBranch} branchName={currentBranchName} branches={formBranches} categories={categories} canWrite={canWrite} orgName={orgName} initialPresetId={readBusinessPresetId(profile.organizations?.settings) ?? undefined} triggerLabel="Starter catalog" />
               <details className="products-add-menu">
                 <summary className="products-secondary-button"><AdminIcon name="more" size={15} /> More</summary>
@@ -735,7 +822,7 @@ function ImportPanel({ branches, defaultBranch, canWrite }: { branches: BranchRe
 }
 
 function BulkUpdatePanel({ canWrite }: { canWrite: boolean }) {
-  return <section id="bulk-update" className="products-action-panel" aria-labelledby="bulk-update-heading"><div className="products-action-panel__header"><div><p className="products-action-panel__eyebrow">Bulk update</p><h2 id="bulk-update-heading">Update selected products</h2><p>Select rows in the table, choose a field change, and apply it to up to 100 product records.</p></div><Link href="/products" className="products-icon-button" aria-label="Close bulk update form">×</Link></div><form id="bulk-update-form" action={bulkUpdateProducts} className="products-bulk-form"><label>POS visibility<select name="is_active" disabled={!canWrite} className="inventory-input inventory-input--compact"><option value="leave">Leave unchanged</option><option value="true">Show in POS</option><option value="false">Hide from POS</option></select></label><label>Stock tracking<select name="track_stock" disabled={!canWrite} className="inventory-input inventory-input--compact"><option value="leave">Leave unchanged</option><option value="true">Track stock</option><option value="false">Do not track</option></select></label><button type="submit" disabled={!canWrite} className="products-primary-button products-form-submit">Apply to selected</button></form><p className="products-bulk-help">Use the selection boxes in the table below. Changes are written directly to the products table and refresh POS and Inventory.</p></section>;
+  return <section id="bulk-update" className="products-action-panel" aria-labelledby="bulk-update-heading"><div className="products-action-panel__header"><div><p className="products-action-panel__eyebrow">Bulk update</p><h2 id="bulk-update-heading">Update selected products</h2><p>Select rows in the table, choose a field change, and apply it to up to 100 product records.</p></div><Link href="/products" className="products-icon-button" aria-label="Close bulk update form">×</Link></div><form id="bulk-update-form" action={bulkUpdateProducts} className="products-bulk-form"><label>POS visibility<select name="is_active" disabled={!canWrite} className="inventory-input inventory-input--compact"><option value="leave">Leave unchanged</option><option value="true">Show in POS</option><option value="false">Hide from POS</option></select></label><label>Inventory behavior<select name="inventory_mode" disabled={!canWrite} className="inventory-input inventory-input--compact"><option value="leave">Leave unchanged</option><option value="direct">Track finished stock</option><option value="none">Do not track</option></select></label><button type="submit" disabled={!canWrite} className="products-primary-button products-form-submit">Apply to selected</button></form><p className="products-bulk-help">Use the selection boxes in the table below. Recipe products should be configured one at a time so each ingredient quantity is explicit.</p></section>;
 }
 
 function CatalogField({ label, htmlFor, children, className = "" }: { label: string; htmlFor: string; children: ReactNode; className?: string }) {

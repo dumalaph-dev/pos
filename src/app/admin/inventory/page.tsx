@@ -5,6 +5,9 @@ import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
 import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { BranchProductSelector } from "@/components/admin/BranchProductSelector";
+import { InventoryItemCreateForm } from "@/components/admin/InventoryItemCreateForm";
+import { InventoryItemDirectory } from "@/components/admin/InventoryItemDirectory";
+import { InventoryItemMovementForm } from "@/components/admin/InventoryItemMovementForm";
 import { AdminMutationForm } from "@/components/admin/AdminMutationForm";
 import { MultiProductModal } from "@/components/admin/MultiProductModal";
 import { AdminReadModelHydrator, type AdminReadModelBatch } from "@/components/admin/AdminReadModelHydrator";
@@ -26,6 +29,7 @@ import { dashboardLowStockThreshold, readAdminInventorySettings } from "@/lib/ad
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import { OwnerGuidance } from "@/components/admin/OwnerOnboardingPanel";
+import type { InventoryItemOption } from "@/lib/inventory-recipes";
 import type {
   InventoryMovementReadModel,
   InventoryProductReadModel,
@@ -94,7 +98,8 @@ type InventoryProductOption = Pick<ProductRecord, "id" | "name" | "store_id" | "
 type MovementRecord = {
   id: string;
   store_id: string;
-  product_id: string;
+  product_id: string | null;
+  inventory_item_id: string | null;
   type: StockMovementType;
   qty: number;
   unit: string;
@@ -108,6 +113,17 @@ type StockRow = {
   store_id: string;
   product_id: string;
   qty: number;
+};
+
+type InventoryStockRow = {
+  store_id: string;
+  inventory_item_id: string;
+  qty: number;
+};
+
+type RecipeUsageRow = {
+  inventory_item_id: string;
+  product_recipes: { product_id: string; store_id: string; is_active: boolean } | { product_id: string; store_id: string; is_active: boolean }[] | null;
 };
 
 type InventoryRow = {
@@ -191,7 +207,7 @@ function readPageSize(value: string) {
 }
 
 type SupabaseQueryError = { code?: string; message?: string; details?: string } | null | undefined;
-const OPTIONAL_INVENTORY_FIELDS = ["sku", "barcode", "cost_price", "min_stock", "supplier_id"];
+const OPTIONAL_INVENTORY_FIELDS = ["sku", "barcode", "cost_price", "min_stock", "supplier_id", "inventory_items", "product_recipes", "inventory_mode"];
 
 function isInventorySchemaError(error: SupabaseQueryError) {
   if (!error) return false;
@@ -328,6 +344,7 @@ export default async function InventoryPage({
     pageSize?: string | string[];
     columns?: string | string[];
     product?: string | string[];
+    item?: string | string[];
     movement?: string | string[];
     yield?: string | string[];
   }>;
@@ -369,9 +386,21 @@ export default async function InventoryPage({
     .order("sort_order")
     .order("name")
     .limit(2000);
+  let inventoryItemsQuery = supabase
+    .from("inventory_items")
+    .select("id, store_id, linked_product_id, name, item_type, unit, cost_per_unit, min_stock, supplier_id, is_active")
+    .eq("org_id", profile.org_id)
+    .eq("is_active", true)
+    .order("name")
+    .limit(3000);
+  const inventoryUsageQuery = supabase
+    .from("product_recipe_items")
+    .select("inventory_item_id, product_recipes!inner(product_id, store_id, is_active)")
+    .eq("product_recipes.is_active", true)
+    .limit(10000);
   let recentMovementsQuery = supabase
     .from("stock_movements")
-    .select("id, store_id, product_id, type, qty, unit, unit_cost, reason, ref_order_id, created_at")
+    .select("id, store_id, product_id, inventory_item_id, type, qty, unit, unit_cost, reason, ref_order_id, created_at")
     .eq("org_id", profile.org_id)
     .order("created_at", { ascending: false })
     .limit(100);
@@ -389,12 +418,13 @@ export default async function InventoryPage({
   if (selectedBranchId) {
     categoriesQuery = categoriesQuery.eq("store_id", selectedBranchId);
     productsQuery = productsQuery.eq("store_id", selectedBranchId);
+    inventoryItemsQuery = inventoryItemsQuery.eq("store_id", selectedBranchId);
     recentMovementsQuery = recentMovementsQuery.eq("store_id", selectedBranchId);
     movedTodayQuery = movedTodayQuery.eq("store_id", selectedBranchId);
     posSaleCountQuery = posSaleCountQuery.eq("store_id", selectedBranchId);
   }
 
-  const [categoriesResult, suppliersResult, productsResult, recentMovementsResult, stockResult, movedTodayResult, posSaleCountResult] = await Promise.all([
+  const [categoriesResult, suppliersResult, productsResult, inventoryItemsResult, inventoryUsageResult, recentMovementsResult, stockResult, inventoryStockResult, movedTodayResult, posSaleCountResult] = await Promise.all([
     categoriesQuery,
     supabase
       .from("suppliers")
@@ -403,11 +433,14 @@ export default async function InventoryPage({
       .order("name")
       .limit(1000),
     productsQuery,
+    inventoryItemsQuery,
+    inventoryUsageQuery,
     recentMovementsQuery,
     // On-hand totals come from the server-side ledger aggregation. The raw
     // movement query is intentionally small for the history preview and is
     // expanded only if the RPC is unavailable.
     supabase.rpc("current_stock", { p_org_id: profile.org_id }),
+    supabase.rpc("current_inventory_stock", { p_org_id: profile.org_id }),
     movedTodayQuery,
     posSaleCountQuery,
   ]);
@@ -451,7 +484,7 @@ export default async function InventoryPage({
   if (stockResult.error) {
     let fallbackMovementsQuery = supabase
       .from("stock_movements")
-      .select("id, store_id, product_id, type, qty, unit, unit_cost, reason, ref_order_id, created_at")
+      .select("id, store_id, product_id, inventory_item_id, type, qty, unit, unit_cost, reason, ref_order_id, created_at")
       .eq("org_id", profile.org_id)
       .order("created_at", { ascending: false })
       .limit(5000);
@@ -481,6 +514,55 @@ export default async function InventoryPage({
       stockByKey.set(`${row.store_id}:${row.product_id}`, Number(row.qty));
     }
   }
+
+  const inventoryItems = (inventoryItemsResult.data ?? []) as InventoryItemOption[];
+  const inventoryItemById = new Map(inventoryItems.map((item) => [item.id, item]));
+  const inventoryStockByKey = new Map<string, number>();
+  if (inventoryStockResult.error) {
+    for (const movement of movements) {
+      if (!movement.inventory_item_id) continue;
+      const key = `${movement.store_id}:${movement.inventory_item_id}`;
+      inventoryStockByKey.set(key, (inventoryStockByKey.get(key) ?? 0) + stockMovementDelta(movement.type, Number(movement.qty)));
+    }
+  } else {
+    for (const row of (inventoryStockResult.data ?? []) as InventoryStockRow[]) {
+      inventoryStockByKey.set(`${row.store_id}:${row.inventory_item_id}`, Number(row.qty));
+    }
+  }
+
+  const usageByItem = new Map<string, { names: string[]; count: number }>();
+  for (const row of (inventoryUsageResult.data ?? []) as RecipeUsageRow[]) {
+    const recipes = Array.isArray(row.product_recipes) ? row.product_recipes : row.product_recipes ? [row.product_recipes] : [];
+    for (const recipe of recipes) {
+      if (!recipe.is_active) continue;
+      const product = productById.get(recipe.product_id);
+      const current = usageByItem.get(row.inventory_item_id) ?? { names: [], count: 0 };
+      if (!current.names.includes(product?.name ?? "Unknown product")) {
+        current.names.push(product?.name ?? "Unknown product");
+        current.count += 1;
+      }
+      usageByItem.set(row.inventory_item_id, current);
+    }
+  }
+  for (const item of inventoryItems) {
+    if (!item.linked_product_id) continue;
+    const current = usageByItem.get(item.id) ?? { names: [], count: 0 };
+    const product = productById.get(item.linked_product_id);
+    if (product && !current.names.includes(product.name)) {
+      current.names.push(product.name);
+      current.count += 1;
+    }
+    usageByItem.set(item.id, current);
+  }
+
+  const inventoryItemRows = inventoryItems.map((item) => ({
+    item,
+    onHand: inventoryStockByKey.get(`${item.store_id}:${item.id}`) ?? 0,
+  }));
+  const inventoryLowStockCount = inventoryItemRows.filter(({ item, onHand }) => onHand > 0 && onHand <= Number(item.min_stock)).length;
+  const inventoryOutOfStockCount = inventoryItemRows.filter(({ onHand }) => onHand <= 0).length;
+  const inventoryEstimatedValue = inventoryItemRows.reduce((sum, { item, onHand }) => sum + Math.max(0, onHand) * Number(item.cost_per_unit ?? 0), 0);
+  const inventoryEstimatedValueItems = inventoryItems.filter((item) => item.cost_per_unit == null).length;
 
   const allRows: InventoryRow[] = trackedProducts.flatMap((product) => {
     const branch = branchById.get(product.store_id);
@@ -528,21 +610,20 @@ export default async function InventoryPage({
   const firstRow = filteredRows.length === 0 ? 0 : (page - 1) * pageSize + 1;
   const lastRow = Math.min(page * pageSize, filteredRows.length);
 
-  const lowStockCount = allRows.filter((row) => row.status === "low").length;
-  const outOfStockCount = allRows.filter((row) => row.status === "out").length;
   const movedToday = stockResult.error
     ? movements.filter((movement) => {
         const time = new Date(movement.created_at).getTime();
         return time >= todayStart.getTime() && time < todayEnd.getTime();
       }).length
     : movedTodayResult.count ?? 0;
-  const estimatedValue = allRows.reduce((sum, row) => sum + row.inventoryValue, 0);
-  const estimatedValueItems = allRows.filter((row) => row.product.cost_price == null).length;
   const catalogFieldsWarning = productsSchemaWarning || isInventorySchemaError(suppliersResult.error);
   const queryWarning = Boolean(
     branchesResult.error
       || categoriesResult.error
       || movementQueryError
+      || inventoryItemsResult.error
+      || inventoryUsageResult.error
+      || inventoryStockResult.error
       || movedTodayResult.error
       || posSaleCountResult.error
       || (productsQueryWarning && !productsSchemaWarning)
@@ -562,6 +643,12 @@ export default async function InventoryPage({
   const selectedMovementProduct = selectedProductId ? productById.get(selectedProductId) : undefined;
   const defaultProduct = formProducts.find((product) => product.id === selectedMovementProduct?.id) ?? formProducts[0];
   const defaultBranch = selectedBranchId ?? defaultProduct?.store_id ?? activeBranches[0]?.id ?? visibleBranches[0]?.id ?? "";
+  const requestedInventoryItemId = readParam(params.item);
+  const defaultInventoryItem = inventoryItems.find((item) => item.id === requestedInventoryItemId && item.store_id === (selectedBranchId ?? item.store_id))
+    ?? inventoryItems.find((item) => item.store_id === defaultBranch)
+    ?? inventoryItems[0];
+  const inventoryStockRecord = Object.fromEntries(inventoryStockByKey.entries());
+  const inventoryUsageRecord = Object.fromEntries(usageByItem.entries());
   const requestedMovement = readParam(params.movement);
   const defaultMovement = movementOptions.some((option) => option.value === requestedMovement)
     ? (requestedMovement as Exclude<StockMovementType, "sale">)
@@ -582,13 +669,15 @@ export default async function InventoryPage({
     ? "Yield entry recorded. Source, output, and waste movements are linked in the ledger."
     : readParam(params.saved) === "1"
       ? "Stock movement recorded. The ledger and POS balance are up to date."
-      : readParam(params.saved) === "product"
+    : readParam(params.saved) === "product"
         ? "Product created with stock tracking enabled. It is now listed in Inventory."
+        : readParam(params.saved) === "item"
+          ? "Inventory item created. You can now add it to product recipes or record opening stock."
         : "";
   const baseHref = { q: searchQuery, category, status, supplier, page, pageSize, columns: visibleColumns };
   const posSaleCount = stockResult.error ? movements.filter((movement) => movement.type === "sale").length : posSaleCountResult.count ?? 0;
   const userInitial = firstName.slice(0, 1).toUpperCase();
-  const inventoryAlertCount = lowStockCount + outOfStockCount;
+  const inventoryAlertCount = inventoryLowStockCount + inventoryOutOfStockCount;
   const activeFilterCount = [category !== "all", status !== "all", Boolean(supplier)].filter(Boolean).length;
   const hiddenColumnCount = columnOptions.length - visibleColumns.size;
   const branding = readAdminBranding(profile.organizations?.settings);
@@ -639,8 +728,10 @@ export default async function InventoryPage({
     data: {
       id: movement.id,
       storeId: movement.store_id,
-      productId: movement.product_id,
-      productName: productById.get(movement.product_id)?.name ?? "Unknown product",
+      productId: movement.product_id ?? movement.inventory_item_id ?? "",
+      productName: movement.product_id
+        ? productById.get(movement.product_id)?.name ?? "Unknown product"
+        : inventoryItemById.get(movement.inventory_item_id ?? "")?.name ?? "Unknown inventory item",
       branchName: branchById.get(movement.store_id)?.name ?? DEFAULT_STORE_NAME,
       type: movement.type,
       quantity: Number(movement.qty),
@@ -680,8 +771,8 @@ export default async function InventoryPage({
               <p className="mt-1 max-w-2xl text-sm text-ink-muted">Manage inventory items, stock levels, and usage for {currentBranchName}, {firstName}.</p>
             </div>
             <div className="admin-compact-toolbar">
-              <Link href={buildInventoryHref({ ...baseHref, page: 1, movement: "receive" }) + "#stock-movement"} className="inventory-button gap-1.5 rounded-btn bg-secondary text-[11px] font-extrabold text-primary transition hover:bg-secondary-hover"><AdminIcon name="download" size={14} />Stock in<AdminIcon name="chevron" size={12} /></Link>
-              <Link href={buildInventoryHref({ ...baseHref, page: 1, movement: "yield_out" }) + "#stock-movement"} className="inventory-button gap-1.5 rounded-btn bg-secondary text-[11px] font-extrabold text-primary transition hover:bg-secondary-hover"><AdminIcon name="upload" size={14} />Stock out<AdminIcon name="chevron" size={12} /></Link>
+              <Link href={buildInventoryHref({ ...baseHref, page: 1, movement: "receive" }) + "#inventory-item-movement"} className="inventory-button gap-1.5 rounded-btn bg-secondary text-[11px] font-extrabold text-primary transition hover:bg-secondary-hover"><AdminIcon name="download" size={14} />Stock in<AdminIcon name="chevron" size={12} /></Link>
+              <Link href={buildInventoryHref({ ...baseHref, page: 1, movement: "yield_out" }) + "#inventory-item-movement"} className="inventory-button gap-1.5 rounded-btn bg-secondary text-[11px] font-extrabold text-primary transition hover:bg-secondary-hover"><AdminIcon name="upload" size={14} />Stock out<AdminIcon name="chevron" size={12} /></Link>
               {isLechonHouseBusinessSelected && <Link href="/admin/inventory?yield=1#yield-entry" className="inventory-button gap-1.5 rounded-btn bg-secondary text-[11px] font-extrabold text-primary transition hover:bg-secondary-hover"><AdminIcon name="inventory" size={14} />Yield entry<AdminIcon name="chevron" size={12} /></Link>}
               <Link href="/admin/inventory/variance" className="inventory-button gap-1.5 rounded-btn bg-secondary text-[11px] font-extrabold text-primary transition hover:bg-secondary-hover"><AdminIcon name="chart" size={14} />End-of-day count<AdminIcon name="chevron" size={12} /></Link>
               <MultiProductModal key={defaultBranch} storeId={defaultBranch} branchName={currentBranchName} branches={activeBranches} categories={categories} canWrite={canWrite} orgName={branding.brandName} initialPresetId={readBusinessPresetId(profile.organizations?.settings) ?? undefined} triggerLabel="Starter catalog" triggerClassName="inventory-button gap-1.5 rounded-btn bg-secondary text-[11px] font-extrabold text-primary transition hover:bg-secondary-hover" />
@@ -703,15 +794,24 @@ export default async function InventoryPage({
           {canWrite && isLechonHouseBusinessSelected && <div className="mt-5"><OwnerGuidance topic="yield" /></div>}
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <InventoryMetric label="Total items" value={String(allRows.length)} detail={`Tracked for ${currentBranchName}`} tone="bg-primary text-primary-fg" icon="box" />
-            <InventoryMetric label="Low stock items" value={String(lowStockCount)} detail="Need to reorder soon" tone="bg-accent text-accent-fg" icon="inventory" />
-            <InventoryMetric label="Out of stock" value={String(outOfStockCount)} detail="Require immediate attention" tone="bg-warning text-primary-fg" icon="alert" />
-            <InventoryMetric label="Total inventory value" value={estimatedValue ? formatPeso(Math.round(estimatedValue)) : "₱0.00"} detail={estimatedValueItems ? `Estimated for ${estimatedValueItems} item${estimatedValueItems === 1 ? "" : "s"}` : "Based on cost price"} tone="bg-success text-primary-fg" icon="wallet" />
+            <InventoryMetric label="Total items" value={String(inventoryItems.length)} detail={`Tracked for ${currentBranchName}`} tone="bg-primary text-primary-fg" icon="box" />
+            <InventoryMetric label="Low stock items" value={String(inventoryLowStockCount)} detail="Need to reorder soon" tone="bg-accent text-accent-fg" icon="inventory" />
+            <InventoryMetric label="Out of stock" value={String(inventoryOutOfStockCount)} detail="Require immediate attention" tone="bg-warning text-primary-fg" icon="alert" />
+            <InventoryMetric label="Total inventory value" value={inventoryEstimatedValue ? formatPeso(Math.round(inventoryEstimatedValue)) : "₱0.00"} detail={inventoryEstimatedValueItems ? `Estimated for ${inventoryEstimatedValueItems} item${inventoryEstimatedValueItems === 1 ? "" : "s"}` : "Based on cost price"} tone="bg-success text-primary-fg" icon="wallet" />
             <InventoryMetric label="Items moved today" value={String(movedToday)} detail={`Since ${formatToday(todayStart)}`} tone="bg-primary text-primary-fg" icon="chart" />
           </div>
 
           <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_252px]">
             <div className="min-w-0">
+              <InventoryItemCreateForm branches={activeBranches} suppliers={suppliers} defaultBranch={defaultBranch} canWrite={canWrite} />
+              <InventoryItemDirectory items={inventoryItems} branches={activeBranches} stockByKey={inventoryStockRecord} usageByItem={inventoryUsageRecord} canWrite={canWrite} selectedBranchId={selectedBranchId} />
+              <InventoryItemMovementForm items={inventoryItems} branches={activeBranches} defaultBranch={defaultBranch} defaultItemId={defaultInventoryItem?.id ?? ""} defaultMovement={defaultMovement} canWrite={canWrite} open={Boolean(readParam(params.item) || readParam(params.movement) || (readParam(params.error) && !readParam(params.yield)))} />
+            </div>
+          </div>
+
+          {inventoryItems.length === 0 && <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_252px]">
+            <div className="min-w-0">
+              <div className="mb-3 rounded-card border border-warning/25 bg-warning/10 px-4 py-3 text-xs text-ink"><strong className="font-extrabold">Legacy product-stock view</strong><p className="mt-1 text-ink-muted">Apply the recipe inventory migration to manage ingredients and shared stock items here.</p></div>
               <section aria-label="Inventory browsing controls" className="admin-panel inventory-directory-controls overflow-visible p-0">
                 <nav aria-label="Inventory categories" className="products-category-tabs inventory-category-tabs">
                   {categoryTabs.map((tab) => (
@@ -779,16 +879,17 @@ export default async function InventoryPage({
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3"><span className="text-[10px] font-semibold text-ink-muted">Showing {firstRow} to {lastRow} of {filteredRows.length} items</span><div className="flex items-center gap-1">{page > 1 ? <Link href={buildInventoryHref({ ...baseHref, page: page - 1 })} className="inventory-icon-button border border-line text-primary hover:bg-primary-soft" aria-label="Previous page">‹</Link> : <span className="inventory-icon-button border border-line text-ink-subtle" aria-hidden="true">‹</span>}{Array.from({ length: Math.min(totalPages, 5) }, (_, index) => index + 1).map((pageNumber) => <Link key={pageNumber} href={buildInventoryHref({ ...baseHref, page: pageNumber })} className={`inventory-page-button ${pageNumber === page ? "is-active" : ""}`}>{pageNumber}</Link>)}{page < totalPages ? <Link href={buildInventoryHref({ ...baseHref, page: page + 1 })} className="inventory-icon-button border border-line text-primary hover:bg-primary-soft" aria-label="Next page">›</Link> : <span className="inventory-icon-button border border-line text-ink-subtle" aria-hidden="true">›</span>}</div><form action="/admin/inventory" method="get" className="flex items-center gap-2"><input type="hidden" name="q" value={searchQuery} /><input type="hidden" name="category" value={category} /><input type="hidden" name="status" value={status} /><input type="hidden" name="supplier" value={supplier} /><input type="hidden" name="columns" value={[...visibleColumns].join(",")} /><label htmlFor="inventory-page-size" className="text-[10px] font-semibold text-ink-muted">Rows per page:</label><select id="inventory-page-size" name="pageSize" defaultValue={String(pageSize)} className="inventory-input inventory-input--compact w-auto text-[10px]"><option value="10">10</option><option value="25">25</option><option value="50">50</option></select><button type="submit" className="inventory-button inventory-button--ghost">Apply</button></form></div>
               </section>
 
-              {isLechonHouseBusinessSelected && <YieldEntryForm branches={activeBranches} products={formProducts} defaultBranch={defaultBranch} defaultSourceProductId={defaultProduct?.id ?? ""} defaultOutputProductId={defaultYieldOutputProduct?.id ?? ""} canWrite={canWrite} open={Boolean(readParam(params.yield) || readParam(params.saved) === "yield")} />}
               <StockMovementForm scope={cacheScope} branches={activeBranches} products={formProducts} defaultBranch={defaultBranch} defaultProductId={defaultProduct?.id ?? ""} defaultMovement={defaultMovement} canWrite={canWrite} open={Boolean(readParam(params.movement) || selectedProductId || (readParam(params.error) && !readParam(params.yield)))} />
             </div>
 
             <aside className="grid content-start gap-3">
-              <section className="admin-panel p-4"><div className="flex items-center justify-between gap-2"><h2 className="text-sm font-extrabold text-ink">Recent stock movements</h2><Link href="#stock-movement" className="text-[10px] font-extrabold text-primary hover:underline">View all</Link></div>{recentMovements.length === 0 ? <p className="mt-4 rounded-btn border border-dashed border-line-strong px-3 py-5 text-center text-[10px] text-ink-muted">No stock movements yet.</p> : <div className="mt-3 divide-y divide-line/70">{recentMovements.map((movement) => { const product = productById.get(movement.product_id); const delta = stockMovementDelta(movement.type, Number(movement.qty)); return <div key={movement.id} className="flex items-start gap-2 py-3 first:pt-0"><span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-extrabold ${movementClass(movement.type)}`} aria-hidden="true">{delta >= 0 ? "↓" : "↑"}</span><span className="min-w-0 flex-1"><strong className="block truncate text-[10px] font-extrabold text-ink">{movementLabel(movement.type)}</strong><small className="mt-1 block truncate text-[10px] text-ink-muted">{product?.name ?? "Unknown product"}</small><small className="block text-[9px] text-ink-muted">{formatDateTime(movement.created_at)}</small></span><strong className={`tnums whitespace-nowrap text-[10px] font-extrabold ${delta >= 0 ? "text-success" : "text-danger"}`}>{delta >= 0 ? "+" : "−"}{formatStockQuantity(Math.abs(delta))} {movement.unit}</strong></div>; })}</div>}<Link href="/admin/reports/inventory" className="inventory-button mt-3 w-full rounded-btn border border-line-strong text-[10px] font-extrabold text-primary transition hover:bg-primary-soft"><AdminIcon name="chart" size={14} />View inventory reports</Link></section>
+              <section className="admin-panel p-4"><div className="flex items-center justify-between gap-2"><h2 className="text-sm font-extrabold text-ink">Recent stock movements</h2><Link href="#inventory-item-movement" className="text-[10px] font-extrabold text-primary hover:underline">View all</Link></div>{recentMovements.length === 0 ? <p className="mt-4 rounded-btn border border-dashed border-line-strong px-3 py-5 text-center text-[10px] text-ink-muted">No stock movements yet.</p> : <div className="mt-3 divide-y divide-line/70">{recentMovements.map((movement) => { const product = movement.product_id ? productById.get(movement.product_id) : undefined; const item = movement.inventory_item_id ? inventoryItemById.get(movement.inventory_item_id) : undefined; const delta = stockMovementDelta(movement.type, Number(movement.qty)); return <div key={movement.id} className="flex items-start gap-2 py-3 first:pt-0"><span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-extrabold ${movementClass(movement.type)}`} aria-hidden="true">{delta >= 0 ? "↓" : "↑"}</span><span className="min-w-0 flex-1"><strong className="block truncate text-[10px] font-extrabold text-ink">{movementLabel(movement.type)}</strong><small className="mt-1 block truncate text-[10px] text-ink-muted">{product?.name ?? item?.name ?? "Unknown inventory item"}</small><small className="block text-[9px] text-ink-muted">{formatDateTime(movement.created_at)}</small></span><strong className={`tnums whitespace-nowrap text-[10px] font-extrabold ${delta >= 0 ? "text-success" : "text-danger"}`}>{delta >= 0 ? "+" : "−"}{formatStockQuantity(Math.abs(delta))} {movement.unit}</strong></div>; })}</div>}<Link href="/admin/reports/inventory" className="inventory-button mt-3 w-full rounded-btn border border-line-strong text-[10px] font-extrabold text-primary transition hover:bg-primary-soft"><AdminIcon name="chart" size={14} />View inventory reports</Link></section>
               <section className="admin-panel p-4"><div className="flex items-start gap-3"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-success/10 text-success"><AdminIcon name="check" size={16} /></span><div><h2 className="text-sm font-extrabold text-ink">Inventory is connected to POS</h2><p className="mt-2 text-[10px] leading-5 text-ink-muted">Tracked items deduct automatically when completed POS orders are recorded.</p></div></div><div className="mt-4 flex items-center justify-between gap-2 border-t border-line pt-3 text-[10px] font-semibold text-ink-muted"><span>Last movement</span><span className="text-right">{movements[0] ? formatDateTime(movements[0].created_at) : "No movement yet"}</span></div>{posSaleCount > 0 && <p className="mt-2 text-[10px] font-bold text-success">{posSaleCount} POS sale movement{posSaleCount === 1 ? "" : "s"} recorded.</p>}</section>
               <section id="inventory-help" className="admin-panel p-4"><h2 className="text-sm font-extrabold text-ink">Did you know?</h2><ul className="mt-4 grid gap-3 text-[10px] leading-4 text-ink-muted"><li className="flex gap-2"><AdminIcon name="check" size={15} /><span>Add items manually or import in bulk from the catalog.</span></li><li className="flex gap-2"><AdminIcon name="check" size={15} /><span>Set a minimum stock level for every tracked item.</span></li><li className="flex gap-2"><AdminIcon name="check" size={15} /><span>Track stock in, out, waste, and adjustments.</span></li><li className="flex gap-2"><AdminIcon name="check" size={15} /><span>Close the day with a physical count and review variance.</span></li></ul><Link href="/admin/inventory/variance" className="inventory-button mt-4 w-full rounded-btn border border-line-strong text-[10px] font-extrabold text-primary transition hover:bg-primary-soft"><AdminIcon name="chart" size={14} />Open end-of-day count</Link></section>
             </aside>
-          </div>
+          </div>}
+
+          {isLechonHouseBusinessSelected && <div className="mt-6"><YieldEntryForm branches={activeBranches} products={formProducts} defaultBranch={defaultBranch} defaultSourceProductId={defaultProduct?.id ?? ""} defaultOutputProductId={defaultYieldOutputProduct?.id ?? ""} canWrite={canWrite} open={Boolean(readParam(params.yield) || readParam(params.saved) === "yield")} /></div>}
         </AdminReadModelHydrator>
       </div>
     </main>

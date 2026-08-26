@@ -36,21 +36,21 @@ function csvResponse(kind: ExportKind, report: InventoryReportData, rows: unknow
 
 function exportInventory(report: InventoryReportData) {
   return [
-    ["Branch", "Product", "Category", "Supplier", "Unit", "On hand", "Minimum", "Status", "Estimated value centavos"],
+    ["Branch", "Inventory item", "Category", "Supplier", "Unit", "On hand", "Minimum", "Status", "Estimated value centavos"],
     ...report.inventoryRows.map((row) => [row.branchName, row.productName, row.categoryName, row.supplierName, row.unit, row.onHand, row.minimum, row.status, Math.round(row.inventoryValue)]),
   ];
 }
 
 function exportMovements(report: InventoryReportData) {
   return [
-    ["Created at", "Branch", "Product", "Category", "Supplier", "Movement", "Quantity", "Unit", "Net change", "Reason"],
+    ["Created at", "Branch", "Inventory item", "Category", "Supplier", "Movement", "Quantity", "Unit", "Net change", "Reason"],
     ...report.movementRows.map((row) => [row.createdAt, row.branchName, row.productName, row.categoryName, row.supplierName, row.typeLabel, row.quantity, row.unit, row.netChange, row.reason]),
   ];
 }
 
 function exportVariance(report: InventoryReportData) {
   return [
-    ["Business date", "Updated at", "Branch", "Product", "Category", "Supplier", "Unit", "Expected", "Counted", "Variance", "Status"],
+    ["Business date", "Updated at", "Branch", "Inventory item", "Category", "Supplier", "Unit", "Expected", "Counted", "Variance", "Status"],
     ...report.varianceRows.map((row) => [row.countDate, row.updatedAt, row.branchName, row.productName, row.categoryName, row.supplierName, row.unit, row.expected, row.counted, row.variance, row.status]),
   ];
 }

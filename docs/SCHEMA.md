@@ -384,7 +384,34 @@ immediately.
 
 ---
 
-## 9. Open schema questions
+## 9. Product recipes and inventory items (migration 0073)
+
+Products remain the sellable POS records. `inventory_items` are branch-scoped
+physical stock records, and `product_recipes` plus `product_recipe_items` map a
+sellable product to the ingredients or packaging consumed per sale. A single
+inventory item may be reused by many recipes, so shared stock such as Fries,
+Dough, Milk, or Coffee beans is deducted from one ledger balance.
+
+`products.inventory_mode` is one of `none`, `direct`, or `recipe`. Existing
+tracked products are backfilled as `direct` finished goods and their historical
+`stock_movements` receive `inventory_item_id` values. Recipe products set the
+legacy `track_stock` flag to false so the old product-sale path cannot deduct
+both a finished product and its recipe ingredients.
+
+Recipe sales create immutable `order_item_consumptions` snapshots and linked
+inventory-item sale movements. Deferred reversal handling reads those snapshots
+for voids/refunds, so changing a recipe or deactivating an inventory item does
+not rewrite historical consumption. `current_inventory_stock` and
+`inventory_item_expected_stock` prefer `inventory_item_id` and fall back to the
+legacy product reference while compatibility data is being migrated.
+
+Physical counts support both legacy product rows and new inventory-item rows.
+The `inventory_counts.inventory_item_id` column is nullable only for historical
+product-only counts; new counts use `record_inventory_item_count`.
+
+---
+
+## 10. Open schema questions
 
 - **Void/refund modeling (implemented):** linked reversing orders remain the immutable accounting truth. POS voids use `order_action_approvals`, `verify_void_pin`, and `record_pos_order_void`; the approval is one-use, expires after five minutes, is branch-scoped for managers, and writes both approval and reversal audit events. Refunds continue through the admin order-action path.
 - **VAT computation:** store computed at sale time (snapshot) — confirm SC/PWD VAT-exempt split formula with the owner.

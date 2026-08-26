@@ -25,9 +25,22 @@ type ProfileRecord = {
 type BranchRecord = { id: string; name: string; is_active: boolean };
 type ProductRecord = { id: string; name: string; unit: string; min_stock: number | null };
 type ExpectedRow = { product_id: string; qty: number };
-type CountRecord = { product_id: string; expected_qty: number; counted_qty: number; variance_qty: number; updated_at: string };
+type InventoryItemRecord = { id: string; name: string; unit: string; min_stock: number | null; item_type: string; linked_product_id: string | null };
+type InventoryExpectedRow = { inventory_item_id: string; qty: number };
+type CountRecord = { inventory_item_id: string | null; product_id: string | null; expected_qty: number; counted_qty: number; variance_qty: number; updated_at: string };
 type VarianceStatus = "pending" | "balanced" | "short" | "over";
-type VarianceRow = ProductRecord & { expectedQty: number; countedQty: number | null; varianceQty: number | null; status: VarianceStatus };
+type VarianceRow = {
+  id: string;
+  name: string;
+  unit: string;
+  min_stock: number | null;
+  inventoryItemId: string | null;
+  productId: string | null;
+  expectedQty: number;
+  countedQty: number | null;
+  varianceQty: number | null;
+  status: VarianceStatus;
+};
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -105,6 +118,16 @@ export default async function InventoryVariancePage({
   const canWrite = profile.role === "admin";
   const dayEnd = getSingaporeDayEnd(countDate);
 
+  const inventoryItemsResult = branchId
+    ? await supabase
+      .from("inventory_items")
+      .select("id, name, unit, min_stock, item_type, linked_product_id")
+      .eq("org_id", profile.org_id)
+      .eq("store_id", branchId)
+      .eq("is_active", true)
+      .order("name")
+      .limit(2000)
+    : { data: [], error: null };
   const productsResult = branchId
     ? await supabase
       .from("products")
@@ -119,13 +142,13 @@ export default async function InventoryVariancePage({
   const countsResult = branchId
     ? await supabase
       .from("inventory_counts")
-      .select("product_id, expected_qty, counted_qty, variance_qty, updated_at")
+      .select("inventory_item_id, product_id, expected_qty, counted_qty, variance_qty, updated_at")
       .eq("org_id", profile.org_id)
       .eq("store_id", branchId)
       .eq("count_date", countDate)
     : { data: [], error: null };
   const expectedResult = branchId
-    ? await supabase.rpc("inventory_expected_stock", {
+    ? await supabase.rpc("inventory_item_expected_stock", {
       p_org_id: profile.org_id,
       p_store_id: branchId,
       p_until: dayEnd.toISOString(),
@@ -133,53 +156,120 @@ export default async function InventoryVariancePage({
     : { data: [], error: null };
 
   const products = (productsResult.data ?? []) as ProductRecord[];
+  const inventoryItems = (inventoryItemsResult.data ?? []) as InventoryItemRecord[];
   const counts = (countsResult.data ?? []) as CountRecord[];
-  let expectedRows = (expectedResult.data ?? []) as ExpectedRow[];
   let expectedWarning = Boolean(expectedResult.error);
+  const usingInventoryItems = !inventoryItemsResult.error;
+  let rows: VarianceRow[] = [];
+  let countByRowId = new Map<string, CountRecord>();
 
-  if (expectedResult.error && branchId) {
-    const fallbackResult = await supabase
-      .from("stock_movements")
-      .select("product_id, type, qty")
-      .eq("org_id", profile.org_id)
-      .eq("store_id", branchId)
-      .lt("created_at", dayEnd.toISOString())
-      .limit(10000);
-    if (fallbackResult.error) {
-      expectedWarning = true;
-    } else {
-      const fallbackByProduct = new Map<string, number>();
-      for (const movement of (fallbackResult.data ?? []) as Array<{ product_id: string; type: string; qty: number }>) {
-        fallbackByProduct.set(movement.product_id, (fallbackByProduct.get(movement.product_id) ?? 0) + stockMovementDelta(movement.type, Number(movement.qty)));
+  if (usingInventoryItems) {
+    let expectedRows = (expectedResult.data ?? []) as InventoryExpectedRow[];
+    if (expectedResult.error && branchId) {
+      const fallbackResult = await supabase
+        .from("stock_movements")
+        .select("inventory_item_id, product_id, type, qty")
+        .eq("org_id", profile.org_id)
+        .eq("store_id", branchId)
+        .lt("created_at", dayEnd.toISOString())
+        .limit(10000);
+      if (fallbackResult.error) {
+        expectedWarning = true;
+      } else {
+        const fallbackByItem = new Map<string, number>();
+        for (const movement of (fallbackResult.data ?? []) as Array<{ inventory_item_id: string | null; product_id: string | null; type: string; qty: number }>) {
+          const key = movement.inventory_item_id;
+          if (!key) continue;
+          fallbackByItem.set(key, (fallbackByItem.get(key) ?? 0) + stockMovementDelta(movement.type, Number(movement.qty)));
+        }
+        expectedRows = Array.from(fallbackByItem, ([inventory_item_id, qty]) => ({ inventory_item_id, qty }));
       }
-      expectedRows = Array.from(fallbackByProduct, ([product_id, qty]) => ({ product_id, qty }));
     }
+
+    const expectedByItemId = new Map(expectedRows.map((row) => [row.inventory_item_id, Number(row.qty)]));
+    const itemByLinkedProductId = new Map(inventoryItems.filter((item) => item.linked_product_id).map((item) => [item.linked_product_id as string, item]));
+    for (const count of counts) {
+      const itemId = count.inventory_item_id ?? (count.product_id ? itemByLinkedProductId.get(count.product_id)?.id : undefined);
+      if (itemId) countByRowId.set(itemId, count);
+    }
+    rows = inventoryItems.map((item) => {
+      const count = countByRowId.get(item.id);
+      const countedQty = count ? Number(count.counted_qty) : null;
+      const varianceQty = count ? Number(count.variance_qty) : null;
+      return {
+        id: item.id,
+        name: item.name,
+        unit: item.unit,
+        min_stock: item.min_stock,
+        inventoryItemId: item.id,
+        productId: item.linked_product_id,
+        expectedQty: count ? Number(count.expected_qty) : expectedByItemId.get(item.id) ?? 0,
+        countedQty,
+        varianceQty,
+        status: countedQty === null ? "pending" : Math.abs(varianceQty ?? 0) < 0.0005 ? "balanced" : (varianceQty ?? 0) < 0 ? "short" : "over",
+      };
+    });
+  } else {
+    const legacyExpectedResult = branchId
+      ? await supabase.rpc("inventory_expected_stock", {
+        p_org_id: profile.org_id,
+        p_store_id: branchId,
+        p_until: dayEnd.toISOString(),
+      })
+      : { data: [], error: null };
+    let expectedRows = (legacyExpectedResult.data ?? []) as ExpectedRow[];
+    expectedWarning = Boolean(legacyExpectedResult.error);
+    if (legacyExpectedResult.error && branchId) {
+      const fallbackResult = await supabase
+        .from("stock_movements")
+        .select("product_id, type, qty")
+        .eq("org_id", profile.org_id)
+        .eq("store_id", branchId)
+        .lt("created_at", dayEnd.toISOString())
+        .limit(10000);
+      if (fallbackResult.error) {
+        expectedWarning = true;
+      } else {
+        const fallbackByProduct = new Map<string, number>();
+        for (const movement of (fallbackResult.data ?? []) as Array<{ product_id: string | null; type: string; qty: number }>) {
+          if (!movement.product_id) continue;
+          fallbackByProduct.set(movement.product_id, (fallbackByProduct.get(movement.product_id) ?? 0) + stockMovementDelta(movement.type, Number(movement.qty)));
+        }
+        expectedRows = Array.from(fallbackByProduct, ([product_id, qty]) => ({ product_id, qty }));
+      }
+    }
+
+    const expectedByProductId = new Map(expectedRows.map((row) => [row.product_id, Number(row.qty)]));
+    countByRowId = new Map(counts.filter((row) => row.product_id).map((row) => [row.product_id as string, row]));
+    rows = products.map((product) => {
+      const count = countByRowId.get(product.id);
+      const countedQty = count ? Number(count.counted_qty) : null;
+      const varianceQty = count ? Number(count.variance_qty) : null;
+      return {
+        id: product.id,
+        name: product.name,
+        unit: product.unit,
+        min_stock: product.min_stock,
+        inventoryItemId: null,
+        productId: product.id,
+        expectedQty: count ? Number(count.expected_qty) : expectedByProductId.get(product.id) ?? 0,
+        countedQty,
+        varianceQty,
+        status: countedQty === null ? "pending" : Math.abs(varianceQty ?? 0) < 0.0005 ? "balanced" : (varianceQty ?? 0) < 0 ? "short" : "over",
+      };
+    });
   }
 
-  const expectedByProductId = new Map(expectedRows.map((row) => [row.product_id, Number(row.qty)]));
-  const countByProductId = new Map(counts.map((row) => [row.product_id, row]));
-  const rows: VarianceRow[] = products.map((product) => {
-    const count = countByProductId.get(product.id);
-    const countedQty = count ? Number(count.counted_qty) : null;
-    const varianceQty = count ? Number(count.variance_qty) : null;
-    return {
-      ...product,
-      expectedQty: count ? Number(count.expected_qty) : expectedByProductId.get(product.id) ?? 0,
-      countedQty,
-      varianceQty,
-      status: countedQty === null ? "pending" : Math.abs(varianceQty ?? 0) < 0.0005 ? "balanced" : (varianceQty ?? 0) < 0 ? "short" : "over",
-    };
-  });
   const countedRows = rows.filter((row) => row.countedQty !== null);
   const shortRows = rows.filter((row) => row.status === "short");
   const overRows = rows.filter((row) => row.status === "over");
-  const queryWarning = Boolean(branchesResult.error || productsResult.error || countsResult.error);
+  const queryWarning = Boolean(branchesResult.error || countsResult.error || (!usingInventoryItems && productsResult.error));
   const errorMessage = readParam(params.error);
   const savedMessage = readParam(params.saved) === "1" ? `End-of-day count saved for ${formatDate(countDate)}.` : "";
-  const formDisabled = !canWrite || !branchId || products.length === 0 || Boolean(productsResult.error || countsResult.error);
+  const formDisabled = !canWrite || !branchId || rows.length === 0 || Boolean(countsResult.error || (!usingInventoryItems && productsResult.error));
   const cacheScope = { userId: user.id, orgId: profile.org_id, storeId: branchId || null, role: profile.role };
   const varianceCacheRecords: Array<{ id: string; data: InventoryVarianceReadModel }> = rows.map((row) => {
-    const count = countByProductId.get(row.id);
+    const count = countByRowId.get(row.id);
     const id = `${branchId}:${countDate}:${row.id}`;
     return {
       id,
@@ -187,6 +277,7 @@ export default async function InventoryVariancePage({
         id,
         storeId: branchId,
         productId: row.id,
+        inventoryItemId: row.inventoryItemId,
         productName: row.name,
         unit: row.unit,
         countDate,
@@ -233,7 +324,7 @@ export default async function InventoryVariancePage({
         </form>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <VarianceMetric label="Tracked products" value={String(rows.length)} detail={branch?.name ?? "Choose a branch"} tone="bg-primary text-primary-fg" />
+          <VarianceMetric label="Tracked items" value={String(rows.length)} detail={branch?.name ?? "Choose a branch"} tone="bg-primary text-primary-fg" />
           <VarianceMetric label="Counted lines" value={`${countedRows.length}/${rows.length}`} detail="Physical quantities saved" tone="bg-secondary text-primary" />
           <VarianceMetric label="Short lines" value={String(shortRows.length)} detail="Counted below expected" tone="bg-danger text-white" />
           <VarianceMetric label="Over lines" value={String(overRows.length)} detail="Counted above expected" tone="bg-warning text-white" />
@@ -241,10 +332,10 @@ export default async function InventoryVariancePage({
 
         <section className="admin-panel mt-5 overflow-hidden" aria-labelledby="variance-table-heading">
           <div className="flex flex-wrap items-end justify-between gap-3 border-b border-line px-4 py-4 sm:px-5"><div><p className="admin-panel__eyebrow">{branch?.name ?? "No branch selected"} · {formatDate(countDate)}</p><h2 id="variance-table-heading" className="admin-panel__title">Expected versus counted</h2><p className="admin-panel__subtitle">Expected quantities include ledger activity through the end of the selected Singapore business day.</p></div><span className="rounded-pill bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary">{countedRows.length === rows.length && rows.length > 0 ? "Count complete" : "Count in progress"}</span></div>
-          {rows.length === 0 ? <div className="grid place-items-center px-4 py-14 text-center"><span className="grid h-12 w-12 place-items-center rounded-full bg-primary-soft text-primary"><AdminIcon name="inventory" size={23} /></span><p className="mt-4 text-sm font-extrabold text-ink">No tracked products found</p><p className="mt-1 max-w-sm text-xs leading-5 text-ink-muted">Enable stock tracking on products before closing a physical inventory count.</p><Link href="/products" className="inventory-button mt-3 rounded-btn bg-primary text-[11px] font-extrabold text-primary-fg">Open Products</Link></div> : <AdminMutationForm scope={cacheScope} kind="inventory_count">
+          {rows.length === 0 ? <div className="grid place-items-center px-4 py-14 text-center"><span className="grid h-12 w-12 place-items-center rounded-full bg-primary-soft text-primary"><AdminIcon name="inventory" size={23} /></span><p className="mt-4 text-sm font-extrabold text-ink">No tracked inventory items found</p><p className="mt-1 max-w-sm text-xs leading-5 text-ink-muted">Create an ingredient, packaging item, or finished good in Inventory before closing a physical count.</p><Link href="/admin/inventory#inventory-item-create" className="inventory-button mt-3 rounded-btn bg-primary text-[11px] font-extrabold text-primary-fg">Open Inventory</Link></div> : <AdminMutationForm scope={cacheScope} kind="inventory_count">
             <input type="hidden" name="store_id" value={branchId} />
             <input type="hidden" name="count_date" value={countDate} />
-            <div className="overflow-x-auto"><table className="admin-list-table min-w-[760px]"><thead><tr><th>Product</th><th>Expected at close</th><th>Counted quantity</th><th>Variance</th><th>Status</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><strong>{row.name}</strong><small className="mt-1 block text-[10px] text-ink-muted">Unit: {row.unit}</small></td><td className="tnums whitespace-nowrap font-extrabold">{formatStockQuantity(row.expectedQty)} {row.unit}</td><td><label className="sr-only" htmlFor={`counted-${row.id}`}>Counted quantity for {row.name}</label><input id={`counted-${row.id}`} name={`counted_${row.id}`} type="number" min="0" step="0.001" inputMode="decimal" defaultValue={row.countedQty === null ? "" : String(row.countedQty)} required disabled={formDisabled} className="inventory-input inventory-input--compact tnums max-w-[160px]" placeholder="Enter count" /></td><td className={`tnums whitespace-nowrap font-extrabold ${row.status === "short" ? "text-danger" : row.status === "over" ? "text-warning" : row.status === "balanced" ? "text-success" : "text-ink-muted"}`}>{row.varianceQty === null ? "—" : `${row.varianceQty >= 0 ? "+" : "−"}${formatStockQuantity(Math.abs(row.varianceQty))} ${row.unit}`}</td><td><span className={`inline-flex whitespace-nowrap rounded-pill px-2.5 py-1 text-[10px] font-extrabold ${statusClass(row.status)}`}>{statusLabel(row.status)}</span></td></tr>)}</tbody></table></div>
+            <div className="overflow-x-auto"><table className="admin-list-table min-w-[760px]"><thead><tr><th>Inventory item</th><th>Expected at close</th><th>Counted quantity</th><th>Variance</th><th>Status</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><strong>{row.name}</strong><small className="mt-1 block text-[10px] text-ink-muted">Unit: {row.unit}</small></td><td className="tnums whitespace-nowrap font-extrabold">{formatStockQuantity(row.expectedQty)} {row.unit}</td><td><label className="sr-only" htmlFor={`counted-${row.id}`}>Counted quantity for {row.name}</label><input id={`counted-${row.id}`} name={`counted_${row.id}`} type="number" min="0" step="0.001" inputMode="decimal" defaultValue={row.countedQty === null ? "" : String(row.countedQty)} required disabled={formDisabled} className="inventory-input inventory-input--compact tnums max-w-[160px]" placeholder="Enter count" /></td><td className={`tnums whitespace-nowrap font-extrabold ${row.status === "short" ? "text-danger" : row.status === "over" ? "text-warning" : row.status === "balanced" ? "text-success" : "text-ink-muted"}`}>{row.varianceQty === null ? "—" : `${row.varianceQty >= 0 ? "+" : "−"}${formatStockQuantity(Math.abs(row.varianceQty))} ${row.unit}`}</td><td><span className={`inline-flex whitespace-nowrap rounded-pill px-2.5 py-1 text-[10px] font-extrabold ${statusClass(row.status)}`}>{statusLabel(row.status)}</span></td></tr>)}</tbody></table></div>
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-4 sm:px-5"><p className="max-w-2xl text-xs leading-5 text-ink-muted">Saving applies a signed adjustment for the difference. If you correct the count later, only the new difference is added, so the ledger will not double-count the reconciliation.</p><button type="submit" disabled={formDisabled} className="min-h-11 rounded-btn bg-primary px-5 text-sm font-extrabold text-primary-fg transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50">Save physical count</button></div>
           </AdminMutationForm>}
         </section>

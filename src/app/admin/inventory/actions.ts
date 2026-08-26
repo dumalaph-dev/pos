@@ -7,6 +7,7 @@ import { STOCK_MOVEMENT_TYPES, type StockMovementType } from "@/lib/inventory";
 import { createClient } from "@/lib/supabase/server";
 import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
 import { isLechonHouseBusiness } from "@/lib/admin/business";
+import { isInventoryItemType, type InventoryItemOption, type InventoryItemType } from "@/lib/inventory-recipes";
 
 function inventoryRedirect(message: string): never {
   redirect(`/admin/inventory?error=${encodeURIComponent(message)}`);
@@ -45,6 +46,20 @@ function readMovementType(value: string): Exclude<StockMovementType, "sale"> | n
   if (!STOCK_MOVEMENT_TYPES.includes(value as StockMovementType) || value === "sale") return null;
   return value as Exclude<StockMovementType, "sale">;
 }
+
+function readInventoryItemType(value: string): InventoryItemType | null {
+  return isInventoryItemType(value) ? value : null;
+}
+
+function readInventoryQuantity(value: string, fallback = 0) {
+  if (!value) return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1_000_000 ? parsed : null;
+}
+
+export type InlineInventoryItemResult =
+  | { ok: true; item: InventoryItemOption }
+  | { ok: false; message: string };
 
 export async function recordStockMovement(formData: FormData) {
   const supabase = await createClient();
@@ -169,6 +184,130 @@ async function requireInventoryAdmin() {
   return { supabase, profile, selectedBranchId };
 }
 
+export async function createInventoryItemInline(formData: FormData): Promise<InlineInventoryItemResult> {
+  const { supabase, profile, selectedBranchId } = await requireInventoryAdmin();
+  const storeId = readText(formData, "store_id");
+  const name = readText(formData, "name");
+  const itemType = readInventoryItemType(readText(formData, "item_type"));
+  const unit = readText(formData, "unit");
+  const costValue = readText(formData, "cost_per_unit");
+  const minimumStock = readInventoryQuantity(readText(formData, "min_stock"), 0);
+  const supplierId = readText(formData, "supplier_id");
+
+  if (!storeId || !name || !itemType || !unit) {
+    return { ok: false, message: "Branch, item name, type, and unit are required." };
+  }
+  if (selectedBranchId && storeId !== selectedBranchId) {
+    return { ok: false, message: "Choose the branch currently selected in the workspace." };
+  }
+  if (name.length < 2 || name.length > 120) return { ok: false, message: "Inventory item names must be between 2 and 120 characters." };
+  if (unit.length > 24) return { ok: false, message: "Units must be 24 characters or fewer." };
+  if (minimumStock === null) return { ok: false, message: "Minimum stock must be a valid non-negative quantity." };
+
+  let costPerUnit: number | null = null;
+  if (costValue) {
+    const parsed = Number(costValue);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100_000_000) return { ok: false, message: "Cost per unit must be a valid non-negative peso amount." };
+    costPerUnit = toCentavos(parsed);
+  }
+
+  const { data: branch } = await supabase
+    .from("stores")
+    .select("id")
+    .eq("id", storeId)
+    .eq("org_id", profile.org_id)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (!branch) return { ok: false, message: "Choose an active branch from your organization." };
+
+  if (supplierId) {
+    const { data: supplier } = await supabase
+      .from("suppliers")
+      .select("id")
+      .eq("id", supplierId)
+      .eq("org_id", profile.org_id)
+      .maybeSingle();
+    if (!supplier) return { ok: false, message: "Choose a supplier from your organization." };
+  }
+
+  const { data, error } = await supabase
+    .from("inventory_items")
+    .insert({
+      org_id: profile.org_id,
+      store_id: storeId,
+      name,
+      item_type: itemType,
+      unit,
+      cost_per_unit: costPerUnit,
+      min_stock: minimumStock,
+      supplier_id: supplierId || null,
+      is_active: true,
+    })
+    .select("id, store_id, name, item_type, unit, cost_per_unit, min_stock, supplier_id, is_active")
+    .single();
+
+  if (error || !data) return { ok: false, message: error?.message || "The inventory item could not be created." };
+  return { ok: true, item: data as InventoryItemOption };
+}
+
+export async function createInventoryItem(formData: FormData) {
+  const result = await createInventoryItemInline(formData);
+  if (!result.ok) inventoryRedirect(result.message);
+  revalidatePath("/admin/inventory");
+  revalidatePath("/products");
+  redirect("/admin/inventory?saved=item");
+}
+
+export async function recordInventoryItemMovement(formData: FormData) {
+  const { supabase, profile, selectedBranchId } = await requireInventoryAdmin();
+  const storeId = readText(formData, "store_id");
+  const inventoryItemId = readText(formData, "inventory_item_id");
+  const movementType = readMovementType(readText(formData, "type"));
+  const quantity = Number(readText(formData, "qty"));
+  const reason = readText(formData, "reason");
+  const unitCostValue = readText(formData, "unit_cost");
+
+  if (!storeId || !inventoryItemId || !movementType || !Number.isFinite(quantity)) {
+    inventoryRedirect("Choose a branch, inventory item, movement type, and valid quantity.");
+  }
+  if (selectedBranchId && storeId !== selectedBranchId) inventoryRedirect("Choose the branch currently selected in the workspace.");
+  if (quantity === 0 || (movementType !== "adjust" && quantity < 0)) {
+    inventoryRedirect("Use a positive quantity for stock in, waste, and preparation movements. Adjustments may be negative.");
+  }
+  if ((movementType === "waste" || movementType === "adjust") && !reason) inventoryRedirect("A reason is required for waste and adjustment movements.");
+  if (reason.length > 180) inventoryRedirect("The movement reason must be at most 180 characters.");
+
+  const { data: item } = await supabase
+    .from("inventory_items")
+    .select("id, store_id, is_active")
+    .eq("id", inventoryItemId)
+    .eq("org_id", profile.org_id)
+    .maybeSingle();
+  if (!item || item.store_id !== storeId || !item.is_active) inventoryRedirect("Choose an active inventory item from the selected branch.");
+
+  let unitCost: number | null = null;
+  if (unitCostValue) {
+    const parsed = Number(unitCostValue);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100_000_000) inventoryRedirect("Unit cost must be a valid non-negative peso amount.");
+    unitCost = toCentavos(parsed);
+  }
+
+  const { error } = await supabase.rpc("record_inventory_item_movement", {
+    p_store_id: storeId,
+    p_inventory_item_id: inventoryItemId,
+    p_type: movementType,
+    p_qty: quantity,
+    p_unit_cost: unitCost,
+    p_reason: reason || null,
+  });
+  if (error) inventoryRedirect(error.message || "The inventory movement could not be recorded.");
+
+  revalidatePath("/admin/inventory");
+  revalidatePath("/products");
+  revalidatePath("/admin");
+  redirect("/admin/inventory?saved=1");
+}
+
 async function canRecordLechonYield(supabase: Awaited<ReturnType<typeof createClient>>, orgId: string) {
   const { data: organization, error } = await supabase
     .from("organizations")
@@ -255,6 +394,44 @@ export async function recordInventoryCount(formData: FormData) {
     .eq("is_active", true)
     .maybeSingle();
   if (!branch) varianceRedirect("Choose an active branch from your organization.", countDate, storeId);
+
+  // The recipe inventory migration makes inventory items the source of truth
+  // for physical counts. Keep the product-count path below as a compatibility
+  // fallback for older environments that have not applied that migration.
+  const inventoryItemsResult = await supabase
+    .from("inventory_items")
+    .select("id")
+    .eq("org_id", profile.org_id)
+    .eq("store_id", storeId)
+    .eq("is_active", true)
+    .order("id")
+    .limit(2000);
+
+  if (!inventoryItemsResult.error) {
+    const inventoryItems = (inventoryItemsResult.data ?? []) as Array<{ id: string }>;
+    if (!inventoryItems.length) varianceRedirect("There are no active inventory items in this branch yet.", countDate, storeId);
+
+    const counts = inventoryItems.map((item) => {
+      const rawCount = readText(formData, `counted_${item.id}`);
+      const countedQty = Number(rawCount);
+      if (!rawCount || !Number.isFinite(countedQty) || countedQty < 0) {
+        varianceRedirect("Enter a zero-or-greater counted quantity for every inventory item.", countDate, storeId);
+      }
+      return { inventory_item_id: item.id, counted_qty: countedQty };
+    });
+
+    const { error } = await supabase.rpc("record_inventory_item_count", {
+      p_store_id: storeId,
+      p_count_date: countDate,
+      p_counts: counts,
+    });
+    if (error) varianceRedirect(error.message || "The end-of-day count could not be saved.", countDate, storeId);
+
+    revalidatePath("/admin/inventory");
+    revalidatePath("/admin/inventory/variance");
+    revalidatePath("/admin");
+    redirect(`/admin/inventory/variance?date=${encodeURIComponent(countDate)}&branch=${encodeURIComponent(storeId)}&saved=1`);
+  }
 
   const { data: products, error: productsError } = await supabase
     .from("products")

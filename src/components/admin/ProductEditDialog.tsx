@@ -4,12 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { updateProduct } from "@/app/admin/catalog/actions";
 import { AdminIcon } from "@/components/admin/AdminIcon";
+import { InventoryRecipeSetup } from "@/components/admin/InventoryRecipeSetup";
 import { ProductFields, type ProductFieldsRecord } from "@/components/admin/ProductFields";
+import type { InventoryItemOption, InventoryMode, RecipeLineRecord } from "@/lib/inventory-recipes";
 
 type BranchRecord = { id: string; name: string; is_active: boolean };
 type CategoryRecord = { id: string; store_id: string; name: string };
 type SupplierRecord = { id: string; name: string; is_active: boolean };
-type ProductRecord = ProductFieldsRecord & { is_active: boolean; track_stock: boolean };
+type ProductRecord = ProductFieldsRecord & { is_active: boolean; track_stock: boolean; inventory_mode: InventoryMode; recipe_lines: RecipeLineRecord[] };
 
 const FOCUSABLE_SELECTOR = "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex=\"-1\"])";
 
@@ -26,11 +28,12 @@ function ProductUpdateButton({ canWrite }: { canWrite: boolean }) {
   return <button type="submit" disabled={!canWrite || pending} className="products-primary-button products-edit-dialog__save"><AdminIcon name="check" size={14} />{pending ? "Saving..." : "Save changes"}</button>;
 }
 
-export function ProductEditDialog({ product, branches, categories, suppliers, canWrite, initialOpen, onClose }: {
+export function ProductEditDialog({ product, branches, categories, suppliers, inventoryItems, canWrite, initialOpen, onClose }: {
   product: ProductRecord;
   branches: BranchRecord[];
   categories: CategoryRecord[];
   suppliers: SupplierRecord[];
+  inventoryItems: InventoryItemOption[];
   canWrite: boolean;
   initialOpen: boolean;
   onClose?: () => void;
@@ -104,9 +107,9 @@ export function ProductEditDialog({ product, branches, categories, suppliers, ca
       <form action={updateProduct} className="products-dialog__form products-form-grid">
         <input type="hidden" name="product_id" value={product.id} />
         <ProductFields product={product} branches={branches} categories={categories} suppliers={suppliers} defaultBranch={product.store_id} canWrite={canWrite} prefix={`edit-product-${product.id}`} />
+        <InventoryRecipeSetup inventoryItems={inventoryItems} suppliers={suppliers} defaultStoreId={product.store_id} initialMode={product.inventory_mode} initialLines={product.recipe_lines} canWrite={canWrite} prefix={`edit-product-${product.id}`} />
         <footer className="products-dialog__footer products-edit-dialog__footer">
           <div className="products-edit-dialog__flags">
-            <label className="products-checkbox-label"><input type="checkbox" name="track_stock" defaultChecked={product.track_stock} disabled={!canWrite} /> Track stock</label>
             <label className="products-checkbox-label"><input type="checkbox" name="is_active" defaultChecked={product.is_active} disabled={!canWrite} /> Visible in POS</label>
           </div>
           <div className="products-dialog__actions">

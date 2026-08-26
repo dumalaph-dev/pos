@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { createProduct } from "@/app/admin/catalog/actions";
 import { AdminIcon } from "@/components/admin/AdminIcon";
+import { InventoryRecipeSetup } from "@/components/admin/InventoryRecipeSetup";
 import { ProductFields } from "@/components/admin/ProductFields";
+import type { InventoryItemOption } from "@/lib/inventory-recipes";
 
 type BranchRecord = { id: string; name: string; is_active: boolean };
 type CategoryRecord = { id: string; store_id: string; name: string };
@@ -29,10 +31,11 @@ function ProductSubmitButton({ fromInventory, canWrite, hasBranches }: { fromInv
   </button>;
 }
 
-export function ProductCreateDialog({ branches, categories, suppliers, defaultBranch, canWrite, orgName, fromInventory, initialOpen }: {
+export function ProductCreateDialog({ branches, categories, suppliers, inventoryItems, defaultBranch, canWrite, orgName, fromInventory, initialOpen }: {
   branches: BranchRecord[];
   categories: CategoryRecord[];
   suppliers: SupplierRecord[];
+  inventoryItems: InventoryItemOption[];
   defaultBranch: string;
   canWrite: boolean;
   orgName: string;
@@ -116,11 +119,8 @@ export function ProductCreateDialog({ branches, categories, suppliers, defaultBr
         <form action={createProduct} className="products-dialog__form products-form-grid">
           {fromInventory && <input type="hidden" name="return_to" value="inventory" />}
           <ProductFields branches={branches} categories={categories} suppliers={suppliers} defaultBranch={defaultBranch} canWrite={canWrite} prefix="new-product" />
+          <InventoryRecipeSetup inventoryItems={inventoryItems} suppliers={suppliers} defaultStoreId={defaultBranch} initialMode={fromInventory ? "direct" : "recipe"} canWrite={canWrite} prefix="new-product" />
           <footer className="products-dialog__footer">
-            <label className="products-dialog__stock-option">
-              <input type="checkbox" name="track_stock" defaultChecked={fromInventory} disabled={!canWrite} />
-              <span><strong>Track stock in inventory</strong><small>{fromInventory ? "This item will appear in Inventory after it is created." : "Turn this on when you want stock movements and low-stock alerts."}</small></span>
-            </label>
             <div className="products-dialog__actions">
               <button type="button" onClick={closeDialog} className="products-secondary-button products-dialog__cancel">Cancel</button>
               <ProductSubmitButton fromInventory={fromInventory} canWrite={canWrite} hasBranches={branches.length > 0} />

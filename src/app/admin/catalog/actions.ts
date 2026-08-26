@@ -14,6 +14,7 @@ import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/br
 import { invalidateAdminProfile } from "@/lib/admin/profile";
 import { saveOrganizationBusinessPreset } from "@/lib/admin/business-server";
 import { getCatalogPreset } from "@/lib/catalog-presets";
+import { isInventoryMode, parseRecipeLines, type InventoryMode, type RecipeLineDraft } from "@/lib/inventory-recipes";
 
 type PricingMode = "fixed" | "per_kg";
 
@@ -99,7 +100,7 @@ function readImportBoolean(value: string, fallback: boolean) {
   return ["1", "true", "yes", "on"].includes(value.toLowerCase());
 }
 
-const OPTIONAL_PRODUCT_COLUMNS = ["sku", "barcode", "cost_price", "min_stock", "supplier_id"] as const;
+const OPTIONAL_PRODUCT_COLUMNS = ["sku", "barcode", "cost_price", "min_stock", "supplier_id", "inventory_mode"] as const;
 
 function isMissingOptionalProductColumn(error: { code?: string | null; message?: string | null } | null) {
   if (!error) return false;
@@ -261,6 +262,92 @@ function refreshCatalog() {
   revalidatePath("/pos");
 }
 
+function readInventoryMode(formData: FormData): InventoryMode | null {
+  const requested = readText(formData, "inventory_mode");
+  if (!requested) return readBoolean(formData, "track_stock") ? "direct" : "none";
+  return isInventoryMode(requested) ? requested : null;
+}
+
+function inventorySchemaError(error: { code?: string | null; message?: string | null } | null) {
+  if (!error) return false;
+  const message = (error.message ?? "").toLowerCase();
+  return ["inventory_items", "product_recipes", "inventory_mode"].some((value) => message.includes(value))
+    && (error.code === "42P01" || error.code === "42703" || error.code === "PGRST204" || error.code === "PGRST205" || message.includes("schema cache") || message.includes("does not exist"));
+}
+
+async function syncDirectInventoryItem(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  values: {
+    orgId: string;
+    storeId: string;
+    productId: string;
+    name: string;
+    unit: string;
+    costPerUnit: number | null;
+    minStock: number;
+    supplierId: string | null;
+    isActive: boolean;
+  },
+) {
+  const existingResult = await supabase
+    .from("inventory_items")
+    .select("id")
+    .eq("linked_product_id", values.productId)
+    .maybeSingle();
+  if (existingResult.error) return existingResult;
+
+  if (existingResult.data?.id) {
+    return supabase
+      .from("inventory_items")
+      .update({
+        store_id: values.storeId,
+        name: values.name,
+        unit: values.unit,
+        cost_per_unit: values.costPerUnit,
+        min_stock: values.minStock,
+        supplier_id: values.supplierId,
+        is_active: values.isActive,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existingResult.data.id)
+      .eq("org_id", values.orgId);
+  }
+
+  return supabase.from("inventory_items").insert({
+    org_id: values.orgId,
+    store_id: values.storeId,
+    linked_product_id: values.productId,
+    name: values.name,
+    item_type: "finished_good",
+    unit: values.unit,
+    cost_per_unit: values.costPerUnit,
+    min_stock: values.minStock,
+    supplier_id: values.supplierId,
+    is_active: values.isActive,
+  });
+}
+
+async function archiveProductInventory(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orgId: string,
+  productId: string,
+) {
+  const [itemResult, recipeResult] = await Promise.all([
+    supabase.from("inventory_items").update({ is_active: false, updated_at: new Date().toISOString() }).eq("org_id", orgId).eq("linked_product_id", productId),
+    supabase.from("product_recipes").update({ is_active: false }).eq("org_id", orgId).eq("product_id", productId),
+  ]);
+  return itemResult.error ?? recipeResult.error ?? null;
+}
+
+function recipePayload(lines: RecipeLineDraft[]) {
+  return lines.map((line) => ({
+    inventory_item_id: line.inventory_item_id,
+    quantity_per_unit: line.quantity_per_unit,
+    waste_percent: line.waste_percent,
+    note: line.note || null,
+  }));
+}
+
 export type InlineCategoryResult =
   | { ok: true; category: { id: string; store_id: string; name: string } }
   | { ok: false; message: string };
@@ -372,6 +459,8 @@ export async function createProduct(formData: FormData) {
   const supplierId = readText(formData, "supplier_id");
   const imageFile = readImageFile(formData);
   const sortOrder = readSortOrder(readText(formData, "sort_order"));
+  const inventoryMode = readInventoryMode(formData);
+  const recipeLines = parseRecipeLines(readText(formData, "recipe_lines"));
 
   if (!storeId || !(await validStore(supabase, orgId, storeId, selectedBranchId, true))) {
     catalogRedirect("Choose a valid branch for this product.");
@@ -391,6 +480,8 @@ export async function createProduct(formData: FormData) {
   if (supplierId && !(await validSupplier(supabase, orgId, supplierId))) catalogRedirect("Choose a supplier from your organization.");
   if (imageFile === undefined) catalogRedirect("Choose a JPG, PNG, or WebP product photo under 900 KB.");
   if (sortOrder === null) catalogRedirect("Sort order must be a whole number greater than or equal to zero.");
+  if (!inventoryMode) catalogRedirect("Choose how this product should affect inventory.");
+  if (inventoryMode === "recipe" && recipeLines.length === 0) catalogRedirect("Add at least one ingredient before tracking this product by recipe.");
 
   const productId = crypto.randomUUID();
   const uploadedImage = imageFile ? await uploadOrganizationImage(supabase, orgId, productId, imageFile) : null;
@@ -407,7 +498,8 @@ export async function createProduct(formData: FormData) {
     pricing_mode: pricingMode,
     price,
     unit,
-    track_stock: readBoolean(formData, "track_stock"),
+    inventory_mode: inventoryMode,
+    track_stock: inventoryMode === "direct",
     image_url: uploadedImage?.url ?? null,
     is_active: true,
     sort_order: sortOrder,
@@ -424,6 +516,47 @@ export async function createProduct(formData: FormData) {
   if (result.error) {
     await removeOrganizationImage(supabase, uploadedImage?.path ?? null);
     catalogRedirect(result.error.message || "The product could not be created.");
+  }
+
+  if (result.usedLegacySchema && inventoryMode !== "none") {
+    await supabase.from("products").delete().eq("id", productId).eq("org_id", orgId);
+    await removeOrganizationImage(supabase, uploadedImage?.path ?? null);
+    catalogRedirect("Recipe inventory requires the latest database migration. Apply it, then try again.");
+  }
+
+  if (inventoryMode === "direct") {
+    const inventoryResult = await syncDirectInventoryItem(supabase, {
+      orgId,
+      storeId,
+      productId,
+      name,
+      unit,
+      costPerUnit: costPrice,
+      minStock: minimumStock,
+      supplierId: supplierId || null,
+      isActive: true,
+    });
+    if (inventoryResult.error) {
+      await supabase.from("products").delete().eq("id", productId).eq("org_id", orgId);
+      await removeOrganizationImage(supabase, uploadedImage?.path ?? null);
+      catalogRedirect(inventorySchemaError(inventoryResult.error)
+        ? "Recipe inventory requires the latest database migration. Apply it, then try again."
+        : inventoryResult.error.message || "The finished-stock inventory record could not be created.");
+    }
+  }
+
+  if (inventoryMode === "recipe") {
+    const recipeResult = await supabase.rpc("save_product_recipe", {
+      p_product_id: productId,
+      p_lines: recipePayload(recipeLines),
+    });
+    if (recipeResult.error) {
+      await supabase.from("products").delete().eq("id", productId).eq("org_id", orgId);
+      await removeOrganizationImage(supabase, uploadedImage?.path ?? null);
+      catalogRedirect(inventorySchemaError(recipeResult.error)
+        ? "Recipe inventory requires the latest database migration. Apply it, then try again."
+        : recipeResult.error.message || "The product recipe could not be saved.");
+    }
   }
 
   refreshCatalog();
@@ -588,6 +721,7 @@ export async function createProductBundle(formData: FormData): Promise<ProductBu
     pricing_mode: template.pricingMode,
     price: toCentavos(draft.price),
     unit: template.unit,
+    inventory_mode: "direct",
     track_stock: true,
     image_url: useStockPhotos ? template.imageUrl : null,
     is_active: true,
@@ -606,6 +740,22 @@ export async function createProductBundle(formData: FormData): Promise<ProductBu
 
   const stockWarnings: string[] = [];
   for (const product of newProducts.map(({ template, draft }, index) => ({ ...records[index], template, draft }))) {
+    const inventoryResult = await syncDirectInventoryItem(supabase, {
+      orgId,
+      storeId,
+      productId: product.id,
+      name: product.name,
+      unit: product.unit,
+      costPerUnit: product.cost_price,
+      minStock: product.min_stock,
+      supplierId: product.supplier_id,
+      isActive: true,
+    });
+    if (inventoryResult.error) {
+      return { ok: false, message: inventorySchemaError(inventoryResult.error)
+        ? "Recipe inventory requires the latest database migration. Apply it, then try again."
+        : inventoryResult.error.message || "The starter inventory records could not be created.", createdCount: 0, skippedCount };
+    }
     if (product.draft.openingStock <= 0) continue;
     const { error } = await supabase.rpc("record_stock_movement", {
       p_store_id: storeId,
@@ -651,6 +801,8 @@ export async function updateProduct(formData: FormData) {
   const supplierId = readText(formData, "supplier_id");
   const imageFile = readImageFile(formData);
   const sortOrder = readSortOrder(readText(formData, "sort_order"));
+  const inventoryMode = readInventoryMode(formData);
+  const recipeLines = parseRecipeLines(readText(formData, "recipe_lines"));
 
   const currentProduct = productId ? await readProductContext(supabase, orgId, productId) : null;
   const currentStoreId = currentProduct?.store_id ?? null;
@@ -672,6 +824,8 @@ export async function updateProduct(formData: FormData) {
   if (supplierId && !(await validSupplier(supabase, orgId, supplierId))) catalogRedirect("Choose a supplier from your organization.");
   if (imageFile === undefined) catalogRedirect("Choose a JPG, PNG, or WebP product photo under 900 KB.");
   if (sortOrder === null) catalogRedirect("Sort order must be a whole number greater than or equal to zero.");
+  if (!inventoryMode) catalogRedirect("Choose how this product should affect inventory.");
+  if (inventoryMode === "recipe" && recipeLines.length === 0) catalogRedirect("Add at least one ingredient before tracking this product by recipe.");
 
   const uploadedImage = imageFile ? await uploadOrganizationImage(supabase, orgId, productId, imageFile) : null;
   if (uploadedImage?.error || (uploadedImage && !uploadedImage.url)) {
@@ -690,7 +844,8 @@ export async function updateProduct(formData: FormData) {
     min_stock: minimumStock,
     unit,
     supplier_id: supplierId || null,
-    track_stock: readBoolean(formData, "track_stock"),
+    inventory_mode: inventoryMode,
+    track_stock: inventoryMode === "direct",
     is_active: readBoolean(formData, "is_active"),
     sort_order: sortOrder,
   };
@@ -704,6 +859,52 @@ export async function updateProduct(formData: FormData) {
   }
   if (uploadedImage?.url) {
     await removeOrganizationImage(supabase, organizationImageStoragePath(currentProduct?.image_url ?? null, orgId));
+  }
+
+  if (result.usedLegacySchema && inventoryMode !== "none") {
+    catalogRedirect("Recipe inventory requires the latest database migration. Apply it, then try again.");
+  }
+
+  if (inventoryMode === "direct") {
+    const inventoryResult = await syncDirectInventoryItem(supabase, {
+      orgId,
+      storeId,
+      productId,
+      name,
+      unit,
+      costPerUnit: costPrice,
+      minStock: minimumStock,
+      supplierId: supplierId || null,
+      isActive: true,
+    });
+    if (inventoryResult.error) {
+      catalogRedirect(inventorySchemaError(inventoryResult.error)
+        ? "Recipe inventory requires the latest database migration. Apply it, then try again."
+        : inventoryResult.error.message || "The finished-stock inventory record could not be updated.");
+    }
+    const archiveResult = await supabase.from("product_recipes").update({ is_active: false }).eq("org_id", orgId).eq("product_id", productId).eq("is_active", true);
+    if (archiveResult.error && !inventorySchemaError(archiveResult.error)) {
+      catalogRedirect(archiveResult.error.message || "The old product recipe could not be archived.");
+    }
+  } else if (inventoryMode === "recipe") {
+    const recipeResult = await supabase.rpc("save_product_recipe", {
+      p_product_id: productId,
+      p_lines: recipePayload(recipeLines),
+    });
+    if (recipeResult.error) {
+      catalogRedirect(inventorySchemaError(recipeResult.error)
+        ? "Recipe inventory requires the latest database migration. Apply it, then try again."
+        : recipeResult.error.message || "The product recipe could not be saved.");
+    }
+    const itemResult = await supabase.from("inventory_items").update({ is_active: false }).eq("org_id", orgId).eq("linked_product_id", productId);
+    if (itemResult.error && !inventorySchemaError(itemResult.error)) {
+      catalogRedirect(itemResult.error.message || "The old finished-stock item could not be archived.");
+    }
+  } else {
+    const archiveError = await archiveProductInventory(supabase, orgId, productId);
+    if (archiveError && !inventorySchemaError(archiveError)) {
+      catalogRedirect(archiveError.message || "The product inventory links could not be archived.");
+    }
   }
 
   refreshCatalog();
@@ -760,9 +961,16 @@ export async function importProducts(formData: FormData) {
     const costPrice = readOptionalCostPrice(String(row.cost_price ?? ""));
     const minimumStock = readMinimumStock(String(row.min_stock ?? ""));
     const imagePath = readImportImagePath(String(row.image_url ?? "").trim());
+    const importedTrackStock = readImportBoolean(typeof row.track_stock === "string" ? row.track_stock : "", true);
+    const importedModeValue = String(row.inventory_mode ?? "").trim();
+    const importedInventoryMode = importedModeValue
+      ? (isInventoryMode(importedModeValue) ? importedModeValue : null)
+      : importedTrackStock ? "direct" : "none";
     if (name.length < 2 || name.length > 120 || !unit || unit.length > 24 || !pricingMode || price === null) catalogRedirect(`Row ${index + 1}: name, unit, pricing_mode, and a valid price are required.`);
     if (costPrice === undefined || minimumStock === null || imagePath === undefined) catalogRedirect(`Row ${index + 1}: cost, minimum stock, or legacy image value is invalid.`);
+    if (!importedInventoryMode || importedInventoryMode === "recipe") catalogRedirect(`Row ${index + 1}: recipe products must be created from the product editor with ingredients.`);
     records.push({
+      id: crypto.randomUUID(),
       org_id: orgId,
       store_id: store.id,
       category_id: category?.id ?? null,
@@ -775,7 +983,8 @@ export async function importProducts(formData: FormData) {
       cost_price: costPrice,
       min_stock: minimumStock,
       unit,
-      track_stock: readImportBoolean(typeof row.track_stock === "string" ? row.track_stock : "", true),
+      inventory_mode: importedInventoryMode,
+      track_stock: importedInventoryMode === "direct",
       image_url: imagePath,
       is_active: readImportBoolean(typeof row.is_active === "string" ? row.is_active : "", true),
       sort_order: Number.isInteger(Number(row.sort_order)) && Number(row.sort_order) >= 0 ? Number(row.sort_order) : 0,
@@ -784,6 +993,24 @@ export async function importProducts(formData: FormData) {
 
   const result = await insertProductRecords(supabase, records);
   if (result.error) catalogRedirect(result.error.message || "The inventory items could not be imported.");
+
+  if (result.usedLegacySchema && records.some((record) => record.inventory_mode !== "none")) {
+    catalogRedirect("Recipe inventory requires the latest database migration. Apply it, then try again.");
+  }
+  for (const record of records.filter((item) => item.inventory_mode === "direct")) {
+    const inventoryResult = await syncDirectInventoryItem(supabase, {
+      orgId,
+      storeId: String(record.store_id),
+      productId: String(record.id),
+      name: String(record.name),
+      unit: String(record.unit),
+      costPerUnit: typeof record.cost_price === "number" ? record.cost_price : null,
+      minStock: Number(record.min_stock),
+      supplierId: typeof record.supplier_id === "string" ? record.supplier_id : null,
+      isActive: Boolean(record.is_active),
+    });
+    if (inventoryResult.error) catalogRedirect(inventoryResult.error.message || "The imported inventory items could not be linked.");
+  }
 
   refreshCatalog();
   redirect(`/products?saved=imported${result.usedLegacySchema ? "&legacy=1" : ""}${defaultStore ? `&store=${encodeURIComponent(defaultStore.name)}` : ""}`);
@@ -823,21 +1050,24 @@ export async function bulkUpdateProducts(formData: FormData) {
   const selectedIds = formData.getAll("product_ids").filter((value): value is string => typeof value === "string" && value.trim().length > 0);
   const productIds = Array.from(new Set(selectedIds)).slice(0, 100);
   const isActive = readText(formData, "is_active");
-  const trackStock = readText(formData, "track_stock");
+  const inventoryMode = readText(formData, "inventory_mode");
 
   if (productIds.length === 0) catalogRedirect("Select at least one product for the bulk update.");
-  if (!["leave", "true", "false"].includes(isActive) || !["leave", "true", "false"].includes(trackStock)) {
+  if (!["leave", "true", "false"].includes(isActive) || !["leave", "direct", "none"].includes(inventoryMode)) {
     catalogRedirect("Choose valid bulk update values.");
   }
 
-  const fields: Record<string, boolean> = {};
+  const fields: Record<string, unknown> = {};
   if (isActive !== "leave") fields.is_active = isActive === "true";
-  if (trackStock !== "leave") fields.track_stock = trackStock === "true";
+  if (inventoryMode !== "leave") {
+    fields.inventory_mode = inventoryMode;
+    fields.track_stock = inventoryMode === "direct";
+  }
   if (Object.keys(fields).length === 0) catalogRedirect("Choose at least one field to update.");
 
   const { data: selectedProducts, error: selectedProductsError } = await supabase
     .from("products")
-    .select("id, store_id")
+    .select("id, store_id, name, unit, cost_price, min_stock, supplier_id, is_active")
     .eq("org_id", orgId)
     .in("id", productIds);
 
@@ -859,6 +1089,29 @@ export async function bulkUpdateProducts(formData: FormData) {
   const { error } = await productUpdate;
 
   if (error) catalogRedirect(error.message || "The selected products could not be updated.");
+
+  if (inventoryMode !== "leave") {
+    for (const product of selectedProducts ?? []) {
+      if (inventoryMode === "direct") {
+        const inventoryResult = await syncDirectInventoryItem(supabase, {
+          orgId,
+          storeId: product.store_id,
+          productId: product.id,
+          name: product.name,
+          unit: product.unit,
+          costPerUnit: product.cost_price,
+          minStock: product.min_stock,
+          supplierId: product.supplier_id,
+          isActive: true,
+        });
+        if (inventoryResult.error) catalogRedirect(inventoryResult.error.message || "The selected products could not be linked to inventory.");
+        await supabase.from("product_recipes").update({ is_active: false }).eq("org_id", orgId).eq("product_id", product.id).eq("is_active", true);
+      } else {
+        const archiveError = await archiveProductInventory(supabase, orgId, product.id);
+        if (archiveError && !inventorySchemaError(archiveError)) catalogRedirect(archiveError.message || "The selected inventory links could not be archived.");
+      }
+    }
+  }
 
   refreshCatalog();
   redirect(`/products?saved=bulk&updated=${productIds.length}`);

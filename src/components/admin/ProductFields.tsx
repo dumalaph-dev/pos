@@ -160,7 +160,7 @@ export function ProductFields({ product, branches, categories, suppliers, defaul
       </CatalogField>
     </ProductFormSection>
 
-    <ProductFormSection eyebrow="Sell and stock" title="Pricing and stock" description="Tell POS how to price this item and when inventory should alert you.">
+    <ProductFormSection eyebrow="Sell and cost" title="Pricing and cost details" description="Set the selling price and the cost reference used for inventory valuation.">
       <CatalogField label="Pricing" htmlFor={`${prefix}-pricing`}>
         <select id={`${prefix}-pricing`} name="pricing_mode" defaultValue={product?.pricing_mode ?? "fixed"} required disabled={!canWrite} className="inventory-input"><option value="fixed">Fixed price</option><option value="per_kg">Price per kilogram</option></select>
       </CatalogField>

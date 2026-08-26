@@ -56,6 +56,7 @@ export type InventoryVarianceReadModel = {
   id: string;
   storeId: string;
   productId: string;
+  inventoryItemId?: string | null;
   productName: string;
   unit: string;
   countDate: string;

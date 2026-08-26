@@ -57,6 +57,19 @@ export type InventoryReportProduct = {
   is_active: boolean;
 };
 
+export type InventoryReportItem = {
+  id: string;
+  store_id: string;
+  linked_product_id: string | null;
+  name: string;
+  item_type: string;
+  unit: string;
+  cost_per_unit: number | string | null;
+  min_stock: number | string | null;
+  supplier_id: string | null;
+  is_active: boolean;
+};
+
 export type QuantityTotal = {
   unit: string;
   value: number;
@@ -67,7 +80,10 @@ export type InventoryStatus = "out" | "low" | "ok";
 export type InventoryReportInventoryRow = {
   branchId: string;
   branchName: string;
+  inventoryItemId: string;
   productId: string;
+  linkedProductId: string | null;
+  itemType: string;
   productName: string;
   categoryName: string;
   supplierName: string;
@@ -83,6 +99,7 @@ export type InventoryReportMovementRow = {
   branchId: string;
   branchName: string;
   productId: string;
+  inventoryItemId: string | null;
   productName: string;
   categoryName: string;
   supplierName: string;
@@ -108,6 +125,7 @@ export type InventoryReportVarianceRow = {
   branchId: string;
   branchName: string;
   productId: string;
+  inventoryItemId: string | null;
   productName: string;
   categoryName: string;
   supplierName: string;
@@ -256,6 +274,23 @@ function productMatches(
   return true;
 }
 
+function inventoryItemMatches(
+  item: InventoryReportItem,
+  filters: InventoryReportFilters,
+  productById: Map<string, InventoryReportProduct>,
+) {
+  if (filters.branchId && item.store_id !== filters.branchId) return false;
+  if (filters.supplierId === "unassigned" && item.supplier_id) return false;
+  if (filters.supplierId && filters.supplierId !== "unassigned" && item.supplier_id !== filters.supplierId) return false;
+
+  const linkedProduct = item.linked_product_id ? productById.get(item.linked_product_id) : undefined;
+  if (filters.productId && item.linked_product_id !== filters.productId) return false;
+  if (filters.categoryId || filters.productId) {
+    return Boolean(linkedProduct && productMatches(linkedProduct, filters));
+  }
+  return true;
+}
+
 function totalsByUnit(entries: Array<{ value: number; unit: string }>) {
   const totals = new Map<string, number>();
   for (const entry of entries) totals.set(entry.unit, (totals.get(entry.unit) ?? 0) + entry.value);
@@ -283,7 +318,8 @@ export function formatQuantityTotals(totals: QuantityTotal[], signed = false) {
 type MovementRecord = {
   id: string;
   store_id: string;
-  product_id: string;
+  product_id: string | null;
+  inventory_item_id: string | null;
   type: StockMovementType;
   qty: number | string;
   unit: string;
@@ -297,10 +333,17 @@ type CurrentStockRecord = {
   qty: number | string;
 };
 
+type CurrentInventoryStockRecord = {
+  store_id: string;
+  inventory_item_id: string;
+  qty: number | string;
+};
+
 type CountRecord = {
   id: string;
   store_id: string;
-  product_id: string;
+  product_id: string | null;
+  inventory_item_id: string | null;
   count_date: string;
   expected_qty: number | string;
   counted_qty: number | string;
@@ -334,9 +377,16 @@ export async function loadInventoryReport(
     .eq("org_id", profile.org_id)
     .order("name")
     .limit(3000);
+  let inventoryItemsQuery = supabase
+    .from("inventory_items")
+    .select("id, store_id, linked_product_id, name, item_type, unit, cost_per_unit, min_stock, supplier_id, is_active")
+    .eq("org_id", profile.org_id)
+    .eq("is_active", true)
+    .order("name")
+    .limit(5000);
   let movementsQuery = supabase
     .from("stock_movements")
-    .select("id, store_id, product_id, type, qty, unit, reason, created_at")
+    .select("id, store_id, product_id, inventory_item_id, type, qty, unit, reason, created_at")
     .eq("org_id", profile.org_id)
     .gte("created_at", reportDateStart(initialFilters.from).toISOString())
     .lt("created_at", reportDateEnd(initialFilters.to).toISOString())
@@ -344,7 +394,7 @@ export async function loadInventoryReport(
     .limit(10000);
   let countsQuery = supabase
     .from("inventory_counts")
-    .select("id, store_id, product_id, count_date, expected_qty, counted_qty, variance_qty, unit, updated_at")
+    .select("id, store_id, product_id, inventory_item_id, count_date, expected_qty, counted_qty, variance_qty, unit, updated_at")
     .eq("org_id", profile.org_id)
     .gte("count_date", initialFilters.from)
     .lte("count_date", initialFilters.to)
@@ -355,27 +405,32 @@ export async function loadInventoryReport(
   if (branchId) {
     categoriesQuery = categoriesQuery.eq("store_id", branchId);
     productsQuery = productsQuery.eq("store_id", branchId);
+    inventoryItemsQuery = inventoryItemsQuery.eq("store_id", branchId);
     movementsQuery = movementsQuery.eq("store_id", branchId);
     countsQuery = countsQuery.eq("store_id", branchId);
   }
 
-  const [categoriesResult, suppliersResult, productsResult, movementsResult, countsResult, stockResult] = await Promise.all([
+  const [categoriesResult, suppliersResult, productsResult, inventoryItemsResult, movementsResult, countsResult, stockResult, inventoryStockResult] = await Promise.all([
     categoriesQuery,
     supabase.from("suppliers").select("id, store_id, name, is_active").eq("org_id", profile.org_id).order("name").limit(1000),
     productsQuery,
+    inventoryItemsQuery,
     movementsQuery,
     countsQuery,
     supabase.rpc("current_stock", { p_org_id: profile.org_id }),
+    supabase.rpc("current_inventory_stock", { p_org_id: profile.org_id }),
   ]);
 
   const categories = (categoriesResult.data ?? []) as InventoryReportCategory[];
   const suppliers = (suppliersResult.data ?? []) as InventoryReportSupplier[];
   const products = (productsResult.data ?? []) as InventoryReportProduct[];
+  const inventoryItems = (inventoryItemsResult.data ?? []) as InventoryReportItem[];
   const movements = (movementsResult.data ?? []) as MovementRecord[];
   const counts = (countsResult.data ?? []) as CountRecord[];
   const categoryById = new Map(categories.map((category) => [category.id, category]));
   const supplierById = new Map(suppliers.map((supplier) => [supplier.id, supplier]));
   const productById = new Map(products.map((product) => [product.id, product]));
+  const inventoryItemById = new Map(inventoryItems.map((item) => [item.id, item]));
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
 
   const effectiveFilters: InventoryReportFilters = {
@@ -385,25 +440,37 @@ export async function loadInventoryReport(
     supplierId: initialFilters.supplierId === "unassigned" || supplierById.has(initialFilters.supplierId) ? initialFilters.supplierId : "",
   };
 
+  const usingInventoryItems = !inventoryItemsResult.error;
+  const stockQueryResult = usingInventoryItems ? inventoryStockResult : stockResult;
   const stockByKey = new Map<string, number>();
-  let stockWarning = Boolean(stockResult.error);
-  if (!stockResult.error) {
-    for (const row of (stockResult.data ?? []) as CurrentStockRecord[]) {
-      if (!effectiveFilters.branchId || row.store_id === effectiveFilters.branchId) {
-        stockByKey.set(`${row.store_id}:${row.product_id}`, Number(row.qty));
+  let stockWarning = Boolean(stockQueryResult.error);
+  if (!stockQueryResult.error) {
+    if (usingInventoryItems) {
+      for (const row of (stockQueryResult.data ?? []) as CurrentInventoryStockRecord[]) {
+        if (!effectiveFilters.branchId || row.store_id === effectiveFilters.branchId) {
+          stockByKey.set(`${row.store_id}:${row.inventory_item_id}`, Number(row.qty));
+        }
+      }
+    } else {
+      for (const row of (stockQueryResult.data ?? []) as CurrentStockRecord[]) {
+        if (!effectiveFilters.branchId || row.store_id === effectiveFilters.branchId) {
+          stockByKey.set(`${row.store_id}:${row.product_id}`, Number(row.qty));
+        }
       }
     }
   } else {
     let fallbackStockQuery = supabase
       .from("stock_movements")
-      .select("store_id, product_id, type, qty")
+      .select("store_id, product_id, inventory_item_id, type, qty")
       .eq("org_id", profile.org_id)
       .limit(20000);
     if (effectiveFilters.branchId) fallbackStockQuery = fallbackStockQuery.eq("store_id", effectiveFilters.branchId);
     const fallbackStockResult = await fallbackStockQuery;
     stockWarning = Boolean(fallbackStockResult.error);
-    for (const movement of (fallbackStockResult.data ?? []) as Array<{ store_id: string; product_id: string; type: StockMovementType; qty: number | string }>) {
-      const key = `${movement.store_id}:${movement.product_id}`;
+    for (const movement of (fallbackStockResult.data ?? []) as Array<{ store_id: string; product_id: string | null; inventory_item_id: string | null; type: StockMovementType; qty: number | string }>) {
+      const keyId = usingInventoryItems ? movement.inventory_item_id : movement.product_id;
+      if (!keyId) continue;
+      const key = `${movement.store_id}:${keyId}`;
       stockByKey.set(key, (stockByKey.get(key) ?? 0) + stockMovementDelta(movement.type, Number(movement.qty)));
     }
   }
@@ -412,28 +479,58 @@ export async function loadInventoryReport(
   const supplierName = (product: InventoryReportProduct) => product.supplier_id ? supplierById.get(product.supplier_id)?.name ?? "Unassigned" : "Unassigned";
   const productMatchesFilters = (product: InventoryReportProduct) => productMatches(product, effectiveFilters);
 
-  const inventoryRows = products
-    .filter((product) => product.track_stock && product.is_active && productMatchesFilters(product))
-    .flatMap((product) => {
-      const branch = branchById.get(product.store_id);
-      if (!branch) return [];
-      const onHand = stockByKey.get(`${product.store_id}:${product.id}`) ?? 0;
-      const minimum = dashboardLowStockThreshold(product.min_stock, defaultLowStockThreshold);
-      const status: InventoryStatus = onHand <= 0 ? "out" : onHand <= minimum ? "low" : "ok";
-      return [{
-        branchId: branch.id,
-        branchName: branch.name,
-        productId: product.id,
-        productName: product.name,
-        categoryName: categoryName(product),
-        supplierName: supplierName(product),
-        unit: product.unit,
-        onHand,
-        minimum,
-        status,
-        inventoryValue: Math.max(0, onHand) * Number(product.cost_price ?? product.price),
-      } satisfies InventoryReportInventoryRow];
-    })
+  const inventoryRows = (usingInventoryItems
+    ? inventoryItems
+      .filter((item) => item.is_active && inventoryItemMatches(item, effectiveFilters, productById))
+      .flatMap((item) => {
+        const branch = branchById.get(item.store_id);
+        if (!branch) return [];
+        const linkedProduct = item.linked_product_id ? productById.get(item.linked_product_id) : undefined;
+        const onHand = stockByKey.get(`${item.store_id}:${item.id}`) ?? 0;
+        const minimum = dashboardLowStockThreshold(item.min_stock, defaultLowStockThreshold);
+        const status: InventoryStatus = onHand <= 0 ? "out" : onHand <= minimum ? "low" : "ok";
+        return [{
+          branchId: branch.id,
+          branchName: branch.name,
+          inventoryItemId: item.id,
+          productId: item.id,
+          linkedProductId: item.linked_product_id,
+          itemType: item.item_type,
+          productName: item.name,
+          categoryName: linkedProduct ? categoryName(linkedProduct) : "Unassigned",
+          supplierName: item.supplier_id ? supplierById.get(item.supplier_id)?.name ?? "Unassigned" : "Unassigned",
+          unit: item.unit,
+          onHand,
+          minimum,
+          status,
+          inventoryValue: Math.max(0, onHand) * Number(item.cost_per_unit ?? 0),
+        } satisfies InventoryReportInventoryRow];
+      })
+    : products
+      .filter((product) => product.track_stock && product.is_active && productMatchesFilters(product))
+      .flatMap((product) => {
+        const branch = branchById.get(product.store_id);
+        if (!branch) return [];
+        const onHand = stockByKey.get(`${product.store_id}:${product.id}`) ?? 0;
+        const minimum = dashboardLowStockThreshold(product.min_stock, defaultLowStockThreshold);
+        const status: InventoryStatus = onHand <= 0 ? "out" : onHand <= minimum ? "low" : "ok";
+        return [{
+          branchId: branch.id,
+          branchName: branch.name,
+          inventoryItemId: product.id,
+          productId: product.id,
+          linkedProductId: product.id,
+          itemType: "finished_good",
+          productName: product.name,
+          categoryName: categoryName(product),
+          supplierName: supplierName(product),
+          unit: product.unit,
+          onHand,
+          minimum,
+          status,
+          inventoryValue: Math.max(0, onHand) * Number(product.cost_price ?? product.price),
+        } satisfies InventoryReportInventoryRow];
+      }))
     .sort((a, b) => {
       const statusOrder: Record<InventoryStatus, number> = { out: 0, low: 1, ok: 2 };
       return statusOrder[a.status] - statusOrder[b.status] || a.productName.localeCompare(b.productName);
@@ -441,21 +538,26 @@ export async function loadInventoryReport(
 
   const movementRows = movements
     .filter((movement) => {
-      const product = productById.get(movement.product_id);
-      return Boolean(product && productMatchesFilters(product));
+      const item = movement.inventory_item_id ? inventoryItemById.get(movement.inventory_item_id) : undefined;
+      const product = movement.product_id ? productById.get(movement.product_id) : undefined;
+      return item
+        ? inventoryItemMatches(item, effectiveFilters, productById)
+        : Boolean(product && productMatchesFilters(product));
     })
     .map((movement) => {
-      const product = productById.get(movement.product_id);
+      const item = movement.inventory_item_id ? inventoryItemById.get(movement.inventory_item_id) : undefined;
+      const product = movement.product_id ? productById.get(movement.product_id) : undefined;
       const branch = branchById.get(movement.store_id);
       const type = movement.type;
       return {
         id: movement.id,
         branchId: movement.store_id,
         branchName: branch?.name ?? "Unknown branch",
-        productId: movement.product_id,
-        productName: product?.name ?? "Unknown product",
+        productId: movement.inventory_item_id ?? movement.product_id ?? "",
+        inventoryItemId: movement.inventory_item_id,
+        productName: item?.name ?? product?.name ?? "Unknown inventory item",
         categoryName: product ? categoryName(product) : "Uncategorized",
-        supplierName: product ? supplierName(product) : "Unassigned",
+        supplierName: item?.supplier_id ? supplierById.get(item.supplier_id)?.name ?? "Unassigned" : product ? supplierName(product) : "Unassigned",
         type,
         typeLabel: MOVEMENT_LABELS[type],
         quantity: Number(movement.qty),
@@ -485,21 +587,26 @@ export async function loadInventoryReport(
 
   const varianceRows = counts
     .filter((count) => {
-      const product = productById.get(count.product_id);
-      return Boolean(product && productMatchesFilters(product));
+      const item = count.inventory_item_id ? inventoryItemById.get(count.inventory_item_id) : undefined;
+      const product = count.product_id ? productById.get(count.product_id) : undefined;
+      return item
+        ? inventoryItemMatches(item, effectiveFilters, productById)
+        : Boolean(product && productMatchesFilters(product));
     })
     .map((count) => {
-      const product = productById.get(count.product_id);
+      const item = count.inventory_item_id ? inventoryItemById.get(count.inventory_item_id) : undefined;
+      const product = count.product_id ? productById.get(count.product_id) : undefined;
       const branch = branchById.get(count.store_id);
       const variance = Number(count.variance_qty);
       return {
         id: count.id,
         branchId: count.store_id,
         branchName: branch?.name ?? "Unknown branch",
-        productId: count.product_id,
-        productName: product?.name ?? "Unknown product",
+        productId: count.inventory_item_id ?? count.product_id ?? "",
+        inventoryItemId: count.inventory_item_id,
+        productName: item?.name ?? product?.name ?? "Unknown inventory item",
         categoryName: product ? categoryName(product) : "Uncategorized",
-        supplierName: product ? supplierName(product) : "Unassigned",
+        supplierName: item?.supplier_id ? supplierById.get(item.supplier_id)?.name ?? "Unassigned" : product ? supplierName(product) : "Unassigned",
         countDate: count.count_date,
         expected: Number(count.expected_qty),
         counted: Number(count.counted_qty),
