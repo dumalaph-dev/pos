@@ -3,6 +3,7 @@ import {
   provisionEmployeeLogin,
   setEmployeePin,
 } from "@/app/admin/employees/actions";
+import { AdminIcon } from "@/components/admin/AdminIcon";
 
 type AccessRole = "admin" | "manager" | "cashier";
 type ReturnState = Record<string, string | undefined>;
@@ -23,57 +24,70 @@ function ReturnFields({ values }: { values: ReturnState }) {
 
 export function EmployeeAccessPanel({ employee, canWrite, returnState = {} }: { employee: EmployeeAccessRecord; canWrite: boolean; returnState?: ReturnState }) {
   const canApproveVoids = employee.role === "admin" || employee.role === "manager";
-  const approvalLabel = employee.role === "manager" ? "Manager approval PIN" : "Admin approval PIN";
-  const accountButtonLabel = canApproveVoids ? "Set up account + approval PIN" : "Set up employee account";
+  const approvalLabel = employee.role === "manager" ? "Manager void PIN" : "Admin void PIN";
+  const accountButtonLabel = canApproveVoids ? "Create account & PIN" : "Create employee account";
 
-  return <section className="employee-entry-form mt-4 border-t border-line pt-5" aria-labelledby={`employee-access-heading-${employee.id}`}>
-    <div className="employee-entry-form__heading">
-      <div>
-        <p className="employee-section-kicker">Account &amp; POS approvals</p>
-        <h3 id={`employee-access-heading-${employee.id}`}>Make this employee ready to sign in</h3>
-        <p>Login access and approval PINs are separate. The employee signs in with their Employee ID and password; an admin or manager approval PIN authorizes completed-order voids.</p>
+  return <section className="employee-access-panel" aria-labelledby={`employee-access-heading-${employee.id}`}>
+    <header className="employee-access-panel__header">
+      <div className="employee-access-panel__title">
+        <span className="employee-access-panel__icon" aria-hidden="true"><AdminIcon name="lock" size={17} /></span>
+        <div>
+          <p className="employee-dialog__section-kicker">Account &amp; approvals</p>
+          <h3 id={`employee-access-heading-${employee.id}`}>Sign-in and POS access</h3>
+        </div>
       </div>
-      <span className="employee-data-badge">{employee.profile_id ? "Account linked" : "Account not set up"}</span>
-    </div>
+      <span className="employee-access-panel__status">{employee.profile_id ? "Account linked" : "Not set up"}</span>
+    </header>
+    <p className="employee-access-panel__intro">Login access and the void approval PIN are separate. The PIN is used by an admin or manager to approve completed-order voids.</p>
 
-    {!employee.is_active && <p className="employee-muted mt-3 rounded-btn border border-warning/30 bg-warning/10 px-3 py-2">Activate this employee before setting up an account or approval PIN.</p>}
+    {!employee.is_active && <p className="employee-access-panel__notice"><AdminIcon name="alert" size={15} /> Activate this employee before setting up access.</p>}
 
-    {!employee.profile_id ? <form action={provisionEmployeeAccess} className="mt-4 rounded-btn border border-line bg-surface-raised p-4">
-      <input type="hidden" name="employee_id" value={employee.id} />
-      <ReturnFields values={returnState} />
-      <div className="grid gap-2">
-        <strong className="text-sm text-ink">Create the login account</strong>
-        <p className="text-xs leading-5 text-ink-muted">The server will create the account and reset it to the configured temporary password. Give that temporary password to the employee privately; they must change it on first sign-in.</p>
-      </div>
-      {canApproveVoids && <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <label><span>New void approval PIN</span><input name="pin" type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{4,6}" minLength={4} maxLength={6} required disabled={!canWrite || !employee.is_active} /></label>
-        <label><span>Confirm approval PIN</span><input name="pin_confirmation" type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{4,6}" minLength={4} maxLength={6} required disabled={!canWrite || !employee.is_active} /></label>
-      </div>}
-      <button type="submit" disabled={!canWrite || !employee.is_active} className="employee-primary-button mt-4">{accountButtonLabel}</button>
-    </form> : <div className="mt-4 grid gap-3 rounded-btn border border-line bg-surface-raised p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-      <div>
-        <strong className="block text-sm text-ink">Employee account is linked</strong>
-        <p className="mt-1 text-xs leading-5 text-ink-muted">Employee ID <span className="font-extrabold text-ink">{employee.employee_code}</span> is ready. Resetting login gives the employee the configured temporary password again and requires a password change.</p>
-      </div>
-      <form action={provisionEmployeeLogin}>
+    <div className="employee-access-panel__stack">
+      {!employee.profile_id ? <form action={provisionEmployeeAccess} className="employee-access-card">
         <input type="hidden" name="employee_id" value={employee.id} />
         <ReturnFields values={returnState} />
-        <button type="submit" disabled={!canWrite || !employee.is_active} className="employee-outline-button">Reset login password</button>
-      </form>
-    </div>}
+        <div className="employee-access-card__heading">
+          <div><strong>Create employee login</strong><p>They will sign in with their Employee ID and a temporary password.</p></div>
+          <span>Step 1</span>
+        </div>
+        {canApproveVoids && <fieldset className="employee-void-pin-fields">
+          <legend>Void approval PIN</legend>
+          <p className="employee-void-pin-fields__help">Use 4–6 digits. This PIN authorizes completed-order voids.</p>
+          <div className="employee-pin-field-grid">
+            <label className="employee-pin-field"><span>New void PIN</span><input id={`employee-new-pin-${employee.id}`} className="employee-pin-input" name="pin" type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{4,6}" minLength={4} maxLength={6} required disabled={!canWrite || !employee.is_active} /></label>
+            <label className="employee-pin-field"><span>Confirm void PIN</span><input id={`employee-confirm-pin-${employee.id}`} className="employee-pin-input" name="pin_confirmation" type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{4,6}" minLength={4} maxLength={6} required disabled={!canWrite || !employee.is_active} /></label>
+          </div>
+        </fieldset>}
+        <button type="submit" disabled={!canWrite || !employee.is_active} className="employee-primary-button">{accountButtonLabel}</button>
+      </form> : <div className="employee-access-card employee-access-card--account">
+        <div className="employee-access-card__heading">
+          <div><strong>Employee account is linked</strong><p><span className="employee-access-card__employee-id">{employee.employee_code}</span> can sign in. Resetting login requires a password change.</p></div>
+          <span className="employee-access-card__check" aria-hidden="true"><AdminIcon name="check" size={15} /></span>
+        </div>
+        <form action={provisionEmployeeLogin}>
+          <input type="hidden" name="employee_id" value={employee.id} />
+          <ReturnFields values={returnState} />
+          <button type="submit" disabled={!canWrite || !employee.is_active} className="employee-outline-button">Reset login password</button>
+        </form>
+      </div>}
 
-    {canApproveVoids && employee.profile_id ? <form action={setEmployeePin} className="mt-4 rounded-btn border border-line bg-surface-raised p-4">
-      <input type="hidden" name="employee_id" value={employee.id} />
-      <ReturnFields values={returnState} />
-      <div>
-        <strong className="block text-sm text-ink">{approvalLabel}</strong>
-        <p className="mt-1 text-xs leading-5 text-ink-muted">Used online to approve completed-order voids. Admin approval PINs also approve custom discounts above the configured threshold. The raw PIN is never stored in the browser or audit log.</p>
-      </div>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <label><span>New approval PIN</span><input name="pin" type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{4,6}" minLength={4} maxLength={6} required disabled={!canWrite || !employee.is_active} /></label>
-        <label><span>Confirm approval PIN</span><input name="pin_confirmation" type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{4,6}" minLength={4} maxLength={6} required disabled={!canWrite || !employee.is_active} /></label>
-      </div>
-      <button type="submit" disabled={!canWrite || !employee.is_active} className="employee-primary-button mt-4">Save approval PIN</button>
-    </form> : !canApproveVoids ? <p className="employee-muted mt-4 rounded-btn border border-line bg-surface-raised px-3 py-2 text-xs">This access level does not hold an approval PIN. Use an active manager or admin account to approve completed-order voids.</p> : <p className="employee-muted mt-4 rounded-btn border border-line bg-surface-raised px-3 py-2 text-xs">Set up the employee account above first. The combined setup action creates both the login and approval PIN.</p>}
+      {canApproveVoids && employee.profile_id ? <form action={setEmployeePin} className="employee-access-card employee-access-card--pin">
+        <input type="hidden" name="employee_id" value={employee.id} />
+        <ReturnFields values={returnState} />
+        <div className="employee-access-card__heading employee-access-card__heading--pin">
+          <div className="employee-access-card__title"><span className="employee-access-card__icon" aria-hidden="true"><AdminIcon name="lock" size={16} /></span><div><strong>{approvalLabel}</strong><p>Required to approve completed-order voids.</p></div></div>
+          <span className="employee-access-card__required">For voids</span>
+        </div>
+        <fieldset className="employee-void-pin-fields">
+          <legend>Change void PIN</legend>
+          <p className="employee-void-pin-fields__help">Enter a new 4–6 digit PIN. It is never stored in the browser or audit log.</p>
+          <div className="employee-pin-field-grid">
+            <label className="employee-pin-field"><span>New void PIN</span><input id={`employee-update-pin-${employee.id}`} className="employee-pin-input" name="pin" type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{4,6}" minLength={4} maxLength={6} required disabled={!canWrite || !employee.is_active} /></label>
+            <label className="employee-pin-field"><span>Confirm void PIN</span><input id={`employee-update-confirm-pin-${employee.id}`} className="employee-pin-input" name="pin_confirmation" type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{4,6}" minLength={4} maxLength={6} required disabled={!canWrite || !employee.is_active} /></label>
+          </div>
+        </fieldset>
+        <button type="submit" disabled={!canWrite || !employee.is_active} className="employee-primary-button">Save void PIN</button>
+      </form> : !canApproveVoids ? <p className="employee-access-panel__notice employee-access-panel__notice--muted">This access level does not hold a void PIN. An active manager or admin can approve completed-order voids.</p> : <p className="employee-access-panel__notice employee-access-panel__notice--muted">Create the employee account above first. The combined setup action creates the login and void PIN.</p>}
+    </div>
   </section>;
 }

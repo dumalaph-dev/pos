@@ -809,6 +809,784 @@
 .employee-login-button--ready { border-color: #e8c6a9; color: #94613f; background: #fffaf4; }
 }
 
+/* Employee edit dialog ----------------------------------------------------- */
+/*
+   The editor is portaled to document.body, so it receives its own theme
+   boundary from OverlayDialog. Keep every dialog color on the shared tokens
+   instead of the workspace's legacy hardcoded palette.
+*/
+@layer components {
+.employee-dialog {
+  --employee-brown: var(--primary);
+  --employee-brown-dark: var(--primary-hover);
+  --employee-cream: var(--surface-raised);
+  --employee-line: var(--border);
+  --employee-muted: var(--text-muted);
+  max-width: 980px;
+  max-height: calc(100dvh - 2rem);
+  color: var(--text);
+  background: var(--surface);
+  font-family: var(--font-ui, var(--font-sans));
+  color-scheme: inherit;
+}
+
+.employee-dialog__shell {
+  min-width: 0;
+}
+
+.employee-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--primary) 6%, var(--surface));
+}
+
+.employee-dialog__identity,
+.employee-dialog__header-actions,
+.employee-access-panel__title,
+.employee-access-card__title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.employee-dialog__identity {
+  min-width: 0;
+}
+
+.employee-dialog__identity > div,
+.employee-dialog__header-actions,
+.employee-access-panel__title > div,
+.employee-access-card__title > div {
+  min-width: 0;
+}
+
+.employee-dialog__avatar {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 13px;
+  color: var(--primary-fg);
+  background: var(--primary);
+  font-size: 14px;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+}
+
+.employee-dialog__eyebrow,
+.employee-dialog__section-kicker {
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.employee-dialog__header h2 {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: clamp(21px, 2.2vw, 27px);
+  font-weight: 850;
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+}
+
+.employee-dialog__header h2 + p {
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.employee-dialog__header-actions {
+  flex: 0 0 auto;
+}
+
+.employee-dialog__status,
+.employee-access-panel__status,
+.employee-access-card__required {
+  display: inline-flex;
+  min-height: 27px;
+  align-items: center;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  background: var(--surface-raised);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.employee-dialog__status.is-active {
+  border-color: color-mix(in srgb, var(--success) 38%, var(--border));
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 11%, var(--surface));
+}
+
+.employee-dialog__status.is-inactive {
+  color: var(--text-muted);
+  background: var(--surface-panel);
+}
+
+.employee-dialog__close {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-muted);
+  background: var(--surface-raised);
+  cursor: pointer;
+  transition: border-color 150ms ease, color 150ms ease, background 150ms ease, transform 150ms ease;
+}
+
+.employee-dialog__close:hover {
+  border-color: var(--border-strong);
+  color: var(--primary);
+  background: var(--primary-soft);
+  transform: translateY(-1px);
+}
+
+.employee-dialog__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  align-items: start;
+  gap: 16px;
+  padding: 16px;
+}
+
+.employee-record-form,
+.employee-access-panel {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.employee-record-form {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.employee-dialog__section-heading,
+.employee-access-panel__header,
+.employee-access-card__heading,
+.employee-dialog__form-footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.employee-dialog__section-heading > span {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.employee-dialog__section-heading h3,
+.employee-access-panel__header h3 {
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 850;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+.employee-dialog__field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.employee-dialog__field {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.employee-dialog__field > span,
+.employee-dialog__field-label,
+.employee-pin-field > span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.065em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.employee-dialog__field input:not([type="checkbox"]):not([type="hidden"]),
+.employee-dialog__field select {
+  width: 100%;
+  min-height: 43px;
+  padding: 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  outline: none;
+  color: var(--text);
+  background: var(--surface-raised);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+
+.employee-dialog__field input::placeholder {
+  color: var(--text-subtle);
+  opacity: 1;
+}
+
+.employee-dialog__field input:focus,
+.employee-dialog__field select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.employee-dialog__field input:disabled,
+.employee-dialog__field select:disabled {
+  cursor: not-allowed;
+  color: color-mix(in srgb, var(--text) 62%, var(--surface));
+  background: color-mix(in srgb, var(--surface-panel) 72%, var(--surface));
+  opacity: 0.82;
+}
+
+.employee-dialog__help {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.employee-dialog__schedule {
+  min-width: 0;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-raised) 68%, var(--surface));
+}
+
+.employee-dialog__schedule legend {
+  padding: 0;
+}
+
+.employee-dialog__schedule-layout {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.72fr) minmax(0, 1.28fr);
+  align-items: end;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.employee-dialog__time-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.employee-dialog__day-checkboxes {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.employee-dialog__day-checkboxes label {
+  display: flex;
+  min-height: 35px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  background: var(--surface-raised);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 750;
+  transition: border-color 150ms ease, color 150ms ease, background 150ms ease;
+}
+
+.employee-dialog__day-checkboxes label:hover,
+.employee-dialog__day-checkboxes label:focus-within {
+  border-color: var(--border-strong);
+}
+
+.employee-dialog__day-checkboxes label:has(input:checked) {
+  border-color: color-mix(in srgb, var(--primary) 48%, var(--border));
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.employee-dialog__day-checkboxes input,
+.employee-dialog__active-toggle input {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  accent-color: var(--primary);
+}
+
+.employee-dialog__form-footer {
+  align-items: center;
+  padding-top: 2px;
+  border-top: 1px solid var(--border);
+}
+
+.employee-dialog__active-toggle {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.employee-dialog__active-toggle > span {
+  display: grid;
+  gap: 2px;
+}
+
+.employee-dialog__active-toggle strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.employee-dialog__active-toggle small {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.employee-dialog__form-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.employee-dialog .employee-tool-button,
+.employee-dialog .employee-primary-button,
+.employee-dialog .employee-outline-button {
+  min-height: 41px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.employee-dialog .employee-tool-button {
+  border: 1px solid var(--border);
+  padding: 0 14px;
+  color: var(--text);
+  background: var(--surface-raised);
+  cursor: pointer;
+}
+
+.employee-dialog .employee-tool-button:hover,
+.employee-dialog .employee-outline-button:hover {
+  border-color: var(--border-strong);
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.employee-dialog .employee-primary-button {
+  border: 1px solid var(--primary);
+  padding: 0 15px;
+  color: var(--primary-fg);
+  background: var(--primary);
+  cursor: pointer;
+}
+
+.employee-dialog .employee-primary-button:hover {
+  border-color: var(--primary-hover);
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.employee-dialog .employee-primary-button:disabled,
+.employee-dialog .employee-tool-button:disabled,
+.employee-dialog .employee-outline-button:disabled {
+  cursor: not-allowed;
+  color: var(--text-muted);
+  border-color: var(--border);
+  background: var(--surface-panel);
+  opacity: 0.62;
+  transform: none;
+}
+
+.employee-access-panel {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 18px;
+  background: color-mix(in srgb, var(--primary) 3%, var(--surface));
+}
+
+.employee-access-panel__header {
+  align-items: center;
+}
+
+.employee-access-panel__title {
+  min-width: 0;
+}
+
+.employee-access-panel__icon,
+.employee-access-card__icon,
+.employee-access-card__check {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.employee-access-panel__header h3 {
+  font-size: 15px;
+}
+
+.employee-access-panel__status {
+  min-height: 25px;
+  padding: 0 8px;
+  font-size: 9px;
+}
+
+.employee-access-panel__intro {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.employee-access-panel__stack {
+  display: grid;
+  gap: 10px;
+}
+
+.employee-access-panel__notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 11px;
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--border));
+  border-radius: 9px;
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 10%, var(--surface));
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.employee-access-panel__notice svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.employee-access-panel__notice--muted {
+  border-color: var(--border);
+  color: var(--text-muted);
+  background: var(--surface-panel);
+}
+
+.employee-access-card {
+  display: grid;
+  min-width: 0;
+  gap: 13px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-raised);
+}
+
+.employee-access-card__heading {
+  align-items: flex-start;
+}
+
+.employee-access-card__heading > div {
+  min-width: 0;
+}
+
+.employee-access-card__heading strong {
+  display: block;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.employee-access-card__heading p {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.employee-access-card__heading > span:last-child:not(.employee-access-card__check) {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.employee-access-card__employee-id {
+  color: var(--text);
+  font-weight: 850;
+}
+
+.employee-access-card--account > form {
+  display: flex;
+}
+
+.employee-access-card--account .employee-outline-button {
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  padding: 0 12px;
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.employee-access-card__check {
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 13%, var(--surface));
+}
+
+.employee-access-card--pin {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface-raised));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 9%, transparent);
+}
+
+.employee-access-card__heading--pin {
+  align-items: flex-start;
+}
+
+.employee-access-card__title {
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.employee-access-card__title .employee-access-card__icon {
+  width: 29px;
+  height: 29px;
+  border-radius: 8px;
+}
+
+.employee-access-card__required {
+  min-height: 24px;
+  border-color: color-mix(in srgb, var(--primary) 28%, var(--border));
+  color: var(--primary);
+  background: var(--primary-soft);
+  font-size: 9px;
+}
+
+.employee-void-pin-fields {
+  min-width: 0;
+  margin: 0;
+  padding: 11px;
+  border: 1px solid color-mix(in srgb, var(--primary) 27%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-raised) 78%, var(--primary-soft));
+}
+
+.employee-void-pin-fields legend {
+  padding: 0 4px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.employee-void-pin-fields__help {
+  margin: 2px 0 9px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.employee-pin-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.employee-pin-field {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.employee-pin-field > span {
+  color: var(--text);
+  font-size: 10px;
+  letter-spacing: 0.035em;
+}
+
+.employee-dialog .employee-pin-input {
+  width: 100%;
+  min-height: 49px;
+  padding: 0 12px;
+  border: 2px solid var(--border-strong);
+  border-radius: 10px;
+  outline: none;
+  color: var(--text);
+  background: var(--surface-raised);
+  caret-color: var(--primary);
+  font: inherit;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  line-height: 1;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+
+.employee-dialog .employee-pin-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.employee-dialog .employee-pin-input::placeholder {
+  color: var(--text-subtle);
+  opacity: 1;
+}
+
+.employee-dialog .employee-pin-input:disabled {
+  cursor: not-allowed;
+  color: var(--text-muted);
+  background: var(--surface-panel);
+  opacity: 0.65;
+}
+
+.employee-access-card > .employee-primary-button {
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .employee-dialog__body {
+    grid-template-columns: 1fr;
+  }
+
+  .employee-access-panel {
+    order: 2;
+  }
+}
+
+@media (max-width: 640px) {
+  .employee-dialog {
+    max-height: calc(100dvh - 1rem);
+  }
+
+  .employee-dialog__header {
+    align-items: flex-start;
+    padding: 16px;
+  }
+
+  .employee-dialog__avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 11px;
+    font-size: 12px;
+  }
+
+  .employee-dialog__identity,
+  .employee-dialog__header-actions {
+    gap: 9px;
+  }
+
+  .employee-dialog__eyebrow,
+  .employee-dialog__section-kicker {
+    font-size: 9px;
+  }
+
+  .employee-dialog__header h2 {
+    font-size: 21px;
+  }
+
+  .employee-dialog__header h2 + p {
+    font-size: 11px;
+  }
+
+  .employee-dialog__status {
+    display: none;
+  }
+
+  .employee-dialog__close {
+    width: 36px;
+    height: 36px;
+  }
+
+  .employee-dialog__body {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .employee-record-form,
+  .employee-access-panel {
+    padding: 14px;
+  }
+
+  .employee-dialog__field-grid,
+  .employee-dialog__schedule-layout,
+  .employee-dialog__time-grid,
+  .employee-pin-field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .employee-dialog__day-checkboxes {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .employee-dialog__form-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .employee-dialog__form-actions {
+    justify-content: flex-end;
+  }
+
+  .employee-dialog__form-actions .employee-tool-button,
+  .employee-dialog__form-actions .employee-primary-button {
+    flex: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .employee-dialog__close,
+  .employee-dialog .employee-tool-button,
+  .employee-dialog .employee-primary-button,
+  .employee-dialog .employee-outline-button,
+  .employee-dialog__field input,
+  .employee-dialog__field select,
+  .employee-dialog .employee-pin-input {
+    transition: none;
+  }
+
+  .employee-dialog .employee-primary-button:hover,
+  .employee-dialog__close:hover {
+    transform: none;
+  }
+}
+}
+
 /* Admin utility overrides intentionally follow Tailwind's generated utilities. */
 
 @layer utilities {

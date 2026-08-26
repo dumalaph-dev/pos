@@ -376,7 +376,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   const staffLinksUnavailable = canWrite && Boolean(staffLinksResult.error);
 
   return (
-    <EmployeeDialogController employees={employees} branches={branches} roles={roles} initialEmployeeId={readParam(params, "edit") || null} today={today} canWrite={canWrite} returnState={employeeListState}>
+    <EmployeeDialogController employees={employees} branches={branches} roles={roles} initialEmployeeId={readParam(params, "edit") || null} today={today} canWrite={canWrite} theme={branding.theme} returnState={employeeListState}>
     <main data-admin-theme={branding.theme} className="admin-page employee-page text-ink">
       <div className="min-w-0 px-4 pb-10 sm:px-6 lg:px-8">
           <header className="employee-topbar">

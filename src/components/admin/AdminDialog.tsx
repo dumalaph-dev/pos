@@ -14,6 +14,7 @@ export function AdminDialog({
   bodyClassName,
   backdropClassName,
   dialogClassName,
+  dataAdminTheme,
 }: {
   children: ReactNode;
   closeHref?: string;
@@ -23,6 +24,7 @@ export function AdminDialog({
   bodyClassName: string;
   backdropClassName: string;
   dialogClassName: string;
+  dataAdminTheme?: string;
 }) {
   const router = useRouter();
   const closeDialog = useCallback(() => {
@@ -33,5 +35,5 @@ export function AdminDialog({
     }
   }, [closeHref, onClose, router]);
 
-  return <OverlayDialog onClose={closeDialog} titleId={titleId} descriptionId={descriptionId} bodyClassName={bodyClassName} backdropClassName={backdropClassName} dialogClassName={dialogClassName}>{children}</OverlayDialog>;
+  return <OverlayDialog onClose={closeDialog} titleId={titleId} descriptionId={descriptionId} bodyClassName={bodyClassName} backdropClassName={backdropClassName} dialogClassName={dialogClassName} dataAdminTheme={dataAdminTheme}>{children}</OverlayDialog>;
 }

@@ -28,6 +28,7 @@ export function OverlayDialog({
   children,
   backdropClassName,
   dialogClassName,
+  dataAdminTheme,
   bodyClassName = "overlay-dialog-open",
   initialFocusSelector = "[data-dialog-autofocus], [data-shift-dialog-autofocus], [data-order-dialog-autofocus]",
   portal = true,
@@ -39,6 +40,7 @@ export function OverlayDialog({
   children: ReactNode;
   backdropClassName: string;
   dialogClassName: string;
+  dataAdminTheme?: string;
   bodyClassName?: string;
   initialFocusSelector?: string;
   portal?: boolean;
@@ -111,6 +113,7 @@ export function OverlayDialog({
       <div
         ref={dialogRef}
         className={dialogClassName}
+        data-admin-theme={dataAdminTheme}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
