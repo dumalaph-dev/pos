@@ -27,6 +27,7 @@ type EmployeeLoginRecord = {
   profile_id: string | null;
   store_id: string | null;
   employee_code: string;
+  role: "admin" | "manager" | "cashier" | null;
   is_active: boolean;
 };
 
@@ -60,7 +61,7 @@ export async function loginWithEmployeeId(_previousState: LoginState, formData: 
 
   const { data: employeeRows, error: employeeError } = await admin
     .from("employee_records")
-    .select("org_id, profile_id, store_id, employee_code, is_active")
+    .select("org_id, profile_id, store_id, employee_code, role, is_active")
     .eq("employee_code", employeeCode)
     .eq("org_id", store.org_id)
     .eq("is_active", true)
@@ -71,6 +72,7 @@ export async function loginWithEmployeeId(_previousState: LoginState, formData: 
   // cross-organization match instead of signing into the wrong business.
   if (employeeError || employees.length !== 1) return { message: INVALID_LOGIN_MESSAGE };
   const employee = employees[0];
+  if (employee.role === null) return { message: "This employee does not have sign-in access. Ask an administrator if access is needed." };
   if (!employee.profile_id) return { message: "This employee login has not been set up yet. Ask an administrator." };
 
   const [{ data: authUserData, error: authUserError }, { data: profileData, error: profileError }] = await Promise.all([

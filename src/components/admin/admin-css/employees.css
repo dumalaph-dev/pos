@@ -600,6 +600,7 @@
 .employee-role--amber { color: #b15d17; background: #fff1dd; }
 .employee-role--green { color: #34783d; background: #eaf7e8; }
 .employee-role--blue { color: #2359a6; background: #eaf1ff; }
+.employee-role--muted { color: #6e6964; background: #f0f0ef; }
 .employee-status--green { color: #34783d; background: #eaf7e8; }
 .employee-status--amber { color: #ac5b17; background: #fff1dc; }
 .employee-status--red { color: #ba412c; background: #ffebe6; }

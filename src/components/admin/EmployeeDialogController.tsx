@@ -22,7 +22,7 @@ export type AdminEmployeeRecord = {
   full_name: string;
   email: string | null;
   phone: string | null;
-  role: AccessRole;
+  role: AccessRole | null;
   job_title: string | null;
   hired_on: string;
   schedule_days: string[];
@@ -120,7 +120,7 @@ function EmployeeEditorDialog({ employee, branches, roles, today, canWrite, onCl
           <label className="employee-dialog__field"><span>Phone</span><input name="phone" defaultValue={employee.phone ?? ""} placeholder="0917 123 4567" disabled={!canWrite} /></label>
           <label className="employee-dialog__field"><span>Job title</span><input name="job_title" defaultValue={employee.job_title ?? ""} placeholder="Cashier" disabled={!canWrite} /></label>
           <label className="employee-dialog__field"><span>Permission preset</span><select name="role_id" defaultValue={defaultRoleId} disabled={!canWrite}><option value="">No preset selected</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select><small className="employee-dialog__help">Managed in Roles &amp; Permissions.</small></label>
-          <label className="employee-dialog__field"><span>System access</span><select name="access_role" defaultValue={employee.role} disabled={!canWrite}><option value="admin">Admin</option><option value="manager">Manager</option><option value="cashier">Cashier</option></select><small className="employee-dialog__help">Controls sign-in routing and authorization.</small></label>
+          <label className="employee-dialog__field"><span>System access</span><select name="access_role" defaultValue={employee.role ?? "none"} disabled={!canWrite}><option value="admin">Admin</option><option value="manager">Manager</option><option value="cashier">Cashier</option><option value="none">None</option></select><small className="employee-dialog__help">Controls sign-in routing and authorization. Choose None for attendance and payroll only.</small></label>
           <label className="employee-dialog__field"><span>Home branch</span><select name="store_id" defaultValue={employee.store_id ?? ""} disabled={!canWrite}><option value="">All branches / unassigned</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.is_active ? "" : " (inactive)"}</option>)}</select></label>
           <label className="employee-dialog__field"><span>Date hired</span><input name="hired_on" type="date" defaultValue={employee.hired_on || today} required disabled={!canWrite} /></label>
         </div>
@@ -140,7 +140,7 @@ function EmployeeEditorDialog({ employee, branches, roles, today, canWrite, onCl
         </fieldset>
 
         <div className="employee-dialog__form-footer">
-          <label className="employee-dialog__active-toggle"><input type="checkbox" name="is_active" defaultChecked={employee.is_active} disabled={!canWrite} /><span><strong>Employee is active</strong><small>Allow sign-in and POS access</small></span></label>
+          <label className="employee-dialog__active-toggle"><input type="checkbox" name="is_active" defaultChecked={employee.is_active} disabled={!canWrite} /><span><strong>Employee is active</strong><small>Keep the employee in attendance and payroll</small></span></label>
           <div className="employee-dialog__form-actions"><button type="button" onClick={onClose} className="employee-tool-button">Cancel</button><EmployeeSubmitButton canWrite={canWrite}>Save changes</EmployeeSubmitButton></div>
         </div>
       </form>

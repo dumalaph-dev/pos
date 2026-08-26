@@ -254,7 +254,7 @@ $$;
 
 ### Employee workspace role presets
 
-The Employees workspace seeds four organization-scoped permission presets: **Admin**, **Manager**, **Cashier**, and **Staff**. These are stored in `employee_roles` and can be adjusted by an organization admin. They are separate from `profiles.role`, which remains the server-enforced system access tier (`admin`, `manager`, or `cashier`) used by route guards and RLS. A Staff preset therefore does not grant admin or POS access by itself; choose the appropriate system access tier when creating the employee account.
+The Employees workspace seeds four organization-scoped permission presets: **Admin**, **Manager**, **Cashier**, and **Staff**. These are stored in `employee_roles` and can be adjusted by an organization admin. They are separate from `employee_records.role`, which stores the employee's system access choice (`admin`, `manager`, `cashier`, or `NULL` for no sign-in/dashboard/POS access), and `profiles.role`, which remains the server-enforced system access tier (`admin`, `manager`, or `cashier`) used by route guards and RLS. A Staff preset therefore does not grant admin or POS access by itself; choose **None** for attendance/payroll-only employees and only create a login for employees with a system access tier.
 
 ### Policy pattern (applied per table)
 ```sql

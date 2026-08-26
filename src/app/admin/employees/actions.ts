@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getBillingAccessReason, isSubscriptionAccessCurrent } from "@/lib/trial";
 
 type AccessRole = "admin" | "manager" | "cashier";
+type EmployeeAccessRole = AccessRole | null;
 type AttendanceStatus = "present" | "absent" | "late" | "on_leave";
 type PayrollStatus = "draft" | "processed" | "paid";
 type LeaveStatus = "pending" | "approved" | "rejected";
@@ -23,7 +24,7 @@ type ProvisionableEmployee = {
   store_id: string | null;
   employee_code: string;
   full_name: string;
-  role: AccessRole;
+  role: EmployeeAccessRole;
   is_active: boolean;
 };
 type AdminClient = NonNullable<ReturnType<typeof createAdminClient>>;
@@ -59,6 +60,11 @@ function readText(formData: FormData, name: string) {
 
 function readRole(value: string): AccessRole | null {
   return value === "admin" || value === "manager" || value === "cashier" ? value : null;
+}
+
+function readEmployeeAccessRole(value: string): EmployeeAccessRole | undefined {
+  if (value === "none") return null;
+  return readRole(value) ?? undefined;
 }
 
 function readAttendanceStatus(value: string): AttendanceStatus | null {
@@ -210,6 +216,7 @@ export async function provisionEmployeeLogin(formData: FormData) {
   const employee = employeeData as ProvisionableEmployee | null;
   if (employeeError || !employee) employeesRedirect("That employee record is not available.");
   if (!employee.is_active) employeesRedirect("Activate the employee before setting up login access.");
+  if (employee.role === null) employeesRedirect("Choose a system access level before setting up login access.");
 
   await provisionEmployeeLoginForRecord({ admin, actor, userId, employee, initialPassword });
 
@@ -230,6 +237,8 @@ async function provisionEmployeeLoginForRecord({
   employee: ProvisionableEmployee;
   initialPassword: string;
 }) {
+  if (employee.role === null) employeesRedirect("Choose a system access level before setting up employee access.");
+
   let profileId = employee.profile_id;
   let createdAuthUserId: string | null = null;
   if (!profileId) {
@@ -337,6 +346,7 @@ export async function provisionEmployeeAccess(formData: FormData) {
   const employee = employeeData as ProvisionableEmployee | null;
   if (employeeError || !employee) employeesRedirect("That employee record is not available.");
   if (!employee.is_active) employeesRedirect("Activate the employee before setting up access.");
+  if (employee.role === null) employeesRedirect("Choose a system access level before setting up employee access.");
   if (employee.role === "manager" && !employee.store_id) employeesRedirect("Assign the manager to a branch before setting an approval PIN.");
 
   const needsApprovalPin = employee.role === "admin" || employee.role === "manager";
@@ -393,7 +403,7 @@ export async function createEmployee(formData: FormData) {
   const email = readText(formData, "email");
   const phone = readText(formData, "phone");
   const jobTitle = readText(formData, "job_title");
-  const accessRole = readRole(readText(formData, "access_role"));
+  const accessRole = readEmployeeAccessRole(readText(formData, "access_role"));
   const storeInput = readText(formData, "store_id");
   const roleInput = readText(formData, "role_id");
   const storeId = await requireBranch(supabase, actor.org_id, storeInput);
@@ -403,7 +413,7 @@ export async function createEmployee(formData: FormData) {
   const scheduleEnd = readTime(formData, "schedule_end", "17:00");
 
   if (!fullName || fullName.length > 120) employeesRedirect("Enter an employee name up to 120 characters.");
-  if (!accessRole) employeesRedirect("Choose a valid sign-in access role.");
+  if (accessRole === undefined) employeesRedirect("Choose a valid system access option.");
   if (!isValidEmail(email)) employeesRedirect("Enter a valid employee email address.");
   if (storeInput && !storeId) employeesRedirect("Choose a valid branch from your organization.");
   if (roleInput && !roleId) employeesRedirect("Choose a valid workspace role.");
@@ -442,7 +452,7 @@ export async function updateEmployee(formData: FormData) {
   const email = readText(formData, "email");
   const phone = readText(formData, "phone");
   const jobTitle = readText(formData, "job_title");
-  const accessRole = readRole(readText(formData, "access_role"));
+  const accessRole = readEmployeeAccessRole(readText(formData, "access_role"));
   const storeInput = readText(formData, "store_id");
   const roleInput = readText(formData, "role_id");
   const storeId = await requireBranch(supabase, actor.org_id, storeInput);
@@ -453,7 +463,7 @@ export async function updateEmployee(formData: FormData) {
   const isActive = readBoolean(formData, "is_active");
 
   if (!employeeId || !fullName || fullName.length > 120) employeesRedirect("Enter an employee name up to 120 characters.");
-  if (!accessRole) employeesRedirect("Choose a valid sign-in access role.");
+  if (accessRole === undefined) employeesRedirect("Choose a valid system access option.");
   if (!isValidEmail(email)) employeesRedirect("Enter a valid employee email address.");
   if (storeInput && !storeId) employeesRedirect("Choose a valid branch from your organization.");
   if (roleInput && !roleId) employeesRedirect("Choose a valid workspace role.");
@@ -498,7 +508,7 @@ export async function updateEmployee(formData: FormData) {
   if (employee.profile_id) {
     const { error: profileError } = await supabase
       .from("profiles")
-      .update({ full_name: fullName, role: accessRole, store_id: storeId, is_active: isActive })
+      .update({ full_name: fullName, role: accessRole ?? "cashier", store_id: storeId, is_active: isActive && accessRole !== null })
       .eq("id", employee.profile_id)
       .eq("org_id", actor.org_id);
     if (profileError) employeesRedirect(profileError.message || "The linked sign-in profile could not be synchronized.");

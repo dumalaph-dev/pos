@@ -32,7 +32,7 @@ type EmployeeRecord = {
   full_name: string;
   email: string | null;
   phone: string | null;
-  role: AccessRole;
+  role: AccessRole | null;
   job_title: string | null;
   hired_on: string;
   schedule_days: string[];
@@ -192,12 +192,13 @@ function formatCentsInput(value: number | null | undefined) {
   return (Number(value ?? 0) / 100).toFixed(2);
 }
 
-function roleLabel(role: AccessRole) {
-  return role.charAt(0).toUpperCase() + role.slice(1);
+function roleLabel(role: AccessRole | null) {
+  return role ? role.charAt(0).toUpperCase() + role.slice(1) : "None";
 }
 
-function roleTone(value: string) {
-  const normalized = value.toLowerCase();
+function roleTone(value: string | null | undefined) {
+  const normalized = (value ?? "none").toLowerCase();
+  if (normalized === "none") return "employee-role--muted";
   if (normalized === "green" || normalized === "cashier") return "employee-role--green";
   if (normalized === "amber" || normalized === "manager") return "employee-role--amber";
   if (normalized === "blue" || normalized === "staff") return "employee-role--blue";
@@ -575,7 +576,7 @@ function EmployeeEditor({ employee, branches, roles, today, canWrite, returnStat
       <div>
         <p className="employee-section-kicker">{employee ? "Edit record" : "Directory action"}</p>
         <h2>{employee ? `Edit ${employee.full_name}` : "Add employee"}</h2>
-        <p>{employee ? "Update the employee directory, account, and POS approval access." : "Create a staff record, then set up its account and approval access from the same screen."}</p>
+        <p>{employee ? "Update the employee directory, account, and POS approval access." : "Create a staff record, then set up account access only when they need to sign in."}</p>
       </div>
       <Link href={returnHref} className="employee-icon-button" aria-label="Close employee form">×</Link>
     </div>
@@ -588,7 +589,7 @@ function EmployeeEditor({ employee, branches, roles, today, canWrite, returnStat
         <label><span>Phone</span><input name="phone" defaultValue={employee?.phone ?? ""} placeholder="0917 123 4567" disabled={!canWrite} /></label>
         <label><span>Job title</span><input name="job_title" defaultValue={employee?.job_title ?? ""} placeholder="Cashier" disabled={!canWrite} /></label>
         <label><span>Permission preset</span><select name="role_id" defaultValue={defaultRoleId} disabled={!canWrite}><option value="">No preset selected</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select><small className="employee-field-help">Choose one of the default permission presets: Admin, Manager, Cashier, or Staff.</small></label>
-        <label><span>System access</span><select name="access_role" defaultValue={employee?.role ?? "cashier"} disabled={!canWrite}><option value="admin">Admin</option><option value="manager">Manager</option><option value="cashier">Cashier</option></select><small className="employee-field-help">This controls sign-in routing and server authorization. Staff uses the basic system access tier.</small></label>
+        <label><span>System access</span><select name="access_role" defaultValue={employee?.role ?? "cashier"} disabled={!canWrite}><option value="admin">Admin</option><option value="manager">Manager</option><option value="cashier">Cashier</option><option value="none">None</option></select><small className="employee-field-help">Controls sign-in routing and authorization. Choose None for staff who only need attendance and payroll.</small></label>
         <label><span>Home branch</span><select name="store_id" defaultValue={employee?.store_id ?? ""} disabled={!canWrite}><option value="">All branches / unassigned</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.is_active ? "" : " (inactive)"}</option>)}</select></label>
         <label><span>Date hired</span><input name="hired_on" type="date" defaultValue={employee?.hired_on ?? today} required disabled={!canWrite} /></label>
         <label><span>Schedule start</span><input name="schedule_start" type="time" defaultValue={employee?.schedule_start?.slice(0, 5) ?? "09:00"} required disabled={!canWrite} /></label>
