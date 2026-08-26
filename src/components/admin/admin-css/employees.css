@@ -605,7 +605,7 @@
 .employee-status--red { color: #ba412c; background: #ffebe6; }
 .employee-status--muted { color: #6e6964; background: #f0f0ef; }
 .employee-schedule { display: block; max-width: 148px; color: #4e4640; font-size: 9px; line-height: 1.45; }
-.employee-row-actions { display: flex; align-items: center; gap: 6px; }
+.employee-row-actions { display: flex; align-items: center; justify-content: center; gap: 6px; }
 .employee-icon-button { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid var(--employee-line); border-radius: 7px; color: #4d3627; background: #fffefb; text-decoration: none; }
 .employee-icon-button:hover { border-color: #c9a98f; color: var(--employee-brown); background: #fff5ea; }
 .employee-table-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 2px 0; color: #6f655e; font-size: 10px; font-weight: 650; }
@@ -804,7 +804,7 @@
 }
 
 .employee-login-action { display: flex; }
-.employee-login-button { min-height: 34px; padding: 0 8px; border: 1px solid #c98b58; border-radius: 7px; color: #7a3c0c; background: #fff5ea; font-size: 9px; font-weight: 850; white-space: nowrap; }
+.employee-login-button { display: inline-flex; min-height: 34px; align-items: center; justify-content: center; padding: 0 8px; border: 1px solid #c98b58; border-radius: 7px; color: #7a3c0c; background: #fff5ea; font-size: 9px; font-weight: 850; line-height: 1; white-space: nowrap; }
 .employee-login-button:hover { border-color: #7a3c0c; background: #fbe6d0; }
 .employee-login-button--ready { border-color: #e8c6a9; color: #94613f; background: #fffaf4; }
 }
