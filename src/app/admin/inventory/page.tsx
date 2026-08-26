@@ -207,7 +207,18 @@ function readPageSize(value: string) {
 }
 
 type SupabaseQueryError = { code?: string; message?: string; details?: string } | null | undefined;
-const OPTIONAL_INVENTORY_FIELDS = ["sku", "barcode", "cost_price", "min_stock", "supplier_id", "inventory_items", "product_recipes", "inventory_mode"];
+const OPTIONAL_INVENTORY_FIELDS = [
+  "sku",
+  "barcode",
+  "cost_price",
+  "min_stock",
+  "supplier_id",
+  "inventory_items",
+  "product_recipes",
+  "product_recipe_items",
+  "current_inventory_stock",
+  "inventory_mode",
+];
 
 function isInventorySchemaError(error: SupabaseQueryError) {
   if (!error) return false;
@@ -479,18 +490,19 @@ export default async function InventoryPage({
     products = products.filter((product) => product.store_id === selectedBranchId);
   }
 
+  const inventoryItemsQueryFailed = Boolean(inventoryItemsResult.error);
   let movements = (recentMovementsResult.data ?? []) as MovementRecord[];
   let movementQueryError = Boolean(recentMovementsResult.error);
-  if (stockResult.error) {
+  if (recentMovementsResult.error || stockResult.error) {
     let fallbackMovementsQuery = supabase
       .from("stock_movements")
-      .select("id, store_id, product_id, inventory_item_id, type, qty, unit, unit_cost, reason, ref_order_id, created_at")
+      .select("id, store_id, product_id, type, qty, unit, unit_cost, reason, ref_order_id, created_at")
       .eq("org_id", profile.org_id)
       .order("created_at", { ascending: false })
       .limit(5000);
     if (selectedBranchId) fallbackMovementsQuery = fallbackMovementsQuery.eq("store_id", selectedBranchId);
     const fallbackMovementsResult = await fallbackMovementsQuery;
-    movements = (fallbackMovementsResult.data ?? []) as MovementRecord[];
+    movements = (fallbackMovementsResult.data ?? []) as unknown as MovementRecord[];
     movementQueryError = Boolean(fallbackMovementsResult.error);
   }
   if (selectedBranchId) {
@@ -582,6 +594,23 @@ export default async function InventoryPage({
     }];
   });
 
+  // The recipe inventory migration is optional during rollout. When the new
+  // item query cannot run, keep the existing product directory as the single
+  // inventory surface instead of showing an empty recipe directory above it.
+  const displayTotalItems = inventoryItemsQueryFailed ? allRows.length : inventoryItems.length;
+  const displayLowStockCount = inventoryItemsQueryFailed
+    ? allRows.filter((row) => row.status === "low").length
+    : inventoryLowStockCount;
+  const displayOutOfStockCount = inventoryItemsQueryFailed
+    ? allRows.filter((row) => row.status === "out").length
+    : inventoryOutOfStockCount;
+  const displayInventoryValue = inventoryItemsQueryFailed
+    ? allRows.reduce((sum, row) => sum + row.inventoryValue, 0)
+    : inventoryEstimatedValue;
+  const displayEstimatedValueItems = inventoryItemsQueryFailed
+    ? allRows.filter((row) => row.product.cost_price == null).length
+    : inventoryEstimatedValueItems;
+
   const requestedStatus = readParam(params.status);
   const status: InventoryStatus = isInventoryStatus(requestedStatus) ? requestedStatus : "all";
   const searchQuery = readParam(params.q).trim();
@@ -617,13 +646,16 @@ export default async function InventoryPage({
       }).length
     : movedTodayResult.count ?? 0;
   const catalogFieldsWarning = productsSchemaWarning || isInventorySchemaError(suppliersResult.error);
+  const inventoryItemsSchemaWarning = isInventorySchemaError(inventoryItemsResult.error);
+  const inventoryUsageSchemaWarning = isInventorySchemaError(inventoryUsageResult.error);
+  const inventoryStockSchemaWarning = isInventorySchemaError(inventoryStockResult.error);
   const queryWarning = Boolean(
     branchesResult.error
       || categoriesResult.error
       || movementQueryError
-      || inventoryItemsResult.error
-      || inventoryUsageResult.error
-      || inventoryStockResult.error
+      || (inventoryItemsResult.error && !inventoryItemsSchemaWarning)
+      || (inventoryUsageResult.error && !inventoryUsageSchemaWarning)
+      || (inventoryStockResult.error && !inventoryStockSchemaWarning)
       || movedTodayResult.error
       || posSaleCountResult.error
       || (productsQueryWarning && !productsSchemaWarning)
@@ -677,7 +709,7 @@ export default async function InventoryPage({
   const baseHref = { q: searchQuery, category, status, supplier, page, pageSize, columns: visibleColumns };
   const posSaleCount = stockResult.error ? movements.filter((movement) => movement.type === "sale").length : posSaleCountResult.count ?? 0;
   const userInitial = firstName.slice(0, 1).toUpperCase();
-  const inventoryAlertCount = inventoryLowStockCount + inventoryOutOfStockCount;
+  const inventoryAlertCount = displayLowStockCount + displayOutOfStockCount;
   const activeFilterCount = [category !== "all", status !== "all", Boolean(supplier)].filter(Boolean).length;
   const hiddenColumnCount = columnOptions.length - visibleColumns.size;
   const branding = readAdminBranding(profile.organizations?.settings);
@@ -758,7 +790,7 @@ export default async function InventoryPage({
         <AdminReadModelHydrator scope={cacheScope} batches={inventoryCacheBatches}>
           <header className="admin-topbar">
             <Link href="/admin" className="admin-mobile-brand" aria-label={`${branding.brandName} ${branding.brandTagline} dashboard`}><AdminBrandLogo logoUrl={branding.logoUrl} className="admin-brand__mark" iconSize={20} label="Brand logo" /><span className="admin-brand__copy"><strong>{branding.brandName}</strong><small>{branding.brandTagline}</small></span></Link>
-            <Link href="#inventory-filters-heading" className="admin-icon-button" aria-label="Search inventory"><AdminIcon name="search" size={19} /></Link>
+            <Link href={inventoryItemsQueryFailed ? "#inventory-filters-heading" : "#inventory-item-search"} className="admin-icon-button" aria-label="Search inventory"><AdminIcon name="search" size={19} /></Link>
             <Link href="#inventory-table" className="admin-icon-button admin-icon-button--alert" aria-label={inventoryAlertCount ? `View ${inventoryAlertCount} inventory alerts` : "View inventory status"}><AdminIcon name="bell" size={19} />{inventoryAlertCount > 0 && <span className="admin-icon-button__badge" aria-hidden="true">{inventoryAlertCount > 9 ? "9+" : inventoryAlertCount}</span>}</Link>
             <Link href="#inventory-help" className="admin-icon-button admin-icon-button--help" aria-label="View inventory help"><AdminIcon name="help" size={19} /></Link>
             <div className="admin-user-chip"><span className="admin-user-chip__avatar" aria-hidden="true">{userInitial}</span><span className="admin-user-chip__copy"><strong>{firstName}</strong><small>{profile.role === "manager" ? "Manager" : "Admin"}⌄</small></span></div>
@@ -794,24 +826,24 @@ export default async function InventoryPage({
           {canWrite && isLechonHouseBusinessSelected && <div className="mt-5"><OwnerGuidance topic="yield" /></div>}
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <InventoryMetric label="Total items" value={String(inventoryItems.length)} detail={`Tracked for ${currentBranchName}`} tone="bg-primary text-primary-fg" icon="box" />
-            <InventoryMetric label="Low stock items" value={String(inventoryLowStockCount)} detail="Need to reorder soon" tone="bg-accent text-accent-fg" icon="inventory" />
-            <InventoryMetric label="Out of stock" value={String(inventoryOutOfStockCount)} detail="Require immediate attention" tone="bg-warning text-primary-fg" icon="alert" />
-            <InventoryMetric label="Total inventory value" value={inventoryEstimatedValue ? formatPeso(Math.round(inventoryEstimatedValue)) : "₱0.00"} detail={inventoryEstimatedValueItems ? `Estimated for ${inventoryEstimatedValueItems} item${inventoryEstimatedValueItems === 1 ? "" : "s"}` : "Based on cost price"} tone="bg-success text-primary-fg" icon="wallet" />
+            <InventoryMetric label="Total items" value={String(displayTotalItems)} detail={`Tracked for ${currentBranchName}`} tone="bg-primary text-primary-fg" icon="box" />
+            <InventoryMetric label="Low stock items" value={String(displayLowStockCount)} detail="Need to reorder soon" tone="bg-accent text-accent-fg" icon="inventory" />
+            <InventoryMetric label="Out of stock" value={String(displayOutOfStockCount)} detail="Require immediate attention" tone="bg-warning text-primary-fg" icon="alert" />
+            <InventoryMetric label="Total inventory value" value={displayInventoryValue ? formatPeso(Math.round(displayInventoryValue)) : "₱0.00"} detail={displayEstimatedValueItems ? `Estimated for ${displayEstimatedValueItems} item${displayEstimatedValueItems === 1 ? "" : "s"}` : "Based on cost price"} tone="bg-success text-primary-fg" icon="wallet" />
             <InventoryMetric label="Items moved today" value={String(movedToday)} detail={`Since ${formatToday(todayStart)}`} tone="bg-primary text-primary-fg" icon="chart" />
           </div>
 
-          <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_252px]">
+          {!inventoryItemsQueryFailed && <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_252px]">
             <div className="min-w-0">
               <InventoryItemCreateForm branches={activeBranches} suppliers={suppliers} defaultBranch={defaultBranch} canWrite={canWrite} />
               <InventoryItemDirectory items={inventoryItems} branches={activeBranches} stockByKey={inventoryStockRecord} usageByItem={inventoryUsageRecord} canWrite={canWrite} selectedBranchId={selectedBranchId} />
               <InventoryItemMovementForm items={inventoryItems} branches={activeBranches} defaultBranch={defaultBranch} defaultItemId={defaultInventoryItem?.id ?? ""} defaultMovement={defaultMovement} canWrite={canWrite} open={Boolean(readParam(params.item) || readParam(params.movement) || (readParam(params.error) && !readParam(params.yield)))} />
             </div>
-          </div>
+          </div>}
 
-          {inventoryItems.length === 0 && <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_252px]">
+          {inventoryItemsQueryFailed && <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_252px]">
             <div className="min-w-0">
-              <div className="mb-3 rounded-card border border-warning/25 bg-warning/10 px-4 py-3 text-xs text-ink"><strong className="font-extrabold">Legacy product-stock view</strong><p className="mt-1 text-ink-muted">Apply the recipe inventory migration to manage ingredients and shared stock items here.</p></div>
+              <p className="mb-3 px-1 text-[10px] text-ink-muted">Showing tracked products. Shared ingredient tracking becomes available after the recipe inventory migration is applied.</p>
               <section aria-label="Inventory browsing controls" className="admin-panel inventory-directory-controls overflow-visible p-0">
                 <nav aria-label="Inventory categories" className="products-category-tabs inventory-category-tabs">
                   {categoryTabs.map((tab) => (
