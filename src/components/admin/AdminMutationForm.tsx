@@ -2,10 +2,14 @@
 
 import type { FormEvent, ReactNode } from "react";
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { refreshAdminInventoryViews } from "@/app/admin/inventory/actions";
 import { toCentavos } from "@/lib/money";
 import {
   createAdminCacheScopeKey,
   enqueueAdminMutation,
+  flushAdminMutationOutbox,
   type AdminCacheScope,
   type AdminInventoryCountPayload,
   type AdminInventoryMovementPayload,
@@ -77,7 +81,9 @@ export function AdminMutationForm({
   kind: AdminMutationKind;
   className?: string;
 }) {
+  const router = useRouter();
   const [state, setState] = useState<MutationFormState>({ phase: "idle" });
+  const syncClientRef = useRef<ReturnType<typeof createClient> | null>(null);
   const submitLockRef = useRef(false);
   const queuedSignatureRef = useRef<string | null>(null);
 
@@ -101,17 +107,37 @@ export function AdminMutationForm({
         return;
       }
       await enqueueAdminMutation(scope, kind, payload);
+      const online = navigator.onLine;
+      let pending = 1;
+      if (online) {
+        syncClientRef.current ??= createClient();
+        const result = await flushAdminMutationOutbox(syncClientRef.current, scope);
+        pending = result.pending;
+        if (result.synced > 0) {
+          try {
+            await refreshAdminInventoryViews();
+          } catch {
+            // The mutation is already committed; the next report visit still
+            // reads the ledger directly if route invalidation is unavailable.
+          }
+          router.refresh();
+        }
+        if (result.failed > 0 || result.conflicts > 0) {
+          throw new Error(result.lastError ?? "The stock movement is waiting to sync.");
+        }
+      }
       queuedSignatureRef.current = payloadSignature;
-      const online = typeof navigator === "undefined" || navigator.onLine;
-      setState({
-        phase: "queued",
-        message: online
-          ? "Saved on this device. Syncing securely in the background."
-          : "Saved on this device. It will sync automatically when the connection returns.",
-      });
       window.dispatchEvent(new CustomEvent("dumala:admin-mutation-queued", {
         detail: { scopeKey: createAdminCacheScopeKey(scope) },
       }));
+      setState({
+        phase: "queued",
+        message: online
+          ? pending === 0
+            ? "Saved and synced. Inventory reports are up to date."
+            : "Saved on this device. Syncing securely in the background."
+          : "Saved on this device. It will sync automatically when the connection returns.",
+      });
     } catch (error) {
       setState({
         phase: "error",

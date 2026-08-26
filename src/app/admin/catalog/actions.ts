@@ -257,6 +257,7 @@ function refreshCatalog() {
   revalidatePath("/admin/products");
   revalidatePath("/admin/catalog");
   revalidatePath("/admin/inventory");
+  revalidatePath("/admin/reports/inventory");
   revalidatePath("/admin");
   revalidatePath("/admin/pos");
   revalidatePath("/pos");

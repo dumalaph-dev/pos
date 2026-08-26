@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ADMIN_ALL_BRANCHES, ADMIN_BRANCH_COOKIE } from "@/lib/admin/branch-context";
+import { ADMIN_BRANCH_COOKIE } from "@/lib/admin/branch-context";
 
 function readText(formData: FormData, name: string) {
   const value = formData.get(name);
@@ -32,16 +32,7 @@ export async function selectAdminBranch(formData: FormData) {
   const returnPath = safeReturnPath(readText(formData, "return_to"));
   const cookieStore = await cookies();
 
-  if (!storeId) {
-    cookieStore.set(ADMIN_BRANCH_COOKIE, ADMIN_ALL_BRANCHES, {
-      httpOnly: true,
-      maxAge: 60 * 60 * 24 * 90,
-      path: "/",
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    });
-    redirect(returnPath);
-  }
+  if (!storeId) redirect(returnPath);
 
   const { data: branch } = await supabase
     .from("stores")
@@ -52,13 +43,6 @@ export async function selectAdminBranch(formData: FormData) {
     .maybeSingle();
 
   if (!branch) {
-    cookieStore.set(ADMIN_BRANCH_COOKIE, ADMIN_ALL_BRANCHES, {
-      httpOnly: true,
-      maxAge: 60 * 60 * 24 * 90,
-      path: "/",
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    });
     redirect(returnPath);
   }
 

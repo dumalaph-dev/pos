@@ -1,5 +1,6 @@
 "use client";
 
+import "@/components/admin/PosSettingsScreen.css";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { PosThemePicker } from "@/components/admin/PosThemePicker";
@@ -100,7 +101,7 @@ export function OnlineMenuEditor({
 
       <div className="grid min-w-0 gap-5 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_minmax(300px,360px)]">
         <div className="order-2 min-w-0 xl:order-1">
-          <form action={updateOnlineOrderingPresentation} encType="multipart/form-data" className="space-y-5">
+          <form action={updateOnlineOrderingPresentation} className="space-y-5">
             <input type="hidden" name="store_id" value={store.id} />
             <input type="hidden" name="theme" value={theme} />
             <input type="hidden" name="brand_logo_url" value={branding.logoUrl ?? ""} />

@@ -223,7 +223,7 @@ export default async function ReportsPage({
         </section>
 
         <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.7fr)]">
-          <section aria-labelledby="trend-heading" className="admin-panel p-5">
+          <section aria-labelledby="trend-heading" className="admin-panel flex min-h-0 flex-col p-5">
             <div className="admin-panel__header">
               <div>
                 <p className="admin-panel__eyebrow">Sales trend</p>
@@ -265,7 +265,7 @@ export default async function ReportsPage({
           </section>
         </div>
 
-        <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        <div className="mt-4 grid items-start gap-4 xl:grid-cols-2">
           <ReportListPanel
             title="Best sellers"
             subtitle="Top items by revenue"
@@ -442,8 +442,8 @@ function ReportTrend({ series }: { series: Array<{ label: string; value: number 
   const max = Math.max(...series.map((point) => point.value), 1);
   const labelEvery = series.length > 14 ? Math.ceil(series.length / 8) : 1;
   return (
-    <div className="mt-5">
-      <div className="flex h-[220px] items-end gap-1 border-b border-line px-1">
+    <div className="mt-4 flex min-h-0 flex-1 flex-col justify-end">
+      <div className="flex h-[180px] items-end gap-1 border-b border-line px-1 sm:h-[200px]">
         {series.map((point, index) => (
           <div key={`${point.label}-${index}`} className="group flex h-full min-w-0 flex-1 items-end justify-center" title={`${point.label}: ${displayPeso(point.value)}`}>
             <span className="w-full max-w-7 rounded-t-sm bg-primary transition-all duration-200 group-hover:bg-accent" style={{ height: `${Math.max(point.value ? 5 : 1, Math.round((point.value / max) * 100))}%` }} />
@@ -458,7 +458,28 @@ function ReportTrend({ series }: { series: Array<{ label: string; value: number 
 }
 
 function ReportListPanel({ title, subtitle, items, emptyTitle, emptyDetail }: { title: string; subtitle: string; items: Array<{ label: string; detail: string; value: string }>; emptyTitle: string; emptyDetail: string }) {
-  return <section className="admin-panel p-5"><div className="admin-panel__header"><div><p className="admin-panel__eyebrow">Performance list</p><h2 className="admin-panel__title">{title}</h2><p className="admin-panel__subtitle">{subtitle}</p></div></div>{items.length === 0 ? <ReportEmpty title={emptyTitle} detail={emptyDetail} /> : <div className="admin-ranking">{items.map((item, index) => <div key={item.label} className="admin-ranking__item"><span className="admin-ranking__rank">{index + 1}</span><span className="admin-ranking__copy"><strong>{item.label}</strong><small>{item.detail}</small></span><strong className="admin-ranking__total tnums">{item.value}</strong></div>)}</div>}</section>;
+  return (
+    <section className="admin-panel min-w-0 p-5">
+      <div className="admin-panel__header">
+        <div>
+          <p className="admin-panel__eyebrow">Performance list</p>
+          <h2 className="admin-panel__title">{title}</h2>
+          <p className="admin-panel__subtitle">{subtitle}</p>
+        </div>
+      </div>
+      {items.length === 0 ? <ReportEmpty title={emptyTitle} detail={emptyDetail} /> : (
+        <div className="admin-ranking admin-ranking--report">
+          {items.map((item, index) => (
+            <div key={item.label} className="admin-ranking__item">
+              <span className="admin-ranking__rank">{index + 1}</span>
+              <span className="admin-ranking__copy"><strong>{item.label}</strong><small>{item.detail}</small></span>
+              <strong className="admin-ranking__total tnums">{item.value}</strong>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
 }
 
 function FilterField({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {

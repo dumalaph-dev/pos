@@ -105,7 +105,7 @@ export default async function AdminRouteLayout({ children }: { children: ReactNo
   const receiptRoute = !requestPath || requestPath === "/admin" || requestPath === "/admin/" || requestPath === "/admin/orders" || requestPath === "/admin/sales" || requestPath === "/admin/promotions";
   const branches = await readBranchOptions(profile.org_id, profile.store_id, canSwitchBranches, receiptRoute);
   const selectedBranchId = canSwitchBranches ? await getSelectedAdminBranchId(branches, profile.store_id) : profile.store_id;
-  const branchName = selectedBranchId ? branches.find((branch) => branch.id === selectedBranchId)?.name ?? profile.stores?.name ?? DEFAULT_STORE_NAME : "All branches";
+  const branchName = selectedBranchId ? branches.find((branch) => branch.id === selectedBranchId)?.name ?? profile.stores?.name ?? DEFAULT_STORE_NAME : "No active branch";
   const connection = await getAdminConnection(user.id, profile.org_id, selectedBranchId);
   const branding = readAdminBranding(profile.organizations?.settings);
   const offlineProfile: OfflineProfileSnapshot = {
