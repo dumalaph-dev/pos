@@ -8,7 +8,7 @@ import { AdminBranchSwitcher } from "./AdminBranchSwitcher";
 import type { AdminBranchOption } from "@/lib/admin/branch-context";
 import type { AdminBranding } from "@/lib/admin/branding";
 
-export type AdminSection = "overview" | "online-ordering" | "calendar" | "sales" | "pos" | "orders" | "shifts" | "inventory" | "products" | "catalog" | "customers" | "suppliers" | "expenses" | "employees" | "billing" | "reports" | "audit" | "settings" | "promotions" | "referrals" | "branches" | "guide";
+export type AdminSection = "overview" | "online-ordering" | "calendar" | "sales" | "pos" | "orders" | "shifts" | "inventory" | "products" | "catalog" | "customers" | "suppliers" | "expenses" | "employees" | "billing" | "reports" | "audit" | "settings" | "promotions" | "referrals" | "branches" | "branch-performance" | "guide";
 
 type NavItem = {
   label: string;
@@ -66,6 +66,7 @@ const adminNavGroups: AdminNavGroup[] = [
     items: [
       { label: "Sales", href: "/admin/sales", icon: "sales", active: "sales" },
       { label: "Reports", href: "/admin/reports", icon: "reports", active: "reports" },
+      { label: "Branch performance", href: "/admin/branches/performance", icon: "chart", active: "branch-performance" },
       { label: "Expenses", href: "/admin/expenses", icon: "expenses", active: "expenses" },
     ],
   },
@@ -118,6 +119,7 @@ function activeSectionForPath(pathname: string | null): AdminSection {
     ["/admin/billing", "billing"],
     ["/admin/reports", "reports"],
     ["/admin/audit", "audit"],
+    ["/admin/branches/performance", "branch-performance"],
     ["/admin/branches", "branches"],
     ["/admin/settings", "settings"],
     ["/admin/promotions", "promotions"],

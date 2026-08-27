@@ -263,7 +263,7 @@ export default async function AdminPage({
     : profile.store_id;
   const visibleBranches = selectedBranchId
     ? branches.filter((branch) => branch.id === selectedBranchId)
-    : branches;
+    : profile.role === "admin" ? branches : [];
 
   let productsQuery = supabase
     .from("products")
@@ -532,7 +532,7 @@ export default async function AdminPage({
   });
   const currentBranchName = selectedBranchId
     ? branches.find((branch) => branch.id === selectedBranchId)?.name ?? "Selected branch"
-    : "No active branch";
+    : profile.role === "admin" ? "All branches" : "No active branch";
   const branchQuery = selectedBranchId ? `&branch=${encodeURIComponent(selectedBranchId)}` : "";
   const reportHref = `/admin/reports?range=7d${branchQuery}`;
   const todayReportHref = `/admin/reports?from=${encodeURIComponent(todayBusinessDate)}&to=${encodeURIComponent(todayBusinessDate)}&grouping=day${branchQuery}`;
@@ -776,7 +776,7 @@ export default async function AdminPage({
 
           <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.8fr)]">
             <section aria-labelledby="branch-performance-heading" className="admin-panel min-w-0 p-5">
-              <div className="admin-panel__header"><div><h2 id="branch-performance-heading" className="admin-panel__title">Branch Performance</h2><p className="admin-panel__subtitle">{selectedBranchId ? `Latest performance for ${currentBranchName}` : "Latest comparison across branches"}</p></div><span className="text-xs font-bold text-ink-muted">{selectedBranchId ? currentBranchName : `${activeBranches} active`}</span></div>
+              <div className="admin-panel__header"><div><h2 id="branch-performance-heading" className="admin-panel__title">Branch Performance</h2><p className="admin-panel__subtitle">{selectedBranchId ? `Latest performance for ${currentBranchName}` : "Latest comparison across branches"}</p></div><div className="flex flex-wrap items-center gap-3"><Link href="/admin/branches/performance" aria-label="Open full branch performance report" className="admin-kpi-card__link mt-0">Full report <AdminIcon name="arrow" size={13} /></Link><span className="text-xs font-bold text-ink-muted">{selectedBranchId ? currentBranchName : `${activeBranches} active`}</span></div></div>
               <div className="mt-3 overflow-x-auto"><table className="admin-list-table min-w-[620px]"><thead><tr><th>Branch</th><th>Total sales</th><th>Orders</th><th>Avg. order value</th><th>Sales share</th></tr></thead><tbody>{branchStats.length === 0 ? <tr><td colSpan={5}><EmptyState title="No branches found" detail="Create a branch to start comparing performance." /></td></tr> : branchStats.map((branch) => <tr key={branch.id}><td><strong>{branch.name}</strong><small className="mt-1 block text-[10px] text-ink-muted">{branch.is_active ? "Active" : "Inactive"}</small></td><td className="tnums font-extrabold">{displayPeso(branch.sales)}</td><td className="tnums">{branch.orderCount}</td><td className="tnums">{displayPeso(branch.average)}</td><td className="tnums font-extrabold text-primary">{totalSales ? `${Math.round((branch.sales / totalSales) * 100)}%` : "—"}</td></tr>)}</tbody></table></div>
             </section>
 

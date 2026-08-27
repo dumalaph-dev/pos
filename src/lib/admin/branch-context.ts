@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
-
-export const ADMIN_BRANCH_COOKIE = "pos_admin_branch";
+export { ADMIN_ALL_BRANCHES, ADMIN_BRANCH_COOKIE } from "@/lib/admin/branch-context-constants";
+import { ADMIN_ALL_BRANCHES, ADMIN_BRANCH_COOKIE } from "@/lib/admin/branch-context-constants";
 
 export type AdminBranchOption = {
   id: string;
@@ -13,9 +13,12 @@ export async function getSelectedAdminBranchId(branches: AdminBranchOption[], fa
   const cookieValue = cookieStore.get(ADMIN_BRANCH_COOKIE)?.value ?? "";
   const activeBranchIds = new Set(branches.filter((branch) => branch.is_active).map((branch) => branch.id));
 
+  if (cookieValue === ADMIN_ALL_BRANCHES) return null;
   if (activeBranchIds.has(cookieValue)) return cookieValue;
-  if (fallbackStoreId && activeBranchIds.has(fallbackStoreId)) return fallbackStoreId;
-  return branches.find((branch) => branch.is_active)?.id ?? null;
+  // Organization admins start in the organization-wide view. A manager's
+  // branch is resolved by its role-specific caller instead of this helper.
+  void fallbackStoreId;
+  return null;
 }
 
 export async function clearSelectedAdminBranch(branchId: string) {

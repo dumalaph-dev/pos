@@ -66,6 +66,7 @@ export default async function BranchesPage({
       <div className="min-w-0 px-4 pb-8 sm:px-6 lg:px-8">
         <AdminPageHeader title="Branches">
           <a href="#branch-editor" className="rounded-btn bg-primary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover"><AdminIcon name="plus" size={14} /> Add branch</a>
+          <Link href="/admin/branches/performance" className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover"><AdminIcon name="chart" size={14} /> View performance</Link>
           <Link href="/admin" className="rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover">Overview</Link>
           <SignOutButton className="px-3 py-2 text-xs" />
         </AdminPageHeader>
