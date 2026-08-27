@@ -671,7 +671,7 @@ export default async function AdminPage({
               </div>
             </AdminMenu>
 
-            <Link href="#system-status" className="admin-icon-button admin-icon-button--help" aria-label="View system status"><AdminIcon name="help" size={19} /></Link>
+            <Link href="/admin/guide?topic=dashboard" className="admin-icon-button admin-icon-button--help" aria-label="Open help and guide"><AdminIcon name="help" size={19} /></Link>
 
             <AdminMenu
               triggerClassName="admin-user-chip"
