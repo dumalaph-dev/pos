@@ -8,6 +8,7 @@ import { ProductCreateDialog } from "@/components/admin/ProductCreateDialog";
 import { ProductEditDialogController } from "@/components/admin/ProductEditDialogController";
 import { ProductsTableClient } from "@/components/admin/ProductsTableClient";
 import { MultiProductModal } from "@/components/admin/MultiProductModal";
+import { ImportProductsPanel } from "@/components/admin/ImportProductsPanel";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatStockQuantity, salesQuantity, stockMovementDelta, stockStatus, type StockMovementType } from "@/lib/inventory";
 import { formatPeso } from "@/lib/money";
@@ -23,7 +24,6 @@ import { isInventoryMode, type InventoryItemOption, type InventoryMode, type Rec
 import {
   bulkUpdateProducts,
   createCategory,
-  importProducts,
   toggleProductVisibility,
   updateCategory,
 } from "@/app/admin/catalog/actions";
@@ -723,7 +723,7 @@ export default async function ProductsPage({
           {dataWarning && <div role="status" className="products-alert products-alert--warning">Some product insights could not refresh. The page is showing the data that was available; product edits remain protected by your admin role.</div>}
 
           {action === "category" && <CategoryActionPanel branches={formBranches} categories={categories} defaultBranch={formDefaultBranch} canWrite={canWrite} branchById={branchById} />}
-          {action === "import" && <ImportPanel branches={formBranches} defaultBranch={formDefaultBranch} canWrite={canWrite} />}
+          {action === "import" && <ImportProductsPanel branches={formBranches} defaultBranch={formDefaultBranch} canWrite={canWrite} />}
           {action === "bulk" && <BulkUpdatePanel canWrite={canWrite} />}
 
           <section aria-label="Product performance" className="products-kpi-grid">
@@ -815,10 +815,6 @@ function CategoryActionPanel({ branches, categories, defaultBranch, canWrite, br
 
 function CategoryEditor({ category, branchName, canWrite }: { category: CategoryRecord; branchName: string; canWrite: boolean }) {
   return <form action={updateCategory} className="products-existing-category"><input type="hidden" name="category_id" value={category.id} /><input type="hidden" name="store_id" value={category.store_id} /><input type="hidden" name="icon" value={category.icon ?? ""} /><span className="products-category-row__icon">{category.icon || "•"}</span><div className="products-existing-category__copy"><strong>{category.name}</strong><small>{branchName}</small></div><input name="name" aria-label={`Name for ${category.name}`} defaultValue={category.name} disabled={!canWrite} className="inventory-input inventory-input--compact" /><input name="sort_order" aria-label={`Sort order for ${category.name}`} type="number" min="0" step="1" defaultValue={category.sort_order} disabled={!canWrite} className="inventory-input inventory-input--compact w-16 text-center tnums" /><label className="products-checkbox-label"><input type="checkbox" name="is_active" defaultChecked={category.is_active} disabled={!canWrite} /> Visible</label><button type="submit" disabled={!canWrite} className="products-small-primary">Save</button></form>;
-}
-
-function ImportPanel({ branches, defaultBranch, canWrite }: { branches: BranchRecord[]; defaultBranch: string; canWrite: boolean }) {
-  return <section id="import-items" className="products-action-panel" aria-labelledby="import-items-heading"><div className="products-action-panel__header"><div><p className="products-action-panel__eyebrow">Bulk catalog action</p><h2 id="import-items-heading">Import products</h2><p>Paste CSV data with name, price, and unit. Optional columns include SKU, barcode, category, supplier, cost price, and minimum stock. Add photos from the product editor after import.</p></div><Link href="/products" className="products-icon-button" aria-label="Close import form">×</Link></div><form action={importProducts} className="products-import-form"><CatalogField label="Default branch" htmlFor="import-store"><select id="import-store" name="store_id" defaultValue={defaultBranch} required disabled={!canWrite || branches.length === 0} className="inventory-input"><option value="">Choose branch</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></CatalogField><CatalogField label="CSV data" htmlFor="import-csv" className="products-import-form__csv"><textarea id="import-csv" name="csv" rows={5} disabled={!canWrite} placeholder="name,price,unit,sku,category,supplier,cost_price,min_stock\nWhole Lechon (Medium),6500,kg,LECHON-MED-001,Lechon,Rico's Farm,5400,5" className="inventory-input min-h-28 resize-y font-mono text-[11px]" /></CatalogField><button type="submit" disabled={!canWrite || branches.length === 0} className="products-primary-button products-form-submit">Import products</button></form></section>;
 }
 
 function BulkUpdatePanel({ canWrite }: { canWrite: boolean }) {

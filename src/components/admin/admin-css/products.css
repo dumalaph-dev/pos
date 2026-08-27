@@ -2361,8 +2361,95 @@ body.products-modal-open {
 }
 
 .products-import-form__csv {
+  display: grid;
+  gap: 5px;
   min-width: 280px;
-  flex: 1 1 380px;
+  flex: 1 1 480px;
+}
+
+.products-import-form__branch {
+  min-width: 145px;
+  flex: 0 1 145px;
+}
+
+.products-import-form__csv-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+}
+
+.products-import-form__csv-label {
+  color: var(--text-muted);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.products-import-form__source-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.products-import-form__source-actions .products-secondary-button {
+  min-height: 27px;
+  padding: 0 8px;
+  font-size: 8px;
+}
+
+.products-import-form__file-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.products-import-form__file-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.products-import-form__file-button:focus-within {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.products-import-form__hint,
+.products-import-form__status {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.products-import-form__status {
+  padding: 7px 8px;
+  border: 1px solid #eee4d7;
+  border-radius: 7px;
+  background: #fffdf9;
+}
+
+.products-import-form__status.is-success {
+  border-color: #cfe3d0;
+  color: #2f6e40;
+  background: #f5fbf4;
+}
+
+.products-import-form__status.is-error {
+  border-color: #efc9c5;
+  color: #9e2f27;
+  background: #fff4f2;
+}
+
+.products-import-form__status.is-info {
+  border-color: #e5d8c9;
+  color: var(--text-muted);
+  background: #fffaf4;
 }
 
 .products-bulk-form > label {
@@ -2552,6 +2639,20 @@ body.products-modal-open {
 
   .products-form-submit {
     width: 100%;
+  }
+
+  .products-import-form__branch,
+  .products-import-form__csv {
+    flex-basis: 100%;
+  }
+
+  .products-import-form__csv-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .products-import-form__source-actions {
+    justify-content: flex-start;
   }
 
   .products-heading__actions > * {

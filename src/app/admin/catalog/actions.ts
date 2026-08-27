@@ -14,6 +14,7 @@ import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/br
 import { invalidateAdminProfile } from "@/lib/admin/profile";
 import { saveOrganizationBusinessPreset } from "@/lib/admin/business-server";
 import { getCatalogPreset } from "@/lib/catalog-presets";
+import { isNonEmptyImportRow, MAX_IMPORT_TEXT_BYTES, normalizeImportHeader, parseDelimitedText } from "@/lib/catalog-import-format";
 import { isInventoryMode, parseRecipeLines, type InventoryMode, type RecipeLineDraft } from "@/lib/inventory-recipes";
 
 type PricingMode = "fixed" | "per_kg";
@@ -69,30 +70,6 @@ function readImportImagePath(value: string) {
   if (!value) return null;
   if (!value.startsWith("/") || value.length > 500) return undefined;
   return value;
-}
-
-function splitCsvLine(line: string) {
-  const values: string[] = [];
-  let value = "";
-  let quoted = false;
-  for (let index = 0; index < line.length; index += 1) {
-    const character = line[index];
-    if (character === '"') {
-      if (quoted && line[index + 1] === '"') {
-        value += '"';
-        index += 1;
-      } else {
-        quoted = !quoted;
-      }
-    } else if (character === "," && !quoted) {
-      values.push(value.trim());
-      value = "";
-    } else {
-      value += character;
-    }
-  }
-  values.push(value.trim());
-  return values;
 }
 
 function readImportBoolean(value: string, fallback: boolean) {
@@ -920,14 +897,17 @@ export async function importProducts(formData: FormData) {
   if (!defaultStoreId || !(await validStore(supabase, orgId, defaultStoreId, selectedBranchId, true))) {
     catalogRedirect("Choose a valid default branch for the import.");
   }
-  if (!csv) catalogRedirect("Paste a CSV file before importing items.");
+  if (!csv) catalogRedirect("Paste CSV, TXT, or spreadsheet data before importing items.");
+  if (new TextEncoder().encode(csv).byteLength > MAX_IMPORT_TEXT_BYTES) {
+    catalogRedirect("This import is too large for one submission. Split the catalog into smaller files.");
+  }
 
-  const lines = csv.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  if (lines.length < 2) catalogRedirect("The CSV needs a header row and at least one item row.");
+  const rows = parseDelimitedText(csv).filter(isNonEmptyImportRow);
+  if (rows.length < 2) catalogRedirect("The import needs a header row and at least one item row.");
 
-  const headers = splitCsvLine(lines[0]).map((header) => header.toLowerCase().replace(/\s+/g, "_"));
+  const headers = (rows[0] ?? []).map(normalizeImportHeader);
   if (!headers.includes("name") || !headers.includes("price") || !headers.includes("unit")) {
-    catalogRedirect("CSV headers must include name, price, and unit.");
+    catalogRedirect("Import headers must include name, price, and unit.");
   }
 
   const [storesResult, categoriesResult, suppliersResult] = await Promise.all([
@@ -941,8 +921,8 @@ export async function importProducts(formData: FormData) {
   const defaultStore = stores.find((store) => store.id === defaultStoreId);
   const records: Array<Record<string, unknown>> = [];
 
-  for (let index = 1; index < lines.length; index += 1) {
-    const values = splitCsvLine(lines[index]);
+  for (let index = 1; index < rows.length; index += 1) {
+    const values = rows[index];
     const row = Object.fromEntries(headers.map((header, headerIndex) => [header, values[headerIndex] ?? ""]));
     const storeId = row.store_id || defaultStoreId;
     const store = stores.find((item) => item.id === storeId || item.name.toLowerCase() === String(storeId).toLowerCase());
