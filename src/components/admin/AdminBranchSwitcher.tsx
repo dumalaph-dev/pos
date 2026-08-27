@@ -5,6 +5,7 @@ import { AdminIcon } from "./AdminIcon";
 import { AdminMenu } from "./AdminMenu";
 import { AdminLink as Link } from "./AdminLink";
 import { selectAdminBranch } from "@/app/admin/branch-context-actions";
+import { ADMIN_ALL_BRANCHES } from "@/lib/admin/branch-context-constants";
 import type { AdminBranchOption } from "@/lib/admin/branch-context";
 
 export function AdminBranchSwitcher({
@@ -56,6 +57,15 @@ export function AdminBranchSwitcher({
       }
     >
       <p className="admin-branch-menu__hint">Choose the branch context for backoffice work.</p>
+      <form action={selectAdminBranch}>
+        <input type="hidden" name="store_id" value={ADMIN_ALL_BRANCHES} />
+        <input type="hidden" name="return_to" value={returnPath} />
+        <button type="submit" className={`admin-menu__item admin-branch-menu__item ${selectedBranchId === null ? "is-selected" : ""}`}>
+          <AdminIcon name="chart" size={16} />
+          <span>All branches</span>
+          {selectedBranchId === null && <AdminIcon name="check" size={15} />}
+        </button>
+      </form>
       {activeBranches.length === 0 && <p className="admin-branch-menu__hint">No active branches are available.</p>}
       {activeBranches.map((branch) => (
         <form action={selectAdminBranch} key={branch.id}>

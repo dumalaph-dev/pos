@@ -63,7 +63,7 @@ async function readBranchOptions(orgId: string, storeId: string | null, canSwitc
   const { data } = includeReceiptFields
     ? await getAdminBranches(orgId)
     : await getAdminBranchOptions(orgId);
-  const visibleBranches = data.filter((branch) => branch.is_active && (canSwitch || !storeId || branch.id === storeId));
+  const visibleBranches = data.filter((branch) => branch.is_active && (canSwitch || Boolean(storeId && branch.id === storeId)));
   return visibleBranches.map(({ id, name, is_active }) => ({ id, name, is_active })) as AdminBranchOption[];
 }
 
@@ -105,7 +105,11 @@ export default async function AdminRouteLayout({ children }: { children: ReactNo
   const receiptRoute = !requestPath || requestPath === "/admin" || requestPath === "/admin/" || requestPath === "/admin/orders" || requestPath === "/admin/sales" || requestPath === "/admin/promotions";
   const branches = await readBranchOptions(profile.org_id, profile.store_id, canSwitchBranches, receiptRoute);
   const selectedBranchId = canSwitchBranches ? await getSelectedAdminBranchId(branches, profile.store_id) : profile.store_id;
-  const branchName = selectedBranchId ? branches.find((branch) => branch.id === selectedBranchId)?.name ?? profile.stores?.name ?? DEFAULT_STORE_NAME : "No active branch";
+  const branchName = selectedBranchId
+    ? branches.find((branch) => branch.id === selectedBranchId)?.name ?? profile.stores?.name ?? DEFAULT_STORE_NAME
+    : canSwitchBranches
+      ? "All branches"
+      : "No active branch";
   const connection = await getAdminConnection(user.id, profile.org_id, selectedBranchId);
   const branding = readAdminBranding(profile.organizations?.settings);
   const offlineProfile: OfflineProfileSnapshot = {
