@@ -8,11 +8,47 @@ import { MAX_IMPORT_TEXT_BYTES, PRODUCT_IMPORT_HEADERS, encodeCsvRow, isNonEmpty
 type BranchRecord = { id: string; name: string; is_active: boolean };
 type ImportFeedback = { tone: "error" | "success" | "info"; message: string };
 
-const CSV_TEMPLATE = `${encodeCsvRow(PRODUCT_IMPORT_HEADERS)}\n`;
 const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
 const REQUIRED_IMPORT_HEADERS = ["name", "price", "unit"] as const;
 const SPREADSHEET_EXTENSIONS = new Set(["xls", "xlsx"]);
 const TEXT_EXTENSIONS = new Set(["csv", "tsv", "txt"]);
+const SAMPLE_PRODUCT_ROW = [
+  "Sample product - replace me",
+  "100",
+  "pcs",
+  "SAMPLE-001",
+  "",
+  "",
+  "",
+  "60",
+  "5",
+  "fixed",
+  "none",
+  "false",
+  "false",
+  "0",
+  "",
+  "",
+] as const;
+const CSV_TEMPLATE = `${encodeCsvRow(PRODUCT_IMPORT_HEADERS)}\n${encodeCsvRow(SAMPLE_PRODUCT_ROW)}\n`;
+const TEMPLATE_INSTRUCTION_ROWS = [
+  ["How to use this template"],
+  ["Keep row 1 as the column headers. Replace the sample row in row 2, then add one product per row below it."],
+  ["Required columns", "name = product name; price = selling price in pesos (100 means ₱100); unit = pcs, serving, kg, or another selling unit."],
+  ["sku", "Optional internal product code. Leave blank when you do not use SKUs."],
+  ["barcode", "Optional barcode. Leave blank when the product has no barcode."],
+  ["category / supplier", "Use an existing category or supplier name/ID from this organization, or leave blank."],
+  ["cost_price", "Your cost per unit in pesos. Leave blank if you do not know it yet."],
+  ["min_stock", "Reorder threshold for direct stock tracking. Blank defaults to 2 units."],
+  ["pricing_mode", "Use fixed for a normal selling price, or per_kg for a price per kilogram."],
+  ["inventory_mode", "Use none for no stock tracking or direct for finished stock. Create recipe products in the product editor."],
+  ["track_stock", "Use true or false. Keep false when inventory_mode is none."],
+  ["is_active", "Use true to show in POS or false to import hidden until reviewed."],
+  ["sort_order", "Optional non-negative display order. 0 is fine for most products."],
+  ["store_id", "Leave blank to use the selected default branch."],
+  ["image_url", "Leave blank. Add product photos later from the product editor."],
+  ["Important", "Replace the sample product and its values before importing. It is hidden from POS, but it will still be saved if left unchanged. Do not rename the header columns."],
+];
 
 function getFileExtension(fileName: string) {
   return fileName.toLowerCase().split(".").pop() ?? "";
@@ -109,9 +145,9 @@ export function ImportProductsPanel({ branches, defaultBranch, canWrite }: { bra
     try {
       if (!navigator.clipboard?.writeText) throw new Error("Clipboard access is unavailable.");
       await navigator.clipboard.writeText(CSV_TEMPLATE);
-      setFeedback({ tone: "success", message: "The template was copied and placed in the editor. Add one product per row, then import." });
+      setFeedback({ tone: "success", message: "The template was copied and placed in the editor. Replace the sample row with your product details, then import." });
     } catch {
-      setFeedback({ tone: "info", message: "The template was placed in the editor. Add one product per row, then import." });
+      setFeedback({ tone: "info", message: "The template was placed in the editor. Replace the sample row with your product details, then import." });
     }
   };
 
@@ -130,21 +166,15 @@ export function ImportProductsPanel({ branches, defaultBranch, canWrite }: { bra
     try {
       const spreadsheet = await import("@e965/xlsx");
       const workbook = spreadsheet.utils.book_new();
-      const productsSheet = spreadsheet.utils.aoa_to_sheet([Array.from(PRODUCT_IMPORT_HEADERS)]);
+      const productsSheet = spreadsheet.utils.aoa_to_sheet([Array.from(PRODUCT_IMPORT_HEADERS), Array.from(SAMPLE_PRODUCT_ROW)]);
       productsSheet["!cols"] = PRODUCT_IMPORT_HEADERS.map((header) => ({ wch: Math.max(12, header.length + 2) }));
       spreadsheet.utils.book_append_sheet(workbook, productsSheet, "Products");
 
-      const instructionsSheet = spreadsheet.utils.aoa_to_sheet([
-        ["Products import template"],
-        ["Fill the Products sheet and keep the first row as the column header."],
-        ["Required columns", "name, price, unit"],
-        ["Optional columns", "sku, barcode, category, supplier, cost_price, min_stock, pricing_mode, inventory_mode, track_stock, is_active, sort_order, store_id, image_url"],
-        ["Notes", "Use one product per row. Leave optional fields blank when they do not apply. Recipe products need the product editor."],
-      ]);
+      const instructionsSheet = spreadsheet.utils.aoa_to_sheet(TEMPLATE_INSTRUCTION_ROWS);
       instructionsSheet["!cols"] = [{ wch: 22 }, { wch: 100 }];
       spreadsheet.utils.book_append_sheet(workbook, instructionsSheet, "Instructions");
       spreadsheet.writeFile(workbook, "products-import-template.xlsx");
-      setFeedback({ tone: "success", message: "The Excel template was downloaded. Fill the Products sheet, then upload it here." });
+      setFeedback({ tone: "success", message: "The Excel template was downloaded. Replace the sample row in the Products sheet, then upload it here." });
     } catch (error) {
       setFeedback({ tone: "error", message: getErrorMessage(error) });
     } finally {
@@ -182,7 +212,7 @@ export function ImportProductsPanel({ branches, defaultBranch, canWrite }: { bra
       <div>
         <p className="products-action-panel__eyebrow">Bulk catalog action</p>
         <h2 id="import-items-heading">Import products</h2>
-        <p>Upload CSV, TXT, or Excel data, or paste a template below. Required columns are name, price, and unit; optional fields can be filled in later.</p>
+        <p>Download a template, replace the sample row with your products, and keep row 1 unchanged. The sample is hidden from POS, but it will still be saved if left unchanged.</p>
       </div>
       <a href="/products" className="products-icon-button" aria-label="Close import form">×</a>
     </div>
@@ -209,8 +239,8 @@ export function ImportProductsPanel({ branches, defaultBranch, canWrite }: { bra
             <button type="button" onClick={handleDownloadExcelTemplate} disabled={!canWrite || isReadingFile || isCreatingTemplate} className="products-secondary-button">{isCreatingTemplate ? "Preparing..." : "Excel template"}</button>
           </div>
         </div>
-        <textarea id="import-csv" name="csv" rows={8} value={csv} onChange={(event) => setEditorText(event.target.value)} disabled={!canWrite} placeholder={`${encodeCsvRow(PRODUCT_IMPORT_HEADERS)}\nWhole Lechon (Medium),6500,kg,LECHON-MED-001,Lechon,Rico's Farm,5400,5`} aria-describedby="import-csv-help" className="inventory-input min-h-40 resize-y font-mono text-[11px]" />
-        <p id="import-csv-help" className="products-import-form__hint">The first worksheet is imported from Excel. Tabs, commas, semicolons, and pipe-delimited text are accepted; review the converted rows before saving.</p>
+        <textarea id="import-csv" name="csv" rows={8} value={csv} onChange={(event) => setEditorText(event.target.value)} disabled={!canWrite} placeholder={CSV_TEMPLATE.trim()} aria-describedby="import-csv-help" className="inventory-input min-h-40 resize-y font-mono text-[11px]" />
+        <p id="import-csv-help" className="products-import-form__hint">Replace the sample row with real product details, then add one product per row. The first worksheet is imported from Excel; tabs, commas, semicolons, and pipe-delimited text are accepted.</p>
         {isReadingFile && <p className="products-import-form__status" role="status" aria-live="polite">Reading file...</p>}
         {feedback && <p className={`products-import-form__status is-${feedback.tone}`} role={feedback.tone === "error" ? "alert" : "status"} aria-live="polite">{feedback.message}</p>}
       </div>
