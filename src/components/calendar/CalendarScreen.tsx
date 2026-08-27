@@ -459,6 +459,7 @@ export function CalendarScreen({ userName = "Admin", userRole = "Admin", storage
               <p className={styles.popoverEyebrow}>Calendar help</p>
               <strong className={styles.popoverTitle}>Plan the work ahead.</strong>
               <p className={styles.popoverCopy}>Use Add Event or Quick Add Event to save an event. Select any event on the grid to edit or remove it.</p>
+              <Link href="/admin/guide?topic=calendar" className={styles.popoverAction}>Open Help &amp; Guide <AdminIcon name="arrow" size={14} /></Link>
             </div>
           )}
 

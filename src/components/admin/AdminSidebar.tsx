@@ -8,7 +8,7 @@ import { AdminBranchSwitcher } from "./AdminBranchSwitcher";
 import type { AdminBranchOption } from "@/lib/admin/branch-context";
 import type { AdminBranding } from "@/lib/admin/branding";
 
-export type AdminSection = "overview" | "online-ordering" | "calendar" | "sales" | "pos" | "orders" | "shifts" | "inventory" | "products" | "catalog" | "customers" | "suppliers" | "expenses" | "employees" | "billing" | "reports" | "audit" | "settings" | "promotions" | "referrals" | "branches";
+export type AdminSection = "overview" | "online-ordering" | "calendar" | "sales" | "pos" | "orders" | "shifts" | "inventory" | "products" | "catalog" | "customers" | "suppliers" | "expenses" | "employees" | "billing" | "reports" | "audit" | "settings" | "promotions" | "referrals" | "branches" | "guide";
 
 type NavItem = {
   label: string;
@@ -94,6 +94,7 @@ const adminNavGroups: AdminNavGroup[] = [
 const adminNavSecondaryItems: NavItem[] = [
   { label: "Billing & Plan", href: "/admin/billing", icon: "wallet", active: "billing", adminOnly: true },
   { label: "Settings", href: "/admin/settings", icon: "settings", active: "settings" },
+  { label: "Help & Guide", href: "/admin/guide", icon: "help", active: "guide" },
 ];
 
 function activeSectionForPath(pathname: string | null): AdminSection {
@@ -121,6 +122,7 @@ function activeSectionForPath(pathname: string | null): AdminSection {
     ["/admin/settings", "settings"],
     ["/admin/promotions", "promotions"],
     ["/admin/referrals", "referrals"],
+    ["/admin/guide", "guide"],
   ];
 
   return routeSections.find(([prefix]) => pathname.startsWith(prefix))?.[1] ?? "overview";

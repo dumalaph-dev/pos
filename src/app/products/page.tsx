@@ -684,7 +684,7 @@ export default async function ProductsPage({
               <AdminIcon name="bell" size={19} />
               {outOfStockProducts > 0 && <span className="admin-icon-button__badge" aria-hidden="true">{outOfStockProducts > 9 ? "9+" : outOfStockProducts}</span>}
             </Link>
-            <Link href="#product-tips" className="admin-icon-button admin-icon-button--help" aria-label="View product tips"><AdminIcon name="help" size={19} /></Link>
+            <Link href="/admin/guide?topic=products" className="admin-icon-button admin-icon-button--help" aria-label="Open help and guide"><AdminIcon name="help" size={19} /></Link>
             <div className="admin-user-chip"><span className="admin-user-chip__avatar" aria-hidden="true">{userInitial}</span><span className="admin-user-chip__copy"><strong>{firstName}</strong><small>{profile.role === "manager" ? "Manager" : "Admin"}</small></span></div>
             <SignOutButton className="px-2 py-2.5 text-[10px]" />
           </header>
