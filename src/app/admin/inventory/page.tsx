@@ -835,14 +835,15 @@ export default async function InventoryPage({
 
           {!inventoryItemsQueryFailed && <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_252px]">
             <div className="min-w-0">
+              <InventoryItemMovementForm items={inventoryItems} branches={activeBranches} defaultBranch={defaultBranch} defaultItemId={defaultInventoryItem?.id ?? ""} defaultMovement={defaultMovement} canWrite={canWrite} open={Boolean(readParam(params.item) || readParam(params.movement) || (readParam(params.error) && !readParam(params.yield)))} />
               <InventoryItemCreateForm branches={activeBranches} suppliers={suppliers} defaultBranch={defaultBranch} canWrite={canWrite} />
               <InventoryItemDirectory items={inventoryItems} branches={activeBranches} stockByKey={inventoryStockRecord} usageByItem={inventoryUsageRecord} canWrite={canWrite} selectedBranchId={selectedBranchId} />
-              <InventoryItemMovementForm items={inventoryItems} branches={activeBranches} defaultBranch={defaultBranch} defaultItemId={defaultInventoryItem?.id ?? ""} defaultMovement={defaultMovement} canWrite={canWrite} open={Boolean(readParam(params.item) || readParam(params.movement) || (readParam(params.error) && !readParam(params.yield)))} />
             </div>
           </div>}
 
           {inventoryItemsQueryFailed && <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_252px]">
             <div className="min-w-0">
+              <StockMovementForm scope={cacheScope} branches={activeBranches} products={formProducts} defaultBranch={defaultBranch} defaultProductId={defaultProduct?.id ?? ""} defaultMovement={defaultMovement} canWrite={canWrite} open={Boolean(readParam(params.movement) || selectedProductId || (readParam(params.error) && !readParam(params.yield)))} />
               <p className="mb-3 px-1 text-[10px] text-ink-muted">Showing tracked products. Shared ingredient tracking becomes available after the recipe inventory migration is applied.</p>
               <section aria-label="Inventory browsing controls" className="admin-panel inventory-directory-controls overflow-visible p-0">
                 <nav aria-label="Inventory categories" className="products-category-tabs inventory-category-tabs">
@@ -911,7 +912,6 @@ export default async function InventoryPage({
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3"><span className="text-[10px] font-semibold text-ink-muted">Showing {firstRow} to {lastRow} of {filteredRows.length} items</span><div className="flex items-center gap-1">{page > 1 ? <Link href={buildInventoryHref({ ...baseHref, page: page - 1 })} className="inventory-icon-button border border-line text-primary hover:bg-primary-soft" aria-label="Previous page">‹</Link> : <span className="inventory-icon-button border border-line text-ink-subtle" aria-hidden="true">‹</span>}{Array.from({ length: Math.min(totalPages, 5) }, (_, index) => index + 1).map((pageNumber) => <Link key={pageNumber} href={buildInventoryHref({ ...baseHref, page: pageNumber })} className={`inventory-page-button ${pageNumber === page ? "is-active" : ""}`}>{pageNumber}</Link>)}{page < totalPages ? <Link href={buildInventoryHref({ ...baseHref, page: page + 1 })} className="inventory-icon-button border border-line text-primary hover:bg-primary-soft" aria-label="Next page">›</Link> : <span className="inventory-icon-button border border-line text-ink-subtle" aria-hidden="true">›</span>}</div><form action="/admin/inventory" method="get" className="flex items-center gap-2"><input type="hidden" name="q" value={searchQuery} /><input type="hidden" name="category" value={category} /><input type="hidden" name="status" value={status} /><input type="hidden" name="supplier" value={supplier} /><input type="hidden" name="columns" value={[...visibleColumns].join(",")} /><label htmlFor="inventory-page-size" className="text-[10px] font-semibold text-ink-muted">Rows per page:</label><select id="inventory-page-size" name="pageSize" defaultValue={String(pageSize)} className="inventory-input inventory-input--compact w-auto text-[10px]"><option value="10">10</option><option value="25">25</option><option value="50">50</option></select><button type="submit" className="inventory-button inventory-button--ghost">Apply</button></form></div>
               </section>
 
-              <StockMovementForm scope={cacheScope} branches={activeBranches} products={formProducts} defaultBranch={defaultBranch} defaultProductId={defaultProduct?.id ?? ""} defaultMovement={defaultMovement} canWrite={canWrite} open={Boolean(readParam(params.movement) || selectedProductId || (readParam(params.error) && !readParam(params.yield)))} />
             </div>
 
             <aside className="grid content-start gap-3">
