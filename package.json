@@ -32,6 +32,7 @@
     "printer:validate:mock": "node --experimental-strip-types scripts/validate-printer.mjs --mock"
   },
   "dependencies": {
+    "@e965/xlsx": "^0.20.3",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.3",
     "dexie": "^4.4.5",
