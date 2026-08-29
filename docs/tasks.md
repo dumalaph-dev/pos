@@ -7,7 +7,7 @@
 
 ## Current project status
 
-**Last updated:** 2026-08-25
+**Last updated:** 2026-08-29
 
 This section is the current source of truth for delivered work and the next gate. Keep it updated in the same change as every feature, migration, QA pass, commit, or deployment.
 
@@ -29,6 +29,22 @@ This section is the current source of truth for delivered work and the next gate
 | Production pilot | In progress; `dumala.store` is live, production identity/deployment preflight passed 2026-08-25, and the paid-branch entitlement drift was repaired in hosted migration `0072` | Complete the physical-device pilot gates, restore rehearsal/backup decision, Vercel log/alert setup, real data intake, pilot week, and branch #2 |
 
 ### Recent delivery log
+
+- **2026-08-29 - Platform owner powers plan, and Phase 1 trial extension:** Added [PLATFORM_OWNER_POWERS_PLAN.md](PLATFORM_OWNER_POWERS_PLAN.md), a six-phase plan for platform operator powers, and implemented its Phase 1.
+
+  **The audit finding that shaped the plan.** Granting Premium to a registered account was already built and already enforced below the app layer: `grantComplimentaryPremium` writes `platform_access_grants` atomically with its audit row through the `grant_platform_access` RPC, and migration `0052` rewired `auth_org_id`, `auth_store_id`, `auth_role`, `auth_is_admin`, and `auth_is_billing_admin` to consult `organization_has_current_access_grant`. What was missing there is reach and edit — the panel sits only on the organization detail page, and a live grant can only be revoked and re-created. Extending a trial, by contrast, did not exist at all: `subscription_trial_ends_at` was written at signup and only ever read.
+
+  **Phase 1 - trial extension.** Migration `0075_extend_organization_trial.sql` adds the service-role-only `extend_organization_trial` RPC and the `platform_trial_extensions` ledger. The RPC takes the organization row `for update`, does the lifecycle arithmetic, writes the ledger row, and writes the `platform.trial.extended` audit row in one transaction. A live trial is extended from its existing end; a lapsed one restarts from `now()`, so operator days are not spent covering the gap since expiry.
+
+  **The guard that mattered most.** `paused` has two unrelated causes — an expired trial, and a PayMongo `unpaid` provider status — so reviving a paused account into `trialing` could otherwise hand free access to an account that stopped paying. The function requires `paused` **and** a null `subscription_provider_subscription_id` **and** a null `subscription_provider_payment_intent_id`, reusing the discriminator the billing subscribe route already applies rather than inventing a second one. `active`, `past_due`, `canceled`, and `incomplete` are refused outright, as are suspended accounts.
+
+  **The cap.** Extensions are bounded to 1-90 days per action and 180 operator-added days per organization for its lifetime, enforced in the RPC against the ledger through `organization_trial_extension_days`, so repeated small extensions cannot keep an account free indefinitely. Past the ceiling the console directs the operator to a complimentary grant, where the decision is recorded as one.
+
+  **Console.** A Trial extension panel on `/platform/organizations/[orgId]` shows the current trial state, an operator-days meter, a day input bounded by the remaining cap, a live preview of the resulting end date, and the full extension history. It is policy-gated like every other entitlement mutation. No tenant-side change was needed: `readTrialLifecycle`, `isSubscriptionAccessCurrent`, `getBillingAccessReason`, and the SQL `subscription_access_is_current` all derive from the two columns the RPC writes.
+
+  **Database verification.** `0075` was applied to a local Supabase stack (local ledger `0071`-`0075`) and `scripts/platform-trial-extension-smoke.sql` passed there in full, so the guards are proven rather than reviewed: the extension arithmetic for a live and a lapsed trial, the ledger and audit rows, refusal of `active`/`past_due`/`canceled`/`incomplete`, refusal of a pause carrying either provider record, revival of a trial-expired pause **with its tenant RLS context restored**, refusal on suspension, the day and reason bounds, the 180-day cap, an unknown organization, and an authenticated tenant client unable to read `platform_trial_extensions`. A negative control confirmed the harness fails when it should: the RPC on an `active` organization raises `platform_trial_status_not_eligible`. No fixture rows survived the rollback.
+
+  `npm run typecheck`, `npm run lint`, `npm run build`, `npm run test:platform-trial` (12 passed), `npm run test:rpc-contracts` (2 passed), `npm run test:trial` (5 passed), and `npm run test:platform-access` (3 passed) all pass. **No hosted data, migration, or deployment configuration was changed** — the hosted ledger remains at `0074`, so hosted application of `0075` and the authenticated console pass against a real second account are still open.
 
 - **2026-08-25 - Production readiness verification and entitlement repair:** The repository-wide validation pass passed typecheck, lint, all available platform/POS/accessibility/contract/public-menu/site/metadata/preflight tests, and the production build. A fresh logical production backup exported **35/35 tables, 621 rows, 290 KB** to `backups/2026-08-25T08-19-50Z`; its manifest and every NDJSON row were re-parsed and count-checked, but it is still only a checkpoint until it is copied off-machine and restored into a scratch project. The live preflight initially found migration `0070` recorded as applied while its trigger still contained the older `0069` function. Added and applied hosted migration `0072_repair_paid_branch_entitlement_guard.sql`; the read-only schema preflight and rollback-scoped entitlement smoke test now pass. The linked validation scripts are pinned to Supabase CLI `2.114.0` for Windows portability. Physical tablet, real-data, Vercel notification, pilot-week, and branch-owner sign-off gates remain open.
 

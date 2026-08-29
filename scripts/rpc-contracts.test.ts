@@ -16,6 +16,7 @@ const RPC_CONTRACTS = new Map<string, RpcContract>([
   ["current_inventory_stock", [["p_org_id"]]],
   ["inventory_item_expected_stock", [["p_org_id", "p_store_id", "p_until"]]],
   ["expire_trialing_organization", [["p_org_id"]]],
+  ["extend_organization_trial", [["p_org_id", "p_days", "p_reason", "p_actor_id", "p_actor_email"]]],
   ["grant_platform_access", [["p_org_id", "p_days", "p_reason", "p_source", "p_start_mode", "p_actor_id", "p_actor_email"]]],
   ["inventory_expected_stock", [["p_org_id", "p_store_id", "p_until"]]],
   ["mark_online_order_phone_verified", [["p_online_order_id"]]],

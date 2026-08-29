@@ -382,6 +382,27 @@ policy. A successful PayMongo activation writes `active`, and the provider
 webhook plus payment-status paths invalidate cached profiles so access returns
 immediately.
 
+Migration 0075 adds the platform-owned trial extension. Where a complimentary
+grant deliberately leaves the trial dates untouched, an extension moves
+`subscription_trial_ends_at` itself, because the owner's trial banner and
+countdown read that column — a grant-shaped extension would leave the tenant
+reading "Trial ended" while the product kept working. The
+`extend_organization_trial` RPC is service-role-only and does the lifecycle
+arithmetic, the ledger insert, and the audit write in one transaction. It
+extends a live trial from its existing end and restarts a lapsed one from
+`now()`, so operator days are not spent covering the gap since expiry.
+
+Two guards live in the function rather than in the console. `paused` has two
+unrelated causes — an expired trial, and a provider status of `unpaid` — so a
+revival back to `trialing` requires `paused` **and** a null
+`subscription_provider_subscription_id` **and** a null
+`subscription_provider_payment_intent_id`, the same discriminator the billing
+subscribe route uses. And `platform_trial_extensions` is both the evidence
+trail and the ceiling: `organization_trial_extension_days` sums it, and the
+function refuses any extension that would carry an organization past 180
+operator-added days, so repeated small extensions cannot keep an account free
+indefinitely. Past that ceiling the recorded decision is a complimentary grant.
+
 ---
 
 ## 9. Product recipes and inventory items (migration 0073)

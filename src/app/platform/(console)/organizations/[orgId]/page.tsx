@@ -3,9 +3,11 @@ import { notFound } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { OrganizationOperations } from "@/app/platform/OrganizationOperations";
 import { ComplimentaryGrantPanel } from "@/app/platform/ComplimentaryGrantPanel";
+import { TrialExtensionPanel } from "@/app/platform/TrialExtensionPanel";
 import { getBillingPlan, normalizeSubscriptionStatus, subscriptionStatusLabel, subscriptionTone } from "@/lib/billing";
 import { createAdminClient } from "@/lib/employee-auth";
 import { readEffectiveComplimentaryAccess } from "@/lib/platform-access";
+import { readTrialExtensionEligibility, sumTrialExtensionDays } from "@/lib/platform-trial";
 import { isPolicyGateOpen, readPolicyNumber } from "@/lib/platform-operations";
 import { readPlatformOperations } from "@/lib/platform-operations-server";
 import { absoluteUrl } from "@/lib/site-url";
@@ -19,6 +21,7 @@ export const dynamic = "force-dynamic";
 export default async function PlatformOrganizationPage({ params }: { params: Promise<{ orgId: string }> }) {
   const { orgId } = await params;
   if (!isUuid(orgId)) notFound();
+  const asOf = new Date().toISOString();
 
   const admin = createAdminClient();
   if (!admin) return <PlatformUnavailable detail="Add SUPABASE_SERVICE_ROLE_KEY before opening the platform console." />;
@@ -29,7 +32,7 @@ export default async function PlatformOrganizationPage({ params }: { params: Pro
   ]);
   if (!detail) notFound();
 
-  const { organization, profiles, stores, employees, authEmailById, accessGrants, supportCases, auditLogs, referralCode, referrals } = detail;
+  const { organization, profiles, stores, employees, authEmailById, accessGrants, trialExtensions, supportCases, auditLogs, referralCode, referrals } = detail;
   const owner = organization.owner_profile_id ? profiles.find((profile) => profile.id === organization.owner_profile_id) : undefined;
   const ownerEmail = organization.owner_profile_id ? authEmailById.get(organization.owner_profile_id) : null;
   const profileIds = new Set(profiles.map((profile) => profile.id));
@@ -59,6 +62,13 @@ export default async function PlatformOrganizationPage({ params }: { params: Pro
       billingMode: organization.subscription_billing_mode,
       complimentaryAccessUntil: effectiveGrant?.until,
     });
+  const trialExtensionEligibility = readTrialExtensionEligibility({
+    status: organization.subscription_status,
+    accountStatus: organization.account_status,
+    providerSubscriptionId: organization.subscription_provider_subscription_id,
+    providerPaymentIntentId: organization.subscription_provider_payment_intent_id,
+    daysUsed: sumTrialExtensionDays(trialExtensions),
+  });
   const policyGateOpen = isPolicyGateOpen(operations.policies);
   const accountOperationsReady = organization.account_status !== undefined && detail.supportCasesSchemaAvailable;
   const accessLabel = organization.account_status === "suspended"
@@ -111,7 +121,18 @@ export default async function PlatformOrganizationPage({ params }: { params: Pro
           </article>
         </section>
 
-        <ComplimentaryGrantPanel orgId={organization.id} grants={accessGrants} schemaAvailable={detail.accessGrantsSchemaAvailable} policyGateOpen={policyGateOpen} accountSuspended={organization.account_status === "suspended"} asOf={new Date().toISOString()} />
+        <TrialExtensionPanel
+          orgId={organization.id}
+          extensions={trialExtensions}
+          eligibility={trialExtensionEligibility}
+          schemaAvailable={detail.trialExtensionsSchemaAvailable}
+          policyGateOpen={policyGateOpen}
+          trialEndsAt={organization.subscription_trial_ends_at ?? organization.subscription_current_period_end ?? null}
+          trialRemainingLabel={trial.known ? formatTrialRemaining(trial.remainingMs) : "No trial scheduled"}
+          asOf={asOf}
+        />
+
+        <ComplimentaryGrantPanel orgId={organization.id} grants={accessGrants} schemaAvailable={detail.accessGrantsSchemaAvailable} policyGateOpen={policyGateOpen} accountSuspended={organization.account_status === "suspended"} asOf={asOf} />
 
         <section className="mt-8 grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]" aria-label="People and branches">
           <article className="overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)]">

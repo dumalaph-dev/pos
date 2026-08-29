@@ -1,6 +1,8 @@
 import { createAdminClient } from "@/lib/employee-auth";
 import { readOrganizationAccessGrants } from "@/lib/platform-access-server";
 import type { ComplimentaryAccessGrant } from "@/lib/platform-access";
+import { readOrganizationTrialExtensions } from "@/lib/platform-trial-server";
+import type { TrialExtensionRecord } from "@/lib/platform-trial";
 import {
   normalizeReferralCodeRecord,
   normalizeReferralRecord,
@@ -98,6 +100,8 @@ export type PlatformOrganizationDetail = {
   authEmailById: Map<string, string>;
   accessGrants: ComplimentaryAccessGrant[];
   accessGrantsSchemaAvailable: boolean;
+  trialExtensions: TrialExtensionRecord[];
+  trialExtensionsSchemaAvailable: boolean;
   supportCases: SupportCaseRecord[];
   supportCasesSchemaAvailable: boolean;
   trialFeedback: TrialFeedbackRecord | null;
@@ -248,12 +252,13 @@ export async function readPlatformOrganizationDetail(admin: PlatformAdminClient,
   const organizationResult = await readOrganizationDetailRecord(admin, organizationId);
   if (!organizationResult) return null;
 
-  const [profilesResult, storesResult, employeesResult, authUsersResult, grantsResult, supportResult, feedbackResult, auditResult, referralCodeResult, referralsAsReferrerResult, referralsAsReferredResult, referralRewardsResult] = await Promise.all([
+  const [profilesResult, storesResult, employeesResult, authUsersResult, grantsResult, trialExtensionsResult, supportResult, feedbackResult, auditResult, referralCodeResult, referralsAsReferrerResult, referralsAsReferredResult, referralRewardsResult] = await Promise.all([
     admin.from("profiles").select("id, org_id, full_name, role, is_active, store_id").eq("org_id", organizationId).order("full_name"),
     admin.from("stores").select("id, org_id, name, is_active").eq("org_id", organizationId).order("name"),
     admin.from("employee_records").select("id, org_id, employee_code, full_name, role, is_active, profile_id, store_id").eq("org_id", organizationId).order("full_name"),
     admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
     readOrganizationAccessGrants(admin, organizationId),
+    readOrganizationTrialExtensions(admin, organizationId),
     admin.from("support_cases").select("id, org_id, created_by, subject, description, priority, status, first_response_due_at, created_at, updated_at, resolved_at").eq("org_id", organizationId).order("created_at", { ascending: false }),
     readOrganizationTrialFeedback(admin, organizationId),
     admin.from("audit_logs").select("id, action, entity, entity_id, before, after, created_at").eq("org_id", organizationId).order("created_at", { ascending: false }).limit(100),
@@ -294,6 +299,8 @@ export async function readPlatformOrganizationDetail(admin: PlatformAdminClient,
     authEmailById: new Map(authUsers.map((authUser) => [authUser.id, authUser.email ?? ""])),
     accessGrants: grantsResult.records,
     accessGrantsSchemaAvailable: grantsResult.schemaAvailable,
+    trialExtensions: trialExtensionsResult.records,
+    trialExtensionsSchemaAvailable: trialExtensionsResult.schemaAvailable,
     supportCases,
     supportCasesSchemaAvailable: !supportResult.error,
     trialFeedback: feedbackResult.record,

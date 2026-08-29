@@ -7,6 +7,7 @@ import { isPolicyGateOpen, readPolicyNumber } from "@/lib/platform-operations";
 import { readPlatformPolicies } from "@/lib/platform-operations-server";
 import { isMissingReferralSchemaError } from "@/lib/referrals-server";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
+import { TRIAL_EXTENSION_MAX_DAYS_PER_ACTION, TRIAL_EXTENSION_MAX_DAYS_LIFETIME, trialExtensionBlockMessage } from "@/lib/platform-trial";
 import { normalizeTrialFeedbackStatus, type TrialFeedbackStatus } from "@/lib/trial";
 
 export type OperationsActionState = {
@@ -302,6 +303,48 @@ export async function revokeComplimentaryPremium(_previousState: OperationsActio
   return { ok: true, message: "Complimentary Premium access was revoked." };
 }
 
+export async function extendOrganizationTrial(_previousState: OperationsActionState, formData: FormData): Promise<OperationsActionState> {
+  const actor = await requirePlatformAdmin();
+  if (!actor.ok) return actor;
+
+  const gate = await requirePublishedPolicies(actor.admin);
+  if (!gate.ok) return gate;
+
+  const organizationId = readText(formData, "organization_id");
+  const reason = readText(formData, "reason");
+  const days = readInteger(formData, "days");
+  if (!isUuid(organizationId)) return { ok: false, message: "Choose a valid business account." };
+  if (!Number.isInteger(days) || days < 1 || days > TRIAL_EXTENSION_MAX_DAYS_PER_ACTION) return { ok: false, message: `Choose a trial extension of 1–${TRIAL_EXTENSION_MAX_DAYS_PER_ACTION} days.` };
+  if (reason.length < 5 || reason.length > 500) return { ok: false, message: "Add an extension reason of 5–500 characters." };
+
+  const organization = await readOrganization(actor.admin, organizationId);
+  if (!organization.ok) return organization;
+  if (organization.record.account_status === "suspended") return { ok: false, message: trialExtensionBlockMessage("account_suspended") };
+
+  const result = await actor.admin.rpc("extend_organization_trial", {
+    p_org_id: organizationId,
+    p_days: days,
+    p_reason: reason,
+    p_actor_id: actor.userId,
+    p_actor_email: actor.email,
+  });
+  if (result.error) return platformTrialExtensionError(result.error.message);
+
+  const extension = isRecord(result.data) ? result.data : null;
+  const trialEndsAt = readRecordString(extension, "trial_ends_at");
+  if (!extension || !trialEndsAt) return { ok: false, message: "The trial extension response was incomplete. Refresh the organization record and try again." };
+
+  const revived = extension.revived === true;
+  const remaining = Number(extension.days_remaining);
+  const remainingNote = Number.isFinite(remaining) ? ` ${remaining} operator day${remaining === 1 ? "" : "s"} remain for this account.` : "";
+
+  revalidatePlatformPages(organizationId);
+  return {
+    ok: true,
+    message: `${days} trial day${days === 1 ? "" : "s"} added to ${organization.record.name}.${revived ? " The expired trial was reopened." : ""} The trial now ends ${formatOperationsDate(trialEndsAt)}.${remainingNote}`,
+  };
+}
+
 export async function updateTrialFeedback(_previousState: OperationsActionState, formData: FormData): Promise<OperationsActionState> {
   const actor = await requirePlatformAdmin();
   if (!actor.ok) return actor;
@@ -478,6 +521,27 @@ function platformAccessGrantError(detail: string): OperationsActionFailure {
   if (normalized.includes("platform_access_invalid_source")) return { ok: false, message: "Choose a valid grant source." };
   if (normalized.includes("platform_access_invalid_start_mode")) return { ok: false, message: "Choose when the complimentary access should begin." };
   return { ok: false, message: detail || "The complimentary grant could not be created." };
+}
+
+function platformTrialExtensionError(detail: string): OperationsActionFailure {
+  const normalized = detail.toLowerCase();
+  if (normalized.includes("platform_trial_account_suspended")) return { ok: false, message: trialExtensionBlockMessage("account_suspended") };
+  if (normalized.includes("platform_trial_billing_pause")) return { ok: false, message: trialExtensionBlockMessage("billing_pause") };
+  if (normalized.includes("platform_trial_status_not_eligible")) return { ok: false, message: trialExtensionBlockMessage("billing_subscription") };
+  if (normalized.includes("platform_trial_cap_exceeded")) return { ok: false, message: `This extension would pass the ${TRIAL_EXTENSION_MAX_DAYS_LIFETIME}-day limit on operator-added trial days for this account. Grant complimentary Premium instead.` };
+  if (normalized.includes("platform_trial_invalid_days")) return { ok: false, message: `Choose a trial extension of 1–${TRIAL_EXTENSION_MAX_DAYS_PER_ACTION} days.` };
+  if (normalized.includes("platform_trial_invalid_reason")) return { ok: false, message: "Add an extension reason of 5–500 characters." };
+  if (normalized.includes("platform_trial_organization_not_found")) return { ok: false, message: "That business account could not be found. Refresh the directory and try again." };
+  if (normalized.includes("platform_trial_invalid_organization")) return { ok: false, message: "Choose a valid business account." };
+  if (normalized.includes("schema cache") || normalized.includes("function") || normalized.includes("does not exist") || normalized.includes("relation") || normalized.includes("column")) {
+    return { ok: false, message: "Apply Supabase migration 0075_extend_organization_trial.sql before extending a trial." };
+  }
+  return { ok: false, message: detail || "The trial extension could not be applied." };
+}
+
+function formatOperationsDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeZone: "Asia/Singapore" }).format(date);
 }
 
 function readText(formData: FormData, name: string) {

@@ -129,6 +129,8 @@ followed by `0062_public_menu_subdomains.sql` and
 65. `0065_rpc_acl_normalization.sql` — remove inherited PUBLIC execution and restore application RPC grants
 66. `0066_service_rpc_acl_fix.sql` — keep server-only RPCs unavailable to authenticated browser clients
 67. `0067_verify_phone_rpc_acl_fix.sql` — keep phone-code verification service-role-only
+68–74. Branch billing/entitlement, automatic shift reports, recipe inventory, and employee access migrations
+75. `0075_extend_organization_trial.sql` — platform-owned trial extension: the `extend_organization_trial` RPC, the `platform_trial_extensions` ledger, and the lifetime cap on operator-added trial days
 
 **Apply them** either way:
 - **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push`
@@ -153,6 +155,28 @@ The checks cover the exact trial-end timestamp, persisted `paused` state,
 tenant access denial, owner Billing access, and immediate access restoration
 after a successful PayMongo activation. The SQL fixture inserts no lasting
 rows.
+
+### Trial extension verification
+
+Run the deterministic bounds and eligibility checks without a database:
+
+```bash
+npm run test:platform-trial
+```
+
+After applying migration `0075`, run the rollback-scoped database smoke
+fixture:
+
+```bash
+npm run platform:trial:validate
+```
+
+The checks cover the extension arithmetic for a live and a lapsed trial, the
+ledger and audit rows, refusal of paying and ended subscriptions, refusal of a
+pause that carries PayMongo provider records, revival of a trial-expired pause
+including its tenant RLS context, suspension, the day and reason bounds, the
+180-day lifetime cap, and that an authenticated tenant client cannot read
+`platform_trial_extensions`. The SQL fixture inserts no lasting rows.
 
 Store owners can register from `/signup`. The flow uses Supabase Auth and the
 `0022_owner_signup.sql` trigger to create a private organization, first branch,
