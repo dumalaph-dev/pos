@@ -387,10 +387,13 @@ grant deliberately leaves the trial dates untouched, an extension moves
 `subscription_trial_ends_at` itself, because the owner's trial banner and
 countdown read that column — a grant-shaped extension would leave the tenant
 reading "Trial ended" while the product kept working. The
-`extend_organization_trial` RPC is service-role-only and does the lifecycle
-arithmetic, the ledger insert, and the audit write in one transaction. It
-extends a live trial from its existing end and restarts a lapsed one from
-`now()`, so operator days are not spent covering the gap since expiry.
+`extend_organization_trial` RPC does the lifecycle arithmetic, the ledger
+insert, and the audit write in one transaction. It extends a live trial from
+its existing end and restarts a lapsed one from `now()`, so operator days are
+not spent covering the gap since expiry. Follow-up migration 0076 explicitly
+removes direct `anon` and `authenticated` EXECUTE grants from both
+service-role-only functions; revoking `PUBLIC` alone does not remove a direct
+grant supplied by a project's default privileges.
 
 Two guards live in the function rather than in the console. `paused` has two
 unrelated causes — an expired trial, and a provider status of `unpaid` — so a

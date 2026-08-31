@@ -255,7 +255,9 @@ $$;
 
 reset role;
 
--- The ledger is service-role-only; a tenant client must not reach it.
+-- The ledger and both helper functions are service-role-only; a tenant client
+-- must not read the ledger or execute a security-definer function that can
+-- inspect or mutate platform-owned state.
 set local role authenticated;
 do $$
 declare
@@ -269,6 +271,40 @@ begin
 
   if v_reachable then
     raise exception 'an authenticated tenant client can read platform_trial_extensions';
+  end if;
+end;
+$$;
+
+do $$
+declare
+  v_reachable boolean := true;
+begin
+  begin
+    perform public.organization_trial_extension_days(current_setting('trial_extension_smoke.org_id')::uuid);
+  exception when insufficient_privilege then
+    v_reachable := false;
+  end;
+
+  if v_reachable then
+    raise exception 'an authenticated tenant client can execute organization_trial_extension_days';
+  end if;
+end;
+$$;
+
+do $$
+declare
+  v_reachable boolean := true;
+begin
+  begin
+    -- A null organization makes an accidentally reachable function fail before
+    -- it can write anything, while still proving the ACL boundary.
+    perform public.extend_organization_trial(null, 1, 'smoke: unauthorized call', null, null);
+  exception when insufficient_privilege then
+    v_reachable := false;
+  end;
+
+  if v_reachable then
+    raise exception 'an authenticated tenant client can execute extend_organization_trial';
   end if;
 end;
 $$;

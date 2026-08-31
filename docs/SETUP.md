@@ -131,6 +131,7 @@ followed by `0062_public_menu_subdomains.sql` and
 67. `0067_verify_phone_rpc_acl_fix.sql` — keep phone-code verification service-role-only
 68–74. Branch billing/entitlement, automatic shift reports, recipe inventory, and employee access migrations
 75. `0075_extend_organization_trial.sql` — platform-owned trial extension: the `extend_organization_trial` RPC, the `platform_trial_extensions` ledger, and the lifetime cap on operator-added trial days
+76. `0076_restrict_platform_trial_rpc.sql` — explicitly remove direct browser-role EXECUTE grants from both platform trial functions
 
 **Apply them** either way:
 - **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push`
@@ -164,7 +165,7 @@ Run the deterministic bounds and eligibility checks without a database:
 npm run test:platform-trial
 ```
 
-After applying migration `0075`, run the rollback-scoped database smoke
+After applying migrations `0075` and `0076`, run the rollback-scoped database smoke
 fixture:
 
 ```bash
@@ -176,7 +177,8 @@ ledger and audit rows, refusal of paying and ended subscriptions, refusal of a
 pause that carries PayMongo provider records, revival of a trial-expired pause
 including its tenant RLS context, suspension, the day and reason bounds, the
 180-day lifetime cap, and that an authenticated tenant client cannot read
-`platform_trial_extensions`. The SQL fixture inserts no lasting rows.
+`platform_trial_extensions` or execute either platform trial function. The SQL
+fixture inserts no lasting rows.
 
 Store owners can register from `/signup`. The flow uses Supabase Auth and the
 `0022_owner_signup.sql` trigger to create a private organization, first branch,

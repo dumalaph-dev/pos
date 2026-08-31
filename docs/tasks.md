@@ -7,7 +7,7 @@
 
 ## Current project status
 
-**Last updated:** 2026-08-29
+**Last updated:** 2026-08-31
 
 This section is the current source of truth for delivered work and the next gate. Keep it updated in the same change as every feature, migration, QA pass, commit, or deployment.
 
@@ -29,6 +29,10 @@ This section is the current source of truth for delivered work and the next gate
 | Production pilot | In progress; `dumala.store` is live, production identity/deployment preflight passed 2026-08-25, and the paid-branch entitlement drift was repaired in hosted migration `0072` | Complete the physical-device pilot gates, restore rehearsal/backup decision, Vercel log/alert setup, real data intake, pilot week, and branch #2 |
 
 ### Recent delivery log
+
+- **2026-08-31 - Hosted trial-extension production preparation:** Reviewed `codex/platform-trial-extension` against `main`; both already point to `adb8b78`, so the merge was an explicit no-op. `npm run test:platform-trial` (12 passed), `npm run test:rpc-contracts` (2 passed), `npm run test:trial` (5 passed), `npm run test:platform-access` (3 passed), `npm run typecheck`, `npm run lint`, and `npm run build` (Next.js 16.3.1) all pass. The linked Supabase project was confirmed as `uzavkjftwcuixidxyopr`; the hosted migration ledger already recorded `0075`, so no migration was replayed and `db push --dry-run` reported no pending migrations. The hosted rollback-scoped smoke passed, and post-smoke checks found zero fixture rows.
+
+  The hosted ACL audit found that Supabase default privileges had granted `authenticated` EXECUTE directly on both 0075 functions, which `REVOKE ... FROM public` did not remove. Added and applied `0076_restrict_platform_trial_rpc.sql`; the strengthened smoke fixture and a direct ACL query now confirm that tenant clients cannot read the ledger or execute either function. The authenticated platform-console UI pass remains the next gate; billing configuration and production tenant data were not changed.
 
 - **2026-08-29 - Platform owner powers plan, and Phase 1 trial extension:** Added [PLATFORM_OWNER_POWERS_PLAN.md](PLATFORM_OWNER_POWERS_PLAN.md), a six-phase plan for platform operator powers, and implemented its Phase 1.
 
