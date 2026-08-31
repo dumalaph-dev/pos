@@ -16,6 +16,7 @@ import {
   readPayMongoString,
   resourceAttributes,
 } from "@/lib/paymongo-server";
+import { LEGAL_DOCUMENT_VERSION } from "@/lib/legal-config";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
 
 type OrganizationRecord = {
@@ -88,6 +89,27 @@ export async function POST(request: NextRequest) {
     if (!organization) return errorResponse("Your POS organization could not be found.", 404);
     if (organization.account_status === "suspended") return errorResponse("This organization is suspended. Contact support before starting billing.", 423);
 
+    const body = await readJson(request);
+    const legalAcceptance = isRecord(body) && isRecord(body.legalAcceptance) ? body.legalAcceptance : null;
+    if (
+      !legalAcceptance
+      || legalAcceptance.termsVersion !== LEGAL_DOCUMENT_VERSION
+      || legalAcceptance.privacyNoticeVersion !== LEGAL_DOCUMENT_VERSION
+    ) return errorResponse("Review and accept the current legal documents before starting checkout.", 400);
+
+    const legalAcceptanceRecord = await admin.from("audit_logs").insert({
+      org_id: organization.id,
+      actor_id: user.id,
+      action: "legal_documents_accepted",
+      entity: "subscription_checkout",
+      after: {
+        terms_version: LEGAL_DOCUMENT_VERSION,
+        privacy_notice_version: LEGAL_DOCUMENT_VERSION,
+        accepted_at: new Date().toISOString(),
+      },
+    });
+    if (legalAcceptanceRecord.error) return errorResponse("We could not record your acceptance of the billing terms. Please try again.", 503);
+
     const activeBranchesResult = await admin
       .from("stores")
       .select("id")
@@ -96,7 +118,6 @@ export async function POST(request: NextRequest) {
     if (activeBranchesResult.error) return errorResponse("The active branch count could not be verified. Try again after the branch data is available.", 503);
     const activeBranchCount = Math.max(activeBranchesResult.data?.length ?? 0, 1);
 
-    const body = await readJson(request);
     const variantId = isRecord(body) && typeof body.variantId === "string" ? body.variantId.trim() : "";
     const promoCode = isRecord(body) && typeof body.promoCode === "string" ? body.promoCode.trim() : "";
     const variant = operations.catalog.variants.find((candidate) => candidate.id === variantId && candidate.isActive);

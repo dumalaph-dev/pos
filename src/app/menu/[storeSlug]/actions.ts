@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { getPublicMenuStoreForHostname } from "@/lib/online-ordering-server";
 import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
+import { LEGAL_DOCUMENT_VERSION } from "@/lib/legal-config";
 import {
   calculateOnlineOrderTotals,
   getDemoOnlineOrderNo,
@@ -163,9 +164,13 @@ export async function placeOnlineOrder(_previousState: PublicOnlineOrderResult, 
   const deliveryNote = readText(formData, "delivery_note");
   const note = readText(formData, "note");
   const requestId = readText(formData, "request_id");
+  const legalAcknowledged = formData.get("legal_acknowledged") === "yes";
+  const legalTermsVersion = readText(formData, "legal_terms_version");
+  const legalPrivacyNoticeVersion = readText(formData, "legal_privacy_notice_version");
   const drafts = readDraftItems(readText(formData, "items"));
 
   if (!isUuid(requestId)) return fail("Refresh the menu and try placing your online order again.");
+  if (!legalAcknowledged || legalTermsVersion !== LEGAL_DOCUMENT_VERSION || legalPrivacyNoticeVersion !== LEGAL_DOCUMENT_VERSION) return fail("Review and accept the current ordering terms and privacy notice, then try again.");
   if (customerName.length < 2 || customerName.length > 80) return fail("Add your name so the store knows who to call.");
   if (customerPhone.length < 5 || customerPhone.length > 40) return fail("Add a phone number the store can reach you on.");
   if (fulfillmentMethod !== "pickup" && fulfillmentMethod !== "delivery") return fail("Choose pickup or delivery to continue.");

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { resolveSignupOrigin, signupConfirmationRedirect } from "@/lib/signup-redirect";
 import { normalizeReferralCode } from "@/lib/referrals";
+import { LEGAL_DOCUMENT_VERSION } from "@/lib/legal-config";
 import type { SignupField, SignupState } from "./state";
 
 // The form state and its initial value live in `./state` because a
@@ -77,6 +78,7 @@ export async function signupStoreOwner(_previousState: SignupState, formData: Fo
   const email = readText(formData, "email").toLowerCase();
   const password = readSecret(formData, "password");
   const passwordConfirmation = readSecret(formData, "password_confirmation");
+  const termsAccepted = formData.get("terms_accepted") === "yes";
   const referralCode = normalizeReferralCode(readText(formData, "referral_code"));
   const errors: SignupState["errors"] = {};
 
@@ -89,6 +91,7 @@ export async function signupStoreOwner(_previousState: SignupState, formData: Fo
     errors.password = "Use at least 8 characters with a letter and a number.";
   }
   if (password !== passwordConfirmation) errors.password_confirmation = "Passwords do not match.";
+  if (!termsAccepted) errors.terms_accepted = "Read and accept the Terms of Service before creating an account.";
 
   if (Object.keys(errors).length > 0) return signupError("Please correct the highlighted fields.", errors);
 
@@ -105,6 +108,9 @@ export async function signupStoreOwner(_previousState: SignupState, formData: Fo
       organization_name: organizationName,
       store_name: storeName,
       store_address: storeAddress,
+      legal_terms_version: LEGAL_DOCUMENT_VERSION,
+      legal_terms_accepted_at: new Date().toISOString(),
+      legal_privacy_notice_version: LEGAL_DOCUMENT_VERSION,
       ...(referralCode ? { referral_code: referralCode } : {}),
     },
     ...(origin ? { emailRedirectTo: signupConfirmationRedirect(origin) } : {}),

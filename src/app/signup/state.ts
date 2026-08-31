@@ -19,6 +19,7 @@ export type SignupField =
   | "email"
   | "password"
   | "password_confirmation"
+  | "terms_accepted"
   | "referral_code";
 
 export type SignupState = {

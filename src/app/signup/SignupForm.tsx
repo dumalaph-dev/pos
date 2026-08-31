@@ -86,6 +86,14 @@ export default function SignupForm({ monthlyPriceLabel, annualOptionsAvailable, 
         </label>
       </div>
 
+      <label className="flex items-start gap-3 text-xs leading-5 text-ink-muted" htmlFor="signup-terms-accepted">
+        <input id="signup-terms-accepted" name="terms_accepted" type="checkbox" value="yes" required className="mt-1 h-4 w-4 shrink-0 accent-primary" />
+        <span>
+          I agree to the <Link href="/legal/terms" target="_blank" rel="noreferrer" className="font-extrabold text-primary underline underline-offset-4">Terms of Service</Link> and acknowledge the <Link href="/legal/privacy" target="_blank" rel="noreferrer" className="font-extrabold text-primary underline underline-offset-4">Privacy Notice</Link>. I understand that Dumala POS is not a BIR-accredited official receipt system.
+          <FieldError state={state} field="terms_accepted" />
+        </span>
+      </label>
+
       <button type="submit" disabled={pending} className="w-full rounded-btn bg-accent px-6 py-3 font-bold uppercase text-accent-fg transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50">{pending ? "Creating workspace…" : "Create owner account"}</button>
       <p className="text-center text-sm text-ink-muted">Already have an account? <Link href="/login" className="font-extrabold text-primary underline-offset-4 hover:underline">Sign in</Link></p>
     </form>

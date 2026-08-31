@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { AdminIcon } from "@/components/admin/AdminIcon";
+import { LEGAL_DOCUMENT_VERSION } from "@/lib/legal-config";
 import { formatPeso } from "@/lib/money";
 import { BranchAddonPicker, CheckoutPlanPicker, priceCheckoutVariants, type CheckoutBranchPricing, type CheckoutVariant } from "./CheckoutPlanPicker";
 import { PromotionCodeInput, type PromotionQuoteState } from "./PromotionCodeInput";
@@ -53,6 +55,7 @@ export default function SubscriptionCheckout({ variants, branchPricing, policyGa
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [messageKind, setMessageKind] = useState<"error" | "success">("error");
+  const [legalAcknowledged, setLegalAcknowledged] = useState(false);
 
   useEffect(() => {
     const paymentIntentId = new URLSearchParams(window.location.search).get("payment_intent_id");
@@ -151,6 +154,7 @@ export default function SubscriptionCheckout({ variants, branchPricing, policyGa
 
     if (!selectedVariant) return setCheckoutError("Choose a plan first.");
     if (!publicKey) return setCheckoutError("Online payment is not ready. Please contact support.");
+    if (!legalAcknowledged) return setCheckoutError("Review and accept the Terms of Service and Billing Policy before paying.");
 
     const normalizedCardNumber = cardNumber.replace(/\D/g, "");
     const month = Number(expiryMonth);
@@ -164,7 +168,10 @@ export default function SubscriptionCheckout({ variants, branchPricing, policyGa
 
     setPending(true);
     try {
-      const intent = await startSubscription(selectedVariant.id, promoQuote?.code ?? "", checkoutTarget);
+       const intent = await startSubscription(selectedVariant.id, promoQuote?.code ?? "", checkoutTarget, {
+         termsVersion: LEGAL_DOCUMENT_VERSION,
+         privacyNoticeVersion: LEGAL_DOCUMENT_VERSION,
+       });
       if (!intent.paymentIntentId) throw new Error(intent.message || "We could not start the payment. Please try again.");
       if (intent.paymentIntentStatus === "succeeded") {
         setCheckoutSuccess("Payment confirmed. Your Premium plan is now active.");
@@ -252,8 +259,12 @@ export default function SubscriptionCheckout({ variants, branchPricing, policyGa
             <div className="mt-4 space-y-2 text-sm"><div className="flex items-center justify-between gap-3"><span className="text-ink-muted">{selectedVariant?.label ?? "Selected plan"}</span><span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-subtle">Selected</span></div>{promoQuote?.variantId === selectedId && <div className="flex items-center justify-between gap-3 text-success"><span>{promoQuote.code} discount</span><span className="font-extrabold tabular-nums">-{formatPeso(promoQuote.discountAmountCentavos)}</span></div>}</div>
             {selectedVariant && <p className="mt-2 text-[11px] leading-4 text-ink-muted">{selectedVariant.activeBranchCount} active branch{selectedVariant.activeBranchCount === 1 ? "" : "es"} · {selectedVariant.billableBranchCount === 0 ? "first branch included" : `${selectedVariant.billableBranchCount} additional branch add-on${selectedVariant.billableBranchCount === 1 ? "" : "s"}`}</p>}
             <div className="mt-4 border-t border-dashed border-line pt-3"><div className="flex items-end justify-between gap-3"><span className="text-xs font-extrabold uppercase tracking-wide text-ink-muted">Due today</span><strong className="text-2xl font-extrabold tracking-[-0.04em] tabular-nums text-primary">{formatPeso(discountedAmount)}</strong></div><p className="mt-1 text-[11px] leading-4 text-ink-muted">{selectedVariant?.cadenceLabel === "per month" ? "Billed monthly" : "One payment for the selected term"}</p></div>
-            <div className="mt-4"><PromotionCodeInput value={promoCode} onChange={(value) => { setPromoCode(value); setPromoQuote(null); setPromoMessage(null); }} onApply={() => void applyPromotion()} pending={promoPending} quote={promoQuote?.variantId === selectedId ? promoQuote : null} message={promoMessage} /></div>
+             <div className="mt-4"><PromotionCodeInput value={promoCode} onChange={(value) => { setPromoCode(value); setPromoQuote(null); setPromoMessage(null); }} onApply={() => void applyPromotion()} pending={promoPending} quote={promoQuote?.variantId === selectedId ? promoQuote : null} message={promoMessage} /></div>
             {message && <p role="status" aria-live="polite" className={`mt-4 rounded-xl border px-3 py-2.5 text-xs font-semibold leading-5 ${messageKind === "success" ? "border-success/25 bg-success/10 text-success" : "border-danger/25 bg-danger-soft text-danger"}`}>{message}</p>}
+            <label className="mt-4 flex items-start gap-3 text-[11px] leading-5 text-ink-muted" htmlFor="checkout-legal-acknowledged">
+              <input id="checkout-legal-acknowledged" type="checkbox" checked={legalAcknowledged} onChange={(event) => setLegalAcknowledged(event.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-primary" />
+              <span>I agree to the <Link href="/legal/terms" target="_blank" rel="noreferrer" className="font-extrabold text-primary underline underline-offset-4">Terms of Service</Link> and <Link href="/legal/billing" target="_blank" rel="noreferrer" className="font-extrabold text-primary underline underline-offset-4">Billing and Refunds Policy</Link>, and acknowledge the <Link href="/legal/privacy" target="_blank" rel="noreferrer" className="font-extrabold text-primary underline underline-offset-4">Privacy Notice</Link>.</span>
+            </label>
             <button type="submit" disabled={pending} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-xs font-extrabold uppercase tracking-wide text-accent-fg transition hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50">{pending ? "Processing payment…" : `Start Premium · ${formatPeso(discountedAmount)}`}<AdminIcon name="arrow" size={14} /></button>
             <p className="mt-3 text-[11px] leading-4 text-ink-muted">Secure verification may be requested by your bank before the plan is activated.</p>
           </aside>
@@ -273,11 +284,11 @@ export default function SubscriptionCheckout({ variants, branchPricing, policyGa
   }
 }
 
-async function startSubscription(variantId: string, promoCode: string, targetActiveBranchCount?: number) {
+async function startSubscription(variantId: string, promoCode: string, targetActiveBranchCount: number | undefined, legalAcceptance: { termsVersion: string; privacyNoticeVersion: string }) {
   const response = await fetch("/api/billing/subscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ variantId, promoCode, targetActiveBranchCount }),
+    body: JSON.stringify({ variantId, promoCode, targetActiveBranchCount, legalAcceptance }),
   });
   const payload = await response.json() as PaymentIntentResponse;
   if (!response.ok || !payload.ok) throw new Error(payload.message || "Checkout could not be started.");

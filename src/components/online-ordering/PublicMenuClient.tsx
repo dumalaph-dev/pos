@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useActionState, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import {
@@ -21,6 +22,7 @@ import {
 } from "@/lib/online-ordering";
 import { formatPeso } from "@/lib/money";
 import { getPublicMenuThemeVariables } from "@/lib/online-ordering-theme";
+import { LEGAL_DOCUMENT_VERSION } from "@/lib/legal-config";
 import { placeOnlineOrder } from "@/app/menu/[storeSlug]/actions";
 
 type CartLine = {
@@ -281,7 +283,14 @@ export function PublicMenuClient({ menu }: { menu: PublicMenuStore }) {
 
       {drawerOpen && <div className="fixed inset-0 z-40 flex items-end justify-center overscroll-contain bg-[var(--public-menu-primary)]/35 p-0 backdrop-blur-[2px] sm:items-center sm:p-5" role="dialog" aria-modal="true" aria-labelledby="checkout-heading"><div className="public-menu__sheet max-h-[92dvh] w-full max-w-xl overflow-y-auto rounded-t-[24px] bg-[var(--public-menu-raised)] p-4 shadow-[var(--public-menu-shadow-pop)] sm:rounded-[var(--public-menu-radius-card)] sm:p-7"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[var(--public-menu-accent-ink)]">{orderState.ok ? "Order received" : "Almost there"}</p><h2 id="checkout-heading" className="mt-1 text-[1.4rem] font-black leading-tight tracking-[-0.045em] text-[var(--public-menu-heading)] sm:text-2xl">{orderState.ok ? `${orderState.fulfillmentMethod === "delivery" ? "Your delivery" : "Your pickup"} is in the queue.` : "Set your order details."}</h2></div><button type="button" onClick={() => setDrawerOpen(false)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-[var(--public-menu-muted)] transition hover:bg-[var(--public-menu-sidebar)] hover:text-[var(--public-menu-heading)]" aria-label="Close checkout"><AdminIcon name="close" size={18} /></button></div>{orderState.ok ? <OrderConfirmation orderState={orderState} status={trackedStatus} etaAt={trackedEta ?? orderState.etaAt ?? null} queuePosition={trackedQueuePosition ?? orderState.queuePosition ?? null} copied={copied} onCopy={copyOrderNumber} menu={menu} /> : <SmarterCheckoutForm menu={menu} cart={cart} cartTotal={cartTotal} fulfillmentMethod={fulfillmentMethod} onFulfillmentMethodChange={setFulfillmentMethod} requestId={checkoutRequestId} action={formAction} pending={pending} orderState={orderState} />}</div></div>}
 
-      <footer className="border-t border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] px-4 py-7 text-center text-[11px] font-semibold text-[var(--public-menu-subtle)] sm:px-6"><span className="font-extrabold text-[var(--public-menu-heading)]">{brandName}</span> · order ahead with Dumala POS</footer>
+        <footer className="border-t border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] px-4 py-7 text-center text-[11px] font-semibold text-[var(--public-menu-subtle)] sm:px-6">
+          <span className="font-extrabold text-[var(--public-menu-heading)]">{brandName}</span> · order ahead with Dumala POS
+          <nav aria-label="Order legal information" className="mt-3 flex flex-wrap justify-center gap-x-3 gap-y-2 font-bold">
+            <Link href="/legal/online-ordering" className="underline underline-offset-4 hover:text-[var(--public-menu-heading)]">Ordering terms</Link>
+            <Link href="/legal/privacy" className="underline underline-offset-4 hover:text-[var(--public-menu-heading)]">Privacy</Link>
+            <Link href="/legal/complaints" className="underline underline-offset-4 hover:text-[var(--public-menu-heading)]">Help and complaints</Link>
+          </nav>
+        </footer>
     </main>
   );
 }
@@ -432,6 +441,7 @@ function SmarterCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfi
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryNote, setDeliveryNote] = useState("");
   const [note, setNote] = useState("");
+  const [legalAcknowledged, setLegalAcknowledged] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [formError, setFormError] = useState("");
   const selectedPickupDate = dateOptions.some((option) => option.value === pickupDate) ? pickupDate : dateOptions[0]?.value ?? "";
@@ -468,6 +478,8 @@ function SmarterCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfi
       <input type="hidden" name="items" value={JSON.stringify(cart.map((line) => ({ productId: line.product.id, qty: line.qty })))} />
        <input type="hidden" name="pickup_date" value={selectedPickupDate} />
        <input type="hidden" name="pickup_slot" value={selectedPickupSlot} />
+       <input type="hidden" name="legal_terms_version" value={LEGAL_DOCUMENT_VERSION} />
+       <input type="hidden" name="legal_privacy_notice_version" value={LEGAL_DOCUMENT_VERSION} />
       {reviewing && <>
         <input type="hidden" name="fulfillment_method" value={fulfillmentMethod} />
         <input type="hidden" name="customer_name" value={customerName} />
@@ -494,8 +506,12 @@ function SmarterCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfi
         {isDelivery && <p className="mt-3 rounded-xl bg-[var(--public-menu-primary-soft)] px-3 py-2.5 text-[11px] leading-5 text-[var(--public-menu-primary-soft-text)]">{menu.settings.delivery.note}{menu.settings.delivery.serviceArea && ` Service area: ${menu.settings.delivery.serviceArea}.`}</p>}
       </>}
       {formError && <p role="alert" className="mt-4 rounded-xl border border-[var(--public-menu-danger-soft)] bg-[var(--public-menu-danger-soft)] px-3 py-2.5 text-xs font-semibold leading-5 text-[var(--public-menu-danger-text)]">{formError}</p>}
-      {orderState.message && <p role="alert" className="mt-4 rounded-xl border border-[var(--public-menu-danger-soft)] bg-[var(--public-menu-danger-soft)] px-3 py-2.5 text-xs font-semibold leading-5 text-[var(--public-menu-danger-text)]">{orderState.message}</p>}
-      <div className="mt-4 flex items-start gap-2 rounded-xl border border-[var(--public-menu-danger-soft)] bg-[var(--public-menu-danger-soft)] px-3 py-2.5 text-[11px] leading-5 text-[var(--public-menu-danger-text)]"><AdminIcon name="lock" size={14} /><p><strong className="font-extrabold">Please check before placing.</strong> Submit only a genuine order with accurate information; fake, prank, duplicate, or fraudulent orders may be cancelled and reviewed by the store.</p></div>
+       {orderState.message && <p role="alert" className="mt-4 rounded-xl border border-[var(--public-menu-danger-soft)] bg-[var(--public-menu-danger-soft)] px-3 py-2.5 text-xs font-semibold leading-5 text-[var(--public-menu-danger-text)]">{orderState.message}</p>}
+       <div className="mt-4 flex items-start gap-2 rounded-xl border border-[var(--public-menu-danger-soft)] bg-[var(--public-menu-danger-soft)] px-3 py-2.5 text-[11px] leading-5 text-[var(--public-menu-danger-text)]"><AdminIcon name="lock" size={14} /><p><strong className="font-extrabold">Please check before placing.</strong> Submit only a genuine order with accurate information; fake, prank, duplicate, or fraudulent orders may be cancelled and reviewed by the store.</p></div>
+       <label className="mt-4 flex items-start gap-3 text-[11px] leading-5 text-[var(--public-menu-muted)]" htmlFor="order-legal-acknowledged">
+         <input id="order-legal-acknowledged" name="legal_acknowledged" type="checkbox" value="yes" required checked={legalAcknowledged} onChange={(event) => setLegalAcknowledged(event.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-[var(--public-menu-primary)]" />
+         <span>I agree to the <Link href="/legal/online-ordering" target="_blank" rel="noreferrer" className="font-extrabold text-[var(--public-menu-heading)] underline underline-offset-4">Online Ordering Terms</Link> and acknowledge the <Link href="/legal/privacy" target="_blank" rel="noreferrer" className="font-extrabold text-[var(--public-menu-heading)] underline underline-offset-4">Privacy Notice</Link>.</span>
+       </label>
        <button type="submit" disabled={pending || cart.length === 0 || !requestId || dateOptions.length === 0 || !selectedPickupDate || !selectedPickupSlot} className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--public-menu-primary)] px-4 py-3 text-xs font-extrabold uppercase tracking-wide text-[var(--public-menu-primary-text)] transition hover:bg-[var(--public-menu-primary-hover)] disabled:cursor-not-allowed disabled:opacity-55">{pending ? "Placing your order…" : reviewing ? "Confirm and place order" : "Review order"}<AdminIcon name="arrow" size={14} /></button>
       <p className="mt-3 text-center text-[10px] leading-4 text-[var(--public-menu-subtle)]">By placing this order, you agree to be contacted about {isDelivery ? "delivery" : "pickup"}. {menu.settings.cancellationPolicy}</p>
     </form>

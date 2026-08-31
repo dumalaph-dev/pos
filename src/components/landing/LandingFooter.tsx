@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import SectionLink from "./SectionLink";
+import { isEmail, isPhone, legalContact, legalDocumentLinks } from "@/lib/legal-config";
 
 /**
  * Shared by the landing page and every standalone content page, so a new page
@@ -19,7 +20,7 @@ export default function LandingFooter({
   onLandingPage?: boolean;
 }) {
   return (
-    <footer className="lp-sec--footer border-t border-[#ddd5c4] px-6 py-12 sm:px-10 lg:px-16">
+    <footer className="lp-sec--footer border-t border-[#ddd5c4] bg-[#f1ebde] px-6 py-12 sm:px-10 lg:px-16">
       <div className="mx-auto max-w-[1280px]">
         <div className="flex flex-col gap-9 sm:flex-row sm:justify-between">
           <div className="max-w-xs">
@@ -33,7 +34,7 @@ export default function LandingFooter({
             </p>
           </div>
 
-          <div className="grid gap-8 text-xs sm:grid-cols-3 sm:gap-12">
+          <div className="grid gap-8 text-xs sm:grid-cols-4 sm:gap-10">
             <div>
               <p className="font-black uppercase tracking-[0.16em] text-[#173a2b]">Product</p>
               <ul className="mt-3 grid gap-2 text-[#708076]">
@@ -67,9 +68,31 @@ export default function LandingFooter({
                     /platform/login instead. */}
               </ul>
             </div>
+            <div>
+              <p className="font-black uppercase tracking-[0.16em] text-[#173a2b]">Legal</p>
+              <ul className="mt-3 grid gap-2 text-[#708076]">
+                <li><Link href="/legal" className="lp-navlink hover:text-[#b18448]">Legal center</Link></li>
+                {legalDocumentLinks.map((document) => (
+                  <li key={document.href}><Link href={document.href} className="lp-navlink hover:text-[#b18448]">{document.label}</Link></li>
+                ))}
+              </ul>
+            </div>
           </div>
+        </div>
+        <div className="mt-10 border-t border-[#ddd5c4] pt-6 text-xs leading-5 text-[#708076]">
+          <p className="font-bold text-[#173a2b]">{legalContact.tradeName} · {legalContact.legalEntityName}</p>
+          <p className="mt-1">{legalContact.businessAddress}</p>
+          <p className="mt-1">
+            Support: <ContactValue value={legalContact.supportEmail} type="email" /> · <ContactValue value={legalContact.supportPhone} type="phone" /> · Privacy: <ContactValue value={legalContact.privacyEmail} type="email" />
+          </p>
         </div>
       </div>
     </footer>
   );
+}
+
+function ContactValue({ value, type }: { value: string; type: "email" | "phone" }) {
+  const valid = type === "email" ? isEmail(value) : isPhone(value);
+  if (!valid) return <span>{value}</span>;
+  return <a href={type === "email" ? `mailto:${value}` : `tel:${value}`} className="underline underline-offset-4 hover:text-[#b18448]">{value}</a>;
 }
