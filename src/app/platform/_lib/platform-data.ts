@@ -12,6 +12,7 @@ import {
   type ReferralRewardRecord,
 } from "@/lib/referrals";
 import { normalizeTrialFeedbackStatus, type TrialFeedbackStatus } from "@/lib/trial";
+import type { PlatformAuditEvent } from "@/lib/platform-audit";
 
 export type PlatformAdminClient = NonNullable<ReturnType<typeof createAdminClient>>;
 
@@ -158,6 +159,15 @@ export type PlatformEntitlementRecords = {
   trialExtensionsSchemaAvailable: boolean;
 };
 
+export type PlatformAuditResult = {
+  events: PlatformAuditEvent[];
+  schemaAvailable: boolean;
+  operatorAuditSchemaAvailable: boolean;
+  hasMore: boolean;
+};
+
+const PLATFORM_AUDIT_LIMIT = 500;
+
 export async function readOrganizations(admin: PlatformAdminClient): Promise<OrganizationsResult> {
   const rich = await admin
     .from("organizations")
@@ -283,6 +293,89 @@ export async function readPlatformEntitlementRecords(admin: PlatformAdminClient)
     accessGrantsSchemaAvailable: grantsResult.schemaAvailable,
     accessGrantAdjustmentSchemaAvailable: grantsResult.adjustmentSchemaAvailable,
     trialExtensionsSchemaAvailable: trialExtensionsResult.schemaAvailable,
+  };
+}
+
+export async function readPlatformAudit(admin: PlatformAdminClient): Promise<PlatformAuditResult> {
+  const [organizationAuditResult, operatorAuditResult] = await Promise.all([
+    admin
+      .from("audit_logs")
+      .select("id, org_id, actor_id, action, entity, entity_id, before, after, created_at")
+      .like("action", "platform.%")
+      .order("created_at", { ascending: false })
+      .limit(PLATFORM_AUDIT_LIMIT),
+    admin
+      .from("platform_operator_audit_logs")
+      .select("id, operator_id, action, actor_id, actor_email, before, after, created_at")
+      .order("created_at", { ascending: false })
+      .limit(PLATFORM_AUDIT_LIMIT),
+  ]);
+
+  const organizationRows = !organizationAuditResult.error && Array.isArray(organizationAuditResult.data)
+    ? organizationAuditResult.data
+    : [];
+  const operatorRows = !operatorAuditResult.error && Array.isArray(operatorAuditResult.data)
+    ? operatorAuditResult.data
+    : [];
+  const organizationIds = [...new Set(organizationRows
+    .map((row) => typeof row.org_id === "string" ? row.org_id : null)
+    .filter((id): id is string => id !== null))];
+  const organizationNamesResult = organizationIds.length > 0
+    ? await admin.from("organizations").select("id, name").in("id", organizationIds)
+    : null;
+  const organizationNames = new Map<string, string>(
+    (organizationNamesResult?.data ?? []).flatMap((row) => typeof row.id === "string"
+      ? [[row.id, typeof row.name === "string" && row.name.trim() ? row.name : "Unnamed organization"] as [string, string]]
+      : []),
+  );
+
+  const organizationEvents = organizationRows.flatMap<PlatformAuditEvent>((row) => {
+    if (typeof row.id !== "string" || typeof row.action !== "string" || typeof row.created_at !== "string") return [];
+    const before = row.before;
+    const after = row.after;
+    return [{
+      id: row.id,
+      source: "organization",
+      organizationId: typeof row.org_id === "string" ? row.org_id : null,
+      organizationName: typeof row.org_id === "string" ? organizationNames.get(row.org_id) ?? null : null,
+      action: row.action,
+      entity: typeof row.entity === "string" ? row.entity : null,
+      entityId: typeof row.entity_id === "string" ? row.entity_id : null,
+      actorId: typeof row.actor_id === "string" ? row.actor_id : readAuditSnapshotString(after, "platform_actor_id") ?? readAuditSnapshotString(after, "operator_id") ?? readAuditSnapshotString(before, "platform_actor_id"),
+      actorEmail: readAuditSnapshotString(after, "platform_actor_email") ?? readAuditSnapshotString(after, "actor_email") ?? readAuditSnapshotString(before, "platform_actor_email"),
+      before,
+      after,
+      createdAt: row.created_at,
+    }];
+  });
+  const operatorEvents = operatorRows.flatMap<PlatformAuditEvent>((row) => {
+    if (typeof row.id !== "string" || typeof row.action !== "string" || typeof row.created_at !== "string") return [];
+    return [{
+      id: row.id,
+      source: "operator",
+      organizationId: null,
+      organizationName: "Platform-wide",
+      action: row.action,
+      entity: "platform_operators",
+      entityId: typeof row.operator_id === "string" ? row.operator_id : null,
+      actorId: typeof row.actor_id === "string" ? row.actor_id : null,
+      actorEmail: typeof row.actor_email === "string" ? row.actor_email : null,
+      before: row.before,
+      after: row.after,
+      createdAt: row.created_at,
+    }];
+  });
+  const events = [...organizationEvents, ...operatorEvents].sort((left, right) => {
+    const rightTime = Date.parse(right.createdAt);
+    const leftTime = Date.parse(left.createdAt);
+    return (Number.isNaN(rightTime) ? 0 : rightTime) - (Number.isNaN(leftTime) ? 0 : leftTime);
+  });
+
+  return {
+    events: events.slice(0, PLATFORM_AUDIT_LIMIT),
+    schemaAvailable: !organizationAuditResult.error,
+    operatorAuditSchemaAvailable: !operatorAuditResult.error,
+    hasMore: events.length > PLATFORM_AUDIT_LIMIT,
   };
 }
 
@@ -437,6 +530,11 @@ function readSettingsTrialFeedback(organization: OrganizationRecord): TrialFeedb
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readAuditSnapshotString(value: unknown, key: string) {
+  if (!isRecord(value)) return null;
+  return typeof value[key] === "string" && value[key].trim() ? value[key] : null;
 }
 
 export function countByOrg<T extends { org_id: string }>(rows: T[]) {
