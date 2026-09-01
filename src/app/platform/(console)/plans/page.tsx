@@ -1,16 +1,22 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
-import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
 import { readPlatformOperations } from "@/lib/platform-operations-server";
+import { requirePlatformOperator } from "@/lib/platform-operators-server";
+import { hasPlatformOperatorPermission } from "@/lib/platform-operators";
 import { BillingCatalogEditor } from "@/app/platform/BillingCatalogEditor";
-import { PlatformMetric, PlatformPageHeader, PlatformSectionHeading, PlatformUnavailable } from "../../PlatformUI";
+import { PlatformAccessDenied, PlatformMetric, PlatformPageHeader, PlatformSectionHeading } from "../../PlatformUI";
 
 export const dynamic = "force-dynamic";
 
 export default async function PlatformPlansPage() {
-  const admin = createAdminClient();
-  if (!admin) return <PlatformUnavailable detail="Add SUPABASE_SERVICE_ROLE_KEY before opening the platform console." />;
+  const actor = await requirePlatformOperator("console_read");
+  if (!actor.ok) {
+    if (actor.code === "unauthenticated") redirect("/platform/login");
+    return <PlatformAccessDenied detail={actor.message} />;
+  }
+  const admin = actor.admin;
 
   const { catalog } = await readPlatformOperations(admin);
   const activeVariants = catalog.variants.filter((variant) => variant.isActive);
@@ -40,7 +46,7 @@ export default async function PlatformPlansPage() {
         </section>
 
         <section className="mt-6">
-          <BillingCatalogEditor catalog={catalog} />
+          <BillingCatalogEditor catalog={catalog} canManage={hasPlatformOperatorPermission(actor.role, "billing_manage")} />
         </section>
 
         <section className="mt-8 rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6">

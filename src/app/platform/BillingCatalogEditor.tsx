@@ -29,7 +29,7 @@ const FEATURE_LIST = [
   "Audited billing and support history",
 ];
 
-export function BillingCatalogEditor({ catalog }: { catalog: BillingCatalog }) {
+export function BillingCatalogEditor({ catalog, canManage }: { catalog: BillingCatalog; canManage: boolean }) {
   const [state, formAction, pending] = useActionState(saveBillingCatalog, INITIAL_STATE);
   const [monthlyPrice, setMonthlyPrice] = useState(formatMonthlyPriceInput(catalog.monthlyPriceCentavos));
   const [additionalBranchPrice, setAdditionalBranchPrice] = useState(formatMonthlyPriceInput(catalog.additionalBranchPriceCentavos));
@@ -116,7 +116,7 @@ export function BillingCatalogEditor({ catalog }: { catalog: BillingCatalog }) {
               onEdit={() => document.getElementById(`variant-${variant.localKey}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}
             />
           ))}
-          <button type="button" onClick={addVariant} disabled={!catalog.schemaAvailable || pending} className="group flex min-h-[222px] flex-col items-center justify-center rounded-[18px] border border-dashed border-line-strong bg-raised/45 px-5 text-center transition hover:-translate-y-1 hover:border-accent hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" onClick={addVariant} disabled={!canManage || !catalog.schemaAvailable || pending} className="group flex min-h-[222px] flex-col items-center justify-center rounded-[18px] border border-dashed border-line-strong bg-raised/45 px-5 text-center transition hover:-translate-y-1 hover:border-accent hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50">
             <span className="grid h-11 w-11 place-items-center rounded-full border border-line-strong bg-surface text-ink-muted transition group-hover:border-accent group-hover:bg-primary-soft group-hover:text-primary"><AdminIcon name="plus" size={20} /></span>
             <span className="mt-4 text-sm font-extrabold text-ink">Add custom plan</span>
             <span className="mt-1 max-w-[165px] text-xs leading-5 text-ink-muted">Create another billing duration with its own discount.</span>
@@ -149,14 +149,14 @@ export function BillingCatalogEditor({ catalog }: { catalog: BillingCatalog }) {
               <SettingCopy label="Monthly base price" detail="The reference price used to calculate every annual offer." />
               <div className="relative w-full sm:max-w-[190px]">
                 <span className="pointer-events-none absolute inset-y-0 left-3 grid place-items-center text-sm font-extrabold text-ink-muted">₱</span>
-                <input id="platform-monthly-price" name="monthly_price" type="text" inputMode="decimal" value={monthlyPrice} onChange={(event) => setMonthlyPrice(event.target.value)} className={`${CONTROL_CLASS} pl-7`} disabled={!catalog.schemaAvailable || pending} aria-describedby="monthly-price-help" />
+                <input id="platform-monthly-price" name="monthly_price" type="text" inputMode="decimal" value={monthlyPrice} onChange={(event) => setMonthlyPrice(event.target.value)} className={`${CONTROL_CLASS} pl-7`} disabled={!canManage || !catalog.schemaAvailable || pending} aria-describedby="monthly-price-help" />
               </div>
             </div>
             <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
               <SettingCopy label="Additional active branch price" detail={`Monthly charge for each active branch beyond the ${catalog.includedBranchCount} included branch${catalog.includedBranchCount === 1 ? "" : "es"}.`} />
               <div className="relative w-full sm:max-w-[190px]">
                 <span className="pointer-events-none absolute inset-y-0 left-3 grid place-items-center text-sm font-extrabold text-ink-muted">₱</span>
-                <input id="platform-additional-branch-price" name="additional_branch_price" type="text" inputMode="decimal" value={additionalBranchPrice} onChange={(event) => setAdditionalBranchPrice(event.target.value)} className={`${CONTROL_CLASS} pl-7`} disabled={!catalog.schemaAvailable || pending} aria-describedby="monthly-price-help" />
+                <input id="platform-additional-branch-price" name="additional_branch_price" type="text" inputMode="decimal" value={additionalBranchPrice} onChange={(event) => setAdditionalBranchPrice(event.target.value)} className={`${CONTROL_CLASS} pl-7`} disabled={!canManage || !catalog.schemaAvailable || pending} aria-describedby="monthly-price-help" />
               </div>
             </div>
             <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
@@ -169,13 +169,14 @@ export function BillingCatalogEditor({ catalog }: { catalog: BillingCatalog }) {
                   <p className="text-sm font-extrabold text-ink">Billing options</p>
                   <p className="mt-1 text-xs leading-5 text-ink-muted">Edit labels, commitment length, customer visibility, and the PayMongo mapping for each cycle.</p>
                 </div>
-                <button type="button" onClick={addVariant} disabled={!catalog.schemaAvailable || pending} className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl bg-secondary px-3 py-2 text-[11px] font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover disabled:cursor-not-allowed disabled:opacity-50"><AdminIcon name="plus" size={13} /> Add option</button>
+                <button type="button" onClick={addVariant} disabled={!canManage || !catalog.schemaAvailable || pending} className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl bg-secondary px-3 py-2 text-[11px] font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover disabled:cursor-not-allowed disabled:opacity-50"><AdminIcon name="plus" size={13} /> Add option</button>
               </div>
 
               <div className="mt-4 divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
-                {variants.map((variant, index) => <BillingOptionRow key={variant.localKey} variant={variant} index={index} catalog={catalog} monthlyPriceCentavos={monthlyPriceCentavos} pending={pending} updateVariant={updateVariant} />)}
+                {variants.map((variant, index) => <BillingOptionRow key={variant.localKey} variant={variant} index={index} catalog={catalog} monthlyPriceCentavos={monthlyPriceCentavos} pending={pending} canManage={canManage} updateVariant={updateVariant} />)}
               </div>
               {!catalog.schemaAvailable && <p role="status" className="mt-3 rounded-xl border border-warning/35 bg-warning/10 px-3 py-2.5 text-xs font-semibold leading-5 text-ink">Pricing controls are previewing the default catalog. Apply migration <code className="font-extrabold">0068_branch_billing_pricing.sql</code> to save changes.</p>}
+              {!canManage && <p role="status" className="mt-3 rounded-xl border border-line bg-raised px-3 py-2.5 text-xs font-semibold leading-5 text-ink-muted">Pricing changes are limited to Billing and Owner operators. Your role can still review the live catalog and customer preview.</p>}
             </div>
           </div>
 
@@ -223,7 +224,7 @@ export function BillingCatalogEditor({ catalog }: { catalog: BillingCatalog }) {
         <div className="flex items-start gap-2.5 text-xs leading-5 text-ink-muted"><span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border border-primary/30 text-primary"><AdminIcon name="history" size={12} /></span><p><strong className="text-ink">New quotes use the saved base and branch prices.</strong><br />Base-price edits do not reprice existing subscribers; branch changes schedule the updated add-on plan.</p></div>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Link href="#discount-structure-heading" className="inline-flex min-h-10 items-center justify-center rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-xs font-extrabold text-primary transition hover:border-primary hover:bg-primary-soft">Review discounts</Link>
-          <button type="submit" disabled={!catalog.schemaAvailable || pending} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50">{pending ? "Saving pricing…" : "Save changes"}<AdminIcon name="check" size={14} /></button>
+          <button type="submit" disabled={!canManage || !catalog.schemaAvailable || pending} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50">{pending ? "Saving pricing…" : "Save changes"}<AdminIcon name="check" size={14} /></button>
         </div>
       </div>
     </form>
@@ -274,23 +275,23 @@ function PlanCard({ variant, monthlyPriceCentavos, featured = false, onEdit }: {
   </article>;
 }
 
-function BillingOptionRow({ variant, index, catalog, monthlyPriceCentavos, pending, updateVariant }: { variant: DraftVariant; index: number; catalog: BillingCatalog; monthlyPriceCentavos: number; pending: boolean; updateVariant: (localKey: string, patch: Partial<DraftVariant>) => void }) {
+function BillingOptionRow({ variant, index, catalog, monthlyPriceCentavos, pending, canManage, updateVariant }: { variant: DraftVariant; index: number; catalog: BillingCatalog; monthlyPriceCentavos: number; pending: boolean; canManage: boolean; updateVariant: (localKey: string, patch: Partial<DraftVariant>) => void }) {
   const priceLabel = billingVariantPriceLabel({ monthlyPriceCentavos }, variant);
   const isMonthly = variant.intervalUnit === "month";
   return <div id={`variant-${variant.localKey}`} className="scroll-mt-6 px-3 py-4 sm:px-4">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div><p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-accent">Option {index + 1}</p><p className="mt-1 text-sm font-extrabold text-ink">{variant.label || "Untitled option"}</p><p className="mt-1 text-xs font-semibold text-ink-muted">{priceLabel} · {isMonthly ? "monthly base" : `${variant.intervalCount}-year commitment`}</p></div>
-      <label className="inline-flex min-h-9 items-center gap-2 rounded-full border border-line bg-raised px-3 text-xs font-extrabold text-ink"><input type="checkbox" checked={variant.isActive} onChange={(event) => updateVariant(variant.localKey, { isActive: event.target.checked })} className="h-4 w-4 accent-primary" disabled={!catalog.schemaAvailable || pending} /> Customer can buy this</label>
+      <label className="inline-flex min-h-9 items-center gap-2 rounded-full border border-line bg-raised px-3 text-xs font-extrabold text-ink"><input type="checkbox" checked={variant.isActive} onChange={(event) => updateVariant(variant.localKey, { isActive: event.target.checked })} className="h-4 w-4 accent-primary" disabled={!canManage || !catalog.schemaAvailable || pending} /> Customer can buy this</label>
     </div>
     <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1.15fr)_100px_112px_128px]">
-      <label className="block text-[10px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor={`variant-label-${variant.localKey}`}>Display label<input id={`variant-label-${variant.localKey}`} type="text" value={variant.label} onChange={(event) => updateVariant(variant.localKey, { label: event.target.value })} className={CONTROL_CLASS} maxLength={80} disabled={!catalog.schemaAvailable || pending} /></label>
-      <label className="block text-[10px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor={`variant-unit-${variant.localKey}`}>Cycle<select id={`variant-unit-${variant.localKey}`} value={variant.intervalUnit} onChange={(event) => updateVariant(variant.localKey, { intervalUnit: event.target.value as BillingVariant["intervalUnit"], intervalCount: event.target.value === "month" ? 1 : Math.max(1, variant.intervalCount), discountPercent: event.target.value === "month" ? 0 : variant.discountPercent })} className={CONTROL_CLASS} disabled={!catalog.schemaAvailable || pending}><option value="month">Month</option><option value="year">Year</option></select></label>
-      <label className="block text-[10px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor={`variant-count-${variant.localKey}`}>Duration<div className="relative"><input id={`variant-count-${variant.localKey}`} type="number" min="1" max="10" step="1" value={variant.intervalCount} onChange={(event) => updateVariant(variant.localKey, { intervalCount: Math.max(1, Math.min(10, Number(event.target.value) || 1)) })} className={`${CONTROL_CLASS} pr-12`} disabled={isMonthly || !catalog.schemaAvailable || pending} /><span className="pointer-events-none absolute inset-y-0 right-3 grid place-items-center text-[10px] font-bold text-ink-muted">{isMonthly ? "mo" : "yrs"}</span></div></label>
-      <label className="block text-[10px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor={`variant-discount-${variant.localKey}`}>Discount<div className="relative"><input id={`variant-discount-${variant.localKey}`} type="number" min="0" max="100" step="0.01" value={variant.discountPercent} onChange={(event) => updateVariant(variant.localKey, { discountPercent: Math.max(0, Math.min(100, Number(event.target.value) || 0)) })} className={`${CONTROL_CLASS} pr-7`} disabled={isMonthly || !catalog.schemaAvailable || pending} /><span className="pointer-events-none absolute inset-y-0 right-3 grid place-items-center text-sm font-extrabold text-ink-muted">%</span></div></label>
+      <label className="block text-[10px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor={`variant-label-${variant.localKey}`}>Display label<input id={`variant-label-${variant.localKey}`} type="text" value={variant.label} onChange={(event) => updateVariant(variant.localKey, { label: event.target.value })} className={CONTROL_CLASS} maxLength={80} disabled={!canManage || !catalog.schemaAvailable || pending} /></label>
+      <label className="block text-[10px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor={`variant-unit-${variant.localKey}`}>Cycle<select id={`variant-unit-${variant.localKey}`} value={variant.intervalUnit} onChange={(event) => updateVariant(variant.localKey, { intervalUnit: event.target.value as BillingVariant["intervalUnit"], intervalCount: event.target.value === "month" ? 1 : Math.max(1, variant.intervalCount), discountPercent: event.target.value === "month" ? 0 : variant.discountPercent })} className={CONTROL_CLASS} disabled={!canManage || !catalog.schemaAvailable || pending}><option value="month">Month</option><option value="year">Year</option></select></label>
+      <label className="block text-[10px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor={`variant-count-${variant.localKey}`}>Duration<div className="relative"><input id={`variant-count-${variant.localKey}`} type="number" min="1" max="10" step="1" value={variant.intervalCount} onChange={(event) => updateVariant(variant.localKey, { intervalCount: Math.max(1, Math.min(10, Number(event.target.value) || 1)) })} className={`${CONTROL_CLASS} pr-12`} disabled={isMonthly || !canManage || !catalog.schemaAvailable || pending} /><span className="pointer-events-none absolute inset-y-0 right-3 grid place-items-center text-[10px] font-bold text-ink-muted">{isMonthly ? "mo" : "yrs"}</span></div></label>
+      <label className="block text-[10px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor={`variant-discount-${variant.localKey}`}>Discount<div className="relative"><input id={`variant-discount-${variant.localKey}`} type="number" min="0" max="100" step="0.01" value={variant.discountPercent} onChange={(event) => updateVariant(variant.localKey, { discountPercent: Math.max(0, Math.min(100, Number(event.target.value) || 0)) })} className={`${CONTROL_CLASS} pr-7`} disabled={isMonthly || !canManage || !catalog.schemaAvailable || pending} /><span className="pointer-events-none absolute inset-y-0 right-3 grid place-items-center text-sm font-extrabold text-ink-muted">%</span></div></label>
     </div>
     <details className="mt-3 rounded-xl border border-line bg-raised px-3 py-2.5">
       <summary className="cursor-pointer list-none text-[11px] font-extrabold text-primary outline-none focus-visible:underline">Advanced provider mapping <span className="font-semibold text-ink-muted">· optional</span></summary>
-      <label className="mt-3 block text-[10px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor={`variant-paymongo-${variant.localKey}`}>PayMongo plan ID<input id={`variant-paymongo-${variant.localKey}`} type="text" value={variant.paymongoPlanId ?? ""} onChange={(event) => updateVariant(variant.localKey, { paymongoPlanId: event.target.value || null })} placeholder="plan_…" className={CONTROL_CLASS} disabled={!catalog.schemaAvailable || pending} /></label>
+      <label className="mt-3 block text-[10px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor={`variant-paymongo-${variant.localKey}`}>PayMongo plan ID<input id={`variant-paymongo-${variant.localKey}`} type="text" value={variant.paymongoPlanId ?? ""} onChange={(event) => updateVariant(variant.localKey, { paymongoPlanId: event.target.value || null })} placeholder="plan_…" className={CONTROL_CLASS} disabled={!canManage || !catalog.schemaAvailable || pending} /></label>
     </details>
   </div>;
 }

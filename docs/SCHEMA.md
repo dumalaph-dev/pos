@@ -341,8 +341,11 @@ Seed **two orgs**, each with **two branches**, each with a cashier + admin, and 
 ## 8. Platform operations (migrations 0027–0030)
 
 Platform-wide configuration is intentionally isolated from tenant RLS. The
-server-only platform admin client reads and writes these tables after checking
-the `PLATFORM_ADMIN_EMAILS` allowlist:
+server-only platform operator client reads and writes these tables after
+checking the managed operator role. `PLATFORM_ADMIN_EMAILS` remains the
+server-only bootstrap path: a matching email resolves as an `owner` before the
+managed membership table is consulted, and that bootstrap membership cannot be
+changed or revoked from the console.
 
 - `platform_billing_settings` stores the PHP monthly base price in integer
   centavos.
@@ -361,6 +364,21 @@ the `PLATFORM_ADMIN_EMAILS` allowlist:
   workflow; migration 0029 removes inherited tenant table grants, and
   tenant-facing case history can be added later without changing the policy
   gate.
+
+Migration 0077 adds the service-role-only `platform_operators` membership table
+and its append-only `platform_operator_audit_logs` table. The four roles are:
+
+- `owner`: every platform permission, including operator management.
+- `billing`: plans, promotions, and entitlement mutations; no support access.
+- `support`: support and account-lifecycle mutations; entitlement is read-only;
+  no pricing or policy changes.
+- `read_only`: console reads without mutation permissions.
+
+The `create_platform_operator`, `change_platform_operator_role`, and
+`revoke_platform_operator` security-definer RPCs preserve membership history,
+write the membership audit row in the same transaction, and protect the final
+active table owner. They are executable only by `service_role`; the application
+still performs the authenticated role check before calling them.
 
 `organizations.account_status` plus the suspension metadata columns are the
 account-lifecycle projection. Platform suspension and restore actions write an

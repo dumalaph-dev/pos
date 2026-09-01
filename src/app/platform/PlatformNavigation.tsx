@@ -4,17 +4,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminIcon, type AdminIconName } from "@/components/admin/AdminIcon";
+import { platformOperatorRoleLabel, type PlatformOperatorRole } from "@/lib/platform-operators";
 
 const PLATFORM_NAV_ITEMS: Array<{ label: string; href: string; icon: AdminIconName; detail: string }> = [
   { label: "Overview", href: "/platform", icon: "dashboard", detail: "Command center" },
   { label: "Plans & Pricing", href: "/platform/plans", icon: "wallet", detail: "Subscription catalog" },
   { label: "Promo & Marketing", href: "/platform/promotions", icon: "tag", detail: "Campaign codes & performance" },
   { label: "Directory", href: "/platform/users", icon: "customers", detail: "Users & organizations" },
+  { label: "Operators", href: "/platform/operators", icon: "employees", detail: "Roles & access" },
   { label: "Policies", href: "/platform/policies", icon: "lock", detail: "Operating rules" },
   { label: "Operations", href: "/platform/operations", icon: "refresh", detail: "Lifecycle & support" },
 ];
 
-export function PlatformNavigation({ userEmail }: { userEmail: string | null | undefined }) {
+export function PlatformNavigation({ userEmail, role, isBootstrap }: { userEmail: string | null | undefined; role: PlatformOperatorRole; isBootstrap: boolean }) {
   const pathname = usePathname();
 
   return (
@@ -45,7 +47,7 @@ export function PlatformNavigation({ userEmail }: { userEmail: string | null | u
             <Link href="/admin" className="flex min-h-10 items-center gap-2 rounded-xl px-3 text-xs font-extrabold text-[#aec3b3] transition hover:bg-white/10 hover:text-[#fffaf1] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d2a15c]"><AdminIcon name="arrow" size={15} /> View owner dashboard</Link>
             <div className="mt-3 flex items-center gap-2.5 rounded-xl bg-white/[0.06] px-3 py-2.5">
               <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#d2a15c] text-[10px] font-extrabold text-[#15382a]">{getInitials(userEmail)}</span>
-              <span className="min-w-0"><span className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#8da795]">Signed in as</span><span className="mt-0.5 block truncate text-xs font-bold text-[#fffaf1]" title={userEmail ?? "Platform admin"}>{userEmail ?? "Platform admin"}</span></span>
+              <span className="min-w-0"><span className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#8da795]">{platformOperatorRoleLabel(role)}{isBootstrap ? " · bootstrap" : ""}</span><span className="mt-0.5 block truncate text-xs font-bold text-[#fffaf1]" title={userEmail ?? "Platform operator"}>{userEmail ?? "Platform operator"}</span></span>
             </div>
           </div>
         </div>
@@ -57,7 +59,7 @@ export function PlatformNavigation({ userEmail }: { userEmail: string | null | u
             <AdminBrandLogo logoUrl="/badge.png" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-[#d2a15c]/50 bg-[#fffaf1] text-[#15382a]" iconSize={20} label="Dumala logo" fallbackIcon="pig" />
             <span className="min-w-0"><strong className="block truncate text-sm font-extrabold">Dumala POS</strong><span className="block text-[9px] font-extrabold uppercase tracking-[0.15em] text-[#aec3b3]">Platform console</span></span>
           </Link>
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#d2a15c] text-[10px] font-extrabold text-[#15382a]" title={userEmail ?? "Platform admin"}>{getInitials(userEmail)}</span>
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#d2a15c] text-[10px] font-extrabold text-[#15382a]" title={`${platformOperatorRoleLabel(role)}${isBootstrap ? " bootstrap" : ""} · ${userEmail ?? "Platform operator"}`}>{getInitials(userEmail)}</span>
         </div>
         <nav aria-label="Platform navigation" className="flex gap-1 overflow-x-auto px-3 pb-3">
           {PLATFORM_NAV_ITEMS.map((item) => <PlatformNavItem key={item.href} item={item} pathname={pathname} compact />)}

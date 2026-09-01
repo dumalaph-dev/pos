@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
-import { createAdminClient } from "@/lib/employee-auth";
-import { PlatformMetric, PlatformPageHeader, PlatformSectionHeading, PlatformUnavailable } from "../../PlatformUI";
+import { requirePlatformOperator } from "@/lib/platform-operators-server";
+import { PlatformAccessDenied, PlatformMetric, PlatformPageHeader, PlatformSectionHeading } from "../../PlatformUI";
 import { countByOrg, humanizeRole, readPlatformDirectory } from "../../_lib/platform-data";
 
 export const dynamic = "force-dynamic";
@@ -9,8 +10,12 @@ export const dynamic = "force-dynamic";
 type PlatformUsersSearchParams = Promise<{ q?: string | string[] | undefined }>;
 
 export default async function PlatformUsersPage({ searchParams }: { searchParams: PlatformUsersSearchParams }) {
-  const admin = createAdminClient();
-  if (!admin) return <PlatformUnavailable detail="Add SUPABASE_SERVICE_ROLE_KEY before opening the platform console." />;
+  const actor = await requirePlatformOperator("console_read");
+  if (!actor.ok) {
+    if (actor.code === "unauthenticated") redirect("/platform/login");
+    return <PlatformAccessDenied detail={actor.message} />;
+  }
+  const admin = actor.admin;
 
   const directory = await readPlatformDirectory(admin);
   const { organizations, profiles, employees, stores, authEmailById } = directory;

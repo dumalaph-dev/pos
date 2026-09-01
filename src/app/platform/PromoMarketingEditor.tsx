@@ -17,7 +17,7 @@ type PromotionSummary = PlatformPromotion & {
 const INITIAL_STATE: PlatformActionState = { ok: false, message: "" };
 const CONTROL_CLASS = "mt-1 w-full rounded-xl border border-line-strong bg-raised px-3 py-2.5 text-sm font-semibold text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10";
 
-export function PromoMarketingEditor({ schemaAvailable, promotions, performance }: { schemaAvailable: boolean; promotions: PlatformPromotion[]; performance: PlatformPromotionPerformance[] }) {
+export function PromoMarketingEditor({ schemaAvailable, promotions, performance, canManage }: { schemaAvailable: boolean; promotions: PlatformPromotion[]; performance: PlatformPromotionPerformance[]; canManage: boolean }) {
   const [state, formAction, pending] = useActionState(savePlatformPromotion, INITIAL_STATE);
   const [discountType, setDiscountType] = useState<"percentage" | "fixed">("percentage");
 
@@ -38,32 +38,32 @@ export function PromoMarketingEditor({ schemaAvailable, promotions, performance 
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <label className="block text-[10px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor="promotion-code">Code
-              <input id="promotion-code" name="code" type="text" required maxLength={32} placeholder="WELCOME20" className={`${CONTROL_CLASS} uppercase`} disabled={!schemaAvailable || pending} />
+              <input id="promotion-code" name="code" type="text" required maxLength={32} placeholder="WELCOME20" className={`${CONTROL_CLASS} uppercase`} disabled={!canManage || !schemaAvailable || pending} />
             </label>
             <label className="block text-[10px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor="promotion-name">Internal name
-              <input id="promotion-name" name="name" type="text" required maxLength={80} placeholder="New customer welcome" className={CONTROL_CLASS} disabled={!schemaAvailable || pending} />
+              <input id="promotion-name" name="name" type="text" required maxLength={80} placeholder="New customer welcome" className={CONTROL_CLASS} disabled={!canManage || !schemaAvailable || pending} />
             </label>
           </div>
 
           <label className="mt-3 block text-[10px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor="promotion-description">Description
-            <textarea id="promotion-description" name="description" rows={2} maxLength={240} placeholder="A short note for your team about when to use this offer." className={`${CONTROL_CLASS} resize-y`} disabled={!schemaAvailable || pending} />
+            <textarea id="promotion-description" name="description" rows={2} maxLength={240} placeholder="A short note for your team about when to use this offer." className={`${CONTROL_CLASS} resize-y`} disabled={!canManage || !schemaAvailable || pending} />
           </label>
 
           <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_1.2fr]">
             <label className="block text-[10px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor="promotion-type">Discount type
-              <select id="promotion-type" name="discount_type" value={discountType} onChange={(event) => setDiscountType(event.target.value as "percentage" | "fixed")} className={CONTROL_CLASS} disabled={!schemaAvailable || pending}>
+              <select id="promotion-type" name="discount_type" value={discountType} onChange={(event) => setDiscountType(event.target.value as "percentage" | "fixed")} className={CONTROL_CLASS} disabled={!canManage || !schemaAvailable || pending}>
                 <option value="percentage">Percentage</option>
                 <option value="fixed">Fixed PHP amount</option>
               </select>
             </label>
             <label className="block text-[10px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor="promotion-value">Value
               <div className="relative">
-                <input id="promotion-value" name="discount_value" type="number" min="0.01" max={discountType === "percentage" ? "100" : "10000"} step="0.01" required placeholder={discountType === "percentage" ? "20" : "500"} className={`${CONTROL_CLASS} pr-9`} disabled={!schemaAvailable || pending} />
+                <input id="promotion-value" name="discount_value" type="number" min="0.01" max={discountType === "percentage" ? "100" : "10000"} step="0.01" required placeholder={discountType === "percentage" ? "20" : "500"} className={`${CONTROL_CLASS} pr-9`} disabled={!canManage || !schemaAvailable || pending} />
                 <span className="pointer-events-none absolute inset-y-0 right-3 grid place-items-center text-xs font-extrabold text-ink-muted">{discountType === "percentage" ? "%" : "₱"}</span>
               </div>
             </label>
             <label className="block text-[10px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor="promotion-scope">Applies to
-              <select id="promotion-scope" name="applies_to" defaultValue="all" className={CONTROL_CLASS} disabled={!schemaAvailable || pending}>
+              <select id="promotion-scope" name="applies_to" defaultValue="all" className={CONTROL_CLASS} disabled={!canManage || !schemaAvailable || pending}>
                 <option value="all">All plans</option>
                 <option value="monthly">Monthly only</option>
                 <option value="annual">Annual options only</option>
@@ -73,13 +73,13 @@ export function PromoMarketingEditor({ schemaAvailable, promotions, performance 
 
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
             <label className="block text-[10px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor="promotion-starts">Starts (Singapore time, optional)
-              <input id="promotion-starts" name="starts_at" type="datetime-local" className={CONTROL_CLASS} disabled={!schemaAvailable || pending} />
+              <input id="promotion-starts" name="starts_at" type="datetime-local" className={CONTROL_CLASS} disabled={!canManage || !schemaAvailable || pending} />
             </label>
             <label className="block text-[10px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor="promotion-ends">Ends (Singapore time, optional)
-              <input id="promotion-ends" name="ends_at" type="datetime-local" className={CONTROL_CLASS} disabled={!schemaAvailable || pending} />
+              <input id="promotion-ends" name="ends_at" type="datetime-local" className={CONTROL_CLASS} disabled={!canManage || !schemaAvailable || pending} />
             </label>
             <label className="block text-[10px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor="promotion-limit">Redemption limit
-              <input id="promotion-limit" name="max_redemptions" type="number" min="1" max="1000000" step="1" placeholder="Unlimited" className={CONTROL_CLASS} disabled={!schemaAvailable || pending} />
+              <input id="promotion-limit" name="max_redemptions" type="number" min="1" max="1000000" step="1" placeholder="Unlimited" className={CONTROL_CLASS} disabled={!canManage || !schemaAvailable || pending} />
             </label>
           </div>
 
@@ -88,8 +88,9 @@ export function PromoMarketingEditor({ schemaAvailable, promotions, performance 
 
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
             <p className="max-w-md text-xs leading-5 text-ink-muted">One business can convert each code once. Pause a campaign at any time without deleting its history.</p>
-            <button type="submit" disabled={!schemaAvailable || pending} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50">{pending ? "Saving…" : "Create promotion"}<AdminIcon name="plus" size={14} /></button>
+            <button type="submit" disabled={!canManage || !schemaAvailable || pending} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50">{pending ? "Saving…" : "Create promotion"}<AdminIcon name="plus" size={14} /></button>
           </div>
+          {!canManage && <p role="status" className="mt-3 rounded-xl border border-line bg-raised px-3 py-2.5 text-xs font-semibold leading-5 text-ink-muted">Promotion changes are limited to Billing and Owner operators. Your role can still review campaign performance.</p>}
         </form>
 
         <aside className="rounded-[20px] border border-line bg-primary p-5 text-primary-fg shadow-[var(--shadow-pop)] sm:p-6" aria-labelledby="promotion-measurement-heading">
@@ -124,7 +125,7 @@ export function PromoMarketingEditor({ schemaAvailable, promotions, performance 
           <div className="overflow-x-auto">
             <table className="min-w-[900px] w-full text-left text-sm">
               <thead className="bg-raised text-[10px] uppercase tracking-[0.12em] text-ink-muted"><tr><th className="px-6 py-3 font-extrabold">Promotion</th><th className="px-4 py-3 font-extrabold">Offer</th><th className="px-4 py-3 font-extrabold">Status</th><th className="px-4 py-3 font-extrabold">Conversion</th><th className="px-4 py-3 text-right font-extrabold">Discount given</th><th className="px-4 py-3 text-right font-extrabold">Revenue</th><th className="px-6 py-3 text-right font-extrabold">Action</th></tr></thead>
-              <tbody className="divide-y divide-line">{summaries.map((promotion) => <PromotionRow key={promotion.id} promotion={promotion} schemaAvailable={schemaAvailable} />)}</tbody>
+              <tbody className="divide-y divide-line">{summaries.map((promotion) => <PromotionRow key={promotion.id} promotion={promotion} schemaAvailable={schemaAvailable} canManage={canManage} />)}</tbody>
             </table>
           </div>
         )}
@@ -133,7 +134,7 @@ export function PromoMarketingEditor({ schemaAvailable, promotions, performance 
   );
 }
 
-function PromotionRow({ promotion, schemaAvailable }: { promotion: PromotionSummary; schemaAvailable: boolean }) {
+function PromotionRow({ promotion, schemaAvailable, canManage }: { promotion: PromotionSummary; schemaAvailable: boolean; canManage: boolean }) {
   return (
     <tr className="align-middle transition hover:bg-raised/55">
       <td className="px-6 py-4"><strong className="block font-extrabold text-primary">{promotion.code}</strong><span className="mt-1 block max-w-[220px] truncate text-xs text-ink-muted">{promotion.name}{promotion.description ? ` · ${promotion.description}` : ""}</span></td>
@@ -142,14 +143,14 @@ function PromotionRow({ promotion, schemaAvailable }: { promotion: PromotionSumm
       <td className="px-4 py-4"><strong className="tabular-nums font-extrabold text-ink">{promotion.converted}/{promotion.started}</strong><span className="mt-1 block text-xs text-ink-muted">{promotion.conversionRate}% conversion</span></td>
       <td className="px-4 py-4 text-right"><strong className="tabular-nums font-extrabold text-danger">-{formatPeso(promotion.discountGivenCentavos)}</strong><span className="mt-1 block text-xs text-ink-muted">{promotion.maxRedemptions ? `${promotion.converted}/${promotion.maxRedemptions} used` : "No limit"}</span></td>
       <td className="px-4 py-4 text-right"><strong className="tabular-nums font-extrabold text-ink">{formatPeso(promotion.revenueCentavos)}</strong><span className="mt-1 block text-xs text-ink-muted">After discount</span></td>
-      <td className="px-6 py-4 text-right"><PromotionToggleButton promotion={promotion} schemaAvailable={schemaAvailable} /></td>
+      <td className="px-6 py-4 text-right"><PromotionToggleButton promotion={promotion} schemaAvailable={schemaAvailable} canManage={canManage} /></td>
     </tr>
   );
 }
 
-function PromotionToggleButton({ promotion, schemaAvailable }: { promotion: PromotionSummary; schemaAvailable: boolean }) {
+function PromotionToggleButton({ promotion, schemaAvailable, canManage }: { promotion: PromotionSummary; schemaAvailable: boolean; canManage: boolean }) {
   const [state, formAction, pending] = useActionState(togglePlatformPromotion, INITIAL_STATE);
-  return <form action={formAction} className="inline-flex flex-col items-end gap-1"><input type="hidden" name="promotion_id" value={promotion.id} readOnly /><input type="hidden" name="is_active" value={String(promotion.isActive)} readOnly /><button type="submit" disabled={!schemaAvailable || pending} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line-strong bg-raised px-3 py-2 text-[10px] font-extrabold uppercase tracking-wide text-primary transition hover:border-primary hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50">{pending ? "Saving…" : promotion.isActive ? "Pause" : "Activate"}</button>{state.message && !state.ok && <span className="max-w-[170px] text-[10px] font-semibold text-danger">{state.message}</span>}</form>;
+  return <form action={formAction} className="inline-flex flex-col items-end gap-1"><input type="hidden" name="promotion_id" value={promotion.id} readOnly /><input type="hidden" name="is_active" value={String(promotion.isActive)} readOnly /><button type="submit" disabled={!canManage || !schemaAvailable || pending} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line-strong bg-raised px-3 py-2 text-[10px] font-extrabold uppercase tracking-wide text-primary transition hover:border-primary hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50">{pending ? "Saving…" : promotion.isActive ? "Pause" : "Activate"}</button>{state.message && !state.ok && <span className="max-w-[170px] text-[10px] font-semibold text-danger">{state.message}</span>}</form>;
 }
 
 function MeasurementRow({ label, detail }: { label: string; detail: string }) {

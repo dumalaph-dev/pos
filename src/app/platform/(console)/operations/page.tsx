@@ -1,22 +1,28 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { CheckoutReadinessChecklist } from "@/app/platform/CheckoutReadinessChecklist";
 import { OrganizationOperations } from "@/app/platform/OrganizationOperations";
 import { TrialFeedbackOperations } from "@/app/platform/TrialFeedbackOperations";
 import { getBillingPlan, normalizeSubscriptionStatus, subscriptionStatusLabel, subscriptionTone } from "@/lib/billing";
-import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
 import { getCheckoutReadiness, isPolicyGateOpen, readPolicyNumber } from "@/lib/platform-operations";
 import { payMongoConfiguration, readPayMongoSubscriptionReadiness, readPlatformOperations, supportCasesSchemaAvailable } from "@/lib/platform-operations-server";
+import { hasPlatformOperatorPermission } from "@/lib/platform-operators";
+import { requirePlatformOperator } from "@/lib/platform-operators-server";
 import { formatTrialRemaining, readTrialLifecycle, TRIAL_FEEDBACK_STATUS_LABELS } from "@/lib/trial";
-import { PlatformMetric, PlatformMigrationNotice, PlatformPageHeader, PlatformSectionHeading, PlatformStatusBadge, PlatformUnavailable } from "../../PlatformUI";
+import { PlatformAccessDenied, PlatformMetric, PlatformMigrationNotice, PlatformPageHeader, PlatformSectionHeading, PlatformStatusBadge } from "../../PlatformUI";
 import { countByOrg, formatDate, readPlatformDirectory } from "../../_lib/platform-data";
 
 export const dynamic = "force-dynamic";
 
 export default async function PlatformOperationsPage() {
-  const admin = createAdminClient();
-  if (!admin) return <PlatformUnavailable detail="Add SUPABASE_SERVICE_ROLE_KEY before opening the platform console." />;
+  const actor = await requirePlatformOperator("console_read");
+  if (!actor.ok) {
+    if (actor.code === "unauthenticated") redirect("/platform/login");
+    return <PlatformAccessDenied detail={actor.message} />;
+  }
+  const admin = actor.admin;
 
   const [directory, operations, supportCasesReady, paymongoSubscriptionReadiness] = await Promise.all([
     readPlatformDirectory(admin),
@@ -54,6 +60,8 @@ export default async function PlatformOperationsPage() {
   });
   const checkoutReady = checkoutReadiness.ready;
   const accountOperationsSchemaReady = organizationsResult.accountFieldsAvailable && policies.schemaAvailable && supportCasesReady;
+  const canManageSupport = hasPlatformOperatorPermission(actor.role, "support_manage");
+  const canViewSupport = actor.role !== "billing";
   const activeSubscriptions = organizations.filter((organization) => organization.subscription_status && normalizeSubscriptionStatus(organization.subscription_status) === "active").length;
   const trialSubscriptions = organizations.filter((organization) => organization.subscription_status && normalizeSubscriptionStatus(organization.subscription_status) === "trialing").length;
   const trialDays = readPolicyNumber(policies.billing, "trialDays", 14);
@@ -112,7 +120,7 @@ export default async function PlatformOperationsPage() {
 
         <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Operations summary">
           <PlatformMetric label="Active subscriptions" value={activeSubscriptions} detail={`${trialSubscriptions} businesses in trial`} icon="wallet" />
-          <PlatformMetric label="Priority trial leads" value={priorityTrialLeads} detail={`${discountRequests} tailored offer request${discountRequests === 1 ? "" : "s"}`} icon="customers" />
+          <PlatformMetric label="Priority trial leads" value={canViewSupport ? priorityTrialLeads : "Restricted"} detail={canViewSupport ? `${discountRequests} tailored offer request${discountRequests === 1 ? "" : "s"}` : "Support workspace access is restricted"} icon="customers" />
           <PlatformMetric label="Suspended accounts" value={suspendedAccounts} detail={suspendedAccounts ? "Review before restoring access" : "No accounts suspended"} icon="lock" />
           <PlatformMetric label="Policy gate" value={policyGateOpen ? "Open" : "Locked"} detail={policyGateOpen ? "Account actions enabled" : "Publish both policies"} icon="refresh" />
           <PlatformMetric label="Checkout" value={checkoutReady ? "Ready" : "Locked"} detail={checkoutReady ? "Provider and policy checks pass" : "Finish provider setup"} icon="dashboard" />
@@ -153,7 +161,7 @@ export default async function PlatformOperationsPage() {
           </div>
         </section>
 
-        <section className="mt-8 rounded-[22px] border border-warning/30 bg-warning/10 p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="priority-trial-leads-heading">
+        {canViewSupport ? <section className="mt-8 rounded-[22px] border border-warning/30 bg-warning/10 p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="priority-trial-leads-heading">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div><p className="text-xs font-extrabold uppercase tracking-[0.14em] text-accent">Retention queue</p><h2 id="priority-trial-leads-heading" className="mt-1 text-xl font-extrabold">Priority trial leads</h2><p className="mt-1 text-sm leading-5 text-ink-muted">Final-five-day reminders and every submitted feedback response appear here. Platform staff can record contact, offers, notes, and closure status.</p></div>
             <span className={`rounded-full px-3 py-1.5 text-xs font-extrabold ${trialFeedbackStorage === "table" ? "bg-success/10 text-success" : "bg-surface text-ink-muted"}`}>{feedbackStorageLabel}</span>
@@ -167,19 +175,19 @@ export default async function PlatformOperationsPage() {
                 <p className="mt-2 text-xs leading-5 text-ink-muted">Reason: <strong className="font-extrabold text-ink">{feedback.reason.replaceAll("_", " ")}</strong></p>
                 {feedback.details && <p className="mt-2 text-xs leading-5 text-ink-muted">Customer note: {feedback.details}</p>}
                 {feedback.platform_notes && <p className="mt-2 rounded-lg bg-raised px-3 py-2 text-xs leading-5 text-ink-muted">Internal note: {feedback.platform_notes}</p>}
-                <TrialFeedbackOperations orgId={organization.id} status={feedback.status} platformNotes={feedback.platform_notes} workflowAvailable={trialFeedbackWorkflowAvailable} />
+                <TrialFeedbackOperations orgId={organization.id} status={feedback.status} platformNotes={feedback.platform_notes} workflowAvailable={trialFeedbackWorkflowAvailable} canManage={canManageSupport} />
               </> : <p className="mt-3 text-xs leading-5 text-ink-muted">This owner is approaching trial expiry. Open the support controls to offer help before access ends.</p>}
               <Link href={`#business-controls-${organization.id}`} className="mt-3 inline-flex text-xs font-extrabold text-primary hover:underline">Open support controls <AdminIcon name="arrow" size={13} /></Link>
             </article>;
           })}</div>}
-        </section>
+        </section> : <section className="mt-8 rounded-[22px] border border-line bg-raised/60 p-5 sm:p-6" aria-label="Support workspace restricted"><PlatformSectionHeading eyebrow="Retention queue" title="Support workspace restricted" description="Billing operators can manage plans, promotions, and entitlements, but support cases and retention notes are reserved for Support and Owner operators." /></section>}
 
         <section id="business-controls-heading" className="mt-8 rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="business-controls-title">
-          <PlatformSectionHeading eyebrow="Lifecycle and support" title="Business controls" description="Each action is recorded in the organization audit trail. Controls remain disabled until both policies are published and the required schemas are available." />
-          {organizations.length === 0 ? <p className="py-8 text-center text-sm text-ink-muted">No business accounts to manage.</p> : <div className="grid gap-4 pt-5 xl:grid-cols-2">{organizations.map((organization) => <article id={`business-controls-${organization.id}`} key={organization.id} className="rounded-[18px] border border-line bg-raised p-4"><div className="mb-4 flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-extrabold">{organization.name}</h3><p className="mt-1 text-xs font-semibold text-ink-muted">Account operations for {organization.id.slice(0, 8)}</p></div><PlatformStatusBadge status={organization.account_status === "suspended" ? "suspended" : "active"} /></div>{organization.account_status === "suspended" && organization.suspension_reason && <p className="mb-4 rounded-xl bg-danger-soft px-3 py-2 text-xs font-semibold leading-5 text-danger">Reason: {organization.suspension_reason}</p>}<OrganizationOperations orgId={organization.id} orgName={organization.name} accountStatus={organization.account_status ?? "active"} suspensionReason={organization.suspension_reason ?? null} policyGateOpen={policyGateOpen} schemaAvailable={accountOperationsSchemaReady} /></article>)}</div>}
+          <PlatformSectionHeading eyebrow="Lifecycle and support" title="Business controls" description={canViewSupport ? "Each action is recorded in the organization audit trail. Controls remain disabled until both policies are published and the required schemas are available." : "Support controls are hidden for Billing operators. Open an organization record for subscription and entitlement context."} />
+          {organizations.length === 0 ? <p className="py-8 text-center text-sm text-ink-muted">No business accounts to manage.</p> : <div className="grid gap-4 pt-5 xl:grid-cols-2">{organizations.map((organization) => <article id={`business-controls-${organization.id}`} key={organization.id} className="rounded-[18px] border border-line bg-raised p-4"><div className="mb-4 flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-extrabold">{organization.name}</h3><p className="mt-1 text-xs font-semibold text-ink-muted">Account operations for {organization.id.slice(0, 8)}</p></div><PlatformStatusBadge status={organization.account_status === "suspended" ? "suspended" : "active"} /></div>{organization.account_status === "suspended" && organization.suspension_reason && <p className="mb-4 rounded-xl bg-danger-soft px-3 py-2 text-xs font-semibold leading-5 text-danger">Reason: {organization.suspension_reason}</p>}<OrganizationOperations orgId={organization.id} orgName={organization.name} accountStatus={organization.account_status ?? "active"} suspensionReason={organization.suspension_reason ?? null} policyGateOpen={policyGateOpen} schemaAvailable={accountOperationsSchemaReady} canManage={canManageSupport} visible={canViewSupport} /></article>)}</div>}
         </section>
 
-        <p className="mt-5 text-xs leading-5 text-ink-muted">Operations owns provider readiness, account lifecycle, support setup, and trial-retention follow-up. Plans, users, and policies each have their own workspace in the platform navigation.</p>
+        <p className="mt-5 text-xs leading-5 text-ink-muted">Operations owns provider readiness, account lifecycle, support setup, and trial-retention follow-up. Plans, users, policies, and operator access each have their own workspace in the platform navigation.</p>
       </div>
     </main>
   );

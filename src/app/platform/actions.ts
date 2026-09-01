@@ -1,10 +1,8 @@
 "use server";
 
 import { revalidatePath, revalidateTag } from "next/cache";
-import { createAdminClient } from "@/lib/employee-auth";
 import { BILLING_CATALOG_TAG } from "@/lib/platform-operations-server";
-import { isPlatformAdminEmail } from "@/lib/platform-admin";
-import { getAuthenticatedUser } from "@/lib/supabase/server";
+import { requirePlatformOperator } from "@/lib/platform-operators-server";
 import {
   calculateSubscriptionVariantPrice,
   DEFAULT_INCLUDED_BRANCH_COUNT,
@@ -19,13 +17,8 @@ export type PlatformActionState = {
   message: string;
 };
 
-type PlatformActionFailure = {
-  ok: false;
-  message: string;
-};
-
 export async function saveBillingCatalog(_previousState: PlatformActionState, formData: FormData): Promise<PlatformActionState> {
-  const actor = await requirePlatformAdmin();
+  const actor = await requirePlatformOperator("billing_manage");
   if (!actor.ok) return actor;
 
   const monthlyPrice = parsePhpToCentavos(readText(formData, "monthly_price"));
@@ -126,7 +119,7 @@ export async function saveBillingCatalog(_previousState: PlatformActionState, fo
 }
 
 export async function savePlatformPolicy(_previousState: PlatformActionState, formData: FormData): Promise<PlatformActionState> {
-  const actor = await requirePlatformAdmin();
+  const actor = await requirePlatformOperator("policy_manage");
   if (!actor.ok) return actor;
 
   const policyKey = readText(formData, "policy_key");
@@ -169,7 +162,7 @@ export async function savePlatformPolicy(_previousState: PlatformActionState, fo
 }
 
 export async function savePlatformPromotion(_previousState: PlatformActionState, formData: FormData): Promise<PlatformActionState> {
-  const actor = await requirePlatformAdmin();
+  const actor = await requirePlatformOperator("billing_manage");
   if (!actor.ok) return actor;
 
   const code = normalizePromotionCode(readText(formData, "code"));
@@ -225,7 +218,7 @@ export async function savePlatformPromotion(_previousState: PlatformActionState,
 }
 
 export async function togglePlatformPromotion(_previousState: PlatformActionState, formData: FormData): Promise<PlatformActionState> {
-  const actor = await requirePlatformAdmin();
+  const actor = await requirePlatformOperator("billing_manage");
   if (!actor.ok) return actor;
 
   const id = readText(formData, "promotion_id");
@@ -240,16 +233,6 @@ export async function togglePlatformPromotion(_previousState: PlatformActionStat
 
   revalidatePlatformPages();
   return { ok: true, message: !isActive ? "Promotion activated." : "Promotion paused." };
-}
-
-async function requirePlatformAdmin(): Promise<{ ok: true; admin: NonNullable<ReturnType<typeof createAdminClient>>; userId: string } | PlatformActionFailure> {
-  const user = await getAuthenticatedUser();
-  if (!user) return { ok: false, message: "Your session has expired. Sign in again to manage platform operations." };
-  if (!isPlatformAdminEmail(user.email)) return { ok: false, message: "Platform administrator access is required." };
-
-  const admin = createAdminClient();
-  if (!admin) return { ok: false, message: "The platform database client is not configured. Add SUPABASE_SERVICE_ROLE_KEY." };
-  return { ok: true, admin, userId: user.id };
 }
 
 function readBillingPolicySettings(formData: FormData) {
@@ -352,6 +335,7 @@ function revalidatePlatformPages() {
   revalidatePath("/platform/users");
   revalidatePath("/platform/operations");
   revalidatePath("/platform/promotions");
+  revalidatePath("/platform/operators");
   revalidatePath("/admin/billing");
   revalidatePath("/signup");
 }

@@ -96,13 +96,13 @@ export function PlatformStatusBadge({ status, label }: { status: "active" | "sus
   return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-extrabold ${styles[status]}`}>{label ?? labels[status]}</span>;
 }
 
-export function PlatformAccessDenied() {
+export function PlatformAccessDenied({ detail = "This account is not an active platform operator." }: { detail?: string }) {
   return (
     <main className="grid min-h-screen place-items-center bg-bg p-6 text-center text-ink">
       <div className="max-w-md rounded-[22px] border border-line bg-surface p-8 shadow-[var(--shadow-pop)]">
         <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-danger-soft text-danger"><AdminIcon name="lock" size={22} /></span>
         <h1 className="mt-5 text-2xl font-extrabold">Platform access is restricted</h1>
-        <p className="mt-3 text-sm leading-6 text-ink-muted">This account is not on the platform administrator allowlist.</p>
+        <p className="mt-3 text-sm leading-6 text-ink-muted">{detail}</p>
         <Link href="/login" className="mt-6 inline-flex rounded-btn bg-primary px-4 py-3 text-sm font-extrabold text-primary-fg">Back to owner login</Link>
       </div>
     </main>

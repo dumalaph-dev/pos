@@ -13,15 +13,18 @@ type ComplimentaryGrantPanelProps = {
   grants: ComplimentaryAccessGrant[];
   schemaAvailable: boolean;
   policyGateOpen: boolean;
+  canManage: boolean;
   accountSuspended: boolean;
   asOf: string;
 };
 
-export function ComplimentaryGrantPanel({ orgId, grants, schemaAvailable, policyGateOpen, accountSuspended, asOf }: ComplimentaryGrantPanelProps) {
+export function ComplimentaryGrantPanel({ orgId, grants, schemaAvailable, policyGateOpen, canManage, accountSuspended, asOf }: ComplimentaryGrantPanelProps) {
   const [grantState, grantAction, grantPending] = useActionState(grantComplimentaryPremium, INITIAL_STATE);
   const [revokeState, revokeAction, revokePending] = useActionState(revokeComplimentaryPremium, INITIAL_STATE);
-  const locked = !schemaAvailable || !policyGateOpen || accountSuspended;
-  const lockMessage = accountSuspended
+  const locked = !canManage || !schemaAvailable || !policyGateOpen || accountSuspended;
+  const lockMessage = !canManage
+    ? "Only Billing and Owner operators can change complimentary access."
+    : accountSuspended
     ? "Restore the suspended account before granting tenant access."
     : !policyGateOpen
       ? "Publish both platform policies to unlock complimentary access."

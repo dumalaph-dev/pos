@@ -2,7 +2,7 @@
 
 **Project:** Dumala POS
 **Created:** 2026-08-29
-**Status:** Draft for owner review — no code, migration, or hosted change has been made
+**Status:** Phase 3 implementation in progress — migration and code are ready; the authenticated managed-operator console pass remains
 **Owner:** Product and engineering
 **Companion to:** [tasks.md](tasks.md) · [SCHEMA.md](SCHEMA.md) §8 · [SETUP.md](SETUP.md)
 
@@ -10,7 +10,7 @@
 
 Give the platform owner direct, audited control over a registered account's entitlement — extending a trial, granting Premium, and the operator powers around them — without a database console, a support email thread, or a deploy.
 
-This document is the working plan for the initiative. It is a review draft: every phase below is unstarted, and the open decisions in [Decisions to make](#decisions-to-make-before-implementation) change the shape of Phase 3 and Phase 5.
+This document is the working plan for the initiative. Phase 1 is complete against hosted Supabase; Phase 2 remains queued, and Phase 3 is the current implementation slice. The open decisions in [Decisions to make](#decisions-to-make-before-implementation) still change the shape of Phase 5.
 
 ---
 
@@ -46,7 +46,7 @@ Existing machinery to build on:
 
 ### Operator access model
 
-`PLATFORM_ADMIN_EMAILS` is a comma-separated env allowlist read by [platform-admin.ts:1](../src/lib/platform-admin.ts). It is flat: every listed address gets every power, membership changes require a redeploy, and there is no read-only, support-only, or billing-only operator. This is the ceiling on how many powers it is safe to add, which is why Phase 3 sits where it does.
+`PLATFORM_ADMIN_EMAILS` is a comma-separated env allowlist read by [platform-admin.ts:1](../src/lib/platform-admin.ts). It remains a flat Owner bootstrap path, while managed operators now live in `platform_operators`; membership changes for managed operators no longer require a redeploy. This is the ceiling that made Phase 3 necessary before adding more powers.
 
 ### Console surface today
 
@@ -77,7 +77,7 @@ Existing machinery to build on:
 
 ### Phase 1 — Trial extension
 
-**Status:** Code complete 2026-08-29; hosted application of migration `0075` and the authenticated console pass remain
+**Status:** Phase 1 complete 2026-09-01; hosted migration state and authenticated console verification passed
 **Migration:** `0075_extend_organization_trial.sql`
 
 The requested feature. An operator picks a registered account, adds days, gives a reason, and the tenant's trial genuinely moves.
@@ -88,22 +88,20 @@ The requested feature. An operator picks a registered account, adds days, gives 
 - [x] Refuse extension for `active`, `past_due`, `canceled`, and `incomplete` — those are billing states, and the Premium grant is the right instrument there.
 - [x] Refuse on `account_status = 'suspended'`, matching `grantComplimentaryPremium`.
 - [x] Bound the input: 1–90 days per action, and a 180-day lifetime cap on operator-added trial days per organization, enforced in the RPC against the `platform_trial_extensions` ledger through `organization_trial_extension_days`.
-- [x] Add `extendOrganizationTrial` to [operations-actions.ts](../src/app/platform/operations-actions.ts), reusing the existing `requirePlatformAdmin` → `requirePublishedPolicies` → `readOrganization` → RPC → `revalidatePlatformPages` chain.
+- [x] Add `extendOrganizationTrial` to [operations-actions.ts](../src/app/platform/operations-actions.ts), using `requirePlatformOperator("entitlement_manage")` → `requirePublishedPolicies` → `readOrganization` → RPC → `revalidatePlatformPages`.
 - [x] Add a **Trial extension** panel above the grant panel on the organization detail page: current trial state, operator-days meter, day input bounded by the remaining cap, reason, a live preview of the resulting end date, and the full extension history.
 - [x] Confirm the tenant-side reads pick the change up with no further work. Verified by reading the call sites: `readTrialLifecycle`, `isSubscriptionAccessCurrent`, `getBillingAccessReason`, and the SQL `subscription_access_is_current` all derive from `subscription_status` and `subscription_trial_ends_at`, both of which the RPC writes. No tenant-side change was needed.
 - [x] Register the RPC in `scripts/rpc-contracts.test.ts` and reload PostgREST at the end of the migration, matching `0073`.
 - [x] Add `scripts/platform-trial-extension.test.ts` (12 cases) and the `npm run test:platform-trial` script.
 - [x] Add `scripts/platform-trial-extension-smoke.sql` and the `npm run platform:trial:validate` script, and prove every RPC guard against a real Postgres.
 - [x] Record the migration in [SETUP.md](SETUP.md) and the RPC in [SCHEMA.md](SCHEMA.md) §8 in the same change.
-- [ ] Apply `0075` to hosted Supabase and run the authenticated console pass against a real second account.
+- [x] Apply `0075` to hosted Supabase and run the authenticated console pass against a real second account. The linked production ledger contains `0075` and `0076`; the normal linked push confirmed the database is up to date, and the hosted console pass verified a live countdown extension, trial-expired revival, and nonpayment-pause refusal.
 
 **Exit criteria:** A live trial extended by an operator shows the new countdown on the owner's billing page. A trial-expired `paused` org returns to `trialing` and regains POS access. A nonpayment `paused` org is refused. Every attempt, successful or not, leaves an audit row. The per-org cap blocks the action at the boundary. Verified against hosted Supabase with a real second account, not only locally.
 
 **Verification status.** The static gates pass: `npm run typecheck`, `npm run lint`, `npm run build`, `npm run test:platform-trial` (12 passed), `npm run test:rpc-contracts` (2 passed), `npm run test:trial` (5 passed), `npm run test:platform-access` (3 passed).
 
-Migration `0075` was applied to a **local** Supabase stack (the local ledger ran `0071` through `0075`; the hosted ledger is untouched at `0074`), and `scripts/platform-trial-extension-smoke.sql` passed there in full: a live trial extended to exactly its old end plus the granted days; a lapsed trial restarted from `now()`; the ledger row, the audit row, and the operator-day total all written; `active`, `past_due`, `canceled`, and `incomplete` refused; a pause carrying a provider subscription id **or** a provider payment intent id refused; a trial-expired pause reopened to `trialing` **with its tenant RLS context restored** (`auth_org_id`, `auth_store_id`, `auth_is_admin`, and branch reads); suspension refused; the day and reason bounds refused; the 180-day lifetime cap refused; an unknown organization refused; and an authenticated tenant client unable to read `platform_trial_extensions`. A negative control confirmed the harness is not vacuous — calling the RPC on an `active` organization raises `platform_trial_status_not_eligible` rather than passing silently. No fixture rows survived the rollback.
-
-What remains for the exit criteria is the part a local database cannot stand in for: hosted application of `0075`, and the authenticated console pass on a real second account confirming the owner-facing billing countdown moves. **No hosted data, migration, or deployment configuration was changed in this session.**
+The hosted rollback-scoped smoke and authenticated console pass are recorded in [tasks.md](tasks.md): a live trial countdown moved, a trial-expired `paused` account returned to `trialing` and regained `/pos` access, and a provider-backed nonpayment pause was refused without a ledger or audit row. The direct tenant ACL check also remains closed, and the smoke fixtures were rolled back. The hosted ledger contains `0075` and `0076`; the only intentional hosted rows from the console pass are the two trial-extension ledger rows and their two corresponding `platform.trial.extended` audit rows.
 
 **Decision taken:** the trial columns are mutated rather than modelled as a second grant kind. The grant-row approach keeps the trial columns immutable and gives a natural ledger, but leaves the tenant reading "Trial ended" while access works — a direct violation of principle 5.
 
@@ -124,19 +122,25 @@ Close the gaps the audit found in the Premium grant that already exists.
 
 ### Phase 3 — Operator role model
 
-**Status:** Not started — gates Phases 4–6
+**Status:** In progress — migration applied and hosted boundary smoke passed; managed-operator console verification remains
 **Migration:** `0077_platform_operators.sql`
 
 The flat `PLATFORM_ADMIN_EMAILS` allowlist is the reason the remaining powers should not simply be stacked on what exists.
 
-- [ ] Add a `platform_operators` table: identity, role, active flag, created/revoked evidence. Service-role only, matching `platform_access_grants`.
-- [ ] Define the initial roles: `owner` (everything, including operator management), `billing` (plans, promos, entitlement; no support access), `support` (support cases, read-only entitlement; no pricing), `read_only` (no mutations).
-- [ ] Keep `PLATFORM_ADMIN_EMAILS` as the bootstrap path for the first `owner` so the console cannot lock itself out, and document that precedence explicitly.
-- [ ] Move the role check into a single server-side helper every action calls, so a new action cannot forget it; keep `isPlatformAdminEmail` as the bootstrap branch only.
-- [ ] Add an Operators page: list, invite, change role, revoke — each writing an audit row.
-- [ ] Add a contract test asserting that every exported platform server action performs a role check.
+- [x] Add a `platform_operators` table: identity, role, active flag, created/revoked evidence. Service-role only, matching `platform_access_grants`.
+- [x] Define the initial roles: `owner` (everything, including operator management), `billing` (plans, promos, entitlement; no support access), `support` (support cases, read-only entitlement; no pricing), `read_only` (no mutations).
+- [x] Keep `PLATFORM_ADMIN_EMAILS` as the bootstrap path for the first `owner` so the console cannot lock itself out, and document that precedence explicitly.
+- [x] Move the role check into a single server-side helper every action calls, so a new action cannot forget it; keep `isPlatformAdminEmail` as the bootstrap branch only.
+- [x] Add an Operators page: list, invite, change role, revoke — each writing an audit row.
+- [x] Add a contract test asserting that every exported platform server action performs a role check.
 
 **Exit criteria:** Operator membership changes without a redeploy. A `read_only` operator can see the console and cannot mutate anything. Every role change is audited. The bootstrap allowlist still recovers a locked-out console.
+
+**Implementation notes (2026-09-01).** Migration `0077_platform_operators.sql` adds service-role-only operator and audit tables plus security-definer invite/reactivate, role-change, and revoke RPCs. The server-side `requirePlatformOperator` helper resolves a managed active row or the `PLATFORM_ADMIN_EMAILS` bootstrap owner, and every exported platform Server Action now names its required permission. The console has an Operators page and role-aware Plans, Promotions, Policies, Operations, and organization-detail controls. Bootstrap emails take precedence over table rows and cannot be changed or revoked from the console; managed membership can be revoked without deleting history, and the final active table owner is protected by the RPCs.
+
+**Verification status.** `npm run test:platform-operators`, `npm run test:rpc-contracts`, `npm run typecheck`, `npm run lint`, `npm run build`, and `npm run production:preflight` pass. `npm run platform:operators:validate` passed against hosted Supabase with a rollback-scoped invite → role-change → revoke → reactivation flow, final-owner protection, append-only audit trigger, and browser-role ACL checks. `npx --yes supabase@2.114.0 db push --linked --yes` applied `0077_platform_operators.sql`; the hosted counts remain 3 organizations, 11 profiles, and 5 stores, with no smoke fixtures left behind. The code is still in the working tree, so the authenticated two-account console pass follows the normal deployment of this change.
+
+After Docker Desktop became available, the preserved local Supabase volume recovered without a reset. Local `0076` and `0077` were applied with `db push --local --yes`; the container `psql` operator smoke and the existing trial smoke passed, and local counts remain 2 organizations, 0 profiles, 4 stores, 0 platform operators, and 0 operator audit rows.
 
 ### Phase 4 — Cross-org read surfaces
 

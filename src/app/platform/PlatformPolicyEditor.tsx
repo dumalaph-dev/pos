@@ -15,7 +15,7 @@ import { savePlatformPolicy, type PlatformActionState } from "./actions";
 const INITIAL_STATE: PlatformActionState = { ok: false, message: "" };
 const CONTROL_CLASS = "mt-1 w-full rounded-btn border border-line-strong bg-raised px-3 py-2.5 text-sm font-semibold text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10";
 
-export function PlatformPolicyEditor({ policy, schemaAvailable }: { policy: PlatformPolicy; schemaAvailable: boolean }) {
+export function PlatformPolicyEditor({ policy, schemaAvailable, canManage }: { policy: PlatformPolicy; schemaAvailable: boolean; canManage: boolean }) {
   const [state, formAction, pending] = useActionState(savePlatformPolicy, INITIAL_STATE);
   const isBilling = policy.key === "billing";
 
@@ -28,17 +28,18 @@ export function PlatformPolicyEditor({ policy, schemaAvailable }: { policy: Plat
       </div>
 
       <label className="block text-xs font-extrabold uppercase tracking-wide text-ink-muted" htmlFor={`${policy.key}-summary`}>Policy summary
-        <textarea id={`${policy.key}-summary`} name="summary" defaultValue={policy.summary} rows={2} maxLength={500} className={`${CONTROL_CLASS} resize-y`} disabled={!schemaAvailable || pending} />
+        <textarea id={`${policy.key}-summary`} name="summary" defaultValue={policy.summary} rows={2} maxLength={500} className={`${CONTROL_CLASS} resize-y`} disabled={!canManage || !schemaAvailable || pending} />
       </label>
 
-      {isBilling ? <BillingPolicyFields policy={policy} disabled={!schemaAvailable || pending} /> : <SupportPolicyFields policy={policy} disabled={!schemaAvailable || pending} />}
+      {isBilling ? <BillingPolicyFields policy={policy} disabled={!canManage || !schemaAvailable || pending} /> : <SupportPolicyFields policy={policy} disabled={!canManage || !schemaAvailable || pending} />}
 
       {state.message && <p role={state.ok ? "status" : "alert"} className={`rounded-btn border px-4 py-3 text-sm font-semibold ${state.ok ? "border-success/25 bg-success/10 text-success" : "border-danger/25 bg-danger-soft text-danger"}`}>{state.message}</p>}
       {!schemaAvailable && <p role="status" className="rounded-btn border border-warning/35 bg-warning/10 px-4 py-3 text-xs font-semibold leading-5 text-ink">Policy storage is not active yet. Apply migration <code className="font-extrabold">0027_platform_operations.sql</code> to edit or publish this policy.</p>}
+      {!canManage && <p role="status" className="rounded-btn border border-line bg-raised px-4 py-3 text-xs font-semibold leading-5 text-ink-muted">Policy changes are reserved for Owner operators. Your role can review the published contract and gate state.</p>}
 
       <div className="flex flex-col gap-2 border-t border-line pt-4 sm:flex-row">
-        <button type="submit" name="intent" value="draft" disabled={!schemaAvailable || pending} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-btn bg-secondary px-4 py-3 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover disabled:cursor-not-allowed disabled:opacity-50">{pending ? "Saving…" : "Save draft"}</button>
-        <button type="submit" name="intent" value="publish" disabled={!schemaAvailable || pending} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-btn bg-primary px-4 py-3 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"><AdminIcon name="check" size={15} /> Publish policy</button>
+        <button type="submit" name="intent" value="draft" disabled={!canManage || !schemaAvailable || pending} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-btn bg-secondary px-4 py-3 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover disabled:cursor-not-allowed disabled:opacity-50">{pending ? "Saving…" : "Save draft"}</button>
+        <button type="submit" name="intent" value="publish" disabled={!canManage || !schemaAvailable || pending} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-btn bg-primary px-4 py-3 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"><AdminIcon name="check" size={15} /> Publish policy</button>
       </div>
     </form>
   );

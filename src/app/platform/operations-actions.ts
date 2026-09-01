@@ -1,12 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createAdminClient } from "@/lib/employee-auth";
-import { isPlatformAdminEmail } from "@/lib/platform-admin";
 import { isPolicyGateOpen, readPolicyNumber } from "@/lib/platform-operations";
 import { readPlatformPolicies } from "@/lib/platform-operations-server";
+import { requirePlatformOperator, type PlatformOperatorActor } from "@/lib/platform-operators-server";
 import { isMissingReferralSchemaError } from "@/lib/referrals-server";
-import { getAuthenticatedUser } from "@/lib/supabase/server";
 import { TRIAL_EXTENSION_MAX_DAYS_PER_ACTION, TRIAL_EXTENSION_MAX_DAYS_LIFETIME, trialExtensionBlockMessage } from "@/lib/platform-trial";
 import { normalizeTrialFeedbackStatus, type TrialFeedbackStatus } from "@/lib/trial";
 
@@ -20,8 +18,6 @@ type OperationsActionFailure = {
   message: string;
 };
 
-type PlatformAdminClient = NonNullable<ReturnType<typeof createAdminClient>>;
-
 type OrganizationLifecycle = {
   id: string;
   name: string;
@@ -31,7 +27,7 @@ type OrganizationLifecycle = {
 };
 
 export async function suspendOrganization(_previousState: OperationsActionState, formData: FormData): Promise<OperationsActionState> {
-  const actor = await requirePlatformAdmin();
+  const actor = await requirePlatformOperator("support_manage");
   if (!actor.ok) return actor;
 
   const gate = await requirePublishedPolicies(actor.admin);
@@ -87,7 +83,7 @@ export async function suspendOrganization(_previousState: OperationsActionState,
 }
 
 export async function restoreOrganization(_previousState: OperationsActionState, formData: FormData): Promise<OperationsActionState> {
-  const actor = await requirePlatformAdmin();
+  const actor = await requirePlatformOperator("support_manage");
   if (!actor.ok) return actor;
 
   const gate = await requirePublishedPolicies(actor.admin);
@@ -140,7 +136,7 @@ export async function restoreOrganization(_previousState: OperationsActionState,
 }
 
 export async function openSupportCase(_previousState: OperationsActionState, formData: FormData): Promise<OperationsActionState> {
-  const actor = await requirePlatformAdmin();
+  const actor = await requirePlatformOperator("support_manage");
   if (!actor.ok) return actor;
 
   const gate = await requirePublishedPolicies(actor.admin);
@@ -198,7 +194,7 @@ export async function openSupportCase(_previousState: OperationsActionState, for
 }
 
 export async function grantComplimentaryPremium(_previousState: OperationsActionState, formData: FormData): Promise<OperationsActionState> {
-  const actor = await requirePlatformAdmin();
+  const actor = await requirePlatformOperator("entitlement_manage");
   if (!actor.ok) return actor;
 
   const gate = await requirePublishedPolicies(actor.admin);
@@ -240,7 +236,7 @@ export async function grantComplimentaryPremium(_previousState: OperationsAction
 }
 
 export async function revokeComplimentaryPremium(_previousState: OperationsActionState, formData: FormData): Promise<OperationsActionState> {
-  const actor = await requirePlatformAdmin();
+  const actor = await requirePlatformOperator("entitlement_manage");
   if (!actor.ok) return actor;
 
   const gate = await requirePublishedPolicies(actor.admin);
@@ -304,7 +300,7 @@ export async function revokeComplimentaryPremium(_previousState: OperationsActio
 }
 
 export async function extendOrganizationTrial(_previousState: OperationsActionState, formData: FormData): Promise<OperationsActionState> {
-  const actor = await requirePlatformAdmin();
+  const actor = await requirePlatformOperator("entitlement_manage");
   if (!actor.ok) return actor;
 
   const gate = await requirePublishedPolicies(actor.admin);
@@ -346,7 +342,7 @@ export async function extendOrganizationTrial(_previousState: OperationsActionSt
 }
 
 export async function updateTrialFeedback(_previousState: OperationsActionState, formData: FormData): Promise<OperationsActionState> {
-  const actor = await requirePlatformAdmin();
+  const actor = await requirePlatformOperator("support_manage");
   if (!actor.ok) return actor;
 
   const organizationId = readText(formData, "organization_id");
@@ -410,24 +406,14 @@ export async function updateTrialFeedback(_previousState: OperationsActionState,
   return { ok: true, message: `${organization.record.name} follow-up saved as ${trialFeedbackStatusLabel(status)}.` };
 }
 
-async function requirePlatformAdmin(): Promise<{ ok: true; admin: PlatformAdminClient; userId: string; email: string | null } | OperationsActionFailure> {
-  const user = await getAuthenticatedUser();
-  if (!user) return { ok: false, message: "Your session has expired. Sign in again to manage platform operations." };
-  if (!isPlatformAdminEmail(user.email)) return { ok: false, message: "Platform administrator access is required." };
-
-  const admin = createAdminClient();
-  if (!admin) return { ok: false, message: "The platform database client is not configured. Add SUPABASE_SERVICE_ROLE_KEY." };
-  return { ok: true, admin, userId: user.id, email: user.email };
-}
-
-async function requirePublishedPolicies(admin: PlatformAdminClient): Promise<{ ok: true; policies: Awaited<ReturnType<typeof readPlatformPolicies>> } | OperationsActionFailure> {
+async function requirePublishedPolicies(admin: PlatformOperatorActor["admin"]): Promise<{ ok: true; policies: Awaited<ReturnType<typeof readPlatformPolicies>> } | OperationsActionFailure> {
   const policies = await readPlatformPolicies(admin);
   if (!policies.schemaAvailable) return { ok: false, message: "Apply Supabase migration 0027_platform_operations.sql before enabling account or support actions." };
   if (!isPolicyGateOpen(policies)) return { ok: false, message: "Publish both the billing and support policies before enabling account or support actions." };
   return { ok: true, policies };
 }
 
-async function readOrganization(admin: PlatformAdminClient, organizationId: string): Promise<{ ok: true; record: OrganizationLifecycle } | OperationsActionFailure> {
+async function readOrganization(admin: PlatformOperatorActor["admin"], organizationId: string): Promise<{ ok: true; record: OrganizationLifecycle } | OperationsActionFailure> {
   const result = await admin
     .from("organizations")
     .select("id, name, account_status, suspension_reason, suspended_at")
@@ -439,7 +425,7 @@ async function readOrganization(admin: PlatformAdminClient, organizationId: stri
   return { ok: true, record: result.data as OrganizationLifecycle };
 }
 
-async function updateFeedbackInOrganizationSettings(admin: PlatformAdminClient, organizationId: string, input: {
+async function updateFeedbackInOrganizationSettings(admin: PlatformOperatorActor["admin"], organizationId: string, input: {
   status: TrialFeedbackStatus;
   platformNotes: string;
   actedAt: string | null;
@@ -467,7 +453,7 @@ async function updateFeedbackInOrganizationSettings(admin: PlatformAdminClient, 
   return { ok: !update.error, found: true };
 }
 
-async function writePlatformAudit(admin: PlatformAdminClient, input: {
+async function writePlatformAudit(admin: PlatformOperatorActor["admin"], input: {
   orgId: string;
   actorId: string;
   action: string;
@@ -494,6 +480,7 @@ function revalidatePlatformPages(organizationId?: string) {
   revalidatePath("/platform/policies");
   revalidatePath("/platform/users");
   revalidatePath("/platform/operations");
+  revalidatePath("/platform/operators");
   revalidatePath("/admin");
   revalidatePath("/admin/billing");
   revalidatePath("/account");

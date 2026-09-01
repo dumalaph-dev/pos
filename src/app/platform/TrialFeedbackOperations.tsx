@@ -12,11 +12,13 @@ export function TrialFeedbackOperations({
   status,
   platformNotes,
   workflowAvailable,
+  canManage,
 }: {
   orgId: string;
   status: TrialFeedbackStatus;
   platformNotes: string;
   workflowAvailable: boolean;
+  canManage: boolean;
 }) {
   const [state, action, pending] = useActionState(updateTrialFeedback, INITIAL_STATE);
 
@@ -28,7 +30,7 @@ export function TrialFeedbackOperations({
       </summary>
       <form action={action} className="space-y-3 border-t border-line px-3 pb-3 pt-3">
         <input type="hidden" name="organization_id" value={orgId} />
-        <fieldset disabled={!workflowAvailable || pending} className="space-y-3">
+        <fieldset disabled={!canManage || !workflowAvailable || pending} className="space-y-3">
           <label className="block text-[11px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor={`trial-feedback-status-${orgId}`}>
             Status
             <select id={`trial-feedback-status-${orgId}`} name="status" defaultValue={status} className="mt-1 w-full rounded-btn border border-line-strong bg-surface px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10">
@@ -46,6 +48,7 @@ export function TrialFeedbackOperations({
         </fieldset>
         {state.message && <p role={state.ok ? "status" : "alert"} className={`rounded-btn border px-3 py-2 text-[11px] font-semibold leading-4 ${state.ok ? "border-success/25 bg-success/10 text-success" : "border-danger/25 bg-danger-soft text-danger"}`}>{state.message}</p>}
         {!workflowAvailable && <p role="status" className="text-[11px] font-semibold leading-4 text-ink-muted">Apply migration 0039_trial_feedback_workflow.sql to enable follow-up tracking.</p>}
+        {!canManage && <p role="status" className="text-[11px] font-semibold leading-4 text-ink-muted">Only Support and Owner operators can record retention follow-up.</p>}
       </form>
     </details>
   );

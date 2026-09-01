@@ -1,18 +1,23 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { getBillingPlan, normalizeSubscriptionStatus, subscriptionStatusLabel, subscriptionTone } from "@/lib/billing";
-import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
 import { getCheckoutReadiness, isPolicyGateOpen } from "@/lib/platform-operations";
 import { readPayMongoSubscriptionReadiness, readPlatformOperations, payMongoConfiguration, supportCasesSchemaAvailable } from "@/lib/platform-operations-server";
-import { PlatformMetric, PlatformMigrationNotice, PlatformPageHeader, PlatformSectionHeading, PlatformUnavailable } from "../PlatformUI";
+import { requirePlatformOperator } from "@/lib/platform-operators-server";
+import { PlatformAccessDenied, PlatformMetric, PlatformMigrationNotice, PlatformPageHeader, PlatformSectionHeading } from "../PlatformUI";
 import { countByOrg, formatDate, readPlatformDirectory } from "../_lib/platform-data";
 
 export const dynamic = "force-dynamic";
 
 export default async function PlatformOverviewPage() {
-  const admin = createAdminClient();
-  if (!admin) return <PlatformUnavailable detail="Add SUPABASE_SERVICE_ROLE_KEY before opening the platform console." />;
+  const actor = await requirePlatformOperator("console_read");
+  if (!actor.ok) {
+    if (actor.code === "unauthenticated") redirect("/platform/login");
+    return <PlatformAccessDenied detail={actor.message} />;
+  }
+  const admin = actor.admin;
 
   const [directory, operations, supportCasesReady, paymongoSubscriptionReadiness] = await Promise.all([
     readPlatformDirectory(admin),

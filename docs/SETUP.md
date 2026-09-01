@@ -47,7 +47,7 @@ For a successful subscription activation in PayMongo test mode, use `41200000000
 
 `EMPLOYEE_INITIAL_PASSWORD` is the common temporary password that the administrator gives to staff. It must be at least 8 characters and stays server-only; employees are forced to replace it after their first successful Employee ID login.
 
-`PLATFORM_ADMIN_EMAILS` is a comma-separated, server-only allowlist for the platform operator console at `/platform`. It should contain only the operator account(s) that may view cross-business metrics.
+`PLATFORM_ADMIN_EMAILS` is a comma-separated, server-only bootstrap allowlist for the platform operator console at `/platform`. Every listed address resolves as an `owner` before the managed `platform_operators` table is consulted, so it remains the recovery path if the table is empty or an operator is locked out. Bootstrap owners cannot be changed or revoked from the Operators page; invite the other real Auth account(s) there with the narrowest role they need.
 
 PayMongo recurring billing uses `NEXT_PUBLIC_PAYMONGO_PUBLIC_KEY` in the
 browser only for tokenizing card details, while `PAYMONGO_SECRET_KEY` and
@@ -132,6 +132,7 @@ followed by `0062_public_menu_subdomains.sql` and
 68–74. Branch billing/entitlement, automatic shift reports, recipe inventory, and employee access migrations
 75. `0075_extend_organization_trial.sql` — platform-owned trial extension: the `extend_organization_trial` RPC, the `platform_trial_extensions` ledger, and the lifetime cap on operator-added trial days
 76. `0076_restrict_platform_trial_rpc.sql` — explicitly remove direct browser-role EXECUTE grants from both platform trial functions
+77. `0077_platform_operators.sql` — service-role-only platform operator membership, role permissions, audited invite/reactivate/role-change/revoke RPCs, and final-owner protection
 
 **Apply them** either way:
 - **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push`
@@ -179,6 +180,30 @@ including its tenant RLS context, suspension, the day and reason bounds, the
 180-day lifetime cap, and that an authenticated tenant client cannot read
 `platform_trial_extensions` or execute either platform trial function. The SQL
 fixture inserts no lasting rows.
+
+### Platform operator verification
+
+Run the role matrix and migration-boundary checks without a database:
+
+```bash
+npm run test:platform-operators
+npm run test:rpc-contracts
+```
+
+After linking the intended project, preview and apply the migration through the
+same CLI workflow used by the other platform changes:
+
+```bash
+npx --yes supabase@2.114.0 db push --linked --dry-run
+npx --yes supabase@2.114.0 db push --linked --yes
+```
+
+Then sign in to `/platform` with a bootstrap owner, open **Operators**, and
+invite an existing real second Auth account. Use that account to verify its
+assigned role can read the console but only perform its documented mutations;
+check the page after invite, role change, and revoke for the corresponding
+audit entries. Revoke the disposable managed membership after the pass. Do not
+put an Auth password or service-role key in the repository or task log.
 
 Store owners can register from `/signup`. The flow uses Supabase Auth and the
 `0022_owner_signup.sql` trigger to create a private organization, first branch,

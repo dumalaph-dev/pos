@@ -19,6 +19,8 @@ type OrganizationOperationsProps = {
   suspensionReason: string | null;
   policyGateOpen: boolean;
   schemaAvailable: boolean;
+  canManage: boolean;
+  visible: boolean;
 };
 
 export function OrganizationOperations({
@@ -28,15 +30,23 @@ export function OrganizationOperations({
   suspensionReason,
   policyGateOpen,
   schemaAvailable,
+  canManage,
+  visible,
 }: OrganizationOperationsProps) {
   const [suspendState, suspendAction, suspendPending] = useActionState(suspendOrganization, INITIAL_STATE);
   const [restoreState, restoreAction, restorePending] = useActionState(restoreOrganization, INITIAL_STATE);
   const [supportState, supportAction, supportPending] = useActionState(openSupportCase, INITIAL_STATE);
   const suspended = accountStatus === "suspended";
-  const locked = !policyGateOpen || !schemaAvailable;
-  const lockMessage = !policyGateOpen
+  const locked = !canManage || !policyGateOpen || !schemaAvailable;
+  const lockMessage = !canManage
+    ? "Only Support and Owner operators can change account lifecycle or open support cases."
+    : !policyGateOpen
     ? "Publish both policies to unlock this action."
     : "Apply migrations 0027 and 0028 to unlock this action.";
+
+  if (!visible) {
+    return <p role="status" className="flex items-start gap-1.5 text-[11px] font-semibold leading-4 text-ink-muted"><AdminIcon name="lock" size={13} />Support controls are not available to Billing operators.</p>;
+  }
 
   return (
     <div className="min-w-[250px] space-y-3">

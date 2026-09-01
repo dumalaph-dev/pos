@@ -1,16 +1,22 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
-import { createAdminClient } from "@/lib/employee-auth";
 import { formatPeso } from "@/lib/money";
 import { readPlatformPromotions } from "@/lib/platform-promotions-server";
-import { PlatformMetric, PlatformPageHeader, PlatformUnavailable } from "../../PlatformUI";
+import { requirePlatformOperator } from "@/lib/platform-operators-server";
+import { hasPlatformOperatorPermission } from "@/lib/platform-operators";
+import { PlatformAccessDenied, PlatformMetric, PlatformPageHeader } from "../../PlatformUI";
 import { PromoMarketingEditor } from "../../PromoMarketingEditor";
 
 export const dynamic = "force-dynamic";
 
 export default async function PlatformPromotionsPage() {
-  const admin = createAdminClient();
-  if (!admin) return <PlatformUnavailable detail="Add SUPABASE_SERVICE_ROLE_KEY before opening the platform console." />;
+  const actor = await requirePlatformOperator("console_read");
+  if (!actor.ok) {
+    if (actor.code === "unauthenticated") redirect("/platform/login");
+    return <PlatformAccessDenied detail={actor.message} />;
+  }
+  const admin = actor.admin;
 
   const { schemaAvailable, promotions, performance } = await readPlatformPromotions(admin);
   const activePromotions = promotions.filter((promotion) => promotion.isActive).length;
@@ -42,7 +48,7 @@ export default async function PlatformPromotionsPage() {
           <PlatformMetric label="Revenue after offers" value={formatPeso(revenue)} detail={`${formatPeso(discountGiven)} discount given`} icon="wallet" />
         </section>
 
-        <PromoMarketingEditor schemaAvailable={schemaAvailable} promotions={promotions} performance={performance} />
+        <PromoMarketingEditor schemaAvailable={schemaAvailable} promotions={promotions} performance={performance} canManage={hasPlatformOperatorPermission(actor.role, "billing_manage")} />
       </div>
     </main>
   );

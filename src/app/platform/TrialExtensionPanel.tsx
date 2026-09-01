@@ -21,18 +21,21 @@ type TrialExtensionPanelProps = {
   eligibility: TrialExtensionEligibility;
   schemaAvailable: boolean;
   policyGateOpen: boolean;
+  canManage: boolean;
   trialEndsAt: string | null;
   trialRemainingLabel: string;
   asOf: string;
 };
 
-export function TrialExtensionPanel({ orgId, extensions, eligibility, schemaAvailable, policyGateOpen, trialEndsAt, trialRemainingLabel, asOf }: TrialExtensionPanelProps) {
+export function TrialExtensionPanel({ orgId, extensions, eligibility, schemaAvailable, policyGateOpen, canManage, trialEndsAt, trialRemainingLabel, asOf }: TrialExtensionPanelProps) {
   const [state, action, pending] = useActionState(extendOrganizationTrial, INITIAL_STATE);
   const maxDays = Math.max(1, eligibility.maxDays);
   const [days, setDays] = useState(Math.min(TRIAL_EXTENSION_DEFAULT_DAYS, maxDays));
 
-  const locked = !schemaAvailable || !policyGateOpen || !eligibility.canExtend;
-  const lockMessage = !schemaAvailable
+  const locked = !canManage || !schemaAvailable || !policyGateOpen || !eligibility.canExtend;
+  const lockMessage = !canManage
+    ? "Only Billing and Owner operators can extend a trial."
+    : !schemaAvailable
     ? "Apply migration 0075_extend_organization_trial.sql to enable trial extensions."
     : !policyGateOpen
       ? "Publish both platform policies to unlock trial extensions."

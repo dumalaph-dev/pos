@@ -1,30 +1,35 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { OrganizationOperations } from "@/app/platform/OrganizationOperations";
 import { ComplimentaryGrantPanel } from "@/app/platform/ComplimentaryGrantPanel";
 import { TrialExtensionPanel } from "@/app/platform/TrialExtensionPanel";
 import { getBillingPlan, normalizeSubscriptionStatus, subscriptionStatusLabel, subscriptionTone } from "@/lib/billing";
-import { createAdminClient } from "@/lib/employee-auth";
 import { readEffectiveComplimentaryAccess } from "@/lib/platform-access";
 import { readTrialExtensionEligibility, sumTrialExtensionDays } from "@/lib/platform-trial";
 import { isPolicyGateOpen, readPolicyNumber } from "@/lib/platform-operations";
 import { readPlatformOperations } from "@/lib/platform-operations-server";
+import { hasPlatformOperatorPermission } from "@/lib/platform-operators";
+import { requirePlatformOperator } from "@/lib/platform-operators-server";
 import { absoluteUrl } from "@/lib/site-url";
 import { referralStatusLabel } from "@/lib/referrals";
 import { isSubscriptionAccessCurrent, formatTrialRemaining, readTrialLifecycle } from "@/lib/trial";
-import { PlatformMetric, PlatformPageHeader, PlatformSectionHeading, PlatformUnavailable } from "@/app/platform/PlatformUI";
+import { PlatformAccessDenied, PlatformMetric, PlatformPageHeader, PlatformSectionHeading } from "@/app/platform/PlatformUI";
 import { formatDate, humanizeRole, readPlatformOrganizationDetail } from "@/app/platform/_lib/platform-data";
 
 export const dynamic = "force-dynamic";
 
 export default async function PlatformOrganizationPage({ params }: { params: Promise<{ orgId: string }> }) {
+  const actor = await requirePlatformOperator("console_read");
+  if (!actor.ok) {
+    if (actor.code === "unauthenticated") redirect("/platform/login");
+    return <PlatformAccessDenied detail={actor.message} />;
+  }
   const { orgId } = await params;
   if (!isUuid(orgId)) notFound();
   const asOf = new Date().toISOString();
 
-  const admin = createAdminClient();
-  if (!admin) return <PlatformUnavailable detail="Add SUPABASE_SERVICE_ROLE_KEY before opening the platform console." />;
+  const admin = actor.admin;
 
   const [detail, operations] = await Promise.all([
     readPlatformOrganizationDetail(admin, orgId),
@@ -71,6 +76,9 @@ export default async function PlatformOrganizationPage({ params }: { params: Pro
   });
   const policyGateOpen = isPolicyGateOpen(operations.policies);
   const accountOperationsReady = organization.account_status !== undefined && detail.supportCasesSchemaAvailable;
+  const canManageSupport = hasPlatformOperatorPermission(actor.role, "support_manage");
+  const canManageEntitlements = hasPlatformOperatorPermission(actor.role, "entitlement_manage");
+  const canViewSupport = actor.role !== "billing";
   const accessLabel = organization.account_status === "suspended"
     ? "Suspended"
     : effectiveGrant
@@ -98,7 +106,7 @@ export default async function PlatformOrganizationPage({ params }: { params: Pro
           <PlatformMetric label="Effective access" value={accessLabel} detail={effectiveGrant ? `Through ${formatDate(effectiveGrant.until)}` : subscription ? subscriptionStatusLabel(subscription) : "No subscription state"} icon="star" />
           <PlatformMetric label="Trial" value={trial.known ? formatTrialRemaining(trial.remainingMs) : "Not scheduled"} detail={trial.endsAt ? `Ends ${formatDate(trial.endsAt)}` : "Base trial history"} icon="bell" />
           <PlatformMetric label="People" value={profiles.length} detail={`${employees.length} employee records`} icon="customers" />
-          <PlatformMetric label="Support history" value={supportCases.length} detail={`${detail.trialFeedback ? "Trial feedback captured" : "No trial feedback"}`} icon="help" />
+          <PlatformMetric label="Support history" value={canViewSupport ? supportCases.length : "Restricted"} detail={canViewSupport ? `${detail.trialFeedback ? "Trial feedback captured" : "No trial feedback"}` : "Support workspace access is restricted"} icon="help" />
         </section>
 
         <section className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]" aria-label="Subscription and owner details">
@@ -127,12 +135,13 @@ export default async function PlatformOrganizationPage({ params }: { params: Pro
           eligibility={trialExtensionEligibility}
           schemaAvailable={detail.trialExtensionsSchemaAvailable}
           policyGateOpen={policyGateOpen}
+          canManage={canManageEntitlements}
           trialEndsAt={organization.subscription_trial_ends_at ?? organization.subscription_current_period_end ?? null}
           trialRemainingLabel={trial.known ? formatTrialRemaining(trial.remainingMs) : "No trial scheduled"}
           asOf={asOf}
         />
 
-        <ComplimentaryGrantPanel orgId={organization.id} grants={accessGrants} schemaAvailable={detail.accessGrantsSchemaAvailable} policyGateOpen={policyGateOpen} accountSuspended={organization.account_status === "suspended"} asOf={asOf} />
+        <ComplimentaryGrantPanel orgId={organization.id} grants={accessGrants} schemaAvailable={detail.accessGrantsSchemaAvailable} policyGateOpen={policyGateOpen} accountSuspended={organization.account_status === "suspended"} asOf={asOf} canManage={canManageEntitlements} />
 
         <section className="mt-8 grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]" aria-label="People and branches">
           <article className="overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)]">
@@ -147,10 +156,10 @@ export default async function PlatformOrganizationPage({ params }: { params: Pro
         </section>
 
         <section className="mt-8 grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]" aria-label="Support and referrals">
-          <article className="overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)]">
+          {canViewSupport ? <article className="overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)]">
             <div className="px-5 py-5 sm:px-6"><PlatformSectionHeading eyebrow="Support history" title="Cases and trial feedback" description="The operator history attached to this organization, including retention conversations." /></div>
             <div className="border-t border-line">{supportCases.length === 0 ? <p className="px-6 py-8 text-center text-sm text-ink-muted">No support cases recorded for this organization.</p> : <div className="divide-y divide-line">{supportCases.map((supportCase) => <div key={supportCase.id} className="px-6 py-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><strong className="block text-sm">{supportCase.subject}</strong><span className="mt-1 block text-xs text-ink-muted">Opened {formatDate(supportCase.created_at)} · {supportCase.priority === "urgent" ? "Urgent" : "Normal"}</span></div><span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-extrabold text-primary">{supportCase.status.replaceAll("_", " ")}</span></div><p className="mt-2 text-sm leading-5 text-ink-muted">{supportCase.description}</p></div>)}</div>}{detail.trialFeedback && <div className="border-t border-line bg-warning/10 px-6 py-4"><p className="text-xs font-extrabold uppercase tracking-wide text-accent">Trial feedback</p><p className="mt-2 text-sm leading-5 text-ink">Reason: <strong>{detail.trialFeedback.reason.replaceAll("_", " ")}</strong>{detail.trialFeedback.wants_discount ? " · Discount requested" : ""}</p>{detail.trialFeedback.details && <p className="mt-1 text-sm leading-5 text-ink-muted">{detail.trialFeedback.details}</p>}<p className="mt-2 text-xs font-semibold text-ink-muted">Updated {formatDate(detail.trialFeedback.updated_at)} · {detail.trialFeedback.status}</p></div>}</div>
-          </article>
+          </article> : <article className="rounded-[22px] border border-line bg-raised/60 p-5 shadow-[var(--shadow-card)] sm:p-6"><PlatformSectionHeading eyebrow="Support history" title="Support workspace restricted" description="Billing operators can manage subscription configuration and entitlements, but support cases and retention notes are reserved for Support and Owner operators." /></article>}
 
           <article className="overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)]">
             <div className="px-5 py-5 sm:px-6"><PlatformSectionHeading eyebrow="Referral history" title="Attribution & rewards" description="Referrals are captured at signup and rewarded only after the referred organization reaches its first paid conversion." /></div>
@@ -162,8 +171,8 @@ export default async function PlatformOrganizationPage({ params }: { params: Pro
         </section>
 
         <section className="mt-8 rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="operator-controls-heading">
-          <PlatformSectionHeading eyebrow="Operator controls" title="Lifecycle and support actions" description="These existing controls remain policy-gated and use the same audit boundary as grants." />
-          <div className="mt-5"><OrganizationOperations orgId={organization.id} orgName={organization.name} accountStatus={organization.account_status ?? null} suspensionReason={organization.suspension_reason ?? null} policyGateOpen={policyGateOpen} schemaAvailable={accountOperationsReady} /></div>
+          <PlatformSectionHeading eyebrow="Operator controls" title="Lifecycle and support actions" description={canViewSupport ? "These existing controls remain policy-gated and use the same audit boundary as grants." : "Support controls are not available to Billing operators."} />
+          <div className="mt-5"><OrganizationOperations orgId={organization.id} orgName={organization.name} accountStatus={organization.account_status ?? null} suspensionReason={organization.suspension_reason ?? null} policyGateOpen={policyGateOpen} schemaAvailable={accountOperationsReady} canManage={canManageSupport} visible={canViewSupport} /></div>
         </section>
 
         <section className="mt-8 overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)]" aria-labelledby="audit-history-heading">

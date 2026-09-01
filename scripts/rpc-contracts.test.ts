@@ -12,8 +12,10 @@ const RPC_CONTRACTS = new Map<string, RpcContract>([
   ["clone_menu", [["source_store", "target_store"]]],
   ["close_shift", [["p_shift_id", "p_declared_cash", "p_note"]]],
   ["complete_online_order", [["p_online_order_id", "p_pos_order_id"]]],
+  ["create_platform_operator", [["p_email", "p_role", "p_actor_id", "p_actor_email"]]],
   ["current_stock", [["p_org_id"]]],
   ["current_inventory_stock", [["p_org_id"]]],
+  ["change_platform_operator_role", [["p_operator_id", "p_role", "p_actor_id", "p_actor_email"]]],
   ["inventory_item_expected_stock", [["p_org_id", "p_store_id", "p_until"]]],
   ["expire_trialing_organization", [["p_org_id"]]],
   ["extend_organization_trial", [["p_org_id", "p_days", "p_reason", "p_actor_id", "p_actor_email"]]],
@@ -33,6 +35,7 @@ const RPC_CONTRACTS = new Map<string, RpcContract>([
   ["record_stock_movement", [["p_store_id", "p_product_id", "p_type", "p_qty", "p_unit_cost", "p_reason"], ["p_store_id", "p_product_id", "p_type", "p_qty", "p_unit_cost", "p_reason", "p_client_mutation_id"]]],
   ["record_yield_entry", [["p_store_id", "p_source_product_id", "p_source_qty", "p_output_product_id", "p_total_yield_qty", "p_waste_qty", "p_reason"]]],
   ["record_z_reading", [["p_shift_id", "p_note"]]],
+  ["revoke_platform_operator", [["p_operator_id", "p_actor_id", "p_actor_email"]]],
   ["save_product_recipe", [["p_product_id", "p_lines"]]],
   ["set_online_availability", [["p_scope", "p_entity_id", "p_available"]]],
   ["set_online_order_status", [["p_online_order_id", "p_next_status", "p_cancel_reason"]]],
@@ -115,4 +118,64 @@ test("online-ordering migrations explicitly reload PostgREST after RPC DDL", () 
     const contents = fs.readFileSync(path.resolve(process.cwd(), "supabase", "migrations", migration), "utf8");
     assert.match(contents, /notify\s+pgrst,\s*'reload schema'/i, `${migration} must reload the PostgREST schema cache`);
   }
+});
+
+const PLATFORM_ACTION_CONTRACTS = new Map<string, Map<string, string>>([
+  ["src/app/platform/actions.ts", new Map([
+    ["saveBillingCatalog", "billing_manage"],
+    ["savePlatformPolicy", "policy_manage"],
+    ["savePlatformPromotion", "billing_manage"],
+    ["togglePlatformPromotion", "billing_manage"],
+  ])],
+  ["src/app/platform/operations-actions.ts", new Map([
+    ["suspendOrganization", "support_manage"],
+    ["restoreOrganization", "support_manage"],
+    ["openSupportCase", "support_manage"],
+    ["grantComplimentaryPremium", "entitlement_manage"],
+    ["revokeComplimentaryPremium", "entitlement_manage"],
+    ["extendOrganizationTrial", "entitlement_manage"],
+    ["updateTrialFeedback", "support_manage"],
+  ])],
+  ["src/app/platform/operators-actions.ts", new Map([
+    ["invitePlatformOperator", "operator_manage"],
+    ["changePlatformOperatorRole", "operator_manage"],
+    ["revokePlatformOperator", "operator_manage"],
+  ])],
+]);
+
+function readPlatformActionPermissionChecks() {
+  const checks: Array<{ file: string; functionName: string; permission: string | null }> = [];
+  for (const [relativeFile, expectedActions] of PLATFORM_ACTION_CONTRACTS) {
+    const file = path.resolve(process.cwd(), relativeFile);
+    const sourceText = fs.readFileSync(file, "utf8");
+    const sourceFile = ts.createSourceFile(file, sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    for (const statement of sourceFile.statements) {
+      if (!ts.isFunctionDeclaration(statement) || !statement.name || !statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) continue;
+      if (!expectedActions.has(statement.name.text)) continue;
+      let permission: string | null = null;
+      function visit(node: ts.Node) {
+        if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "requirePlatformOperator") {
+          const argument = node.arguments[0];
+          if (argument && ts.isStringLiteral(argument)) permission = argument.text;
+        }
+        ts.forEachChild(node, visit);
+      }
+      if (statement.body) visit(statement.body);
+      checks.push({ file: relativeFile, functionName: statement.name.text, permission });
+    }
+  }
+  return checks;
+}
+
+test("every exported platform Server Action performs its required centralized role check", () => {
+  const checks = readPlatformActionPermissionChecks();
+  const errors: string[] = [];
+  for (const [file, expectedActions] of PLATFORM_ACTION_CONTRACTS) {
+    for (const [functionName, expectedPermission] of expectedActions) {
+      const check = checks.find((candidate) => candidate.file === file && candidate.functionName === functionName);
+      if (!check) errors.push(`${file} is missing exported action ${functionName}`);
+      else if (check.permission !== expectedPermission) errors.push(`${file}:${functionName} checks ${check.permission ?? "nothing"}; expected ${expectedPermission}`);
+    }
+  }
+  assert.equal(errors.length, 0, errors.join("\n"));
 });

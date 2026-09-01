@@ -1,16 +1,22 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
-import { createAdminClient } from "@/lib/employee-auth";
 import { isPolicyGateOpen } from "@/lib/platform-operations";
 import { readPlatformOperations } from "@/lib/platform-operations-server";
+import { requirePlatformOperator } from "@/lib/platform-operators-server";
+import { hasPlatformOperatorPermission } from "@/lib/platform-operators";
 import { PlatformPolicyEditor, PolicyCardHeading } from "@/app/platform/PlatformPolicyEditor";
-import { PlatformMetric, PlatformPageHeader, PlatformSectionHeading, PlatformUnavailable } from "../../PlatformUI";
+import { PlatformAccessDenied, PlatformMetric, PlatformPageHeader, PlatformSectionHeading } from "../../PlatformUI";
 
 export const dynamic = "force-dynamic";
 
 export default async function PlatformPoliciesPage() {
-  const admin = createAdminClient();
-  if (!admin) return <PlatformUnavailable detail="Add SUPABASE_SERVICE_ROLE_KEY before opening the platform console." />;
+  const actor = await requirePlatformOperator("console_read");
+  if (!actor.ok) {
+    if (actor.code === "unauthenticated") redirect("/platform/login");
+    return <PlatformAccessDenied detail={actor.message} />;
+  }
+  const admin = actor.admin;
 
   const { policies } = await readPlatformOperations(admin);
   const policyGateOpen = isPolicyGateOpen(policies);
@@ -58,11 +64,11 @@ export default async function PlatformPoliciesPage() {
         <section className="mt-6 grid gap-5 xl:grid-cols-2" aria-label="Platform policy editors">
           <article id="billing-policy" className="scroll-mt-24 rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6">
             <PolicyCardHeading policy={policies.billing} />
-            <PlatformPolicyEditor policy={policies.billing} schemaAvailable={policies.schemaAvailable} />
+            <PlatformPolicyEditor policy={policies.billing} schemaAvailable={policies.schemaAvailable} canManage={hasPlatformOperatorPermission(actor.role, "policy_manage")} />
           </article>
           <article id="support-policy" className="scroll-mt-24 rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6">
             <PolicyCardHeading policy={policies.support} />
-            <PlatformPolicyEditor policy={policies.support} schemaAvailable={policies.schemaAvailable} />
+            <PlatformPolicyEditor policy={policies.support} schemaAvailable={policies.schemaAvailable} canManage={hasPlatformOperatorPermission(actor.role, "policy_manage")} />
           </article>
         </section>
 
