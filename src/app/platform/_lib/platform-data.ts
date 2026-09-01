@@ -12,6 +12,13 @@ import {
   type ReferralRewardRecord,
 } from "@/lib/referrals";
 import { normalizeTrialFeedbackStatus, type TrialFeedbackStatus } from "@/lib/trial";
+import {
+  PLATFORM_FLEET_HEALTH_WINDOWS,
+  summarizePlatformFleetHealth,
+  type PlatformFleetHealthOrganization,
+  type PlatformFleetHealthSample,
+  type PlatformFleetHealthSummaries,
+} from "@/lib/platform-fleet-health";
 import type { PlatformAuditEvent } from "@/lib/platform-audit";
 
 export type PlatformAdminClient = NonNullable<ReturnType<typeof createAdminClient>>;
@@ -166,7 +173,16 @@ export type PlatformAuditResult = {
   hasMore: boolean;
 };
 
+export type PlatformFleetHealthResult = {
+  asOf: string;
+  summaries: PlatformFleetHealthSummaries;
+  schemaAvailable: boolean;
+  organizationsAvailable: boolean;
+  hasMore: boolean;
+};
+
 const PLATFORM_AUDIT_LIMIT = 500;
+const PLATFORM_FLEET_HEALTH_SAMPLE_LIMIT = 10000;
 
 export async function readOrganizations(admin: PlatformAdminClient): Promise<OrganizationsResult> {
   const rich = await admin
@@ -379,6 +395,56 @@ export async function readPlatformAudit(admin: PlatformAdminClient): Promise<Pla
   };
 }
 
+export async function readPlatformFleetHealth(admin: PlatformAdminClient, requestedAsOf = new Date().toISOString()): Promise<PlatformFleetHealthResult> {
+  const parsedAsOf = Date.parse(requestedAsOf);
+  const asOf = Number.isFinite(parsedAsOf) ? new Date(parsedAsOf).toISOString() : new Date().toISOString();
+  const lookbackStart = new Date(Date.parse(asOf) - 60 * 24 * 60 * 60 * 1000).toISOString();
+  const [attributedSamplesResult, organizationsResult] = await Promise.all([
+    admin
+      .from("admin_performance_samples")
+      .select("id, org_id, recorded_at, surface, interaction, mode, sample_type, duration_ms, error", { count: "exact" })
+      .gte("recorded_at", lookbackStart)
+      .lte("recorded_at", asOf)
+      .order("recorded_at", { ascending: false })
+      .limit(PLATFORM_FLEET_HEALTH_SAMPLE_LIMIT),
+    admin.from("organizations").select("id, name").order("name").limit(1000),
+  ]);
+
+  let rawSamples: unknown[] = Array.isArray(attributedSamplesResult.data) ? attributedSamplesResult.data : [];
+  let sampleCount = attributedSamplesResult.count;
+  let schemaAvailable = !attributedSamplesResult.error;
+  if (attributedSamplesResult.error) {
+    const legacySamplesResult = await admin
+      .from("admin_performance_samples")
+      .select("id, recorded_at, surface, interaction, mode, sample_type, duration_ms, error", { count: "exact" })
+      .gte("recorded_at", lookbackStart)
+      .lte("recorded_at", asOf)
+      .order("recorded_at", { ascending: false })
+      .limit(PLATFORM_FLEET_HEALTH_SAMPLE_LIMIT);
+    rawSamples = Array.isArray(legacySamplesResult.data) ? legacySamplesResult.data : [];
+    sampleCount = legacySamplesResult.count;
+    schemaAvailable = false;
+  }
+
+  const samples = rawSamples.flatMap((row) => normalizePlatformFleetSample(row));
+  const organizations = (Array.isArray(organizationsResult.data) ? organizationsResult.data : []).flatMap((row): PlatformFleetHealthOrganization[] => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+    return [{ id: row.id, name: typeof row.name === "string" && row.name.trim() ? row.name : "Unnamed organization" }];
+  });
+  const summaries = Object.fromEntries(PLATFORM_FLEET_HEALTH_WINDOWS.map((window) => [
+    window,
+    summarizePlatformFleetHealth(samples, organizations, window, asOf),
+  ])) as PlatformFleetHealthSummaries;
+
+  return {
+    asOf,
+    summaries,
+    schemaAvailable,
+    organizationsAvailable: !organizationsResult.error,
+    hasMore: (sampleCount ?? rawSamples.length) > rawSamples.length,
+  };
+}
+
 export async function readPlatformOrganizationDetail(admin: PlatformAdminClient, organizationId: string): Promise<PlatformOrganizationDetail | null> {
   const organizationResult = await readOrganizationDetailRecord(admin, organizationId);
   if (!organizationResult) return null;
@@ -530,6 +596,21 @@ function readSettingsTrialFeedback(organization: OrganizationRecord): TrialFeedb
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizePlatformFleetSample(value: unknown): PlatformFleetHealthSample[] {
+  if (!isRecord(value) || typeof value.recorded_at !== "string" || typeof value.surface !== "string" || typeof value.interaction !== "string" || typeof value.mode !== "string" || typeof value.sample_type !== "string" || typeof value.duration_ms !== "number" || !Number.isFinite(value.duration_ms) || typeof value.error !== "boolean") return [];
+  return [{
+    organizationId: typeof value.org_id === "string" ? value.org_id : null,
+    organizationName: null,
+    surface: value.surface,
+    interaction: value.interaction,
+    mode: value.mode,
+    sampleType: value.sample_type,
+    durationMs: value.duration_ms,
+    error: value.error,
+    recordedAt: value.recorded_at,
+  }];
 }
 
 function readAuditSnapshotString(value: unknown, key: string) {

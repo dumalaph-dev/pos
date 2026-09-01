@@ -54,10 +54,18 @@ export async function POST(request: Request) {
     return new NextResponse(null, { status: 400 });
   }
 
-  if (!(await getAuthenticatedUser())) return new NextResponse(null, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return new NextResponse(null, { status: 401 });
 
   const supabase = await createClient();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("org_id")
+    .eq("id", user.id)
+    .maybeSingle();
+  const organizationId = typeof profile?.org_id === "string" ? profile.org_id : null;
   const { error: persistError } = await supabase.from("admin_performance_samples").insert({
+    org_id: organizationId,
     surface,
     interaction,
     mode,
@@ -92,6 +100,7 @@ export async function POST(request: Request) {
     resource_encoded_body_bytes: encodedBodyBytes,
     navigation_transfer_bytes: navigationTransferBytes,
     navigation_encoded_body_bytes: navigationEncodedBodyBytes,
+    organization_attributed: organizationId !== null,
     recorded_at: new Date().toISOString(),
     persisted: !persistError,
   }));

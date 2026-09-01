@@ -12,6 +12,7 @@ const PLATFORM_NAV_ITEMS: Array<{ label: string; href: string; icon: AdminIconNa
   { label: "Promo & Marketing", href: "/platform/promotions", icon: "tag", detail: "Campaign codes & performance" },
   { label: "Directory", href: "/platform/users", icon: "customers", detail: "Users & organizations" },
   { label: "Audit log", href: "/platform/audit", icon: "history", detail: "Platform actor actions" },
+  { label: "Fleet health", href: "/platform/fleet", icon: "chart", detail: "Performance signals" },
   { label: "Operators", href: "/platform/operators", icon: "employees", detail: "Roles & access" },
   { label: "Policies", href: "/platform/policies", icon: "lock", detail: "Operating rules" },
   { label: "Operations", href: "/platform/operations", icon: "refresh", detail: "Lifecycle & support" },
