@@ -2,7 +2,7 @@
 
 **Project:** Dumala POS
 **Created:** 2026-08-29
-**Status:** Phase 3 deployed — hosted migration, code, and static/rollback checks are complete; the authenticated managed-operator console pass remains
+**Status:** Phase 4 in progress — the first cross-org read surface is deployed; fleet, sync/outbox, device, and schema-drift views remain
 **Owner:** Product and engineering
 **Companion to:** [tasks.md](tasks.md) · [SCHEMA.md](SCHEMA.md) §8 · [SETUP.md](SETUP.md)
 
@@ -10,7 +10,7 @@
 
 Give the platform owner direct, audited control over a registered account's entitlement — extending a trial, granting Premium, and the operator powers around them — without a database console, a support email thread, or a deploy.
 
-This document is the working plan for the initiative. Phase 1 is complete against hosted Supabase; Phase 2 remains queued, and Phase 3 is the current implementation slice. The open decisions in [Decisions to make](#decisions-to-make-before-implementation) still change the shape of Phase 5.
+This document is the working plan for the initiative. Phases 1–3 are complete against hosted Supabase, and Phase 4 is the current implementation slice. The open decisions in [Decisions to make](#decisions-to-make-before-implementation) still change the shape of Phase 5.
 
 ---
 
@@ -173,18 +173,31 @@ After Docker Desktop became available, the preserved local Supabase volume recov
 
 ### Phase 4 — Cross-org read surfaces
 
-**Status:** Not started
+**Status:** In progress — platform audit viewer deployed from `main` commit `2e195fd`; remaining read surfaces are queued
 **Migration:** none expected; read-only over existing tables
 
 Powers that only need to look. Safe to build once Phase 3 can scope who looks.
 
-- [ ] **Platform audit viewer.** `PlatformAuditRecord` already exists in [platform-data.ts:77](../src/app/platform/_lib/platform-data.ts) with no page behind it. Add a filterable cross-org view of platform-actor audit rows.
+- [x] **Platform audit viewer.** The deployed `/platform/audit` page combines platform-scoped `audit_logs` rows with `platform_operator_audit_logs`, and supports search plus source, action, organization, and time-window filters. Before/after snapshots remain expandable; the page is read-only and excludes tenant order, customer, and staff activity.
 - [ ] **Fleet health.** Surface the `admin_performance_samples` data that today is only reachable through `scripts/admin-performance-summary.sql`: p50/p95 interaction latency and error rates, per org.
 - [ ] **Sync and outbox health.** Offline-sync failure counts and stuck outbox depth per branch — the signal that a pilot tablet is silently failing.
 - [ ] **Device and terminal inventory.** Last-seen heartbeat per device, so "the tablet at branch 2 has not synced in three days" is visible without asking.
 - [ ] **Schema drift.** Which organizations are on which migration ledger position, replacing the hand-maintained note in [tasks.md](tasks.md).
 
 **Exit criteria:** The 2026-08-25-style production verification can be read off the console instead of assembled from scripts. No page exposes order, customer, or staff personal data to an operator not entitled to it.
+
+**Verification status (2026-09-01).** `npm run test:platform-audit` (3
+passed), `npm run test:rpc-contracts` (3 passed), `npm run typecheck`,
+`npm run lint`, `npm run build`, `npm run production:preflight`, and
+`git diff --check` pass. The local read-only smoke returned zero platform rows
+against the preserved local fixture. The hosted
+`npm run platform:audit:validate` smoke returned 5 organization events and 2
+operator-membership events, confirmed every organization event is scoped to
+`platform.%`, loaded 2 organization IDs, and made no writes. GitHub CI run
+`33475370420` passed typecheck, lint, build, and production preflight; commit
+`2e195fd` is deployed to production through Vercel deployment `6195435114`.
+The live unauthenticated `/platform/audit` boundary returns the expected `307`
+redirect to `/platform/login`. No migration or hosted data change was needed.
 
 ### Phase 5 — Support access into a tenant
 

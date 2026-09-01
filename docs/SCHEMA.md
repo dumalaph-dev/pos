@@ -424,6 +424,13 @@ expired grants, and shortened windows that would end at or before the current
 time are refused in the database transaction; browser roles have no table
 SELECT or RPC EXECUTE privilege.
 
+The Phase 4 platform audit viewer is read-only and requires the server-side
+`console_read` platform-operator check. Its organization stream reads only
+`audit_logs` rows whose action matches `platform.%`; its operator stream reads
+`platform_operator_audit_logs` from migration 0077. The viewer does not query
+tenant orders, customers, staff, devices, or other operational records, and no
+new migration or hosted table is needed for this surface.
+
 Two guards live in the function rather than in the console. `paused` has two
 unrelated causes — an expired trial, and a provider status of `unpaid` — so a
 revival back to `trialing` requires `paused` **and** a null

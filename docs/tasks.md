@@ -27,9 +27,32 @@ This section is the current source of truth for delivered work and the next gate
 | Store-owner onboarding and guidance | Implemented | Verify first-run and mobile behavior on the deployed app |
 | Admin workspace themes | Live main deployment previews verified 2026-08-09 | Maintain regression coverage |
 | Production pilot | In progress; `dumala.store` is live, production identity/deployment preflight passed 2026-08-25, and the paid-branch entitlement drift was repaired in hosted migration `0072` | Complete the physical-device pilot gates, restore rehearsal/backup decision, Vercel log/alert setup, real data intake, pilot week, and branch #2 |
-| Platform owner powers | Phase 2 entitlement controls deployed from `main` commit `198e77e`; hosted migration `0078` applied, rollback smoke passed, and the authenticated console walkthrough is owner-reported complete. Phase 3 operator verification is also owner-reported complete | Begin Phase 4 cross-org read surfaces with the platform audit viewer |
+| Platform owner powers | Phase 4 first slice deployed from `main` commit `2e195fd`; the read-only cross-org platform audit viewer, hosted smoke, CI, and production preflight passed. Phases 1–3 remain complete, including the owner-reported authenticated console gates | Continue Phase 4 with fleet health, sync/outbox health, device inventory, and schema-drift visibility |
 
 ### Recent delivery log
+
+- **2026-09-01 - Phase 4 platform audit viewer:** Added the filterable,
+  read-only `/platform/audit` cross-org surface for platform-actor actions.
+  It combines organization `audit_logs` events limited to `action like
+  'platform.%'` with the migration-0077 operator-membership audit stream, and
+  supports search plus source, action, organization, and time-window filters.
+  Each event preserves its organization link, actor identity, timestamp, and
+  expandable before/after snapshots. The viewer is behind the centralized
+  `console_read` role check and deliberately excludes tenant order, customer,
+  staff, device, and other operational records.
+
+  `npm run test:platform-audit` (3 passed), `npm run test:rpc-contracts` (3
+  passed), `npm run typecheck`, `npm run lint`, `npm run build`,
+  `npm run production:preflight`, and `git diff --check` pass. The local
+  read-only smoke returned zero platform rows. Hosted
+  `npm run platform:audit:validate` returned 5 organization events, 2
+  operator-membership events, 2 organization IDs, and
+  `organization_events_are_platform_scoped: true`; it performed no writes.
+  No migration or hosted data change was needed. Commit `2e195fd` was pushed to
+  `main`; GitHub CI run `33475370420` passed typecheck, lint, build, and
+  production preflight, Vercel deployment `6195435114` completed successfully,
+  and the live unauthenticated `/platform/audit` route returns the expected
+  `307` redirect to `/platform/login`.
 
 - **2026-09-01 - Phase 2 entitlement controls:** Added the searchable/filterable Account entitlement directory to `/platform/operations`, inline entitlement actions, combined organization entitlement timeline, and Overview trial/grant expiry readiness signals. Added hosted migration `0078_adjust_platform_access_grant.sql`; it adds grant update metadata and a service-role-only in-place adjustment RPC that locks the current grant, preserves its original reason, and writes exactly one `platform.access_grant.adjusted` audit row with before/after snapshots, delta, adjustment reason, and actor identity. Existing grant and revoke paths remain unchanged.
 

@@ -231,6 +231,33 @@ check the page after invite, role change, and revoke for the corresponding
 audit entries. Revoke the disposable managed membership after the pass. Do not
 put an Auth password or service-role key in the repository or task log.
 
+### Platform audit verification
+
+The cross-organization audit viewer is read-only and requires the same
+server-side `console_read` platform-operator check as the rest of the console.
+It reads only platform-actor events: `audit_logs` rows whose action matches
+`platform.%` and the operator-membership audit table introduced by migration
+`0077`. It does not query tenant order, customer, staff, or device activity.
+
+Run the deterministic filter and query-boundary checks:
+
+```bash
+npm run test:platform-audit
+npm run test:rpc-contracts
+```
+
+Against the linked project, run the read-only smoke:
+
+```bash
+npm run platform:audit:validate
+```
+
+Then open `/platform/audit` as a platform operator and verify search, source,
+action, organization, and time-window filters, organization links, and the
+expandable before/after snapshots. The smoke query performs no writes and does
+not create fixtures. Migration `0077` must be applied for operator-membership
+events to appear; organization platform events remain available independently.
+
 Store owners can register from `/signup`. The flow uses Supabase Auth and the
 `0022_owner_signup.sql` trigger to create a private organization, first branch,
 and admin profile atomically. Set `NEXT_PUBLIC_SITE_URL` to the Vercel origin
