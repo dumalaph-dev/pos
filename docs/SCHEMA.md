@@ -441,6 +441,20 @@ fleet reader aggregates the table server-side into organization-level latency,
 error, freshness, and surface metrics, includes an explicit unattributed legacy
 bucket, and exposes no raw tenant activity to the platform console.
 
+Migration 0080 adds `admin_sync_health_snapshots`, a service-role-readable
+telemetry table that stores the latest bounded heartbeat for each
+`(org_id, store_id, device_key, queue)` pair. Its queues are `orders`, `audit`,
+and `admin_mutations`; each row contains pending, failed, conflict,
+oldest-pending, online, and server-recorded timestamp fields. The unique key
+makes reports upserts rather than an unbounded event history, and no order or
+mutation payload is stored. RLS permits authenticated insert/update only when
+the organization comes from `auth_org_id()` and the branch is the caller's
+branch or the caller is an organization admin. Browser SELECT and DELETE are
+revoked; the platform reader uses the service role after its own centralized
+`console_read` check. The reporting route resolves `org_id` from the caller's
+profile and validates the branch server-side, so clients cannot spoof a
+cross-organization snapshot.
+
 Two guards live in the function rather than in the console. `paused` has two
 unrelated causes — an expired trial, and a provider status of `unpaid` — so a
 revival back to `trialing` requires `paused` **and** a null

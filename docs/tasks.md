@@ -27,9 +27,55 @@ This section is the current source of truth for delivered work and the next gate
 | Store-owner onboarding and guidance | Implemented | Verify first-run and mobile behavior on the deployed app |
 | Admin workspace themes | Live main deployment previews verified 2026-08-09 | Maintain regression coverage |
 | Production pilot | In progress; `dumala.store` is live, production identity/deployment preflight passed 2026-08-25, and the paid-branch entitlement drift was repaired in hosted migration `0072` | Complete the physical-device pilot gates, restore rehearsal/backup decision, Vercel log/alert setup, real data intake, pilot week, and branch #2 |
-| Platform owner powers | Phase 4 audit viewer and fleet-health slice deployed from `main` commits `2e195fd` and `979b151`; migration `0079` applied with hosted smoke, CI, and production preflight passed. Phases 1–3 remain complete, including the owner-reported authenticated console gates | Continue Phase 4 with sync/outbox health, device inventory, and schema-drift visibility |
+| Platform owner powers | Phase 4 audit viewer, fleet-health, and sync/outbox-health slices deployed from `main` commits `2e195fd`, `979b151`, and `ab18eb7`; migrations `0079` and `0080` applied with hosted smoke, ACL, CI, and production preflight passed. Phases 1–3 remain complete, including the owner-reported authenticated console gates | Continue Phase 4 with device inventory, then schema-drift visibility |
 
 ### Recent delivery log
+
+- **2026-09-01 - Phase 4 sync/outbox health:** Added the read-only,
+  filterable `/platform/sync` cross-organization health viewer. It groups the
+  latest bounded heartbeat by organization and active branch, with separate
+  `POS orders`, `Audit events`, and `Admin changes` queue rows. The viewer shows
+  pending depth, offline-sync failure counts, conflict counts, oldest pending
+  age, reporter freshness, and explicit `Healthy`, `Needs attention`, `Stale
+  reporter`, and `No telemetry` states. Organization/branch search, queue
+  filter, health-status filter, expandable queue detail, and read-only boundary
+  notes are included; there are no retry/delete controls and no order,
+  customer, staff, or mutation payloads exposed.
+
+  POS and admin clients now report their existing IndexedDB queue counters on
+  startup, after sync attempts, and every five minutes through the authenticated
+  `/api/admin/sync-health` route. The route derives the organization from the
+  caller's profile, validates branch scope, bounds all counters, and upserts the
+  current terminal/queue snapshot. Migration `0080_sync_health_snapshots.sql`
+  adds the RLS-protected service-role reader table with a unique
+  organization/branch/terminal/queue key; it preserves all existing data and
+  stores no payloads or unbounded heartbeat history.
+
+  Local and hosted Supabase application used the established `db push` workflow.
+  Both read-only smoke checks returned `schema_has_table: true`, 0 snapshots, 0
+  reporting stores/devices, 0 pending depth, 0 failed items, 0 conflicts,
+  `latest_reported_at: null`, and `read_is_telemetry_only: true`. The hosted
+  preservation query remains 3 organizations, 11 profiles, and 5 stores, with
+  0 sync-health snapshots. The hosted ACL check confirms RLS enabled,
+  authenticated insert/update allowed, authenticated and anon SELECT denied,
+  authenticated DELETE denied, and service-role SELECT allowed. The linked
+  migration apply completed; Supabase emitted the same optional post-apply
+  pg-delta catalog-cache timeout seen on earlier migrations, after the
+  successful migration transaction.
+
+  `npm run test:platform-sync` (3 passed), `npm run test:platform-fleet` (3
+  passed), `npm run test:platform-audit` (3 passed), `npm run test:rpc-contracts`
+  (3 passed), `npm run test:pos` (5 passed), `npm run test:pos:accessibility` (6
+  passed), `npm run test:platform-entitlements` (4 passed), `npm run typecheck`,
+  `npm run lint`, `npm run build`, `npm run production:preflight`, and
+  `git diff --check` pass. Commit `ab18eb7` is pushed to `main`; GitHub CI run
+  `33481888299` passed typecheck, lint, build, and production preflight, and
+  Vercel deployment `6196547670` completed successfully. The live
+  unauthenticated `/platform/sync` boundary returns the expected `307` redirect
+  to `/platform/login`. No authenticated tenant walkthrough was claimed in this
+  build pass; real POS/admin sessions will populate their own bounded snapshot
+  rows after the deployed clients run. Next: device inventory, then schema-drift
+  visibility.
 
 - **2026-09-01 - Phase 4 fleet health:** Added the read-only `/platform/fleet`
   cross-organization performance surface. It aggregates
@@ -57,8 +103,8 @@ This section is the current source of truth for delivered work and the next gate
   `git diff --check` pass. Commit `979b151` is deployed to `main`; GitHub CI
   run `33478837547` passed, Vercel deployment `6196018458` completed
   successfully, and the live unauthenticated `/platform/fleet` route returns
-  the expected `307` redirect to `/platform/login`. Next: sync/outbox health,
-  then device inventory and schema-drift visibility.
+  the expected `307` redirect to `/platform/login`. Next: device inventory,
+  then schema-drift visibility.
 
 - **2026-09-01 - Phase 4 platform audit viewer:** Added the filterable,
   read-only `/platform/audit` cross-org surface for platform-actor actions.

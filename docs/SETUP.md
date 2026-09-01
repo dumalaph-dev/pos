@@ -135,6 +135,7 @@ followed by `0062_public_menu_subdomains.sql` and
 77. `0077_platform_operators.sql` — service-role-only platform operator membership, role permissions, audited invite/reactivate/role-change/revoke RPCs, and final-owner protection
 78. `0078_adjust_platform_access_grant.sql` — inline entitlement directory support, in-place grant adjustment, and a single before/after audit row
 79. `0079_scope_admin_performance_to_organizations.sql` — preserve performance samples while attributing future authenticated samples to their server-resolved organization; legacy rows remain unattributed
+80. `0080_sync_health_snapshots.sql` — retain the latest bounded POS, audit, and admin-mutation queue heartbeat per organization, branch, local terminal key, and queue; browser reads remain denied
 
 **Apply them** either way:
 - **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push`
@@ -295,6 +296,52 @@ links, and expandable surface breakdowns. `Needs attention` begins at a 5% error
 rate; `stale` means the latest sample is over 24 hours old; `no telemetry` means
 there is no sample in the selected window. Existing hosted history may appear
 under **Unattributed history** until new authenticated samples are collected.
+
+### Platform sync and outbox health verification
+
+The sync viewer is a read-only cross-organization surface at `/platform/sync`.
+Because the POS and admin outboxes live in each browser's IndexedDB, active
+terminals report only bounded counters for `POS orders`, `Audit events`, and
+`Admin changes`; order, customer, staff, and mutation payloads never leave the
+terminal. The server resolves the organization from the authenticated profile
+and validates the branch before upserting the current heartbeat.
+
+Run the deterministic aggregation and boundary checks:
+
+```bash
+npm run test:platform-sync
+npm run test:rpc-contracts
+```
+
+Preview and apply migration `0080` through the established local or linked
+workflow, then run the read-only smoke:
+
+```bash
+npx --yes supabase@2.114.0 db push --local --dry-run
+npx --yes supabase@2.114.0 db push --local --yes
+npx --yes supabase@2.114.0 db query --local --file scripts/platform-sync-health-smoke.sql --output json
+
+npx --yes supabase@2.114.0 db push --linked --dry-run
+npx --yes supabase@2.114.0 db push --linked --yes
+npm run platform:sync:validate
+```
+
+The table has one current row per organization, branch, terminal key, and
+queue, with `pending_count`, `failed_count`, `conflict_count`,
+`oldest_pending_at`, `online`, and server `recorded_at`. RLS allows only
+authenticated branch-scoped insert/update; browser SELECT and DELETE are
+denied, while the platform reader uses the service role. Existing data is not
+rewritten, backfilled, or deleted. The smoke performs no writes and reports
+schema presence, reporting stores/devices, current queue depth, failures,
+conflicts, and latest heartbeat.
+
+Then open `/platform/sync` as a platform operator. Search by organization or
+branch, select a queue, and select a health status. `Needs attention` means a
+failed/conflict item, an offline reporter, or an oldest pending item over 15
+minutes; `stale` means no heartbeat for over 30 minutes; `no telemetry` means
+the active branch has not reported. The page has no retry, delete, or tenant
+data controls. A real POS or admin session will populate its branch rows after
+the deployed client reports its first heartbeat.
 
 Store owners can register from `/signup`. The flow uses Supabase Auth and the
 `0022_owner_signup.sql` trigger to create a private organization, first branch,

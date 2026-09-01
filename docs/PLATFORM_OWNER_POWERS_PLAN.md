@@ -173,14 +173,14 @@ After Docker Desktop became available, the preserved local Supabase volume recov
 
 ### Phase 4 — Cross-org read surfaces
 
-**Status:** In progress — platform audit viewer deployed from `main` commit `2e195fd` and fleet health deployed from `main` commit `979b151`; sync/outbox, device, and schema-drift views remain queued
-**Migration:** `0079_scope_admin_performance_to_organizations.sql` applied; the fleet reader is read-only and legacy samples remain preserved and unattributed
+**Status:** In progress — platform audit viewer, fleet health, and sync/outbox health are deployed from `main` commits `2e195fd`, `979b151`, and `ab18eb7`; device and schema-drift views remain queued
+**Migration:** `0079_scope_admin_performance_to_organizations.sql` and `0080_sync_health_snapshots.sql` applied; both readers are read-only, and legacy performance samples plus existing tenant data remain preserved
 
 Powers that only need to look. Safe to build once Phase 3 can scope who looks.
 
 - [x] **Platform audit viewer.** The deployed `/platform/audit` page combines platform-scoped `audit_logs` rows with `platform_operator_audit_logs`, and supports search plus source, action, organization, and time-window filters. Before/after snapshots remain expandable; the page is read-only and excludes tenant order, customer, and staff activity.
 - [x] **Fleet health.** The deployed `/platform/fleet` page aggregates `admin_performance_samples` into p50/p95 interaction latency, error rate, sample freshness, and surface breakdowns per organization, with time-window, search, and status filters. Migration `0079` attributes future authenticated samples from the server-resolved profile organization; existing rows remain preserved as unattributed history, and no raw tenant activity is exposed.
-- [ ] **Sync and outbox health.** Offline-sync failure counts and stuck outbox depth per branch — the signal that a pilot tablet is silently failing.
+- [x] **Sync and outbox health.** The deployed `/platform/sync` page reports bounded POS-order, audit-event, and admin-mutation queue snapshots per organization and active branch, including pending depth, failed/conflict counts, oldest-pending age, reporter freshness, and explicit `healthy`, `needs attention`, `stale`, and `no telemetry` states. Search, queue, and health filters are read-only; payloads never leave the terminal.
 - [ ] **Device and terminal inventory.** Last-seen heartbeat per device, so "the tablet at branch 2 has not synced in three days" is visible without asking.
 - [ ] **Schema drift.** Which organizations are on which migration ledger position, replacing the hand-maintained note in [tasks.md](tasks.md).
 
@@ -220,8 +220,41 @@ sample `2026-08-29T14:23:04.405294+00:00`; the pre-migration hosted count was
 were added. GitHub CI run `33478837547` passed typecheck, lint, build, and
 production preflight; commit `979b151` is deployed through Vercel deployment
 `6196018458`. The live unauthenticated `/platform/fleet` boundary returns the
-expected `307` redirect to `/platform/login`. The next Phase 4 slice is sync and
-outbox health, followed by device inventory and schema-drift visibility.
+expected `307` redirect to `/platform/login`. The next Phase 4 slice is device
+inventory, followed by schema-drift visibility.
+
+**Sync/outbox health verification (2026-09-01).** Migration `0080_sync_health_snapshots.sql`
+was previewed as the only pending local and linked migration and applied to both
+Supabase databases through `npx --yes supabase@2.114.0 db push`. The linked push
+completed the migration and emitted only the CLI's optional post-apply
+pg-delta catalog-cache timeout warning; the direct read-only smoke confirmed the
+schema. The new table keeps one upserted row per organization, branch, local
+terminal key, and queue, so it does not copy order or mutation payloads or grow
+an unbounded history. Existing hosted counts remain 3 organizations, 11
+profiles, and 5 stores; the new table contains 0 rows because no deployed
+terminal has reported a heartbeat yet.
+
+The viewer derives branch and organization health server-side. A queue is
+`needs attention` when it has failed/conflict items, an offline reporter, or an
+oldest pending item over 15 minutes; a reporter is `stale` after 30 minutes
+without a heartbeat; branches with no report are `no telemetry`. The local and
+hosted read-only smoke both returned `schema_has_table: true`, 0 snapshots, 0
+reporting stores/devices, 0 pending depth, 0 failed items, 0 conflicts, and
+`read_is_telemetry_only: true`. The hosted ACL check confirms RLS is enabled,
+authenticated insert/update is allowed only through branch/org policies,
+authenticated and anon SELECT are false, authenticated DELETE is false, and
+service-role SELECT is true.
+
+`npm run test:platform-sync` (3 passed), `npm run test:platform-fleet` (3
+passed), `npm run test:platform-audit` (3 passed), `npm run test:rpc-contracts`
+(3 passed), `npm run test:pos` (5 passed), `npm run test:pos:accessibility` (6
+passed), `npm run test:platform-entitlements` (4 passed), `npm run typecheck`,
+`npm run lint`, `npm run build`, `npm run production:preflight`, and
+`git diff --check` pass. Commit `ab18eb7` is deployed through Vercel deployment
+`6196547670`; GitHub CI run `33481888299` passed typecheck, lint, build, and
+production preflight. The live unauthenticated `/platform/sync` boundary
+returns the expected `307` redirect to `/platform/login`. The next Phase 4
+slice is device inventory, followed by schema-drift visibility.
 
 ### Phase 5 — Support access into a tenant
 
