@@ -313,8 +313,8 @@ npm run test:platform-sync
 npm run test:rpc-contracts
 ```
 
-Preview and apply migration `0080` through the established local or linked
-workflow, then run the read-only smoke:
+Preview and apply migrations `0080` and `0081` through the established local or
+linked workflow, then run the read-only smoke:
 
 ```bash
 npx --yes supabase@2.114.0 db push --local --dry-run
@@ -327,21 +327,23 @@ npm run platform:sync:validate
 ```
 
 The table has one current row per organization, branch, terminal key, and
-queue, with `pending_count`, `failed_count`, `conflict_count`,
-`oldest_pending_at`, `online`, and server `recorded_at`. RLS allows only
-authenticated branch-scoped insert/update; browser SELECT and DELETE are
-denied, while the platform reader uses the service role. Existing data is not
-rewritten, backfilled, or deleted. The smoke performs no writes and reports
-schema presence, reporting stores/devices, current queue depth, failures,
-conflicts, and latest heartbeat.
+queue, with `pending_count`, `failed_count`, `conflict_count`, exact
+`stuck_count`, `oldest_pending_at`, `last_successful_sync_at`, `online`, and
+server `recorded_at`. RLS allows only authenticated branch-scoped
+insert/update; browser SELECT and DELETE are denied, while the platform reader
+uses the service role. Existing data is not rewritten, backfilled, or deleted.
+The smoke performs no writes and reports schema/constraint/trigger presence,
+reporting stores/devices, current queue depth, stuck depth, failures,
+conflicts, last success, and latest heartbeat.
 
 Then open `/platform/sync` as a platform operator. Search by organization or
-branch, select a queue, and select a health status. `Needs attention` means a
-failed/conflict item, an offline reporter, or an oldest pending item over 15
-minutes; `stale` means no heartbeat for over 30 minutes; `no telemetry` means
-the active branch has not reported. The page has no retry, delete, or tenant
-data controls. A real POS or admin session will populate its branch rows after
-the deployed client reports its first heartbeat.
+branch, select a queue, freshness, or health status, and expand a branch's
+aggregate queue details. `Needs attention` means a failed/conflict item, an
+offline reporter, or an exact stuck item; `stale` means no heartbeat for over
+30 minutes; `no telemetry` means the active branch has not reported. The page
+has no retry, delete, or tenant-data controls. A real POS or admin session will
+populate its branch rows after the enhanced client is deployed and reports its
+first heartbeat.
 
 Store owners can register from `/signup`. The flow uses Supabase Auth and the
 `0022_owner_signup.sql` trigger to create a private organization, first branch,

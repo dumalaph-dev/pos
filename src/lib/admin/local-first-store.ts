@@ -1,6 +1,6 @@
 import Dexie, { type Table } from "dexie";
 import type { StockMovementType } from "@/lib/inventory";
-import type { PlatformSyncHealthQueueSnapshot } from "@/lib/platform-sync-health";
+import { PLATFORM_SYNC_HEALTH_STUCK_AFTER_MS, type PlatformSyncHealthQueueSnapshot } from "@/lib/platform-sync-health";
 
 export const ADMIN_LOCAL_FIRST_SCHEMA_VERSION = 2;
 
@@ -415,12 +415,18 @@ export async function getAdminMutationRecords(scope: AdminCacheScope): Promise<A
 
 export async function getAdminMutationHealth(scope: AdminCacheScope): Promise<AdminMutationHealth> {
   const records = await getAdminMutationRecords(scope);
+  const stuckCutoff = Date.now() - PLATFORM_SYNC_HEALTH_STUCK_AFTER_MS;
   return {
     queue: "admin_mutations",
     pendingCount: records.length,
     failedCount: records.filter((record) => record.status === "failed").length,
     conflictCount: records.filter((record) => record.status === "conflict").length,
+    stuckCount: records.filter((record) => {
+      const createdAt = Date.parse(record.createdAt);
+      return Number.isFinite(createdAt) && createdAt < stuckCutoff;
+    }).length,
     oldestPendingAt: records[0]?.createdAt ?? null,
+    lastSuccessfulSyncAt: null,
   };
 }
 

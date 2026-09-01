@@ -7,13 +7,16 @@ export const PLATFORM_SYNC_HEALTH_REPORT_INTERVAL_MS = 5 * 60 * 1000;
 export const PLATFORM_SYNC_HEALTH_MAX_QUEUE_COUNT = 10_000;
 
 export type PlatformSyncHealthStatus = "healthy" | "needs_attention" | "stale" | "no_data";
+export type PlatformSyncHealthFreshness = "fresh" | "stale" | "no_data";
 
 export type PlatformSyncHealthQueueSnapshot = {
   queue: PlatformSyncHealthQueue;
   pendingCount: number;
   failedCount: number;
   conflictCount: number;
+  stuckCount: number;
   oldestPendingAt: string | null;
+  lastSuccessfulSyncAt: string | null;
 };
 
 export type PlatformSyncHealthSample = PlatformSyncHealthQueueSnapshot & {
@@ -40,8 +43,10 @@ export type PlatformSyncHealthMetrics = {
   pendingCount: number;
   failedCount: number;
   conflictCount: number;
+  stuckCount: number;
   oldestPendingAt: string | null;
   lastReportedAt: string | null;
+  lastSuccessfulSyncAt: string | null;
   reporterCount: number;
   offlineReporterCount: number;
   queueCount: number;
@@ -53,6 +58,7 @@ export type PlatformSyncHealthQueueRow = PlatformSyncHealthMetrics & PlatformSyn
   storeId: string;
   storeName: string;
   status: PlatformSyncHealthStatus;
+  freshness: PlatformSyncHealthFreshness;
 };
 
 export type PlatformSyncHealthBranchRow = PlatformSyncHealthMetrics & {
@@ -62,6 +68,7 @@ export type PlatformSyncHealthBranchRow = PlatformSyncHealthMetrics & {
   storeName: string;
   isActive: boolean;
   status: PlatformSyncHealthStatus;
+  freshness: PlatformSyncHealthFreshness;
 };
 
 export type PlatformSyncHealthOrganizationRow = PlatformSyncHealthMetrics & {
@@ -70,6 +77,7 @@ export type PlatformSyncHealthOrganizationRow = PlatformSyncHealthMetrics & {
   branchCount: number;
   activeBranchCount: number;
   status: PlatformSyncHealthStatus;
+  freshness: PlatformSyncHealthFreshness;
 };
 
 export type PlatformSyncHealthSummary = {
@@ -120,6 +128,7 @@ export function summarizePlatformSyncHealth(
       isActive: store.isActive,
       ...metrics,
       status: syncHealthStatus(metrics, asOfMs),
+      freshness: syncHealthFreshness(metrics, asOfMs),
     };
   });
 
@@ -138,6 +147,7 @@ export function summarizePlatformSyncHealth(
         queue,
         ...metrics,
         status: syncHealthStatus(metrics, asOfMs),
+        freshness: syncHealthFreshness(metrics, asOfMs),
       });
     }
   }
@@ -156,6 +166,7 @@ export function summarizePlatformSyncHealth(
       status: organizationBranches.length > 0
         ? organizationBranches.reduce<PlatformSyncHealthStatus>((worst, branch) => worstStatus(worst, branch.status), "healthy")
         : "no_data",
+      freshness: syncHealthFreshness(metrics, asOfMs),
     };
   });
 
@@ -181,6 +192,10 @@ export function syncHealthStatusLabel(status: PlatformSyncHealthStatus) {
       : status === "no_data"
         ? "No telemetry"
         : "Healthy";
+}
+
+export function syncHealthFreshnessLabel(freshness: PlatformSyncHealthFreshness) {
+  return freshness === "stale" ? "Stale reporter" : freshness === "no_data" ? "No telemetry" : "Fresh reporter";
 }
 
 export function syncHealthQueueLabel(queue: PlatformSyncHealthQueue) {
@@ -215,8 +230,10 @@ function metricsForSamples(samples: PlatformSyncHealthSample[]): PlatformSyncHea
     pendingCount: sumCount(samples, "pendingCount"),
     failedCount: sumCount(samples, "failedCount"),
     conflictCount: sumCount(samples, "conflictCount"),
+    stuckCount: sumCount(samples, "stuckCount"),
     oldestPendingAt: pendingTimes.length > 0 ? new Date(pendingTimes[0]).toISOString() : null,
     lastReportedAt: timestamps.length > 0 ? new Date(timestamps[timestamps.length - 1]).toISOString() : null,
+    lastSuccessfulSyncAt: latestSuccessfulSyncAt(samples),
     reporterCount: reporters.size,
     offlineReporterCount: offlineReporters.size,
     queueCount: new Set(samples.map((sample) => sample.queue)).size,
@@ -225,9 +242,15 @@ function metricsForSamples(samples: PlatformSyncHealthSample[]): PlatformSyncHea
 
 function syncHealthStatus(metrics: PlatformSyncHealthMetrics, asOfMs: number): PlatformSyncHealthStatus {
   if (metrics.reporterCount === 0 || !metrics.lastReportedAt) return "no_data";
-  if (metrics.failedCount > 0 || metrics.conflictCount > 0 || metrics.offlineReporterCount > 0 || isOlderThan(metrics.oldestPendingAt, asOfMs, PLATFORM_SYNC_HEALTH_STUCK_AFTER_MS)) return "needs_attention";
-  if (isOlderThan(metrics.lastReportedAt, asOfMs, PLATFORM_SYNC_HEALTH_STALE_AFTER_MS)) return "stale";
+  if (metrics.failedCount > 0 || metrics.conflictCount > 0 || metrics.stuckCount > 0 || metrics.offlineReporterCount > 0 || isOlderThan(metrics.oldestPendingAt, asOfMs, PLATFORM_SYNC_HEALTH_STUCK_AFTER_MS)) return "needs_attention";
+  if (syncHealthFreshness(metrics, asOfMs) === "stale") return "stale";
   return "healthy";
+}
+
+export function syncHealthFreshness(metrics: PlatformSyncHealthMetrics, asOf: string | number): PlatformSyncHealthFreshness {
+  const asOfMs = toTimestamp(asOf) ?? Date.now();
+  if (metrics.reporterCount === 0 || !metrics.lastReportedAt) return "no_data";
+  return isOlderThan(metrics.lastReportedAt, asOfMs, PLATFORM_SYNC_HEALTH_STALE_AFTER_MS) ? "stale" : "fresh";
 }
 
 function isOlderThan(value: string | null, asOfMs: number, thresholdMs: number) {
@@ -235,8 +258,16 @@ function isOlderThan(value: string | null, asOfMs: number, thresholdMs: number) 
   return timestamp !== null && asOfMs - timestamp > thresholdMs;
 }
 
-function sumCount(samples: PlatformSyncHealthSample[], key: "pendingCount" | "failedCount" | "conflictCount") {
+function sumCount(samples: PlatformSyncHealthSample[], key: "pendingCount" | "failedCount" | "conflictCount" | "stuckCount") {
   return samples.reduce((total, sample) => total + (Number.isFinite(sample[key]) ? Math.max(0, Math.round(sample[key])) : 0), 0);
+}
+
+function latestSuccessfulSyncAt(samples: PlatformSyncHealthSample[]) {
+  const timestamps = samples
+    .map((sample) => toTimestamp(sample.lastSuccessfulSyncAt))
+    .filter((timestamp): timestamp is number => timestamp !== null)
+    .sort((left, right) => left - right);
+  return timestamps.length > 0 ? new Date(timestamps[timestamps.length - 1]).toISOString() : null;
 }
 
 function groupSamples(samples: PlatformSyncHealthSample[], keyOf: (sample: PlatformSyncHealthSample) => string) {

@@ -36,15 +36,26 @@ function readQueueSnapshot(value: unknown) {
   const pendingCount = readBoundedInteger(value.pending_count);
   const failedCount = readBoundedInteger(value.failed_count);
   const conflictCount = readBoundedInteger(value.conflict_count);
+  const stuckCount = value.stuck_count === undefined ? 0 : readBoundedInteger(value.stuck_count);
   const oldestPendingAt = readTimestamp(value.oldest_pending_at);
-  if (queue === null || pendingCount === null || failedCount === null || conflictCount === null || failedCount > pendingCount || conflictCount > pendingCount) return null;
+  const syncSucceeded = value.sync_succeeded === undefined
+    ? false
+    : typeof value.sync_succeeded === "boolean" ? value.sync_succeeded : null;
+  if (queue === null || pendingCount === null || failedCount === null || conflictCount === null || stuckCount === null || syncSucceeded === null || failedCount > pendingCount || conflictCount > pendingCount || stuckCount > pendingCount) return null;
   return {
     queue,
     pending_count: pendingCount,
     failed_count: failedCount,
     conflict_count: conflictCount,
+    stuck_count: stuckCount,
     oldest_pending_at: pendingCount > 0 ? oldestPendingAt : null,
+    sync_succeeded: syncSucceeded,
   };
+}
+
+function isMissingEnhancedSchema(error: unknown) {
+  const message = error instanceof Error ? error.message : isRecord(error) && typeof error.message === "string" ? error.message : "";
+  return /stuck_count|last_successful_sync_at|column .* does not exist|schema cache/i.test(message);
 }
 
 export async function POST(request: Request) {
@@ -91,7 +102,7 @@ export async function POST(request: Request) {
   if (storeError || !store) return new NextResponse(null, { status: 403 });
 
   const recordedAt = new Date().toISOString();
-  const { error: persistError } = await supabase
+  const enrichedResult = await supabase
     .from("admin_sync_health_snapshots")
     .upsert(
       queues.map((queue) => ({
@@ -102,12 +113,39 @@ export async function POST(request: Request) {
         pending_count: queue!.pending_count,
         failed_count: queue!.failed_count,
         conflict_count: queue!.conflict_count,
+        stuck_count: queue!.stuck_count,
         oldest_pending_at: queue!.oldest_pending_at,
+        last_successful_sync_at: queue!.sync_succeeded ? recordedAt : null,
         online,
         recorded_at: recordedAt,
       })),
       { onConflict: "org_id,store_id,device_key,queue" },
     );
+  let persistError = enrichedResult.error;
+
+  // Keep the rollout safe for a server whose 0080 table is present while the
+  // additive 0081 columns are still being applied. The database trigger in
+  // 0081 preserves an earlier success timestamp on non-success reports.
+  if (persistError && isMissingEnhancedSchema(persistError)) {
+    const legacyResult = await supabase
+      .from("admin_sync_health_snapshots")
+      .upsert(
+        queues.map((queue) => ({
+          org_id: organizationId,
+          store_id: store.id,
+          device_key: deviceKey,
+          queue: queue!.queue,
+          pending_count: queue!.pending_count,
+          failed_count: queue!.failed_count,
+          conflict_count: queue!.conflict_count,
+          oldest_pending_at: queue!.oldest_pending_at,
+          online,
+          recorded_at: recordedAt,
+        })),
+        { onConflict: "org_id,store_id,device_key,queue" },
+      );
+    persistError = legacyResult.error;
+  }
 
   // Keep deployment logs useful without persisting identifiers, queue payloads,
   // error messages, or organization data outside the telemetry table.
@@ -116,8 +154,9 @@ export async function POST(request: Request) {
     queues: queues.map((queue) => queue!.queue),
     online,
     persisted: !persistError,
+    enhanced_metrics: queues.some((queue) => queue!.stuck_count > 0 || queue!.sync_succeeded),
     recorded_at: recordedAt,
   }));
 
-  return new NextResponse(null, { status: 202 });
+  return new NextResponse(null, { status: persistError ? 503 : 202 });
 }

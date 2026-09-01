@@ -12,7 +12,7 @@ import {
   getAdminMutationHealth,
   type AdminCacheScope,
 } from "@/lib/admin/local-first-store";
-import { PLATFORM_SYNC_HEALTH_REPORT_INTERVAL_MS } from "@/lib/platform-sync-health";
+import { PLATFORM_SYNC_HEALTH_REPORT_INTERVAL_MS, type PlatformSyncHealthQueue } from "@/lib/platform-sync-health";
 import { reportSyncHealthSnapshot } from "@/lib/sync-health-client";
 
 type SyncState = {
@@ -29,7 +29,7 @@ export function AdminMutationSync({ scope }: { scope: AdminCacheScope }) {
   const scopeKey = createAdminCacheScopeKey(scope);
   const [state, setState] = useState<SyncState>({ phase: "idle", pending: 0, failed: 0, conflicts: 0, message: null });
 
-  const reportHealth = useCallback(async () => {
+  const reportHealth = useCallback(async (successful = false) => {
     if (!scope.storeId) return;
     try {
       const health = await getAdminMutationHealth(scope);
@@ -37,6 +37,7 @@ export function AdminMutationSync({ scope }: { scope: AdminCacheScope }) {
         storeId: scope.storeId,
         online: typeof navigator !== "undefined" && navigator.onLine,
         queues: [health],
+        successfulQueues: successful && typeof navigator !== "undefined" && navigator.onLine ? ["admin_mutations" as PlatformSyncHealthQueue] : [],
       });
     } catch {
       // Health reporting must not block the admin workspace when IndexedDB is unavailable.
@@ -46,11 +47,13 @@ export function AdminMutationSync({ scope }: { scope: AdminCacheScope }) {
   const sync = useCallback(async () => {
     try {
       const status = await getAdminMutationStatus(scope);
-      void reportHealth();
       if (status.pending === 0) {
         setState((current) => current.phase === "synced" ? current : { phase: "idle", pending: 0, failed: 0, conflicts: 0, message: null });
+        void reportHealth(typeof navigator !== "undefined" && navigator.onLine);
         return;
       }
+
+      void reportHealth(false);
 
       if (!navigator.onLine) {
         setState({
@@ -82,7 +85,7 @@ export function AdminMutationSync({ scope }: { scope: AdminCacheScope }) {
         conflicts: result.conflicts,
         message: result.lastError,
       });
-      void reportHealth();
+      void reportHealth(result.failed === 0 && result.conflicts === 0 && result.pending === 0);
     } catch (error) {
       void reportHealth();
       setState((current) => ({

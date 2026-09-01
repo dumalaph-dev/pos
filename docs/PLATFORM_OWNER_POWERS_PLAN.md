@@ -173,14 +173,14 @@ After Docker Desktop became available, the preserved local Supabase volume recov
 
 ### Phase 4 — Cross-org read surfaces
 
-**Status:** In progress — platform audit viewer, fleet health, and sync/outbox health are deployed from `main` commits `2e195fd`, `979b151`, and `ab18eb7`; device and schema-drift views remain queued
-**Migration:** `0079_scope_admin_performance_to_organizations.sql` and `0080_sync_health_snapshots.sql` applied; both readers are read-only, and legacy performance samples plus existing tenant data remain preserved
+**Status:** In progress — platform audit viewer, fleet health, and the baseline sync/outbox health surface are deployed from `main` commits `2e195fd`, `979b151`, and `ab18eb7`; the enhanced sync/outbox slice is implemented with linked migration `0081` applied; device and schema-drift views remain queued
+**Migration:** `0079_scope_admin_performance_to_organizations.sql`, `0080_sync_health_snapshots.sql`, and `0081_sync_health_enhanced_metrics.sql` applied; platform readers are read-only, and legacy performance samples plus existing tenant data remain preserved
 
 Powers that only need to look. Safe to build once Phase 3 can scope who looks.
 
 - [x] **Platform audit viewer.** The deployed `/platform/audit` page combines platform-scoped `audit_logs` rows with `platform_operator_audit_logs`, and supports search plus source, action, organization, and time-window filters. Before/after snapshots remain expandable; the page is read-only and excludes tenant order, customer, and staff activity.
 - [x] **Fleet health.** The deployed `/platform/fleet` page aggregates `admin_performance_samples` into p50/p95 interaction latency, error rate, sample freshness, and surface breakdowns per organization, with time-window, search, and status filters. Migration `0079` attributes future authenticated samples from the server-resolved profile organization; existing rows remain preserved as unattributed history, and no raw tenant activity is exposed.
-- [x] **Sync and outbox health.** The deployed `/platform/sync` page reports bounded POS-order, audit-event, and admin-mutation queue snapshots per organization and active branch, including pending depth, failed/conflict counts, oldest-pending age, reporter freshness, and explicit `healthy`, `needs attention`, `stale`, and `no telemetry` states. Search, queue, and health filters are read-only; payloads never leave the terminal.
+- [x] **Sync and outbox health.** The `/platform/sync` page is extended to report bounded POS-order, audit-event, and admin-mutation queue snapshots per organization and active branch, including pending depth, offline-sync failure/conflict counts, exact stuck-outbox depth, last successful sync per queue, oldest-pending age, reporter freshness, and explicit `healthy`, `needs attention`, `stale`, and `no telemetry` states. Search, queue, freshness, and health-status filters plus organization/branch/queue aggregate drill-downs are read-only; payloads never leave the terminal. The enhanced application slice is implemented locally and awaits deployment.
 - [ ] **Device and terminal inventory.** Last-seen heartbeat per device, so "the tablet at branch 2 has not synced in three days" is visible without asking.
 - [ ] **Schema drift.** Which organizations are on which migration ledger position, replacing the hand-maintained note in [tasks.md](tasks.md).
 
@@ -255,6 +255,26 @@ passed), `npm run test:platform-entitlements` (4 passed), `npm run typecheck`,
 production preflight. The live unauthenticated `/platform/sync` boundary
 returns the expected `307` redirect to `/platform/login`. The next Phase 4
 slice is device inventory, followed by schema-drift visibility.
+
+**Enhanced sync/outbox health verification (2026-09-02).** Migration
+`0081_sync_health_enhanced_metrics.sql` adds exact `stuck_count` and a
+server-recorded, monotonic `last_successful_sync_at` without copying tenant
+payloads or rewriting existing snapshots. The linked dry run initially showed
+only `0081` pending; the linked apply completed, and a second dry run reported
+the remote database up to date. The hosted read-only smoke returned zero
+snapshots, zero pending/failed/conflict/stuck depth, both enhanced columns,
+both integrity constraints, the success-preserving trigger, RLS enabled,
+service-role SELECT allowed, and authenticated SELECT/DELETE denied. No hosted
+fixtures were created, so there was no fixture data to retain or clean up.
+
+`npm run test:platform-sync`, the adjacent platform/POS/accessibility/RPC
+regressions, `npm run typecheck`, `npm run lint`, `npm run build`,
+`npm run production:preflight`, and `git diff --check` pass. The local
+Supabase dry run could not connect because Docker Desktop was not running; no
+local database or fixture state was changed. The live unauthenticated
+`/platform/sync` boundary still returns the expected `307` redirect to
+`/platform/login`. Application deployment remains the next gate before real
+POS/admin terminals begin populating enhanced heartbeats.
 
 ### Phase 5 — Support access into a tenant
 

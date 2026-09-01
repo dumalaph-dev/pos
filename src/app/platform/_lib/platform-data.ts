@@ -192,6 +192,7 @@ export type PlatformFleetHealthResult = {
 export type PlatformSyncHealthResult = {
   summary: PlatformSyncHealthSummary;
   schemaAvailable: boolean;
+  enhancedMetricsAvailable: boolean;
   organizationsAvailable: boolean;
   storesAvailable: boolean;
   hasMore: boolean;
@@ -465,16 +466,29 @@ export async function readPlatformFleetHealth(admin: PlatformAdminClient, reques
 export async function readPlatformSyncHealth(admin: PlatformAdminClient, requestedAsOf = new Date().toISOString()): Promise<PlatformSyncHealthResult> {
   const parsedAsOf = Date.parse(requestedAsOf);
   const asOf = Number.isFinite(parsedAsOf) ? new Date(parsedAsOf).toISOString() : new Date().toISOString();
-  const [samplesResult, organizationsResult, storesResult] = await Promise.all([
+  const [richSamplesResult, organizationsResult, storesResult] = await Promise.all([
     admin
       .from("admin_sync_health_snapshots")
-      .select("id, recorded_at, org_id, store_id, device_key, queue, pending_count, failed_count, conflict_count, oldest_pending_at, online", { count: "exact" })
+      .select("id, recorded_at, org_id, store_id, device_key, queue, pending_count, failed_count, conflict_count, stuck_count, oldest_pending_at, last_successful_sync_at, online", { count: "exact" })
       .order("recorded_at", { ascending: false })
       .limit(PLATFORM_SYNC_HEALTH_SAMPLE_LIMIT),
     admin.from("organizations").select("id, name").order("name").limit(1000),
     admin.from("stores").select("id, org_id, name, is_active").order("name").limit(10000),
   ]);
 
+  let samplesResult: { data: unknown[] | null; count: number | null; error: unknown } = richSamplesResult;
+  let enhancedMetricsAvailable = !richSamplesResult.error;
+  if (richSamplesResult.error) {
+    // 0080 can be deployed before the additive 0081 metrics. Keep the
+    // read-only page useful during that rollout, while the UI labels the
+    // missing exact stuck depth and success marker explicitly.
+    samplesResult = await admin
+      .from("admin_sync_health_snapshots")
+      .select("id, recorded_at, org_id, store_id, device_key, queue, pending_count, failed_count, conflict_count, oldest_pending_at, online", { count: "exact" })
+      .order("recorded_at", { ascending: false })
+      .limit(PLATFORM_SYNC_HEALTH_SAMPLE_LIMIT);
+    enhancedMetricsAvailable = false;
+  }
   const rawSamples = Array.isArray(samplesResult.data) ? samplesResult.data : [];
   const samples = rawSamples.flatMap((row) => normalizePlatformSyncSample(row));
   const organizations = (Array.isArray(organizationsResult.data) ? organizationsResult.data : []).flatMap((row): PlatformSyncHealthOrganization[] => {
@@ -494,6 +508,7 @@ export async function readPlatformSyncHealth(admin: PlatformAdminClient, request
   return {
     summary: summarizePlatformSyncHealth(samples, organizations, stores, asOf),
     schemaAvailable: !samplesResult.error,
+    enhancedMetricsAvailable,
     organizationsAvailable: !organizationsResult.error,
     storesAvailable: !storesResult.error,
     hasMore: (samplesResult.count ?? rawSamples.length) > rawSamples.length,
@@ -684,12 +699,20 @@ function normalizePlatformSyncSample(value: unknown): PlatformSyncHealthSample[]
     || !Number.isInteger(value.conflict_count)
     || (value.oldest_pending_at !== null && typeof value.oldest_pending_at !== "string")
     || typeof value.online !== "boolean") return [];
+  const stuckCount = value.stuck_count === undefined ? 0 : value.stuck_count;
+  if (typeof stuckCount !== "number" || !Number.isInteger(stuckCount) || stuckCount < 0 || stuckCount > value.pending_count) return [];
+  const recordedAtMs = Date.parse(value.recorded_at);
+  const successAt = value.last_successful_sync_at;
+  const successAtMs = typeof successAt === "string" ? Date.parse(successAt) : null;
+  const lastSuccessfulSyncAt = typeof successAt === "string" && successAtMs !== null && Number.isFinite(successAtMs) && Number.isFinite(recordedAtMs) && successAtMs <= recordedAtMs ? successAt : null;
   return [{
     queue: value.queue as PlatformSyncHealthSample["queue"],
     pendingCount: value.pending_count,
     failedCount: value.failed_count,
     conflictCount: value.conflict_count,
-    oldestPendingAt: value.oldest_pending_at,
+    stuckCount,
+    oldestPendingAt: value.pending_count > 0 ? value.oldest_pending_at : null,
+    lastSuccessfulSyncAt,
     organizationId: value.org_id,
     storeId: value.store_id,
     deviceKey: value.device_key,

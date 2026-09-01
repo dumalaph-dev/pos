@@ -33,7 +33,7 @@ export default async function PlatformSyncHealthPage() {
           </div>
         </header>
 
-        <PlatformSyncHealthViewer summary={result.summary} schemaAvailable={result.schemaAvailable} organizationsAvailable={result.organizationsAvailable} storesAvailable={result.storesAvailable} hasMore={result.hasMore} />
+        <PlatformSyncHealthViewer summary={result.summary} schemaAvailable={result.schemaAvailable} enhancedMetricsAvailable={result.enhancedMetricsAvailable} organizationsAvailable={result.organizationsAvailable} storesAvailable={result.storesAvailable} hasMore={result.hasMore} />
 
         <section className="mt-6 rounded-[22px] border border-primary/15 bg-primary-soft/45 p-5 sm:p-6" aria-labelledby="platform-sync-boundary-heading">
           <PlatformSectionHeading eyebrow="Read boundary" title="Queue counters only" description="The platform sees bounded branch heartbeats, not local order payloads, inventory mutation contents, customer data, or staff activity." />

@@ -27,9 +27,39 @@ This section is the current source of truth for delivered work and the next gate
 | Store-owner onboarding and guidance | Implemented | Verify first-run and mobile behavior on the deployed app |
 | Admin workspace themes | Live main deployment previews verified 2026-08-09 | Maintain regression coverage |
 | Production pilot | In progress; `dumala.store` is live, production identity/deployment preflight passed 2026-08-25, and the paid-branch entitlement drift was repaired in hosted migration `0072` | Complete the physical-device pilot gates, restore rehearsal/backup decision, Vercel log/alert setup, real data intake, pilot week, and branch #2 |
-| Platform owner powers | Phase 4 audit viewer, fleet-health, and sync/outbox-health slices deployed from `main` commits `2e195fd`, `979b151`, and `ab18eb7`; migrations `0079` and `0080` applied with hosted smoke, ACL, CI, and production preflight passed. Phases 1–3 remain complete, including the owner-reported authenticated console gates | Continue Phase 4 with device inventory, then schema-drift visibility |
+| Platform owner powers | Phase 4 audit viewer, fleet-health, and baseline sync/outbox-health slices deployed from `main` commits `2e195fd`, `979b151`, and `ab18eb7`; enhanced sync/outbox health is implemented, linked migration `0081` is applied, and the hosted smoke/ACL/build checks pass. Phases 1–3 remain complete, including the owner-reported authenticated console gates | Deploy the enhanced sync surface and collect the first bounded terminal heartbeats; then continue Phase 4 with device inventory and schema-drift visibility |
 
 ### Recent delivery log
+
+- **2026-09-02 - Phase 4 sync/outbox health enhancement:** Expanded the
+  read-only `/platform/sync` surface across organizations and active branches.
+  It now shows exact stuck outbox depth, offline-sync failure counts, last
+  successful sync, oldest pending age, and separate freshness plus health
+  status filters. Organization cards, branch rows, and expandable queue rows
+  remain aggregate-only; no tenant order, customer, staff, or mutation payload
+  is returned to the platform console.
+
+  POS and admin clients now report bounded `stuck_count` values and queue
+  success markers through the existing authenticated route. Migration `0081`
+  adds the enhanced columns, integrity checks, and a trigger that preserves the
+  last successful timestamp when a later heartbeat fails. The reader falls back
+  to the `0080` columns during rollout and labels exact stuck/success metrics as
+  unavailable until `0081` is present.
+
+  The linked dry run identified only `0081`; the migration applied successfully,
+  and the follow-up dry run reported the remote database up to date. The hosted
+  read-only smoke returned zero snapshots, zero pending/failed/conflict/stuck
+  depth, both enhanced columns and constraints, the preserving trigger, RLS,
+  service-role SELECT, and denied authenticated SELECT/DELETE. No hosted
+  fixtures were created. Local migration validation was not available because
+  Docker Desktop was stopped, and no local database state was changed.
+
+  `npm run test:platform-sync` (3 passed), adjacent platform/POS/accessibility/
+  RPC regression suites, `npm run typecheck`, `npm run lint`, `npm run build`,
+  `npm run production:preflight`, and `git diff --check` pass. The live
+  unauthenticated `/platform/sync` boundary returns `307` to `/platform/login`.
+  Application deployment and the first real terminal heartbeat remain the next
+  gate; device inventory follows.
 
 - **2026-09-01 - Phase 4 sync/outbox health:** Added the read-only,
   filterable `/platform/sync` cross-organization health viewer. It groups the

@@ -1,16 +1,18 @@
 "use client";
 
 import { getDeviceId } from "@/lib/offline";
-import type { PlatformSyncHealthQueueSnapshot } from "@/lib/platform-sync-health";
+import type { PlatformSyncHealthQueue, PlatformSyncHealthQueueSnapshot } from "@/lib/platform-sync-health";
 
 export function reportSyncHealthSnapshot({
   storeId,
   online,
   queues,
+  successfulQueues = [],
 }: {
   storeId: string;
   online: boolean;
   queues: PlatformSyncHealthQueueSnapshot[];
+  successfulQueues?: PlatformSyncHealthQueue[];
 }): void {
   if (typeof window === "undefined" || queues.length === 0) return;
 
@@ -23,7 +25,9 @@ export function reportSyncHealthSnapshot({
       pending_count: queue.pendingCount,
       failed_count: queue.failedCount,
       conflict_count: queue.conflictCount,
+      stuck_count: queue.stuckCount,
       oldest_pending_at: queue.oldestPendingAt,
+      sync_succeeded: successfulQueues.includes(queue.queue),
     })),
   });
 

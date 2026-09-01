@@ -455,6 +455,17 @@ revoked; the platform reader uses the service role after its own centralized
 profile and validates the branch server-side, so clients cannot spoof a
 cross-organization snapshot.
 
+Migration 0081 adds `stuck_count` and
+`last_successful_sync_at`. The first is derived in the terminal from pending
+items older than the 15-minute stuck threshold; the second is stamped by the
+authenticated reporting route from its server heartbeat time only when that
+queue's sync attempt succeeds. `stuck_count` cannot exceed `pending_count`, a
+success timestamp cannot be later than `recorded_at`, and the
+`admin_sync_health_preserve_success` trigger keeps the previous success marker
+when a later failed heartbeat upserts the same queue row. The platform reader
+accepts the legacy 0080 shape during rollout and labels the enhanced metrics
+unavailable until the new columns are present.
+
 Two guards live in the function rather than in the console. `paused` has two
 unrelated causes — an expired trial, and a provider status of `unpaid` — so a
 revival back to `trialing` requires `paused` **and** a null

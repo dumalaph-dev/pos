@@ -11,7 +11,7 @@ import Dexie, { liveQuery, type Table } from "dexie";
 
 import { isDisplayGalleryItem, isDisplayPromotion, isDisplaySettings, type DisplayGalleryItem, type DisplayPromotion, type DisplaySettings } from "@/lib/display";
 import { reportError, reportSyncFailure } from "@/lib/monitoring";
-import type { PlatformSyncHealthQueueSnapshot } from "@/lib/platform-sync-health";
+import { PLATFORM_SYNC_HEALTH_STUCK_AFTER_MS, type PlatformSyncHealthQueueSnapshot } from "@/lib/platform-sync-health";
 
 export type PendingOrder = {
   id?: number;
@@ -356,12 +356,18 @@ function summarizeOfflineQueue(
     .map((item) => item.created_at)
     .filter((value) => Number.isFinite(Date.parse(value)))
     .sort();
+  const stuckCutoff = Date.now() - PLATFORM_SYNC_HEALTH_STUCK_AFTER_MS;
   return {
     queue,
     pendingCount: items.length,
     failedCount: items.filter((item) => item.attempts > 0).length,
     conflictCount: 0,
+    stuckCount: items.filter((item) => {
+      const createdAt = Date.parse(item.created_at);
+      return Number.isFinite(createdAt) && createdAt < stuckCutoff;
+    }).length,
     oldestPendingAt: timestamps[0] ?? null,
+    lastSuccessfulSyncAt: null,
   };
 }
 

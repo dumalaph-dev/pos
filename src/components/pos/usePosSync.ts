@@ -12,7 +12,7 @@ import {
   type OfflineProfileSnapshot,
   type OfflineSyncScope,
 } from "@/lib/offline";
-import { PLATFORM_SYNC_HEALTH_REPORT_INTERVAL_MS } from "@/lib/platform-sync-health";
+import { PLATFORM_SYNC_HEALTH_REPORT_INTERVAL_MS, type PlatformSyncHealthQueue } from "@/lib/platform-sync-health";
 import { reportSyncHealthSnapshot } from "@/lib/sync-health-client";
 import { syncReducer, type SyncState } from "@/lib/pos/state-machines";
 import type { BrowserSupabaseClient } from "@/lib/supabase/client";
@@ -47,23 +47,33 @@ export function usePosSync({
   const retryMs = useRef(2000);
   const pendingRef = useRef(0);
   const healthReportInFlight = useRef(false);
+  const pendingSuccessfulQueues = useRef(new Set<PlatformSyncHealthQueue>());
 
-  const reportHealth = useCallback(async () => {
-    if (!scope?.storeId || healthReportInFlight.current) return;
+  const reportHealth = useCallback(async (successfulQueues: PlatformSyncHealthQueue[] = []) => {
+    if (!scope?.storeId) return;
+    successfulQueues.forEach((queue) => pendingSuccessfulQueues.current.add(queue));
+    if (healthReportInFlight.current) return;
     healthReportInFlight.current = true;
     try {
       const queues = await getOfflineQueueHealth(scope);
+      const queuesWithSuccess = [...pendingSuccessfulQueues.current];
       reportSyncHealthSnapshot({
         storeId: scope.storeId,
         online: typeof navigator !== "undefined" && navigator.onLine,
         queues,
+        successfulQueues: queuesWithSuccess,
       });
+      queuesWithSuccess.forEach((queue) => pendingSuccessfulQueues.current.delete(queue));
     } catch {
       // Health reporting must not turn a local storage problem into a POS error.
     } finally {
       healthReportInFlight.current = false;
     }
   }, [scope]);
+
+  useEffect(() => {
+    pendingSuccessfulQueues.current.clear();
+  }, [scope?.storeId]);
 
   useEffect(() => {
     if (!scope) {
@@ -104,11 +114,15 @@ export function usePosSync({
       ]);
       const failed = orderResult.failed + auditResult.failed;
       const synced = orderResult.synced + auditResult.synced;
+      const successfulQueues: PlatformSyncHealthQueue[] = [
+        ...(orderResult.failed === 0 ? ["orders" as const] : []),
+        ...(auditResult.failed === 0 ? ["audit" as const] : []),
+      ];
       if (failed > 0) {
         const pending = pendingRef.current;
         dispatch({ type: "failed", error: `Sync issue — ${pending} item${pending === 1 ? "" : "s"} waiting. Retrying automatically.` });
         retryMs.current = Math.min(60000, retryMs.current * 2);
-        void reportHealth();
+        void reportHealth(successfulQueues);
         return;
       }
 
@@ -122,7 +136,7 @@ export function usePosSync({
         onRecovered?.();
         void refreshCatalog();
       }
-      void reportHealth();
+      void reportHealth(successfulQueues);
     } catch (error) {
       reportError(error, { area: "offline-sync", queue: "flush" });
       dispatch({ type: "failed", error: "Sync could not run — queued work is safe and will retry automatically." });
