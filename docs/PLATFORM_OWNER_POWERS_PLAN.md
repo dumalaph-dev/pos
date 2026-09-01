@@ -2,7 +2,7 @@
 
 **Project:** Dumala POS
 **Created:** 2026-08-29
-**Status:** Phase 3 implementation in progress — migration and code are ready; the authenticated managed-operator console pass remains
+**Status:** Phase 3 deployed — hosted migration, code, and static/rollback checks are complete; the authenticated managed-operator console pass remains
 **Owner:** Product and engineering
 **Companion to:** [tasks.md](tasks.md) · [SCHEMA.md](SCHEMA.md) §8 · [SETUP.md](SETUP.md)
 
@@ -122,7 +122,7 @@ Close the gaps the audit found in the Premium grant that already exists.
 
 ### Phase 3 — Operator role model
 
-**Status:** In progress — migration applied and hosted boundary smoke passed; managed-operator console verification remains
+**Status:** Deployed from `main` commit `c7131fb` — migration applied, hosted boundary smoke and CI passed; managed-operator console verification remains
 **Migration:** `0077_platform_operators.sql`
 
 The flat `PLATFORM_ADMIN_EMAILS` allowlist is the reason the remaining powers should not simply be stacked on what exists.
@@ -138,7 +138,7 @@ The flat `PLATFORM_ADMIN_EMAILS` allowlist is the reason the remaining powers sh
 
 **Implementation notes (2026-09-01).** Migration `0077_platform_operators.sql` adds service-role-only operator and audit tables plus security-definer invite/reactivate, role-change, and revoke RPCs. The server-side `requirePlatformOperator` helper resolves a managed active row or the `PLATFORM_ADMIN_EMAILS` bootstrap owner, and every exported platform Server Action now names its required permission. The console has an Operators page and role-aware Plans, Promotions, Policies, Operations, and organization-detail controls. Bootstrap emails take precedence over table rows and cannot be changed or revoked from the console; managed membership can be revoked without deleting history, and the final active table owner is protected by the RPCs.
 
-**Verification status.** `npm run test:platform-operators`, `npm run test:rpc-contracts`, `npm run typecheck`, `npm run lint`, `npm run build`, and `npm run production:preflight` pass. `npm run platform:operators:validate` passed against hosted Supabase with a rollback-scoped invite → role-change → revoke → reactivation flow, final-owner protection, append-only audit trigger, and browser-role ACL checks. `npx --yes supabase@2.114.0 db push --linked --yes` applied `0077_platform_operators.sql`; the hosted counts remain 3 organizations, 11 profiles, and 5 stores, with no smoke fixtures left behind. The code is still in the working tree, so the authenticated two-account console pass follows the normal deployment of this change.
+**Verification status.** `npm run test:platform-operators`, `npm run test:rpc-contracts`, `npm run typecheck`, `npm run lint`, `npm run build`, and `npm run production:preflight` pass. `npm run platform:operators:validate` passed against hosted Supabase with a rollback-scoped invite → role-change → revoke → reactivation flow, final-owner protection, append-only audit trigger, and browser-role ACL checks. `npx --yes supabase@2.114.0 db push --linked --yes` applied `0077_platform_operators.sql`; the hosted counts remain 3 organizations, 11 profiles, and 5 stores, with no smoke fixtures left behind. Commit `c7131fb` was pushed to `main`; GitHub CI run `33465830354` passed its typecheck, lint, build, and production-preflight job, and the live `/platform/operators` route returns the expected unauthenticated `307` redirect to `/platform/login`. The authenticated two-account console pass remains the final gate.
 
 After Docker Desktop became available, the preserved local Supabase volume recovered without a reset. Local `0076` and `0077` were applied with `db push --local --yes`; the container `psql` operator smoke and the existing trial smoke passed, and local counts remain 2 organizations, 0 profiles, 4 stores, 0 platform operators, and 0 operator audit rows.
 
