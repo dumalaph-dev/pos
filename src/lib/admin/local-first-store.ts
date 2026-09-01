@@ -1,5 +1,6 @@
 import Dexie, { type Table } from "dexie";
 import type { StockMovementType } from "@/lib/inventory";
+import type { PlatformSyncHealthQueueSnapshot } from "@/lib/platform-sync-health";
 
 export const ADMIN_LOCAL_FIRST_SCHEMA_VERSION = 2;
 
@@ -98,6 +99,10 @@ export type AdminMutationSyncResult = {
   conflicts: number;
   lastError: string | null;
   pending: number;
+};
+
+export type AdminMutationHealth = PlatformSyncHealthQueueSnapshot & {
+  queue: "admin_mutations";
 };
 
 type AdminMutationSyncClient = {
@@ -408,14 +413,28 @@ export async function getAdminMutationRecords(scope: AdminCacheScope): Promise<A
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 }
 
-export async function getAdminMutationStatus(scope: AdminCacheScope): Promise<{ pending: number; failed: number; conflicts: number; lastError: string | null }> {
+export async function getAdminMutationHealth(scope: AdminCacheScope): Promise<AdminMutationHealth> {
   const records = await getAdminMutationRecords(scope);
+  return {
+    queue: "admin_mutations",
+    pendingCount: records.length,
+    failedCount: records.filter((record) => record.status === "failed").length,
+    conflictCount: records.filter((record) => record.status === "conflict").length,
+    oldestPendingAt: records[0]?.createdAt ?? null,
+  };
+}
+
+export async function getAdminMutationStatus(scope: AdminCacheScope): Promise<{ pending: number; failed: number; conflicts: number; lastError: string | null }> {
+  const [health, records] = await Promise.all([
+    getAdminMutationHealth(scope),
+    getAdminMutationRecords(scope),
+  ]);
   const failed = records.filter((record) => record.status === "failed");
   const conflicts = records.filter((record) => record.status === "conflict");
   return {
-    pending: records.length,
-    failed: failed.length,
-    conflicts: conflicts.length,
+    pending: health.pendingCount,
+    failed: health.failedCount,
+    conflicts: health.conflictCount,
     lastError: [...failed, ...conflicts].sort((left, right) => left.createdAt.localeCompare(right.createdAt)).at(-1)?.lastError ?? null,
   };
 }

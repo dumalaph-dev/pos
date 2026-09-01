@@ -98,6 +98,7 @@ export default async function PlatformOverviewPage() {
               <FeatureLink href="/platform/users" icon="customers" label="Users" detail={`${profiles.length} user profiles across ${organizations.length} businesses`} />
               <FeatureLink href="/platform/audit" icon="history" label="Audit log" detail="Review platform actions across organizations" />
               <FeatureLink href="/platform/fleet" icon="chart" label="Fleet health" detail="Review performance signals by organization" />
+              <FeatureLink href="/platform/sync" icon="refresh" label="Sync & outbox" detail="Find stuck queues by branch" />
               <FeatureLink href="/platform/policies" icon="lock" label="Policies" detail={`${publishedPolicies}/2 published · controls stay gated until complete`} />
               <FeatureLink href="/platform/operations" icon="refresh" label="Operations" detail={accountOperationsReady ? `${trialExpiring + grantsExpiring} trial or grant expiry signal${trialExpiring + grantsExpiring === 1 ? "" : "s"} · access controls available` : "Finish migrations before using account controls"} />
             </div>

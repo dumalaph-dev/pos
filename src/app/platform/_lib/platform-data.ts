@@ -19,6 +19,14 @@ import {
   type PlatformFleetHealthSample,
   type PlatformFleetHealthSummaries,
 } from "@/lib/platform-fleet-health";
+import {
+  PLATFORM_SYNC_HEALTH_QUEUES,
+  summarizePlatformSyncHealth,
+  type PlatformSyncHealthOrganization,
+  type PlatformSyncHealthSample,
+  type PlatformSyncHealthStore,
+  type PlatformSyncHealthSummary,
+} from "@/lib/platform-sync-health";
 import type { PlatformAuditEvent } from "@/lib/platform-audit";
 
 export type PlatformAdminClient = NonNullable<ReturnType<typeof createAdminClient>>;
@@ -181,8 +189,17 @@ export type PlatformFleetHealthResult = {
   hasMore: boolean;
 };
 
+export type PlatformSyncHealthResult = {
+  summary: PlatformSyncHealthSummary;
+  schemaAvailable: boolean;
+  organizationsAvailable: boolean;
+  storesAvailable: boolean;
+  hasMore: boolean;
+};
+
 const PLATFORM_AUDIT_LIMIT = 500;
 const PLATFORM_FLEET_HEALTH_SAMPLE_LIMIT = 10000;
+const PLATFORM_SYNC_HEALTH_SAMPLE_LIMIT = 10000;
 
 export async function readOrganizations(admin: PlatformAdminClient): Promise<OrganizationsResult> {
   const rich = await admin
@@ -445,6 +462,44 @@ export async function readPlatformFleetHealth(admin: PlatformAdminClient, reques
   };
 }
 
+export async function readPlatformSyncHealth(admin: PlatformAdminClient, requestedAsOf = new Date().toISOString()): Promise<PlatformSyncHealthResult> {
+  const parsedAsOf = Date.parse(requestedAsOf);
+  const asOf = Number.isFinite(parsedAsOf) ? new Date(parsedAsOf).toISOString() : new Date().toISOString();
+  const [samplesResult, organizationsResult, storesResult] = await Promise.all([
+    admin
+      .from("admin_sync_health_snapshots")
+      .select("id, recorded_at, org_id, store_id, device_key, queue, pending_count, failed_count, conflict_count, oldest_pending_at, online", { count: "exact" })
+      .order("recorded_at", { ascending: false })
+      .limit(PLATFORM_SYNC_HEALTH_SAMPLE_LIMIT),
+    admin.from("organizations").select("id, name").order("name").limit(1000),
+    admin.from("stores").select("id, org_id, name, is_active").order("name").limit(10000),
+  ]);
+
+  const rawSamples = Array.isArray(samplesResult.data) ? samplesResult.data : [];
+  const samples = rawSamples.flatMap((row) => normalizePlatformSyncSample(row));
+  const organizations = (Array.isArray(organizationsResult.data) ? organizationsResult.data : []).flatMap((row): PlatformSyncHealthOrganization[] => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+    return [{ id: row.id, name: typeof row.name === "string" && row.name.trim() ? row.name : "Unnamed organization" }];
+  });
+  const stores = (Array.isArray(storesResult.data) ? storesResult.data : []).flatMap((row): PlatformSyncHealthStore[] => {
+    if (!isRecord(row) || typeof row.id !== "string" || typeof row.org_id !== "string") return [];
+    return [{
+      id: row.id,
+      organizationId: row.org_id,
+      name: typeof row.name === "string" && row.name.trim() ? row.name : "Unnamed branch",
+      isActive: row.is_active !== false,
+    }];
+  });
+
+  return {
+    summary: summarizePlatformSyncHealth(samples, organizations, stores, asOf),
+    schemaAvailable: !samplesResult.error,
+    organizationsAvailable: !organizationsResult.error,
+    storesAvailable: !storesResult.error,
+    hasMore: (samplesResult.count ?? rawSamples.length) > rawSamples.length,
+  };
+}
+
 export async function readPlatformOrganizationDetail(admin: PlatformAdminClient, organizationId: string): Promise<PlatformOrganizationDetail | null> {
   const organizationResult = await readOrganizationDetailRecord(admin, organizationId);
   if (!organizationResult) return null;
@@ -609,6 +664,36 @@ function normalizePlatformFleetSample(value: unknown): PlatformFleetHealthSample
     sampleType: value.sample_type,
     durationMs: value.duration_ms,
     error: value.error,
+    recordedAt: value.recorded_at,
+  }];
+}
+
+function normalizePlatformSyncSample(value: unknown): PlatformSyncHealthSample[] {
+  if (!isRecord(value)
+    || typeof value.recorded_at !== "string"
+    || typeof value.org_id !== "string"
+    || typeof value.store_id !== "string"
+    || typeof value.device_key !== "string"
+    || typeof value.queue !== "string"
+    || !PLATFORM_SYNC_HEALTH_QUEUES.includes(value.queue as PlatformSyncHealthSample["queue"])
+    || typeof value.pending_count !== "number"
+    || !Number.isInteger(value.pending_count)
+    || typeof value.failed_count !== "number"
+    || !Number.isInteger(value.failed_count)
+    || typeof value.conflict_count !== "number"
+    || !Number.isInteger(value.conflict_count)
+    || (value.oldest_pending_at !== null && typeof value.oldest_pending_at !== "string")
+    || typeof value.online !== "boolean") return [];
+  return [{
+    queue: value.queue as PlatformSyncHealthSample["queue"],
+    pendingCount: value.pending_count,
+    failedCount: value.failed_count,
+    conflictCount: value.conflict_count,
+    oldestPendingAt: value.oldest_pending_at,
+    organizationId: value.org_id,
+    storeId: value.store_id,
+    deviceKey: value.device_key,
+    online: value.online,
     recordedAt: value.recorded_at,
   }];
 }

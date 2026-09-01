@@ -9,8 +9,11 @@ import {
   adminMutationErrorMessage,
   flushAdminMutationOutbox,
   getAdminMutationStatus,
+  getAdminMutationHealth,
   type AdminCacheScope,
 } from "@/lib/admin/local-first-store";
+import { PLATFORM_SYNC_HEALTH_REPORT_INTERVAL_MS } from "@/lib/platform-sync-health";
+import { reportSyncHealthSnapshot } from "@/lib/sync-health-client";
 
 type SyncState = {
   phase: "idle" | "syncing" | "waiting" | "synced" | "error";
@@ -26,9 +29,24 @@ export function AdminMutationSync({ scope }: { scope: AdminCacheScope }) {
   const scopeKey = createAdminCacheScopeKey(scope);
   const [state, setState] = useState<SyncState>({ phase: "idle", pending: 0, failed: 0, conflicts: 0, message: null });
 
+  const reportHealth = useCallback(async () => {
+    if (!scope.storeId) return;
+    try {
+      const health = await getAdminMutationHealth(scope);
+      reportSyncHealthSnapshot({
+        storeId: scope.storeId,
+        online: typeof navigator !== "undefined" && navigator.onLine,
+        queues: [health],
+      });
+    } catch {
+      // Health reporting must not block the admin workspace when IndexedDB is unavailable.
+    }
+  }, [scope]);
+
   const sync = useCallback(async () => {
     try {
       const status = await getAdminMutationStatus(scope);
+      void reportHealth();
       if (status.pending === 0) {
         setState((current) => current.phase === "synced" ? current : { phase: "idle", pending: 0, failed: 0, conflicts: 0, message: null });
         return;
@@ -64,7 +82,9 @@ export function AdminMutationSync({ scope }: { scope: AdminCacheScope }) {
         conflicts: result.conflicts,
         message: result.lastError,
       });
+      void reportHealth();
     } catch (error) {
+      void reportHealth();
       setState((current) => ({
         phase: "error",
         pending: Math.max(1, current.pending),
@@ -73,7 +93,13 @@ export function AdminMutationSync({ scope }: { scope: AdminCacheScope }) {
         message: adminMutationErrorMessage(error),
       }));
     }
-  }, [router, scope]);
+  }, [reportHealth, router, scope]);
+
+  useEffect(() => {
+    void reportHealth();
+    const interval = window.setInterval(() => { void reportHealth(); }, PLATFORM_SYNC_HEALTH_REPORT_INTERVAL_MS);
+    return () => window.clearInterval(interval);
+  }, [reportHealth]);
 
   useEffect(() => {
     const onOnline = () => { void sync(); };

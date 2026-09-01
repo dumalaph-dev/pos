@@ -11,6 +11,7 @@ import Dexie, { liveQuery, type Table } from "dexie";
 
 import { isDisplayGalleryItem, isDisplayPromotion, isDisplaySettings, type DisplayGalleryItem, type DisplayPromotion, type DisplaySettings } from "@/lib/display";
 import { reportError, reportSyncFailure } from "@/lib/monitoring";
+import type { PlatformSyncHealthQueueSnapshot } from "@/lib/platform-sync-health";
 
 export type PendingOrder = {
   id?: number;
@@ -46,6 +47,8 @@ export type PendingQueueStatus = {
   pending: number;
   oldestQueuedSaleAt: string | null;
 };
+
+export type OfflineQueueHealth = PlatformSyncHealthQueueSnapshot;
 
 export type OfflineProfileSnapshot = {
   id: string;
@@ -323,21 +326,42 @@ export async function pendingCount(scope: OfflineSyncScope): Promise<number> {
   return (await getPendingQueueStatus(scope)).pending;
 }
 
-/** Read the queue metrics needed by the POS operational health panel. */
-export async function getPendingQueueStatus(scope: OfflineSyncScope): Promise<PendingQueueStatus> {
+/** Read bounded queue counters without returning private order or audit payloads. */
+export async function getOfflineQueueHealth(scope: OfflineSyncScope): Promise<OfflineQueueHealth[]> {
   const db = getDb();
   const [pendingOrders, pendingAudits] = await Promise.all([
     db.outbox.toArray(),
     db.auditOutbox.toArray(),
   ]);
-  const scopedOrders = pendingOrders.filter((item) => matchesOrderScope(item.p_order, scope));
-  const scopedAudits = pendingAudits.filter((item) => matchesAuditScope(item.payload, scope));
+  return [
+    summarizeOfflineQueue("orders", pendingOrders.filter((item) => matchesOrderScope(item.p_order, scope))),
+    summarizeOfflineQueue("audit", pendingAudits.filter((item) => matchesAuditScope(item.payload, scope))),
+  ];
+}
+
+/** Read the queue metrics needed by the POS operational health panel. */
+export async function getPendingQueueStatus(scope: OfflineSyncScope): Promise<PendingQueueStatus> {
+  const [orders, audits] = await getOfflineQueueHealth(scope);
   return {
-    pending: scopedOrders.length + scopedAudits.length,
-    oldestQueuedSaleAt: scopedOrders.reduce<string | null>((oldest, item) => {
-      if (!oldest) return item.created_at;
-      return item.created_at < oldest ? item.created_at : oldest;
-    }, null),
+    pending: orders.pendingCount + audits.pendingCount,
+    oldestQueuedSaleAt: orders.oldestPendingAt,
+  };
+}
+
+function summarizeOfflineQueue(
+  queue: "orders" | "audit",
+  items: Array<{ created_at: string; attempts: number }>,
+): OfflineQueueHealth {
+  const timestamps = items
+    .map((item) => item.created_at)
+    .filter((value) => Number.isFinite(Date.parse(value)))
+    .sort();
+  return {
+    queue,
+    pendingCount: items.length,
+    failedCount: items.filter((item) => item.attempts > 0).length,
+    conflictCount: 0,
+    oldestPendingAt: timestamps[0] ?? null,
   };
 }
 
