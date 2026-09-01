@@ -431,6 +431,16 @@ The Phase 4 platform audit viewer is read-only and requires the server-side
 tenant orders, customers, staff, devices, or other operational records, and no
 new migration or hosted table is needed for this surface.
 
+Migration 0079 extends `admin_performance_samples` with a nullable `org_id`
+foreign key to `organizations(id)` and an index for organization/time-window
+reads. The performance API resolves the caller's organization from the
+server-side `profiles` row and writes that value; the insert policy permits a
+null value during rollout but refuses a cross-organization value. Existing
+samples remain intact and null rather than being fabricated or backfilled. The
+fleet reader aggregates the table server-side into organization-level latency,
+error, freshness, and surface metrics, includes an explicit unattributed legacy
+bucket, and exposes no raw tenant activity to the platform console.
+
 Two guards live in the function rather than in the console. `paused` has two
 unrelated causes — an expired trial, and a provider status of `unpaid` — so a
 revival back to `trialing` requires `paused` **and** a null

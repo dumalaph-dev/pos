@@ -27,9 +27,38 @@ This section is the current source of truth for delivered work and the next gate
 | Store-owner onboarding and guidance | Implemented | Verify first-run and mobile behavior on the deployed app |
 | Admin workspace themes | Live main deployment previews verified 2026-08-09 | Maintain regression coverage |
 | Production pilot | In progress; `dumala.store` is live, production identity/deployment preflight passed 2026-08-25, and the paid-branch entitlement drift was repaired in hosted migration `0072` | Complete the physical-device pilot gates, restore rehearsal/backup decision, Vercel log/alert setup, real data intake, pilot week, and branch #2 |
-| Platform owner powers | Phase 4 first slice deployed from `main` commit `2e195fd`; the read-only cross-org platform audit viewer, hosted smoke, CI, and production preflight passed. Phases 1–3 remain complete, including the owner-reported authenticated console gates | Continue Phase 4 with fleet health, sync/outbox health, device inventory, and schema-drift visibility |
+| Platform owner powers | Phase 4 audit viewer and fleet-health slice deployed from `main` commits `2e195fd` and `979b151`; migration `0079` applied with hosted smoke, CI, and production preflight passed. Phases 1–3 remain complete, including the owner-reported authenticated console gates | Continue Phase 4 with sync/outbox health, device inventory, and schema-drift visibility |
 
 ### Recent delivery log
+
+- **2026-09-01 - Phase 4 fleet health:** Added the read-only `/platform/fleet`
+  cross-organization performance surface. It aggregates
+  `admin_performance_samples` server-side into p50/p95 interaction duration,
+  error rate, sample freshness, and per-surface breakdowns, with `24h`, `7d`,
+  `30d`, and `60d` windows plus organization search and health-status filters.
+  Organizations with no samples remain visible, while legacy rows without
+  attribution are shown in a separate **Unattributed history** bucket. The
+  surface is behind the centralized `console_read` check and exposes no raw
+  tenant orders, customers, staff, devices, or other operational records.
+
+  Hosted migration `0079_scope_admin_performance_to_organizations.sql` adds
+  nullable organization attribution, a supporting index, and a server-derived
+  insert guard that blocks cross-organization spoofing. It preserves existing
+  rows and does not backfill them. The pre-migration hosted sample count was
+  643; after migration the read-only 60-day smoke still reports 643 total, 4
+  errors, 0 attributed, 643 unattributed legacy rows, 0 organizations with
+  attributed samples, and latest sample
+  `2026-08-29T14:23:04.405294+00:00`. Local smoke reports zero samples with the
+  new schema present; no fixtures or writes remain.
+
+  `npm run test:platform-fleet` (3 passed), `npm run test:platform-audit` (3
+  passed), `npm run test:rpc-contracts` (3 passed), `npm run typecheck`,
+  `npm run lint`, `npm run build`, `npm run production:preflight`, and
+  `git diff --check` pass. Commit `979b151` is deployed to `main`; GitHub CI
+  run `33478837547` passed, Vercel deployment `6196018458` completed
+  successfully, and the live unauthenticated `/platform/fleet` route returns
+  the expected `307` redirect to `/platform/login`. Next: sync/outbox health,
+  then device inventory and schema-drift visibility.
 
 - **2026-09-01 - Phase 4 platform audit viewer:** Added the filterable,
   read-only `/platform/audit` cross-org surface for platform-actor actions.

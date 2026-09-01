@@ -134,6 +134,7 @@ followed by `0062_public_menu_subdomains.sql` and
 76. `0076_restrict_platform_trial_rpc.sql` — explicitly remove direct browser-role EXECUTE grants from both platform trial functions
 77. `0077_platform_operators.sql` — service-role-only platform operator membership, role permissions, audited invite/reactivate/role-change/revoke RPCs, and final-owner protection
 78. `0078_adjust_platform_access_grant.sql` — inline entitlement directory support, in-place grant adjustment, and a single before/after audit row
+79. `0079_scope_admin_performance_to_organizations.sql` — preserve performance samples while attributing future authenticated samples to their server-resolved organization; legacy rows remain unattributed
 
 **Apply them** either way:
 - **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push`
@@ -257,6 +258,43 @@ action, organization, and time-window filters, organization links, and the
 expandable before/after snapshots. The smoke query performs no writes and does
 not create fixtures. Migration `0077` must be applied for operator-membership
 events to appear; organization platform events remain available independently.
+
+### Platform fleet health verification
+
+The fleet viewer is a read-only cross-organization performance surface. It
+aggregates `admin_performance_samples` server-side into p50/p95 interaction
+duration, error rate, sample freshness, and surface breakdowns. It does not
+return raw tenant orders, customers, staff, devices, or other operational
+records.
+
+Run the deterministic viewer and contract checks:
+
+```bash
+npm run test:platform-fleet
+npm run test:rpc-contracts
+```
+
+Preview and apply migration `0079` through the established linked workflow:
+
+```bash
+npx --yes supabase@2.114.0 db push --linked --dry-run
+npx --yes supabase@2.114.0 db push --linked --yes
+npm run platform:fleet:validate
+```
+
+The migration adds nullable `admin_performance_samples.org_id` plus its
+organization index and requires future authenticated samples to use the
+server-resolved profile organization when attribution is present. Null remains
+allowed for rollout compatibility; existing samples are not backfilled or
+deleted. The read-only smoke reports total, attributed, unattributed, error,
+and latest-sample counts without creating fixtures.
+
+Then open `/platform/fleet` as a platform operator. Check the `24h`, `7d`,
+`30d`, and `60d` windows, organization search, status filter, organization
+links, and expandable surface breakdowns. `Needs attention` begins at a 5% error
+rate; `stale` means the latest sample is over 24 hours old; `no telemetry` means
+there is no sample in the selected window. Existing hosted history may appear
+under **Unattributed history** until new authenticated samples are collected.
 
 Store owners can register from `/signup`. The flow uses Supabase Auth and the
 `0022_owner_signup.sql` trigger to create a private organization, first branch,

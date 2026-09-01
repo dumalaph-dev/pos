@@ -173,13 +173,13 @@ After Docker Desktop became available, the preserved local Supabase volume recov
 
 ### Phase 4 — Cross-org read surfaces
 
-**Status:** In progress — platform audit viewer deployed from `main` commit `2e195fd`; remaining read surfaces are queued
-**Migration:** none expected; read-only over existing tables
+**Status:** In progress — platform audit viewer deployed from `main` commit `2e195fd` and fleet health deployed from `main` commit `979b151`; sync/outbox, device, and schema-drift views remain queued
+**Migration:** `0079_scope_admin_performance_to_organizations.sql` applied; the fleet reader is read-only and legacy samples remain preserved and unattributed
 
 Powers that only need to look. Safe to build once Phase 3 can scope who looks.
 
 - [x] **Platform audit viewer.** The deployed `/platform/audit` page combines platform-scoped `audit_logs` rows with `platform_operator_audit_logs`, and supports search plus source, action, organization, and time-window filters. Before/after snapshots remain expandable; the page is read-only and excludes tenant order, customer, and staff activity.
-- [ ] **Fleet health.** Surface the `admin_performance_samples` data that today is only reachable through `scripts/admin-performance-summary.sql`: p50/p95 interaction latency and error rates, per org.
+- [x] **Fleet health.** The deployed `/platform/fleet` page aggregates `admin_performance_samples` into p50/p95 interaction latency, error rate, sample freshness, and surface breakdowns per organization, with time-window, search, and status filters. Migration `0079` attributes future authenticated samples from the server-resolved profile organization; existing rows remain preserved as unattributed history, and no raw tenant activity is exposed.
 - [ ] **Sync and outbox health.** Offline-sync failure counts and stuck outbox depth per branch — the signal that a pilot tablet is silently failing.
 - [ ] **Device and terminal inventory.** Last-seen heartbeat per device, so "the tablet at branch 2 has not synced in three days" is visible without asking.
 - [ ] **Schema drift.** Which organizations are on which migration ledger position, replacing the hand-maintained note in [tasks.md](tasks.md).
@@ -198,6 +198,30 @@ operator-membership events, confirmed every organization event is scoped to
 `2e195fd` is deployed to production through Vercel deployment `6195435114`.
 The live unauthenticated `/platform/audit` boundary returns the expected `307`
 redirect to `/platform/login`. No migration or hosted data change was needed.
+
+**Fleet health verification (2026-09-01).** The `/platform/fleet` reader is
+server-side and aggregated: it exposes organization-level samples, p50/p95
+duration, error rate, freshness, and surface breakdowns only. The status rules
+are explicit in the UI and code: `needs attention` at a 5% or higher error rate,
+`stale` when the latest sample is more than 24 hours old, and `no telemetry`
+when an organization has no samples in the selected window. Migration `0079`
+adds nullable `org_id` attribution to `admin_performance_samples` with a
+server-derived insert guard; it does not rewrite or remove existing data.
+
+`npm run test:platform-fleet` (3 passed), `npm run test:platform-audit` (3
+passed), `npm run test:rpc-contracts` (3 passed), `npm run typecheck`,
+`npm run lint`, `npm run build`, `npm run production:preflight`, and
+`git diff --check` pass. Local fleet smoke returned zero samples with the new
+schema present. Hosted `npm run platform:fleet:validate` returned 643 samples
+in the last 60 days, 4 error samples, 0 attributed samples, 643 legacy
+unattributed samples, 0 organizations with attributed samples, and latest
+sample `2026-08-29T14:23:04.405294+00:00`; the pre-migration hosted count was
+643 and remains 643 after the migration. The smoke is read-only and no fixtures
+were added. GitHub CI run `33478837547` passed typecheck, lint, build, and
+production preflight; commit `979b151` is deployed through Vercel deployment
+`6196018458`. The live unauthenticated `/platform/fleet` boundary returns the
+expected `307` redirect to `/platform/login`. The next Phase 4 slice is sync and
+outbox health, followed by device inventory and schema-drift visibility.
 
 ### Phase 5 — Support access into a tenant
 
