@@ -133,6 +133,7 @@ followed by `0062_public_menu_subdomains.sql` and
 75. `0075_extend_organization_trial.sql` — platform-owned trial extension: the `extend_organization_trial` RPC, the `platform_trial_extensions` ledger, and the lifetime cap on operator-added trial days
 76. `0076_restrict_platform_trial_rpc.sql` — explicitly remove direct browser-role EXECUTE grants from both platform trial functions
 77. `0077_platform_operators.sql` — service-role-only platform operator membership, role permissions, audited invite/reactivate/role-change/revoke RPCs, and final-owner protection
+78. `0078_adjust_platform_access_grant.sql` — inline entitlement directory support, in-place grant adjustment, and a single before/after audit row
 
 **Apply them** either way:
 - **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push`
@@ -180,6 +181,31 @@ including its tenant RLS context, suspension, the day and reason bounds, the
 180-day lifetime cap, and that an authenticated tenant client cannot read
 `platform_trial_extensions` or execute either platform trial function. The SQL
 fixture inserts no lasting rows.
+
+### Platform entitlement verification
+
+Run the deterministic directory, filter, timeline, and migration-boundary checks:
+
+```bash
+npm run test:platform-entitlements
+npm run test:rpc-contracts
+```
+
+After applying migration `0078`, run the rollback-scoped database smoke fixture:
+
+```bash
+npm run platform:entitlements:validate
+```
+
+The fixture adjusts one active grant forward and backward in place, asserts the
+window arithmetic and exactly one before/after audit row per adjustment, refuses
+an invalid shortening, verifies browser-role table/RPC denial, and rolls back all
+fixtures. Then open `/platform/operations` as a platform operator and verify the
+entitlement search/filter cards, inline controls, expiry signals, organization
+timeline, and the existing grant/revoke flows against a deliberately selected
+test organization. If exercising a real hosted grant, capture the end-date change
+and the single `platform.access_grant.adjusted` audit row; do not use a service-role
+key in the browser or task log.
 
 ### Platform operator verification
 

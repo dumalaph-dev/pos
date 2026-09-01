@@ -413,6 +413,17 @@ removes direct `anon` and `authenticated` EXECUTE grants from both
 service-role-only functions; revoking `PUBLIC` alone does not remove a direct
 grant supplied by a project's default privileges.
 
+Migration 0078 adds `updated_by` and `updated_at` to
+`platform_access_grants` and introduces the service-role-only
+`adjust_platform_access_grant` RPC. The RPC locks an existing active,
+non-expired grant, applies a bounded positive or negative day delta, and keeps
+the original grant row and reason intact. Its single
+`platform.access_grant.adjusted` audit row contains the complete before/after
+grant snapshots, delta, adjustment reason, and actor identity. Invalid deltas,
+expired grants, and shortened windows that would end at or before the current
+time are refused in the database transaction; browser roles have no table
+SELECT or RPC EXECUTE privilege.
+
 Two guards live in the function rather than in the console. `paused` has two
 unrelated causes — an expired trial, and a provider status of `unpaid` — so a
 revival back to `trialing` requires `paused` **and** a null

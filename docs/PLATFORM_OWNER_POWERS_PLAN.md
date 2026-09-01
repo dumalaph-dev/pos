@@ -107,22 +107,53 @@ The hosted rollback-scoped smoke and authenticated console pass are recorded in 
 
 ### Phase 2 — Complete and surface the entitlement controls
 
-**Status:** Not started
-**Migration:** `0076`, only if grant adjustment lands as an RPC
+**Status:** Code and migration deployed from `main` commit `198e77e`; hosted boundary smoke, CI, and production preflight passed; authenticated entitlement walkthrough remains the manual gate
+**Migration:** `0078_adjust_platform_access_grant.sql`
 
 Close the gaps the audit found in the Premium grant that already exists.
 
-- [ ] Add an **Account entitlement** card to `/platform/operations` showing, per organization, the live state — status, trial end, current grant and its expiry, paid-branch entitlement — with the actions inline instead of one page deeper.
-- [ ] Make an active grant adjustable: extend or shorten in place, with before/after in the audit row, replacing today's revoke-and-recreate, which leaves two rows and loses the original reason.
-- [ ] Show a combined entitlement timeline per org — trial window, grants, subscription periods, suspensions — so an operator can see *why* an account currently has access.
-- [ ] Add search and filter by entitlement state (in trial, trial expiring within 7 days, on a grant, grant expiring, paused, suspended) so the console works past a handful of accounts.
-- [ ] Surface grant and trial expiry on the Overview readiness panel.
+- [x] Add an **Account entitlement** card to `/platform/operations` showing, per organization, the live state — status, trial end, current grant and its expiry, paid-branch entitlement — with the actions inline instead of one page deeper.
+- [x] Make an active grant adjustable: extend or shorten in place, with before/after in the audit row, replacing today's revoke-and-recreate, which leaves two rows and loses the original reason.
+- [x] Show a combined entitlement timeline per org — trial window, grants, subscription periods, suspensions — so an operator can see *why* an account currently has access.
+- [x] Add search and filter by entitlement state (in trial, trial expiring within 7 days, on a grant, grant expiring, paused, suspended) so the console works past a handful of accounts.
+- [x] Surface grant and trial expiry on the Overview readiness panel.
 
 **Exit criteria:** Every entitlement power is reachable within one click of `/platform/operations`. Adjusting a grant produces exactly one audit row with before and after. No regression to the existing grant and revoke flows.
 
+**Implementation notes (2026-09-01).** `/platform/operations` now loads a searchable,
+filterable entitlement directory with inline trial-extension, grant, adjustment, and
+revoke controls. Organization detail adds the combined entitlement timeline, and the
+Overview readiness panel reports near-term trial and grant expiry. Migration `0078`
+adds `updated_by`/`updated_at` to `platform_access_grants` and the service-role-only
+`adjust_platform_access_grant` RPC. It locks and updates the existing grant row in
+place and writes one `platform.access_grant.adjusted` audit row containing the full
+before/after snapshots and adjustment reason. The existing grant and revoke paths are
+unchanged.
+
+**Verification status.** Local `0078` application and the rollback-scoped adjustment,
+grant, trial, and operator smokes passed. `npm run test:platform-entitlements` (4
+passed), `npm run test:rpc-contracts` (3 passed), `npm run typecheck`, `npm run lint`,
+`npm run build`, and `npm run production:preflight` passed. Hosted Supabase project
+`uzavkjftwcuixidxyopr` records migration `0078` with two adjustment columns and one
+adjustment function; direct ACL checks report `anon` and `authenticated` EXECUTE as
+false, authenticated table SELECT as false, and `service_role` EXECUTE as true.
+The hosted rollback smoke passed. Existing hosted counts remain unchanged at 3
+organizations, 0 access grants, 2 trial-extension rows, 2 `platform.%` audit rows,
+and 1 platform operator. The code push's GitHub CI run `33470633381` passed, and the
+live operations route returns the expected unauthenticated `307` redirect to
+`/platform/login`.
+
+The authenticated Phase 2 console walkthrough is still open. The hosted project
+currently has no pre-existing `platform_access_grants` row, so the walkthrough must
+use a deliberately chosen test organization/account (or a real active grant if one
+is provisioned): verify the directory filters and timeline, adjust a live grant in
+both directions, confirm the end-date countdown and exactly one before/after audit
+row, then verify the existing revoke flow. No hosted grant was created by the smoke;
+all smoke fixtures rolled back.
+
 ### Phase 3 — Operator role model
 
-**Status:** Deployed from `main` commit `c7131fb` — migration applied, hosted boundary smoke and CI passed; managed-operator console verification remains
+**Status:** Deployed from `main` commit `c7131fb` — migration applied, hosted boundary smoke and CI passed; the owner reports the authenticated two-account console verification complete
 **Migration:** `0077_platform_operators.sql`
 
 The flat `PLATFORM_ADMIN_EMAILS` allowlist is the reason the remaining powers should not simply be stacked on what exists.
@@ -138,7 +169,7 @@ The flat `PLATFORM_ADMIN_EMAILS` allowlist is the reason the remaining powers sh
 
 **Implementation notes (2026-09-01).** Migration `0077_platform_operators.sql` adds service-role-only operator and audit tables plus security-definer invite/reactivate, role-change, and revoke RPCs. The server-side `requirePlatformOperator` helper resolves a managed active row or the `PLATFORM_ADMIN_EMAILS` bootstrap owner, and every exported platform Server Action now names its required permission. The console has an Operators page and role-aware Plans, Promotions, Policies, Operations, and organization-detail controls. Bootstrap emails take precedence over table rows and cannot be changed or revoked from the console; managed membership can be revoked without deleting history, and the final active table owner is protected by the RPCs.
 
-**Verification status.** `npm run test:platform-operators`, `npm run test:rpc-contracts`, `npm run typecheck`, `npm run lint`, `npm run build`, and `npm run production:preflight` pass. `npm run platform:operators:validate` passed against hosted Supabase with a rollback-scoped invite → role-change → revoke → reactivation flow, final-owner protection, append-only audit trigger, and browser-role ACL checks. `npx --yes supabase@2.114.0 db push --linked --yes` applied `0077_platform_operators.sql`; the hosted counts remain 3 organizations, 11 profiles, and 5 stores, with no smoke fixtures left behind. Commit `c7131fb` was pushed to `main`; GitHub CI run `33465830354` passed its typecheck, lint, build, and production-preflight job, and the live `/platform/operators` route returns the expected unauthenticated `307` redirect to `/platform/login`. The authenticated two-account console pass remains the final gate.
+**Verification status.** `npm run test:platform-operators`, `npm run test:rpc-contracts`, `npm run typecheck`, `npm run lint`, `npm run build`, and `npm run production:preflight` pass. `npm run platform:operators:validate` passed against hosted Supabase with a rollback-scoped invite → role-change → revoke → reactivation flow, final-owner protection, append-only audit trigger, and browser-role ACL checks. `npx --yes supabase@2.114.0 db push --linked --yes` applied `0077_platform_operators.sql`; the hosted counts remain 3 organizations, 11 profiles, and 5 stores, with no smoke fixtures left behind. Commit `c7131fb` was pushed to `main`; GitHub CI run `33465830354` passed its typecheck, lint, build, and production-preflight job, and the live `/platform/operators` route returns the expected unauthenticated `307` redirect to `/platform/login`. The owner reported completing the authenticated two-account invite, login, role restriction, role change/revoke, and audit-entry console verification on 2026-09-01; no account credentials or additional identity details are recorded here.
 
 After Docker Desktop became available, the preserved local Supabase volume recovered without a reset. Local `0076` and `0077` were applied with `db push --local --yes`; the container `psql` operator smoke and the existing trial smoke passed, and local counts remain 2 organizations, 0 profiles, 4 stores, 0 platform operators, and 0 operator audit rows.
 
