@@ -27,7 +27,7 @@ This section is the current source of truth for delivered work and the next gate
 | Store-owner onboarding and guidance | Implemented | Verify first-run and mobile behavior on the deployed app |
 | Admin workspace themes | Live main deployment previews verified 2026-08-09 | Maintain regression coverage |
 | Production pilot | In progress; `dumala.store` is live, production identity/deployment preflight passed 2026-08-25, and the paid-branch entitlement drift was repaired in hosted migration `0072` | Complete the physical-device pilot gates, restore rehearsal/backup decision, Vercel log/alert setup, real data intake, pilot week, and branch #2 |
-| Platform owner powers | Phase 4 audit viewer, fleet-health, and baseline sync/outbox-health slices deployed from `main` commits `2e195fd`, `979b151`, and `ab18eb7`; enhanced sync/outbox health is implemented, linked migration `0081` is applied, and the hosted smoke/ACL/build checks pass. Phases 1–3 remain complete, including the owner-reported authenticated console gates | Deploy the enhanced sync surface and collect the first bounded terminal heartbeats; then continue Phase 4 with device inventory and schema-drift visibility |
+| Platform owner powers | Phase 4 audit viewer, fleet-health, and enhanced sync/outbox-health slices deployed from `main`; linked migration `0081` is applied, and the hosted smoke/ACL/build checks pass. Phases 1–3 remain complete, including the owner-reported authenticated console gates | Run authenticated operator QA and collect the first bounded terminal heartbeats; then continue Phase 4 with device inventory and schema-drift visibility |
 
 ### Recent delivery log
 
@@ -58,8 +58,10 @@ This section is the current source of truth for delivered work and the next gate
   RPC regression suites, `npm run typecheck`, `npm run lint`, `npm run build`,
   `npm run production:preflight`, and `git diff --check` pass. The live
   unauthenticated `/platform/sync` boundary returns `307` to `/platform/login`.
-  Application deployment and the first real terminal heartbeat remain the next
-  gate; device inventory follows.
+  Commit `9ea585f` is merged to `main` and deployed through Vercel production
+  deployment `6205982303`; GitHub CI run `33533961354` passed. The next gate is
+  authenticated operator QA and the first real terminal heartbeat; device
+  inventory follows.
 
 - **2026-09-01 - Phase 4 sync/outbox health:** Added the read-only,
   filterable `/platform/sync` cross-organization health viewer. It groups the

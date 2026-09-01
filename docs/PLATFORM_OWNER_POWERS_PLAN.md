@@ -173,14 +173,14 @@ After Docker Desktop became available, the preserved local Supabase volume recov
 
 ### Phase 4 — Cross-org read surfaces
 
-**Status:** In progress — platform audit viewer, fleet health, and the baseline sync/outbox health surface are deployed from `main` commits `2e195fd`, `979b151`, and `ab18eb7`; the enhanced sync/outbox slice is implemented with linked migration `0081` applied; device and schema-drift views remain queued
+**Status:** In progress — platform audit viewer, fleet health, and the enhanced sync/outbox health surface are deployed from `main`; linked migration `0081` is applied; device and schema-drift views remain queued
 **Migration:** `0079_scope_admin_performance_to_organizations.sql`, `0080_sync_health_snapshots.sql`, and `0081_sync_health_enhanced_metrics.sql` applied; platform readers are read-only, and legacy performance samples plus existing tenant data remain preserved
 
 Powers that only need to look. Safe to build once Phase 3 can scope who looks.
 
 - [x] **Platform audit viewer.** The deployed `/platform/audit` page combines platform-scoped `audit_logs` rows with `platform_operator_audit_logs`, and supports search plus source, action, organization, and time-window filters. Before/after snapshots remain expandable; the page is read-only and excludes tenant order, customer, and staff activity.
 - [x] **Fleet health.** The deployed `/platform/fleet` page aggregates `admin_performance_samples` into p50/p95 interaction latency, error rate, sample freshness, and surface breakdowns per organization, with time-window, search, and status filters. Migration `0079` attributes future authenticated samples from the server-resolved profile organization; existing rows remain preserved as unattributed history, and no raw tenant activity is exposed.
-- [x] **Sync and outbox health.** The `/platform/sync` page is extended to report bounded POS-order, audit-event, and admin-mutation queue snapshots per organization and active branch, including pending depth, offline-sync failure/conflict counts, exact stuck-outbox depth, last successful sync per queue, oldest-pending age, reporter freshness, and explicit `healthy`, `needs attention`, `stale`, and `no telemetry` states. Search, queue, freshness, and health-status filters plus organization/branch/queue aggregate drill-downs are read-only; payloads never leave the terminal. The enhanced application slice is implemented locally and awaits deployment.
+- [x] **Sync and outbox health.** The deployed `/platform/sync` page reports bounded POS-order, audit-event, and admin-mutation queue snapshots per organization and active branch, including pending depth, offline-sync failure/conflict counts, exact stuck-outbox depth, last successful sync per queue, oldest-pending age, reporter freshness, and explicit `healthy`, `needs attention`, `stale`, and `no telemetry` states. Search, queue, freshness, and health-status filters plus organization/branch/queue aggregate drill-downs are read-only; payloads never leave the terminal.
 - [ ] **Device and terminal inventory.** Last-seen heartbeat per device, so "the tablet at branch 2 has not synced in three days" is visible without asking.
 - [ ] **Schema drift.** Which organizations are on which migration ledger position, replacing the hand-maintained note in [tasks.md](tasks.md).
 
@@ -273,8 +273,10 @@ regressions, `npm run typecheck`, `npm run lint`, `npm run build`,
 Supabase dry run could not connect because Docker Desktop was not running; no
 local database or fixture state was changed. The live unauthenticated
 `/platform/sync` boundary still returns the expected `307` redirect to
-`/platform/login`. Application deployment remains the next gate before real
-POS/admin terminals begin populating enhanced heartbeats.
+`/platform/login`. Commit `9ea585f` is deployed through Vercel production
+deployment `6205982303`, and GitHub CI run `33533961354` passed. The next gate
+is authenticated operator QA plus the first real POS/admin terminal
+heartbeats before device inventory.
 
 ### Phase 5 — Support access into a tenant
 
