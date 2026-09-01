@@ -21,3 +21,20 @@ export async function readOrganizationTrialExtensions(admin: PlatformAdminClient
     schemaAvailable: true,
   };
 }
+
+export async function readAllPlatformTrialExtensions(admin: PlatformAdminClient): Promise<{
+  records: TrialExtensionRecord[];
+  schemaAvailable: boolean;
+}> {
+  const result = await admin
+    .from("platform_trial_extensions")
+    .select(EXTENSION_FIELDS)
+    .order("created_at", { ascending: false })
+    .limit(10000);
+
+  if (result.error) return { records: [], schemaAvailable: false };
+  return {
+    records: (result.data ?? []).map((record) => normalizeTrialExtension(record)),
+    schemaAvailable: true,
+  };
+}

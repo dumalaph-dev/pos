@@ -3,11 +3,12 @@ import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { getBillingPlan, normalizeSubscriptionStatus, subscriptionStatusLabel, subscriptionTone } from "@/lib/billing";
 import { formatPeso } from "@/lib/money";
-import { getCheckoutReadiness, isPolicyGateOpen } from "@/lib/platform-operations";
+import { getCheckoutReadiness, isPolicyGateOpen, readPolicyNumber } from "@/lib/platform-operations";
 import { readPayMongoSubscriptionReadiness, readPlatformOperations, payMongoConfiguration, supportCasesSchemaAvailable } from "@/lib/platform-operations-server";
 import { requirePlatformOperator } from "@/lib/platform-operators-server";
+import { derivePlatformEntitlementSummary } from "@/lib/platform-entitlements";
 import { PlatformAccessDenied, PlatformMetric, PlatformMigrationNotice, PlatformPageHeader, PlatformSectionHeading } from "../PlatformUI";
-import { countByOrg, formatDate, readPlatformDirectory } from "../_lib/platform-data";
+import { countByOrg, formatDate, readPlatformDirectory, readPlatformEntitlementRecords } from "../_lib/platform-data";
 
 export const dynamic = "force-dynamic";
 
@@ -34,8 +35,21 @@ export default async function PlatformOverviewPage() {
   const activeSubscriptions = organizations.filter((organization) => organization.subscription_status && normalizeSubscriptionStatus(organization.subscription_status) === "active").length;
   const trialSubscriptions = organizations.filter((organization) => organization.subscription_status && normalizeSubscriptionStatus(organization.subscription_status) === "trialing").length;
   const storesByOrg = countByOrg(stores);
+  const activeStoresByOrg = countByOrg(stores.filter((store) => store.is_active));
   const activeStores = stores.filter((store) => store.is_active).length;
   const activeStaff = employees.filter((employee) => employee.is_active).length;
+  const entitlementRecords = await readPlatformEntitlementRecords(admin);
+  const trialDays = readPolicyNumber(policies.billing, "trialDays", 14);
+  const entitlementSummaries = organizations.map((organization) => derivePlatformEntitlementSummary({
+    organization,
+    grants: entitlementRecords.accessGrantsByOrg.get(organization.id),
+    trialExtensions: entitlementRecords.trialExtensionsByOrg.get(organization.id),
+    activeBranchCount: activeStoresByOrg.get(organization.id) ?? 0,
+    includedBranchCount: catalog.includedBranchCount,
+    trialDays,
+  }));
+  const trialExpiring = entitlementSummaries.filter((summary) => summary.filterKeys.includes("trial_expiring")).length;
+  const grantsExpiring = entitlementSummaries.filter((summary) => summary.filterKeys.includes("grant_expiring")).length;
   const accountOperationsReady = organizationsResult.accountFieldsAvailable && policies.schemaAvailable && supportCasesReady;
   const checkoutReadiness = getCheckoutReadiness({
     catalog,
@@ -83,7 +97,7 @@ export default async function PlatformOverviewPage() {
               <FeatureLink href="/platform/promotions" icon="tag" label="Promo & Marketing" detail="Create checkout codes and measure paid conversion" />
               <FeatureLink href="/platform/users" icon="customers" label="Users" detail={`${profiles.length} user profiles across ${organizations.length} businesses`} />
               <FeatureLink href="/platform/policies" icon="lock" label="Policies" detail={`${publishedPolicies}/2 published · controls stay gated until complete`} />
-              <FeatureLink href="/platform/operations" icon="refresh" label="Operations" detail={accountOperationsReady ? "Lifecycle and support controls are available" : "Finish migrations before using account controls"} />
+              <FeatureLink href="/platform/operations" icon="refresh" label="Operations" detail={accountOperationsReady ? `${trialExpiring + grantsExpiring} trial or grant expiry signal${trialExpiring + grantsExpiring === 1 ? "" : "s"} · access controls available` : "Finish migrations before using account controls"} />
             </div>
           </article>
 
@@ -101,6 +115,8 @@ export default async function PlatformOverviewPage() {
               <ReadinessRow label="Support policy" ready={policies.support.status === "published"} detail={policies.support.status === "published" ? "Published" : "Draft"} dark />
               <ReadinessRow label="Checkout provider" ready={checkoutReady} detail={checkoutReady ? "Ready" : "Setup incomplete"} dark />
               <ReadinessRow label="Account operations" ready={accountOperationsReady && policyGateOpen} detail={accountOperationsReady && policyGateOpen ? "Ready" : "Locked"} dark />
+              <ReadinessRow label="Trial expiry" ready={trialExpiring === 0} detail={trialExpiring === 0 ? "No near-term expiry" : `${trialExpiring} within 7 days`} dark />
+              <ReadinessRow label="Grant expiry" ready={grantsExpiring === 0} detail={grantsExpiring === 0 ? "No near-term expiry" : `${grantsExpiring} within 7 days`} dark />
             </div>
             <Link href={policyGateOpen ? "/platform/operations" : "/platform/policies"} className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-xl bg-primary-fg px-3.5 py-2.5 text-xs font-extrabold text-primary transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-fg">{policyGateOpen ? "Open operations" : "Review policies"}<AdminIcon name="arrow" size={14} /></Link>
           </article>

@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/employee-auth";
-import { readOrganizationAccessGrants } from "@/lib/platform-access-server";
+import { readAllPlatformAccessGrants, readOrganizationAccessGrants } from "@/lib/platform-access-server";
 import type { ComplimentaryAccessGrant } from "@/lib/platform-access";
-import { readOrganizationTrialExtensions } from "@/lib/platform-trial-server";
+import { readAllPlatformTrialExtensions, readOrganizationTrialExtensions } from "@/lib/platform-trial-server";
 import type { TrialExtensionRecord } from "@/lib/platform-trial";
 import {
   normalizeReferralCodeRecord,
@@ -30,6 +30,9 @@ export type OrganizationRecord = {
   subscription_provider_plan_id?: string | null;
   subscription_provider_subscription_id?: string | null;
   subscription_provider_payment_intent_id?: string | null;
+  subscription_entitled_branch_count?: number | null;
+  subscription_pending_branch_count?: number | null;
+  subscription_updated_at?: string | null;
   settings?: unknown;
   account_status?: "active" | "suspended" | null;
   suspension_reason?: string | null;
@@ -100,6 +103,7 @@ export type PlatformOrganizationDetail = {
   authEmailById: Map<string, string>;
   accessGrants: ComplimentaryAccessGrant[];
   accessGrantsSchemaAvailable: boolean;
+  accessGrantAdjustmentSchemaAvailable: boolean;
   trialExtensions: TrialExtensionRecord[];
   trialExtensionsSchemaAvailable: boolean;
   supportCases: SupportCaseRecord[];
@@ -146,10 +150,18 @@ export type PlatformDirectory = {
   trialFeedbackWorkflowAvailable: boolean;
 };
 
+export type PlatformEntitlementRecords = {
+  accessGrantsByOrg: Map<string, ComplimentaryAccessGrant[]>;
+  trialExtensionsByOrg: Map<string, TrialExtensionRecord[]>;
+  accessGrantsSchemaAvailable: boolean;
+  accessGrantAdjustmentSchemaAvailable: boolean;
+  trialExtensionsSchemaAvailable: boolean;
+};
+
 export async function readOrganizations(admin: PlatformAdminClient): Promise<OrganizationsResult> {
   const rich = await admin
     .from("organizations")
-    .select("id, name, created_at, owner_profile_id, settings, subscription_status, subscription_plan, subscription_trial_started_at, subscription_trial_ends_at, subscription_current_period_end, account_status, suspension_reason, suspended_at")
+    .select("id, name, created_at, owner_profile_id, settings, subscription_status, subscription_plan, subscription_trial_started_at, subscription_trial_ends_at, subscription_current_period_end, subscription_billing_mode, subscription_billing_variant_id, subscription_provider_plan_id, subscription_provider_subscription_id, subscription_provider_payment_intent_id, subscription_entitled_branch_count, subscription_pending_branch_count, subscription_updated_at, account_status, suspension_reason, suspended_at")
     .order("created_at", { ascending: false })
     .limit(1000);
 
@@ -248,6 +260,32 @@ export async function readPlatformDirectory(admin: PlatformAdminClient): Promise
   };
 }
 
+export async function readPlatformEntitlementRecords(admin: PlatformAdminClient): Promise<PlatformEntitlementRecords> {
+  const [grantsResult, trialExtensionsResult] = await Promise.all([
+    readAllPlatformAccessGrants(admin),
+    readAllPlatformTrialExtensions(admin),
+  ]);
+  const accessGrantsByOrg = new Map<string, ComplimentaryAccessGrant[]>();
+  for (const grant of grantsResult.records) {
+    const records = accessGrantsByOrg.get(grant.org_id) ?? [];
+    records.push(grant);
+    accessGrantsByOrg.set(grant.org_id, records);
+  }
+  const trialExtensionsByOrg = new Map<string, TrialExtensionRecord[]>();
+  for (const extension of trialExtensionsResult.records) {
+    const records = trialExtensionsByOrg.get(extension.org_id) ?? [];
+    records.push(extension);
+    trialExtensionsByOrg.set(extension.org_id, records);
+  }
+  return {
+    accessGrantsByOrg,
+    trialExtensionsByOrg,
+    accessGrantsSchemaAvailable: grantsResult.schemaAvailable,
+    accessGrantAdjustmentSchemaAvailable: grantsResult.adjustmentSchemaAvailable,
+    trialExtensionsSchemaAvailable: trialExtensionsResult.schemaAvailable,
+  };
+}
+
 export async function readPlatformOrganizationDetail(admin: PlatformAdminClient, organizationId: string): Promise<PlatformOrganizationDetail | null> {
   const organizationResult = await readOrganizationDetailRecord(admin, organizationId);
   if (!organizationResult) return null;
@@ -299,6 +337,7 @@ export async function readPlatformOrganizationDetail(admin: PlatformAdminClient,
     authEmailById: new Map(authUsers.map((authUser) => [authUser.id, authUser.email ?? ""])),
     accessGrants: grantsResult.records,
     accessGrantsSchemaAvailable: grantsResult.schemaAvailable,
+    accessGrantAdjustmentSchemaAvailable: grantsResult.adjustmentSchemaAvailable,
     trialExtensions: trialExtensionsResult.records,
     trialExtensionsSchemaAvailable: trialExtensionsResult.schemaAvailable,
     supportCases,
@@ -315,7 +354,7 @@ export async function readPlatformOrganizationDetail(admin: PlatformAdminClient,
 async function readOrganizationDetailRecord(admin: PlatformAdminClient, organizationId: string): Promise<OrganizationRecord | null> {
   const rich = await admin
     .from("organizations")
-    .select("id, name, created_at, owner_profile_id, settings, subscription_status, subscription_plan, subscription_trial_started_at, subscription_trial_ends_at, subscription_current_period_end, subscription_billing_mode, subscription_billing_variant_id, subscription_provider_plan_id, subscription_provider_subscription_id, subscription_provider_payment_intent_id, account_status, suspension_reason, suspended_at")
+    .select("id, name, created_at, owner_profile_id, settings, subscription_status, subscription_plan, subscription_trial_started_at, subscription_trial_ends_at, subscription_current_period_end, subscription_billing_mode, subscription_billing_variant_id, subscription_provider_plan_id, subscription_provider_subscription_id, subscription_provider_payment_intent_id, subscription_entitled_branch_count, subscription_pending_branch_count, subscription_updated_at, account_status, suspension_reason, suspended_at")
     .eq("id", organizationId)
     .maybeSingle();
 

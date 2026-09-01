@@ -235,6 +235,53 @@ export async function grantComplimentaryPremium(_previousState: OperationsAction
   return { ok: true, message: `${days} complimentary Premium day${days === 1 ? "" : "s"} granted to ${organization.record.name}. Access runs from ${startsAt} through ${endsAt}.` };
 }
 
+export async function adjustComplimentaryPremium(_previousState: OperationsActionState, formData: FormData): Promise<OperationsActionState> {
+  const actor = await requirePlatformOperator("entitlement_manage");
+  if (!actor.ok) return actor;
+
+  const gate = await requirePublishedPolicies(actor.admin);
+  if (!gate.ok) return gate;
+
+  const grantId = readText(formData, "grant_id");
+  const deltaDays = readInteger(formData, "delta_days");
+  const reason = readText(formData, "reason");
+  if (!isUuid(grantId)) return { ok: false, message: "Choose a valid complimentary grant." };
+  if (!Number.isInteger(deltaDays) || deltaDays === 0 || deltaDays < -365 || deltaDays > 365) return { ok: false, message: "Choose a grant adjustment from -365 to 365 days, excluding zero." };
+  if (reason.length < 5 || reason.length > 500) return { ok: false, message: "Add an adjustment reason of 5–500 characters." };
+
+  const grant = await actor.admin
+    .from("platform_access_grants")
+    .select("id, org_id, status, starts_at, ends_at")
+    .eq("id", grantId)
+    .maybeSingle();
+  if (grant.error) return platformMigrationError(grant.error.message, "0052_platform_access_grants.sql");
+  if (!grant.data) return { ok: false, message: "That complimentary grant could not be found." };
+  if (grant.data.status !== "active") return { ok: false, message: "That complimentary grant has already been revoked." };
+
+  const organization = await readOrganization(actor.admin, grant.data.org_id as string);
+  if (!organization.ok) return organization;
+  if (organization.record.account_status === "suspended") return { ok: false, message: "Restore the suspended account before changing tenant access." };
+
+  const result = await actor.admin.rpc("adjust_platform_access_grant", {
+    p_grant_id: grantId,
+    p_delta_days: deltaDays,
+    p_reason: reason,
+    p_actor_id: actor.userId,
+    p_actor_email: actor.email,
+  });
+  if (result.error) return platformAccessGrantAdjustmentError(result.error.message);
+
+  const adjustment = isRecord(result.data) ? result.data : null;
+  const endsAt = readRecordString(adjustment, "ends_at");
+  const previousEndsAt = readRecordString(adjustment, "previous_ends_at");
+  if (!adjustment || !endsAt || !previousEndsAt) return { ok: false, message: "The grant adjustment response was incomplete. Refresh the organization record and try again." };
+
+  revalidatePlatformPages(organization.record.id);
+  const direction = deltaDays > 0 ? "extended" : "shortened";
+  const dayCount = Math.abs(deltaDays);
+  return { ok: true, message: `Grant for ${organization.record.name} ${direction} by ${dayCount} day${dayCount === 1 ? "" : "s"}. Access now ends ${formatOperationsDate(endsAt)}; one before/after audit row was recorded.` };
+}
+
 export async function revokeComplimentaryPremium(_previousState: OperationsActionState, formData: FormData): Promise<OperationsActionState> {
   const actor = await requirePlatformOperator("entitlement_manage");
   if (!actor.ok) return actor;
@@ -508,6 +555,22 @@ function platformAccessGrantError(detail: string): OperationsActionFailure {
   if (normalized.includes("platform_access_invalid_source")) return { ok: false, message: "Choose a valid grant source." };
   if (normalized.includes("platform_access_invalid_start_mode")) return { ok: false, message: "Choose when the complimentary access should begin." };
   return { ok: false, message: detail || "The complimentary grant could not be created." };
+}
+
+function platformAccessGrantAdjustmentError(detail: string): OperationsActionFailure {
+  const normalized = detail.toLowerCase();
+  if (normalized.includes("schema cache") || normalized.includes("function") || normalized.includes("does not exist") || normalized.includes("relation") || normalized.includes("column")) {
+    return { ok: false, message: "Apply Supabase migration 0078_adjust_platform_access_grant.sql before adjusting complimentary access." };
+  }
+  if (normalized.includes("platform_access_invalid_grant")) return { ok: false, message: "Choose a valid complimentary grant." };
+  if (normalized.includes("platform_access_invalid_actor")) return { ok: false, message: "A signed-in platform operator is required to adjust access." };
+  if (normalized.includes("platform_access_invalid_delta_days")) return { ok: false, message: "Choose a grant adjustment from -365 to 365 days, excluding zero." };
+  if (normalized.includes("platform_access_invalid_adjustment_reason")) return { ok: false, message: "Add an adjustment reason of 5–500 characters." };
+  if (normalized.includes("platform_access_grant_not_found")) return { ok: false, message: "That complimentary grant could not be found. Refresh the organization record and try again." };
+  if (normalized.includes("platform_access_grant_not_active")) return { ok: false, message: "That complimentary grant is no longer active." };
+  if (normalized.includes("platform_access_grant_expired")) return { ok: false, message: "That complimentary grant has expired. Create a new grant instead." };
+  if (normalized.includes("platform_access_invalid_adjusted_window")) return { ok: false, message: "That shortening would end access now or make the grant window invalid. Revoke it for immediate removal." };
+  return { ok: false, message: detail || "The complimentary grant could not be adjusted." };
 }
 
 function platformTrialExtensionError(detail: string): OperationsActionFailure {

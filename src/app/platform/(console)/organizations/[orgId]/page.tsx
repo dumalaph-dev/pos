@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { OrganizationOperations } from "@/app/platform/OrganizationOperations";
 import { ComplimentaryGrantPanel } from "@/app/platform/ComplimentaryGrantPanel";
+import { PlatformEntitlementTimeline } from "@/app/platform/PlatformEntitlementTimeline";
 import { TrialExtensionPanel } from "@/app/platform/TrialExtensionPanel";
 import { getBillingPlan, normalizeSubscriptionStatus, subscriptionStatusLabel, subscriptionTone } from "@/lib/billing";
 import { readEffectiveComplimentaryAccess } from "@/lib/platform-access";
@@ -11,6 +12,7 @@ import { isPolicyGateOpen, readPolicyNumber } from "@/lib/platform-operations";
 import { readPlatformOperations } from "@/lib/platform-operations-server";
 import { hasPlatformOperatorPermission } from "@/lib/platform-operators";
 import { requirePlatformOperator } from "@/lib/platform-operators-server";
+import { derivePlatformEntitlementSummary } from "@/lib/platform-entitlements";
 import { absoluteUrl } from "@/lib/site-url";
 import { referralStatusLabel } from "@/lib/referrals";
 import { isSubscriptionAccessCurrent, formatTrialRemaining, readTrialLifecycle } from "@/lib/trial";
@@ -79,6 +81,15 @@ export default async function PlatformOrganizationPage({ params }: { params: Pro
   const canManageSupport = hasPlatformOperatorPermission(actor.role, "support_manage");
   const canManageEntitlements = hasPlatformOperatorPermission(actor.role, "entitlement_manage");
   const canViewSupport = actor.role !== "billing";
+  const entitlementSummary = derivePlatformEntitlementSummary({
+    organization,
+    grants: accessGrants,
+    trialExtensions,
+    activeBranchCount: stores.filter((store) => store.is_active).length,
+    includedBranchCount: operations.catalog.includedBranchCount,
+    trialDays,
+    now: Date.parse(asOf),
+  });
   const accessLabel = organization.account_status === "suspended"
     ? "Suspended"
     : effectiveGrant
@@ -119,6 +130,7 @@ export default async function PlatformOrganizationPage({ params }: { params: Pro
               <DetailField label="Trial started" value={formatDate(organization.subscription_trial_started_at)} />
               <DetailField label="Trial ends" value={formatDate(organization.subscription_trial_ends_at)} />
               <DetailField label="Current period ends" value={formatDate(organization.subscription_current_period_end)} />
+              <DetailField label="Paid branch capacity" value={`${entitlementSummary.paidBranch.entitledCount} slot${entitlementSummary.paidBranch.entitledCount === 1 ? "" : "s"}`} />
             </div>
             {effectiveGrant ? <div className="mt-4 rounded-xl border border-success/25 bg-success/10 px-4 py-3"><div className="flex items-start gap-2.5"><AdminIcon name="star" size={16} /><div><p className="text-xs font-extrabold uppercase tracking-wide text-success">Complimentary Premium is active</p><p className="mt-1 text-sm leading-5 text-ink">Access is covered through <strong>{formatDate(effectiveGrant.until)}</strong> via a {effectiveGrant.source} grant.</p><p className="mt-1 text-xs leading-5 text-ink-muted">Reason: {effectiveGrant.reason}</p></div></div></div> : <div className="mt-4 rounded-xl border border-dashed border-line-strong bg-raised px-4 py-3 text-sm leading-5 text-ink-muted">No current complimentary grant is carrying this organization beyond its ordinary subscription state.</div>}
           </article>
@@ -141,7 +153,12 @@ export default async function PlatformOrganizationPage({ params }: { params: Pro
           asOf={asOf}
         />
 
-        <ComplimentaryGrantPanel orgId={organization.id} grants={accessGrants} schemaAvailable={detail.accessGrantsSchemaAvailable} policyGateOpen={policyGateOpen} accountSuspended={organization.account_status === "suspended"} asOf={asOf} canManage={canManageEntitlements} />
+        <ComplimentaryGrantPanel orgId={organization.id} grants={accessGrants} schemaAvailable={detail.accessGrantsSchemaAvailable} adjustmentSchemaAvailable={detail.accessGrantAdjustmentSchemaAvailable} policyGateOpen={policyGateOpen} accountSuspended={organization.account_status === "suspended"} asOf={asOf} canManage={canManageEntitlements} />
+
+        <section className="mt-8 rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="entitlement-timeline-heading">
+          <PlatformSectionHeading eyebrow="Entitlement history" title="Why access exists" description="Trial windows, operator extensions, complimentary grants, paid periods, and account suspensions share one chronological view." action={<span className="rounded-full bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary">{entitlementSummary.timeline.length} events</span>} />
+          <div className="mt-5"><PlatformEntitlementTimeline items={entitlementSummary.timeline} /></div>
+        </section>
 
         <section className="mt-8 grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]" aria-label="People and branches">
           <article className="overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)]">

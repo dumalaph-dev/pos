@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { isComplimentaryAccessCurrent, type ComplimentaryAccessGrant } from "@/lib/platform-access";
+import { PlatformGrantAdjustmentForm } from "./PlatformGrantAdjustmentForm";
 import { grantComplimentaryPremium, revokeComplimentaryPremium, type OperationsActionState } from "./operations-actions";
 
 const INITIAL_STATE: OperationsActionState = { ok: false, message: "" };
@@ -12,13 +13,14 @@ type ComplimentaryGrantPanelProps = {
   orgId: string;
   grants: ComplimentaryAccessGrant[];
   schemaAvailable: boolean;
+  adjustmentSchemaAvailable: boolean;
   policyGateOpen: boolean;
   canManage: boolean;
   accountSuspended: boolean;
   asOf: string;
 };
 
-export function ComplimentaryGrantPanel({ orgId, grants, schemaAvailable, policyGateOpen, canManage, accountSuspended, asOf }: ComplimentaryGrantPanelProps) {
+export function ComplimentaryGrantPanel({ orgId, grants, schemaAvailable, adjustmentSchemaAvailable, policyGateOpen, canManage, accountSuspended, asOf }: ComplimentaryGrantPanelProps) {
   const [grantState, grantAction, grantPending] = useActionState(grantComplimentaryPremium, INITIAL_STATE);
   const [revokeState, revokeAction, revokePending] = useActionState(revokeComplimentaryPremium, INITIAL_STATE);
   const locked = !canManage || !schemaAvailable || !policyGateOpen || accountSuspended;
@@ -29,6 +31,15 @@ export function ComplimentaryGrantPanel({ orgId, grants, schemaAvailable, policy
     : !policyGateOpen
       ? "Publish both platform policies to unlock complimentary access."
       : "Apply migrations 0052_platform_access_grants.sql and 0054_atomic_platform_access_grant.sql to enable grants.";
+  const adjustmentLockMessage = !canManage
+    ? "Only Billing and Owner operators can change complimentary access."
+    : !adjustmentSchemaAvailable
+      ? "Apply migration 0078_adjust_platform_access_grant.sql to adjust grants in place."
+      : !policyGateOpen
+        ? "Publish both platform policies to unlock grant adjustments."
+        : accountSuspended
+          ? "Restore the suspended account before changing tenant access."
+          : undefined;
 
   return (
     <section className="mt-8 overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)]" aria-labelledby="complimentary-access-heading">
@@ -88,19 +99,20 @@ export function ComplimentaryGrantPanel({ orgId, grants, schemaAvailable, policy
             </div>
             {revokeState.message && <span className="max-w-[260px]"><ActionMessage state={revokeState} /></span>}
           </div>
-          {grants.length === 0 ? <div className="mt-4 rounded-xl border border-dashed border-line-strong bg-raised px-4 py-8 text-center text-sm leading-6 text-ink-muted">No complimentary Premium grants have been recorded for this organization.</div> : <div className="mt-4 overflow-x-auto rounded-xl border border-line"><table className="min-w-[700px] w-full text-left text-xs"><thead className="bg-raised uppercase tracking-wide text-ink-muted"><tr><th className="px-4 py-3 font-extrabold">Status</th><th className="px-4 py-3 font-extrabold">Access window</th><th className="px-4 py-3 font-extrabold">Source</th><th className="px-4 py-3 font-extrabold">Reason</th><th className="px-4 py-3 font-extrabold">Action</th></tr></thead><tbody className="divide-y divide-line">{grants.map((grant) => <GrantRow key={grant.id} grant={grant} revokeAction={revokeAction} revokePending={revokePending} locked={locked} asOf={asOf} />)}</tbody></table></div>}
+          {grants.length === 0 ? <div className="mt-4 rounded-xl border border-dashed border-line-strong bg-raised px-4 py-8 text-center text-sm leading-6 text-ink-muted">No complimentary Premium grants have been recorded for this organization.</div> : <div className="mt-4 overflow-x-auto rounded-xl border border-line"><table className="min-w-[700px] w-full text-left text-xs"><thead className="bg-raised uppercase tracking-wide text-ink-muted"><tr><th className="px-4 py-3 font-extrabold">Status</th><th className="px-4 py-3 font-extrabold">Access window</th><th className="px-4 py-3 font-extrabold">Source</th><th className="px-4 py-3 font-extrabold">Reason</th><th className="px-4 py-3 font-extrabold">Action</th></tr></thead><tbody className="divide-y divide-line">{grants.map((grant) => <GrantRow key={grant.id} grant={grant} revokeAction={revokeAction} revokePending={revokePending} locked={locked} adjustmentLocked={locked || !adjustmentSchemaAvailable} adjustmentLockMessage={adjustmentLockMessage} asOf={asOf} />)}</tbody></table></div>}
         </div>
       </div>
     </section>
   );
 }
 
-function GrantRow({ grant, revokeAction, revokePending, locked, asOf }: { grant: ComplimentaryAccessGrant; revokeAction: (formData: FormData) => void; revokePending: boolean; locked: boolean; asOf: string }) {
+function GrantRow({ grant, revokeAction, revokePending, locked, adjustmentLocked, adjustmentLockMessage, asOf }: { grant: ComplimentaryAccessGrant; revokeAction: (formData: FormData) => void; revokePending: boolean; locked: boolean; adjustmentLocked: boolean; adjustmentLockMessage?: string; asOf: string }) {
   const asOfMs = Date.parse(asOf);
   const current = grant.status === "active" && isComplimentaryAccessCurrent(grant.ends_at, asOfMs) && Date.parse(grant.starts_at) <= asOfMs;
   const statusLabel = grant.status === "revoked" ? "Revoked" : current ? "Current" : "Expired";
   const statusTone = grant.status === "revoked" ? "bg-raised text-ink-muted" : current ? "bg-success/10 text-success" : "bg-warning/15 text-ink";
-  return <tr className="align-top"><td className="px-4 py-3"><span className={`inline-flex rounded-full px-2.5 py-1 font-extrabold ${statusTone}`}>{statusLabel}</span></td><td className="whitespace-nowrap px-4 py-3 font-semibold text-ink-muted"><span className="block">{formatAccessDate(grant.starts_at)}</span><span className="mt-1 block">to {formatAccessDate(grant.ends_at)}</span></td><td className="px-4 py-3 font-semibold text-ink-muted">{sourceLabel(grant.source)}</td><td className="max-w-[260px] px-4 py-3 leading-5 text-ink-muted">{grant.reason}</td><td className="px-4 py-3">{grant.status === "active" ? <form action={revokeAction}><input type="hidden" name="grant_id" value={grant.id} /><button type="submit" disabled={locked || revokePending} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-danger/25 bg-danger-soft px-3 py-2 font-extrabold text-danger transition hover:border-danger disabled:cursor-not-allowed disabled:opacity-50"><AdminIcon name="alert" size={13} />{revokePending ? "Revoking…" : "Revoke"}</button></form> : <span className="text-ink-subtle">—</span>}</td></tr>;
+  const adjustable = grant.status === "active" && Date.parse(grant.ends_at) > asOfMs;
+  return <tr className="align-top"><td className="px-4 py-3"><span className={`inline-flex rounded-full px-2.5 py-1 font-extrabold ${statusTone}`}>{statusLabel}</span></td><td className="whitespace-nowrap px-4 py-3 font-semibold text-ink-muted"><span className="block">{formatAccessDate(grant.starts_at)}</span><span className="mt-1 block">to {formatAccessDate(grant.ends_at)}</span></td><td className="px-4 py-3 font-semibold text-ink-muted">{sourceLabel(grant.source)}</td><td className="max-w-[260px] px-4 py-3 leading-5 text-ink-muted">{grant.reason}</td><td className="px-4 py-3"><div className="space-y-2">{adjustable && <PlatformGrantAdjustmentForm grantId={grant.id} endsAt={grant.ends_at} locked={adjustmentLocked} lockMessage={adjustmentLockMessage} />} {grant.status === "active" ? <form action={revokeAction}><input type="hidden" name="grant_id" value={grant.id} /><button type="submit" disabled={locked || revokePending} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-danger/25 bg-danger-soft px-3 py-2 font-extrabold text-danger transition hover:border-danger disabled:cursor-not-allowed disabled:opacity-50"><AdminIcon name="alert" size={13} />{revokePending ? "Revoking…" : "Revoke"}</button></form> : <span className="text-ink-subtle">—</span>}</div></td></tr>;
 }
 
 function ActionMessage({ state }: { state: OperationsActionState }) {

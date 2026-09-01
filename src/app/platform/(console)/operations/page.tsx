@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { CheckoutReadinessChecklist } from "@/app/platform/CheckoutReadinessChecklist";
 import { OrganizationOperations } from "@/app/platform/OrganizationOperations";
+import { PlatformEntitlementDirectory } from "@/app/platform/PlatformEntitlementDirectory";
 import { TrialFeedbackOperations } from "@/app/platform/TrialFeedbackOperations";
 import { getBillingPlan, normalizeSubscriptionStatus, subscriptionStatusLabel, subscriptionTone } from "@/lib/billing";
 import { formatPeso } from "@/lib/money";
@@ -11,8 +12,9 @@ import { payMongoConfiguration, readPayMongoSubscriptionReadiness, readPlatformO
 import { hasPlatformOperatorPermission } from "@/lib/platform-operators";
 import { requirePlatformOperator } from "@/lib/platform-operators-server";
 import { formatTrialRemaining, readTrialLifecycle, TRIAL_FEEDBACK_STATUS_LABELS } from "@/lib/trial";
+import { derivePlatformEntitlementSummary } from "@/lib/platform-entitlements";
 import { PlatformAccessDenied, PlatformMetric, PlatformMigrationNotice, PlatformPageHeader, PlatformSectionHeading, PlatformStatusBadge } from "../../PlatformUI";
-import { countByOrg, formatDate, readPlatformDirectory } from "../../_lib/platform-data";
+import { countByOrg, formatDate, readPlatformDirectory, readPlatformEntitlementRecords } from "../../_lib/platform-data";
 
 export const dynamic = "force-dynamic";
 
@@ -61,10 +63,12 @@ export default async function PlatformOperationsPage() {
   const checkoutReady = checkoutReadiness.ready;
   const accountOperationsSchemaReady = organizationsResult.accountFieldsAvailable && policies.schemaAvailable && supportCasesReady;
   const canManageSupport = hasPlatformOperatorPermission(actor.role, "support_manage");
+  const canManageEntitlements = hasPlatformOperatorPermission(actor.role, "entitlement_manage");
   const canViewSupport = actor.role !== "billing";
   const activeSubscriptions = organizations.filter((organization) => organization.subscription_status && normalizeSubscriptionStatus(organization.subscription_status) === "active").length;
   const trialSubscriptions = organizations.filter((organization) => organization.subscription_status && normalizeSubscriptionStatus(organization.subscription_status) === "trialing").length;
   const trialDays = readPolicyNumber(policies.billing, "trialDays", 14);
+  const entitlementRecords = await readPlatformEntitlementRecords(admin);
   const priorityTrialLeads = organizations.filter((organization) => {
     const trial = readTrialLifecycle({
       status: organization.subscription_status,
@@ -83,6 +87,14 @@ export default async function PlatformOperationsPage() {
   const employeesByOrg = countByOrg(employees);
   const activeEmployeesByOrg = countByOrg(employees.filter((employee) => employee.is_active));
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+  const entitlementSummaries = organizations.map((organization) => derivePlatformEntitlementSummary({
+    organization,
+    grants: entitlementRecords.accessGrantsByOrg.get(organization.id),
+    trialExtensions: entitlementRecords.trialExtensionsByOrg.get(organization.id),
+    activeBranchCount: activeStoresByOrg.get(organization.id) ?? 0,
+    includedBranchCount: catalog.includedBranchCount,
+    trialDays,
+  }));
   const priorityLeads = organizations.map((organization) => {
     const trial = readTrialLifecycle({
       status: organization.subscription_status,
@@ -116,7 +128,7 @@ export default async function PlatformOperationsPage() {
           </>}
         />
 
-        {(!organizationsResult.subscriptionFieldsAvailable || !organizationsResult.accountFieldsAvailable || !catalog.schemaAvailable || !policies.schemaAvailable || !supportCasesReady) && <PlatformMigrationNotice migrations={["0027_platform_operations.sql", "0028_support_cases.sql", "0068_branch_billing_pricing.sql"]} />}
+        {(!organizationsResult.subscriptionFieldsAvailable || !organizationsResult.accountFieldsAvailable || !catalog.schemaAvailable || !policies.schemaAvailable || !supportCasesReady || !entitlementRecords.accessGrantsSchemaAvailable || !entitlementRecords.trialExtensionsSchemaAvailable) && <PlatformMigrationNotice migrations={["0027_platform_operations.sql", "0028_support_cases.sql", "0052_platform_access_grants.sql", "0054_atomic_platform_access_grant.sql", "0068_branch_billing_pricing.sql", "0075_extend_organization_trial.sql"]} />}
 
         <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Operations summary">
           <PlatformMetric label="Active subscriptions" value={activeSubscriptions} detail={`${trialSubscriptions} businesses in trial`} icon="wallet" />
@@ -141,6 +153,15 @@ export default async function PlatformOperationsPage() {
             </div>
           </article>
         </section>
+
+        <PlatformEntitlementDirectory
+          summaries={entitlementSummaries}
+          grantSchemaAvailable={entitlementRecords.accessGrantsSchemaAvailable}
+          adjustmentSchemaAvailable={entitlementRecords.accessGrantAdjustmentSchemaAvailable}
+          trialSchemaAvailable={entitlementRecords.trialExtensionsSchemaAvailable}
+          policyGateOpen={policyGateOpen}
+          canManage={canManageEntitlements}
+        />
 
         <section className="mt-8 overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)]" aria-labelledby="directory-heading">
           <div className="px-5 py-5 sm:px-6">
