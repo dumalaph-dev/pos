@@ -107,7 +107,7 @@ The hosted rollback-scoped smoke and authenticated console pass are recorded in 
 
 ### Phase 2 — Complete and surface the entitlement controls
 
-**Status:** Code and migration deployed from `main` commit `198e77e`; hosted boundary smoke, CI, and production preflight passed; authenticated entitlement walkthrough remains the manual gate
+**Status:** Complete — code and migration deployed from `main` commit `198e77e`; hosted boundary smoke, CI, production preflight, and the owner-reported authenticated entitlement walkthrough passed
 **Migration:** `0078_adjust_platform_access_grant.sql`
 
 Close the gaps the audit found in the Premium grant that already exists.
@@ -143,13 +143,11 @@ and 1 platform operator. The code push's GitHub CI run `33470633381` passed, and
 live operations route returns the expected unauthenticated `307` redirect to
 `/platform/login`.
 
-The authenticated Phase 2 console walkthrough is still open. The hosted project
-currently has no pre-existing `platform_access_grants` row, so the walkthrough must
-use a deliberately chosen test organization/account (or a real active grant if one
-is provisioned): verify the directory filters and timeline, adjust a live grant in
-both directions, confirm the end-date countdown and exactly one before/after audit
-row, then verify the existing revoke flow. No hosted grant was created by the smoke;
-all smoke fixtures rolled back.
+The owner reports completing the authenticated Phase 2 console walkthrough and
+confirming the entitlement directory, filters, timeline, live grant adjustment,
+countdown change, before/after audit entry, and existing revoke flow all work. This
+is recorded as owner-reported evidence without adding account credentials or
+identifiers to the repository; the database smoke remained rollback-scoped.
 
 ### Phase 3 — Operator role model
 
