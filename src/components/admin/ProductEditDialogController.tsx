@@ -1,10 +1,15 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
-import { ProductEditDialog } from "@/components/admin/ProductEditDialog";
 import { UrlLocalDialogController } from "@/components/admin/UrlLocalDialogController";
 import type { ProductFieldsRecord } from "@/components/admin/ProductFields";
 import type { InventoryItemOption, InventoryMode, RecipeLineRecord } from "@/lib/inventory-recipes";
+
+const ProductEditDialog = dynamic(
+  () => import("@/components/admin/ProductEditDialog").then((module) => module.ProductEditDialog),
+  { loading: () => <div className="products-dialog__loading" role="status">Loading product editor…</div> },
+);
 
 type BranchRecord = { id: string; name: string; is_active: boolean };
 type CategoryRecord = { id: string; store_id: string; name: string };

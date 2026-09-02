@@ -31,6 +31,9 @@ export type MultiProductModalProps = {
   onPreviewSelectionChange?: (selection: { presetId: string; productIds: string[] }) => void;
   triggerLabel?: string;
   triggerClassName?: string;
+  initialOpen?: boolean;
+  hideTrigger?: boolean;
+  onClose?: () => void;
 };
 
 const FOCUSABLE_SELECTOR = "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex='-1'])";
@@ -70,9 +73,12 @@ export function MultiProductModal({
   onPreviewSelectionChange,
   triggerLabel = "Starter catalog",
   triggerClassName = "products-secondary-button",
+  initialOpen = false,
+  hideTrigger = false,
+  onClose,
 }: MultiProductModalProps) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
   const [selectedStoreId, setSelectedStoreId] = useState(storeId || branches[0]?.id || "");
   const [presetId, setPresetId] = useState(() => getCatalogPreset(initialPresetId)?.id ?? CATALOG_PRESETS[0].id);
   const [selected, setSelected] = useState<Record<string, boolean>>(() => buildSelection(getCatalogPreset(initialPresetId) ?? CATALOG_PRESETS[0]));
@@ -93,7 +99,10 @@ export function MultiProductModal({
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setOpen(false);
+        if (!isPending) {
+          setOpen(false);
+          onClose?.();
+        }
         return;
       }
       if (event.key !== "Tab" || !modalRef.current) return;
@@ -117,7 +126,7 @@ export function MultiProductModal({
       document.removeEventListener("keydown", handleKeyDown);
       if (previousActiveElement instanceof HTMLElement) previousActiveElement.focus();
     };
-  }, [open]);
+  }, [isPending, onClose, open]);
 
   const branchCategoryNames = useMemo(() => {
     return new Set(
@@ -148,6 +157,7 @@ export function MultiProductModal({
   function closeModal() {
     if (isPending) return;
     setOpen(false);
+    onClose?.();
   }
 
   function choosePreset(nextPreset: CatalogPreset) {
@@ -216,10 +226,10 @@ export function MultiProductModal({
 
   return (
     <>
-      <button type="button" className={triggerClassName} onClick={openModal} disabled={!canWrite || !selectedStoreId}>
-        <AdminIcon name="box" size={15} />
-        {triggerLabel}
-      </button>
+      {!hideTrigger && <button type="button" className={triggerClassName} onClick={openModal} disabled={!canWrite || !selectedStoreId}>
+          <AdminIcon name="box" size={15} />
+          {triggerLabel}
+        </button>}
 
       {open ? (
         <div className="products-dialog__backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeModal(); }}>

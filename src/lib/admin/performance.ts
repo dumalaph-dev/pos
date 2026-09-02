@@ -14,6 +14,9 @@ export type AdminPerformanceDetail = {
   resource_count: number;
   resource_transfer_bytes: number;
   resource_encoded_body_bytes: number;
+  ttfb_ms: number | null;
+  transfer_ms: number | null;
+  browser_settle_ms: number | null;
 };
 
 type AdminResourceSnapshot = {
@@ -93,6 +96,9 @@ export function completeAdminInteraction(
     resource_count: Math.max(0, resourcesAtEnd.count - token.resourceSnapshot.count),
     resource_transfer_bytes: Math.max(0, Math.round(resourcesAtEnd.transferBytes - token.resourceSnapshot.transferBytes)),
     resource_encoded_body_bytes: Math.max(0, Math.round(resourcesAtEnd.encodedBodyBytes - token.resourceSnapshot.encodedBodyBytes)),
+    ttfb_ms: detail.ttfb_ms ?? null,
+    transfer_ms: detail.transfer_ms ?? null,
+    browser_settle_ms: detail.browser_settle_ms ?? null,
   };
 
   window.dispatchEvent(new CustomEvent<AdminPerformanceDetail>("dumala:admin-performance", { detail: metric }));

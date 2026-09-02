@@ -1,12 +1,20 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { createProduct } from "@/app/admin/catalog/actions";
 import { AdminIcon } from "@/components/admin/AdminIcon";
-import { InventoryRecipeSetup } from "@/components/admin/InventoryRecipeSetup";
-import { ProductFields } from "@/components/admin/ProductFields";
 import type { InventoryItemOption } from "@/lib/inventory-recipes";
+
+const ProductFields = dynamic(
+  () => import("@/components/admin/ProductFields").then((module) => module.ProductFields),
+  { loading: () => <p className="products-dialog__loading" role="status">Loading product fields…</p> },
+);
+const InventoryRecipeSetup = dynamic(
+  () => import("@/components/admin/InventoryRecipeSetup").then((module) => module.InventoryRecipeSetup),
+  { loading: () => <p className="products-dialog__loading" role="status">Loading inventory options…</p> },
+);
 
 type BranchRecord = { id: string; name: string; is_active: boolean };
 type CategoryRecord = { id: string; store_id: string; name: string };

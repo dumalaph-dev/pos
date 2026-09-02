@@ -7,14 +7,15 @@ import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { ProductCreateDialog } from "@/components/admin/ProductCreateDialog";
 import { ProductEditDialogController } from "@/components/admin/ProductEditDialogController";
 import { ProductsTableClient } from "@/components/admin/ProductsTableClient";
-import { MultiProductModal } from "@/components/admin/MultiProductModal";
-import { ImportProductsPanel } from "@/components/admin/ImportProductsPanel";
+import { LazyMultiProductModal } from "@/components/admin/LazyMultiProductModal";
+import { LazyImportProductsPanel } from "@/components/admin/LazyImportProductsPanel";
 import { SignOutButton } from "@/components/SignOutButton";
 import { formatStockQuantity, salesQuantity, stockMovementDelta, stockStatus, type StockMovementType } from "@/lib/inventory";
 import { formatPeso } from "@/lib/money";
 import { categoryIconName } from "@/lib/category-icons";
 import { isProductImageUrl } from "@/lib/product-images";
 import { getAdminProfile } from "@/lib/admin/profile";
+import { getAdminBranchOptions } from "@/lib/admin/branches";
 import { readBusinessPresetId } from "@/lib/admin/business";
 import { loadReversedOrderIds, selectNetSales } from "@/lib/admin/sales-reports";
 import { readAdminBranding } from "@/lib/admin/branding";
@@ -140,8 +141,22 @@ type TopSellingProduct = {
   qty: number;
   unit: string;
   total: number;
-  orderIds: Set<string>;
+  orderCount: number;
   imageUrl: string | null;
+};
+
+type SalesPeriodTotalsRecord = {
+  order_count: number | string;
+  total_sales: number | string;
+};
+
+type TopSellingRpcRecord = {
+  product_id: string | null;
+  name: string;
+  unit: string;
+  qty: number | string;
+  total: number | string;
+  order_count?: number | string;
 };
 
 type QueryValue = string | string[] | undefined;
@@ -331,6 +346,11 @@ function isMissingSupplierSchema(error: { code?: string | null; message?: string
   return message.includes("supplier") && (error.code === "42P01" || error.code === "PGRST205" || message.includes("schema cache") || message.includes("does not exist"));
 }
 
+function firstRpcRecord<T>(value: unknown): T | null {
+  if (Array.isArray(value)) return (value[0] ?? null) as T | null;
+  return typeof value === "object" && value !== null ? value as T : null;
+}
+
 export default async function ProductsPage({
   searchParams,
 }: {
@@ -388,11 +408,7 @@ export default async function ProductsPage({
   const currentStart = new Date(todayStart.getTime() - DAY_MS * (selectedDays - 1));
   const previousStart = new Date(currentStart.getTime() - DAY_MS * selectedDays);
 
-  const branchesResult = await supabase
-    .from("stores")
-    .select("id, name, is_active")
-    .eq("org_id", profile.org_id)
-    .order("name");
+  const branchesResult = await getAdminBranchOptions(profile.org_id);
   const branches = (branchesResult.data ?? []) as BranchRecord[];
   const selectedBranchId = profile.role === "admin"
     ? await getSelectedAdminBranchId(branches, profile.store_id)
@@ -400,26 +416,6 @@ export default async function ProductsPage({
   const visibleBranches = selectedBranchId
     ? branches.filter((branch) => branch.id === selectedBranchId)
     : branches;
-
-  let currentOrdersQuery = supabase
-    .from("orders")
-    .select("id, store_id, total, status, created_at, reversal_of")
-    .eq("org_id", profile.org_id)
-    .eq("status", "completed")
-    .is("reversal_of", null)
-    .gte("created_at", currentStart.toISOString())
-    .lt("created_at", todayEnd.toISOString())
-    .order("created_at", { ascending: false })
-    .limit(5000);
-  let previousOrdersQuery = supabase
-    .from("orders")
-    .select("id, store_id, total, status, created_at, reversal_of")
-    .eq("org_id", profile.org_id)
-    .eq("status", "completed")
-    .is("reversal_of", null)
-    .gte("created_at", previousStart.toISOString())
-    .lt("created_at", currentStart.toISOString())
-    .limit(5000);
 
   let categoriesQuery = supabase
     .from("categories")
@@ -434,14 +430,6 @@ export default async function ProductsPage({
     .order("sort_order")
     .order("name")
     .limit(1000);
-  let orderItemsQuery = supabase
-    .from("order_items")
-    .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status, reversal_of)")
-    .eq("orders.org_id", profile.org_id)
-    .eq("orders.status", "completed")
-    .is("orders.reversal_of", null)
-    .gte("orders.created_at", currentStart.toISOString())
-    .lt("orders.created_at", todayEnd.toISOString());
   let inventoryItemsQuery = supabase
     .from("inventory_items")
     .select("id, store_id, name, item_type, unit, cost_per_unit, min_stock, supplier_id, is_active")
@@ -457,26 +445,39 @@ export default async function ProductsPage({
     .order("version", { ascending: false })
     .limit(1000);
   if (selectedBranchId) {
-    currentOrdersQuery = currentOrdersQuery.eq("store_id", selectedBranchId);
-    previousOrdersQuery = previousOrdersQuery.eq("store_id", selectedBranchId);
     categoriesQuery = categoriesQuery.eq("store_id", selectedBranchId);
     productsQuery = productsQuery.eq("store_id", selectedBranchId);
-    orderItemsQuery = orderItemsQuery.eq("orders.store_id", selectedBranchId);
     inventoryItemsQuery = inventoryItemsQuery.eq("store_id", selectedBranchId);
     recipesQuery = recipesQuery.eq("store_id", selectedBranchId);
   }
 
-  const [categoriesResult, productsResult, suppliersResult, stockResult, inventoryStockResult, inventoryItemsResult, recipesResult, currentOrdersResult, previousOrdersResult, orderItemsResult] = await Promise.all([
+  const [categoriesResult, productsResult, suppliersResult, stockResult, inventoryStockResult, inventoryItemsResult, recipesResult, currentSalesSummaryResult, previousSalesSummaryResult, topSellingResult] = await Promise.all([
     categoriesQuery,
     productsQuery,
     supabase.from("suppliers").select("id, name, is_active").eq("org_id", profile.org_id).order("name").limit(1000),
-    supabase.rpc("current_stock", { p_org_id: profile.org_id }),
-    supabase.rpc("current_inventory_stock", { p_org_id: profile.org_id }),
+    supabase.rpc("current_stock", { p_org_id: profile.org_id, p_store_id: selectedBranchId }),
+    supabase.rpc("current_inventory_stock", { p_org_id: profile.org_id, p_store_id: selectedBranchId }),
     inventoryItemsQuery,
     recipesQuery,
-    currentOrdersQuery,
-    previousOrdersQuery,
-    orderItemsQuery,
+    supabase.rpc("admin_sales_period_totals", {
+      p_org_id: profile.org_id,
+      p_from: currentStart.toISOString(),
+      p_to: todayEnd.toISOString(),
+      p_store_id: selectedBranchId,
+    }),
+    supabase.rpc("admin_sales_period_totals", {
+      p_org_id: profile.org_id,
+      p_from: previousStart.toISOString(),
+      p_to: currentStart.toISOString(),
+      p_store_id: selectedBranchId,
+    }),
+    supabase.rpc("admin_products_top_items", {
+      p_org_id: profile.org_id,
+      p_from: currentStart.toISOString(),
+      p_to: todayEnd.toISOString(),
+      p_store_id: selectedBranchId,
+      p_limit: 5,
+    }),
   ]);
 
   const allCategories = (categoriesResult.data ?? []) as CategoryRecord[];
@@ -548,11 +549,6 @@ export default async function ProductsPage({
     fallbackMovements = (fallbackMovementsResult.data ?? []) as MovementRecord[];
     stockFallbackError = Boolean(fallbackMovementsResult.error);
   }
-  const currentOrders = ((currentOrdersResult.data ?? []) as OrderRecord[]).filter((order) => !selectedBranchId || order.store_id === selectedBranchId);
-  const previousOrders = ((previousOrdersResult.data ?? []) as OrderRecord[]).filter((order) => !selectedBranchId || order.store_id === selectedBranchId);
-  const orderItems = (orderItemsResult.data ?? []) as OrderItemRecord[];
-  const orderItemsError = Boolean(orderItemsResult.error);
-
   const branchById = new Map(branches.map((branch) => [branch.id, branch]));
   const categoryById = new Map(categories.map((category) => [category.id, category]));
   const productById = new Map(products.map((product) => [product.id, product]));
@@ -615,39 +611,125 @@ export default async function ProductsPage({
   const inactiveProducts = products.length - activeProducts;
   const outOfStockProducts = productRows.filter((row) => row.stockStatus === "out").length;
   const lowStockProducts = productRows.filter((row) => row.stockStatus === "low").length;
-  // A void or refund (0020) leaves the original at `completed`, so the sales
-  // figures below drop any order that was later reversed.
-  const reversalLookup = await loadReversedOrderIds(
-    supabase,
-    profile.org_id,
-    [...currentOrders, ...previousOrders].map((order) => order.id),
-  );
-  const completedOrders = selectNetSales(currentOrders, reversalLookup.reversedIds);
-  const previousCompletedOrders = selectNetSales(previousOrders, reversalLookup.reversedIds);
-  const currentSales = completedOrders.reduce((sum, order) => sum + Number(order.total), 0);
-  const previousSales = previousCompletedOrders.reduce((sum, order) => sum + Number(order.total), 0);
-  const salesChange = percentChange(currentSales, previousSales);
-  const completedOrderIds = new Set(completedOrders.map((order) => order.id));
-  const topItemsByKey = new Map<string, TopSellingProduct>();
-  for (const item of orderItems) {
-    if (!completedOrderIds.has(item.order_id)) continue;
-    const key = item.product_id ?? item.name_snapshot;
-    const product = item.product_id ? productById.get(item.product_id) : undefined;
-    const existing = topItemsByKey.get(key) ?? {
-      productId: item.product_id,
-      name: product?.name ?? item.name_snapshot,
-      qty: 0,
-      unit: product?.unit ?? "items",
-      total: 0,
-      orderIds: new Set<string>(),
-      imageUrl: product?.image_url ?? null,
-    };
-    existing.qty += salesQuantity(item);
-    existing.total += Number(item.line_total);
-    existing.orderIds.add(item.order_id);
-    topItemsByKey.set(key, existing);
+  let currentSales = 0;
+  let previousSales = 0;
+  let salesQueryError = false;
+  let topSelling: TopSellingProduct[] = [];
+  const currentSalesSummary = firstRpcRecord<SalesPeriodTotalsRecord>(currentSalesSummaryResult.data);
+  const previousSalesSummary = firstRpcRecord<SalesPeriodTotalsRecord>(previousSalesSummaryResult.data);
+  const topSellingRpcRows = (Array.isArray(topSellingResult.data) ? topSellingResult.data : []) as TopSellingRpcRecord[];
+  const topSellingRpcShapeAvailable = topSellingRpcRows.length === 0
+    || topSellingRpcRows.every((row) => Object.prototype.hasOwnProperty.call(row, "order_count"));
+
+  if (!currentSalesSummaryResult.error && !previousSalesSummaryResult.error && !topSellingResult.error
+    && currentSalesSummary && previousSalesSummary && topSellingRpcShapeAvailable) {
+    currentSales = Number(currentSalesSummary.total_sales);
+    previousSales = Number(previousSalesSummary.total_sales);
+    topSelling = topSellingRpcRows.map((item) => {
+      const product = item.product_id ? productById.get(item.product_id) : undefined;
+      return {
+        productId: item.product_id,
+        name: item.name || product?.name || "Unnamed product",
+        qty: Number(item.qty),
+        unit: item.unit || product?.unit || "items",
+        total: Number(item.total),
+        orderCount: Number(item.order_count ?? 0),
+        imageUrl: product?.image_url ?? null,
+      };
+    });
+  } else {
+    // The aggregate RPCs are additive. Keep a bounded, reversal-aware fallback
+    // for deployments where 0082 has not reached PostgREST yet.
+    salesQueryError = true;
+    let currentOrdersQuery = supabase
+      .from("orders")
+      .select("id, store_id, total, status, created_at, reversal_of")
+      .eq("org_id", profile.org_id)
+      .eq("status", "completed")
+      .is("reversal_of", null)
+      .gte("created_at", currentStart.toISOString())
+      .lt("created_at", todayEnd.toISOString())
+      .order("created_at", { ascending: false })
+      .limit(5000);
+    let previousOrdersQuery = supabase
+      .from("orders")
+      .select("id, store_id, total, status, created_at, reversal_of")
+      .eq("org_id", profile.org_id)
+      .eq("status", "completed")
+      .is("reversal_of", null)
+      .gte("created_at", previousStart.toISOString())
+      .lt("created_at", currentStart.toISOString())
+      .limit(5000);
+    let orderItemsQuery = supabase
+      .from("order_items")
+      .select("order_id, product_id, name_snapshot, qty, weight_kg, line_total, orders!inner(status, reversal_of)")
+      .eq("orders.org_id", profile.org_id)
+      .eq("orders.status", "completed")
+      .is("orders.reversal_of", null)
+      .gte("orders.created_at", currentStart.toISOString())
+      .lt("orders.created_at", todayEnd.toISOString());
+    if (selectedBranchId) {
+      currentOrdersQuery = currentOrdersQuery.eq("store_id", selectedBranchId);
+      previousOrdersQuery = previousOrdersQuery.eq("store_id", selectedBranchId);
+      orderItemsQuery = orderItemsQuery.eq("orders.store_id", selectedBranchId);
+    }
+
+    const [currentOrdersResult, previousOrdersResult, orderItemsResult] = await Promise.all([
+      currentOrdersQuery,
+      previousOrdersQuery,
+      orderItemsQuery,
+    ]);
+    const currentOrders = ((currentOrdersResult.data ?? []) as OrderRecord[]).filter((order) => !selectedBranchId || order.store_id === selectedBranchId);
+    const previousOrders = ((previousOrdersResult.data ?? []) as OrderRecord[]).filter((order) => !selectedBranchId || order.store_id === selectedBranchId);
+    const orderItems = (orderItemsResult.data ?? []) as OrderItemRecord[];
+    salesQueryError = Boolean(currentOrdersResult.error || previousOrdersResult.error || orderItemsResult.error);
+
+    // A void or refund (0020) leaves the original at `completed`, so the sales
+    // figures below drop any order that was later reversed.
+    const reversalLookup = await loadReversedOrderIds(
+      supabase,
+      profile.org_id,
+      [...currentOrders, ...previousOrders].map((order) => order.id),
+    );
+    salesQueryError = salesQueryError || reversalLookup.failed;
+    const completedOrders = selectNetSales(currentOrders, reversalLookup.reversedIds);
+    const previousCompletedOrders = selectNetSales(previousOrders, reversalLookup.reversedIds);
+    currentSales = completedOrders.reduce((sum, order) => sum + Number(order.total), 0);
+    previousSales = previousCompletedOrders.reduce((sum, order) => sum + Number(order.total), 0);
+    const completedOrderIds = new Set(completedOrders.map((order) => order.id));
+    const topItemsByKey = new Map<string, {
+      productId: string | null;
+      name: string;
+      qty: number;
+      unit: string;
+      total: number;
+      orderIds: Set<string>;
+      imageUrl: string | null;
+    }>();
+    for (const item of orderItems) {
+      if (!completedOrderIds.has(item.order_id)) continue;
+      const key = item.product_id ?? item.name_snapshot;
+      const product = item.product_id ? productById.get(item.product_id) : undefined;
+      const existing = topItemsByKey.get(key) ?? {
+        productId: item.product_id,
+        name: product?.name ?? item.name_snapshot,
+        qty: 0,
+        unit: product?.unit ?? "items",
+        total: 0,
+        orderIds: new Set<string>(),
+        imageUrl: product?.image_url ?? null,
+      };
+      existing.qty += salesQuantity(item);
+      existing.total += Number(item.line_total);
+      existing.orderIds.add(item.order_id);
+      topItemsByKey.set(key, existing);
+    }
+    topSelling = Array.from(topItemsByKey.values())
+      .sort((a, b) => b.qty - a.qty || b.total - a.total)
+      .slice(0, 5)
+      .map(({ orderIds, ...item }) => ({ ...item, orderCount: orderIds.size }));
   }
-  const topSelling = Array.from(topItemsByKey.values()).sort((a, b) => b.qty - a.qty || b.total - a.total).slice(0, 5);
+  const salesChange = percentChange(currentSales, previousSales);
   const bestSeller = topSelling[0];
   const categoryCounts = new Map<string, number>();
   for (const product of products) categoryCounts.set(product.category_id ?? "uncategorized", (categoryCounts.get(product.category_id ?? "uncategorized") ?? 0) + 1);
@@ -663,7 +745,7 @@ export default async function ProductsPage({
   const userInitial = firstName.charAt(0).toUpperCase();
   const branding = readAdminBranding(profile.organizations?.settings);
   const dataWarning = Boolean(
-    branchesResult.error || categoriesResult.error || Boolean(productsResult.error && !productsSchemaWarning) || fallbackProductsError || (suppliersResult.error && !suppliersSchemaWarning) || stockFallbackError || inventoryStockResult.error || inventoryItemsResult.error || recipesResult.error || currentOrdersResult.error || previousOrdersResult.error || orderItemsError,
+    branchesResult.error || categoriesResult.error || Boolean(productsResult.error && !productsSchemaWarning) || fallbackProductsError || (suppliersResult.error && !suppliersSchemaWarning) || stockFallbackError || inventoryStockResult.error || inventoryItemsResult.error || recipesResult.error || salesQueryError,
   );
   const canWrite = profile.role === "admin";
   const formBranches = visibleBranches.filter((branch) => branch.is_active);
@@ -705,7 +787,7 @@ export default async function ProductsPage({
               </details>
               <Link href="#product-filters" className="products-secondary-button"><AdminIcon name="filter" size={15} /> Filters{(searchQuery || categoryFilter !== "all" || status !== "all" || posOnly) && <span className="products-filter-count">!</span>}</Link>
               <ProductCreateDialog key={action === "product" ? "product-create-open" : "product-create-closed"} branches={formBranches} categories={categories} suppliers={suppliers} inventoryItems={inventoryItems} defaultBranch={formDefaultBranch} canWrite={canWrite} orgName={orgName} fromInventory={fromInventory} initialOpen={action === "product"} />
-              <MultiProductModal key={formDefaultBranch} storeId={formDefaultBranch} branchName={currentBranchName} branches={formBranches} categories={categories} canWrite={canWrite} orgName={orgName} initialPresetId={readBusinessPresetId(profile.organizations?.settings) ?? undefined} triggerLabel="Starter catalog" />
+              <LazyMultiProductModal key={formDefaultBranch} storeId={formDefaultBranch} branchName={currentBranchName} branches={formBranches} categories={categories} canWrite={canWrite} orgName={orgName} initialPresetId={readBusinessPresetId(profile.organizations?.settings) ?? undefined} triggerLabel="Starter catalog" />
               <details className="products-add-menu">
                 <summary className="products-secondary-button"><AdminIcon name="more" size={15} /> More</summary>
                 <div className="products-popover products-add-popover">
@@ -723,7 +805,7 @@ export default async function ProductsPage({
           {dataWarning && <div role="status" className="products-alert products-alert--warning">Some product insights could not refresh. The page is showing the data that was available; product edits remain protected by your admin role.</div>}
 
           {action === "category" && <CategoryActionPanel branches={formBranches} categories={categories} defaultBranch={formDefaultBranch} canWrite={canWrite} branchById={branchById} />}
-          {action === "import" && <ImportProductsPanel branches={formBranches} defaultBranch={formDefaultBranch} canWrite={canWrite} />}
+          {action === "import" && <LazyImportProductsPanel branches={formBranches} defaultBranch={formDefaultBranch} canWrite={canWrite} />}
           {action === "bulk" && <BulkUpdatePanel canWrite={canWrite} />}
 
           <section aria-label="Product performance" className="products-kpi-grid">
@@ -794,7 +876,7 @@ export default async function ProductsPage({
 
             <aside className="products-sidebar-panels">
               <section className="products-side-card" aria-labelledby="categories-overview-heading"><div className="products-side-card__header"><div><h2 id="categories-overview-heading">Categories overview</h2><p>Manage your product categories</p></div></div><div className="products-category-list">{categoryOverview.length === 0 ? <p className="products-side-empty">No categories yet.</p> : categoryOverview.map((category) => <Link key={category.id} href={buildProductsHref({ ...baseHref, category: category.id, page: 1 })} className="products-category-row"><span className="products-category-row__icon"><AdminIcon name={categoryIconName(category.icon, category.name)} size={15} /></span><strong>{category.name}</strong><small>{category.count} product{category.count === 1 ? "" : "s"}</small></Link>)}</div><Link href="/products?create=category#category-form" className="products-outline-button"><AdminIcon name="box" size={14} /> Manage categories</Link></section>
-              <section className="products-side-card" aria-labelledby="top-selling-heading"><div className="products-side-card__header"><div><h2 id="top-selling-heading">Top selling products</h2><p>{range === "7d" ? "This week" : `Last ${selectedDays} days`}</p></div><details className="products-side-period"><summary className="products-side-select">{rangeOptions.find((option) => option.value === range)?.label ?? "Period"} <AdminIcon name="chevron" size={11} /></summary><div className="products-popover products-side-period-popover">{rangeOptions.map((option) => <Link key={option.value} href={buildProductsHref({ ...baseHref, range: option.value, page: 1 })} className={`products-menu-link ${range === option.value ? "is-active" : ""}`}>{option.label}</Link>)}</div></details></div><div className="products-ranking">{topSelling.slice(0, 3).length === 0 ? <p className="products-side-empty">Completed POS sales will appear here.</p> : topSelling.slice(0, 3).map((item, index) => <div key={`${item.productId ?? item.name}-${index}`} className="products-ranking__item"><span className={`products-ranking__rank ${index === 0 ? "is-first" : ""}`}>{index + 1}</span><Image src={productImage({ name: item.name, image_url: item.imageUrl })} alt="" width={32} height={32} className="products-ranking__image" /><span className="products-ranking__copy"><strong>{item.name}</strong><small>{displayPeso(item.total)} · {item.orderIds.size} order{item.orderIds.size === 1 ? "" : "s"}</small></span><small className="products-ranking__qty">{formatStockQuantity(item.qty)} {item.unit} sold</small></div>)}</div><Link href={`/admin/sales?range=${range}`} className="products-outline-button"><AdminIcon name="chart" size={14} /> View sales report</Link></section>
+              <section className="products-side-card" aria-labelledby="top-selling-heading"><div className="products-side-card__header"><div><h2 id="top-selling-heading">Top selling products</h2><p>{range === "7d" ? "This week" : `Last ${selectedDays} days`}</p></div><details className="products-side-period"><summary className="products-side-select">{rangeOptions.find((option) => option.value === range)?.label ?? "Period"} <AdminIcon name="chevron" size={11} /></summary><div className="products-popover products-side-period-popover">{rangeOptions.map((option) => <Link key={option.value} href={buildProductsHref({ ...baseHref, range: option.value, page: 1 })} className={`products-menu-link ${range === option.value ? "is-active" : ""}`}>{option.label}</Link>)}</div></details></div><div className="products-ranking">{topSelling.slice(0, 3).length === 0 ? <p className="products-side-empty">Completed POS sales will appear here.</p> : topSelling.slice(0, 3).map((item, index) => <div key={`${item.productId ?? item.name}-${index}`} className="products-ranking__item"><span className={`products-ranking__rank ${index === 0 ? "is-first" : ""}`}>{index + 1}</span><Image src={productImage({ name: item.name, image_url: item.imageUrl })} alt="" width={32} height={32} className="products-ranking__image" /><span className="products-ranking__copy"><strong>{item.name}</strong><small>{displayPeso(item.total)} · {item.orderCount} order{item.orderCount === 1 ? "" : "s"}</small></span><small className="products-ranking__qty">{formatStockQuantity(item.qty)} {item.unit} sold</small></div>)}</div><Link href={`/admin/sales?range=${range}`} className="products-outline-button"><AdminIcon name="chart" size={14} /> View sales report</Link></section>
               <section id="product-tips" className="products-tip-card"><span className="products-tip-card__icon"><AdminIcon name="alert" size={15} /></span><h2>Product tips</h2><strong>Keep your menu updated</strong><p>Review prices, POS visibility, and stock thresholds regularly so customers see accurate availability.</p><Link href="/admin/inventory#inventory-help">Learn more <AdminIcon name="arrow" size={13} /></Link></section>
             </aside>
           </div>

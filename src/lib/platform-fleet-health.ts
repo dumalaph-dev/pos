@@ -19,6 +19,9 @@ export type PlatformFleetHealthSample = {
   mode: string;
   sampleType: string;
   durationMs: number;
+  ttfbMs?: number | null;
+  transferMs?: number | null;
+  browserSettleMs?: number | null;
   error: boolean;
   recordedAt: string;
 };
@@ -29,6 +32,10 @@ export type PlatformFleetHealthMetrics = {
   errorRatePct: number;
   p50DurationMs: number | null;
   p95DurationMs: number | null;
+  p50TtfbMs: number | null;
+  p95TtfbMs: number | null;
+  p50BrowserSettleMs: number | null;
+  p95BrowserSettleMs: number | null;
   firstSampleAt: string | null;
   lastSampleAt: string | null;
   surfaceCount: number;
@@ -164,6 +171,14 @@ function metricsForSamples(samples: PlatformFleetHealthSample[]): PlatformFleetH
     .map((sample) => sample.durationMs)
     .filter((duration): duration is number => Number.isFinite(duration) && duration >= 0)
     .sort((left, right) => left - right);
+  const ttfb = samples
+    .map((sample) => sample.ttfbMs)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0)
+    .sort((left, right) => left - right);
+  const browserSettle = samples
+    .map((sample) => sample.browserSettleMs)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0)
+    .sort((left, right) => left - right);
   const timestamps = samples
     .map((sample) => toTimestamp(sample.recordedAt))
     .filter((timestamp): timestamp is number => timestamp !== null)
@@ -175,6 +190,10 @@ function metricsForSamples(samples: PlatformFleetHealthSample[]): PlatformFleetH
     errorRatePct: samples.length > 0 ? round((errorCount / samples.length) * 100, 1) : 0,
     p50DurationMs: percentile(durations, 0.5),
     p95DurationMs: percentile(durations, 0.95),
+    p50TtfbMs: percentile(ttfb, 0.5),
+    p95TtfbMs: percentile(ttfb, 0.95),
+    p50BrowserSettleMs: percentile(browserSettle, 0.5),
+    p95BrowserSettleMs: percentile(browserSettle, 0.95),
     firstSampleAt: timestamps.length > 0 ? new Date(timestamps[0]).toISOString() : null,
     lastSampleAt: timestamps.length > 0 ? new Date(timestamps[timestamps.length - 1]).toISOString() : null,
     surfaceCount: new Set(samples.map((sample) => sample.surface).filter(Boolean)).size,

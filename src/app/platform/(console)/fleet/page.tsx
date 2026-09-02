@@ -33,7 +33,7 @@ export default async function PlatformFleetHealthPage() {
           </div>
         </header>
 
-        <PlatformFleetHealthViewer summaries={result.summaries} schemaAvailable={result.schemaAvailable} organizationsAvailable={result.organizationsAvailable} hasMore={result.hasMore} />
+        <PlatformFleetHealthViewer summaries={result.summaries} schemaAvailable={result.schemaAvailable} organizationsAvailable={result.organizationsAvailable} hasMore={result.hasMore} timingMetricsAvailable={result.timingMetricsAvailable} />
 
         <section className="mt-6 rounded-[22px] border border-primary/15 bg-primary-soft/45 p-5 sm:p-6" aria-labelledby="platform-fleet-boundary-heading">
           <PlatformSectionHeading eyebrow="Read boundary" title="Aggregated telemetry only" description="Fleet health uses bounded route-level timing samples already collected by the app. It does not expose order, customer, staff, device, request, or authentication data." />

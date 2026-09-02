@@ -23,6 +23,19 @@ function readBoundedNumber(value: unknown, maximum: number) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= maximum ? Math.round(value) : null;
 }
 
+function readOptionalBoundedNumber(value: unknown, maximum: number) {
+  if (value === undefined || value === null) return null;
+  return readBoundedNumber(value, maximum);
+}
+
+function isMissingTimingColumnError(error: unknown) {
+  if (!isRecord(error)) return false;
+  const code = typeof error.code === "string" ? error.code : "";
+  const message = typeof error.message === "string" ? error.message.toLowerCase() : "";
+  return ["42703", "PGRST204"].includes(code)
+    || ["ttfb_ms", "transfer_ms", "browser_settle_ms"].some((column) => message.includes(column));
+}
+
 export async function POST(request: Request) {
   const rawBody = await request.text();
   if (rawBody.length > MAX_BODY_LENGTH) return new NextResponse(null, { status: 413 });
@@ -46,6 +59,9 @@ export async function POST(request: Request) {
   const encodedBodyBytes = readBoundedNumber(parsed.resource_encoded_body_bytes, 100_000_000);
   const navigationTransferBytes = readBoundedNumber(parsed.navigation_transfer_bytes ?? 0, 100_000_000);
   const navigationEncodedBodyBytes = readBoundedNumber(parsed.navigation_encoded_body_bytes ?? 0, 100_000_000);
+  const ttfbMs = readOptionalBoundedNumber(parsed.ttfb_ms, 120_000);
+  const transferMs = readOptionalBoundedNumber(parsed.transfer_ms, 120_000);
+  const browserSettleMs = readOptionalBoundedNumber(parsed.browser_settle_ms, 120_000);
   const routeChanged = readBoolean(parsed.route_changed);
   const recordCached = readBoolean(parsed.record_cached);
   const error = readBoolean(parsed.error);
@@ -64,7 +80,7 @@ export async function POST(request: Request) {
     .eq("id", user.id)
     .maybeSingle();
   const organizationId = typeof profile?.org_id === "string" ? profile.org_id : null;
-  const { error: persistError } = await supabase.from("admin_performance_samples").insert({
+  const performanceSample = {
     org_id: organizationId,
     surface,
     interaction,
@@ -80,7 +96,20 @@ export async function POST(request: Request) {
     resource_encoded_body_bytes: encodedBodyBytes,
     navigation_transfer_bytes: navigationTransferBytes,
     navigation_encoded_body_bytes: navigationEncodedBodyBytes,
-  });
+    ttfb_ms: ttfbMs,
+    transfer_ms: transferMs,
+    browser_settle_ms: browserSettleMs,
+  };
+  let { error: persistError } = await supabase.from("admin_performance_samples").insert(performanceSample);
+
+  // Keep telemetry non-blocking while the additive timing migration rolls out
+  // across environments. A legacy row still preserves the original P50/P95.
+  if (persistError && isMissingTimingColumnError(persistError)) {
+    const legacyPerformanceSample = Object.fromEntries(
+      Object.entries(performanceSample).filter(([key]) => !["ttfb_ms", "transfer_ms", "browser_settle_ms"].includes(key)),
+    );
+    ({ error: persistError } = await supabase.from("admin_performance_samples").insert(legacyPerformanceSample));
+  }
 
   // Structured deployment logs are the storage boundary for this first slice.
   // No URL, record ID, user ID, organization ID, or request body is logged.
@@ -100,6 +129,9 @@ export async function POST(request: Request) {
     resource_encoded_body_bytes: encodedBodyBytes,
     navigation_transfer_bytes: navigationTransferBytes,
     navigation_encoded_body_bytes: navigationEncodedBodyBytes,
+    ttfb_ms: ttfbMs,
+    transfer_ms: transferMs,
+    browser_settle_ms: browserSettleMs,
     organization_attributed: organizationId !== null,
     recorded_at: new Date().toISOString(),
     persisted: !persistError,

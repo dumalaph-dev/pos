@@ -187,6 +187,7 @@ export type PlatformFleetHealthResult = {
   schemaAvailable: boolean;
   organizationsAvailable: boolean;
   hasMore: boolean;
+  timingMetricsAvailable: boolean;
 };
 
 export type PlatformSyncHealthResult = {
@@ -420,7 +421,7 @@ export async function readPlatformFleetHealth(admin: PlatformAdminClient, reques
   const [attributedSamplesResult, organizationsResult] = await Promise.all([
     admin
       .from("admin_performance_samples")
-      .select("id, org_id, recorded_at, surface, interaction, mode, sample_type, duration_ms, error", { count: "exact" })
+      .select("id, org_id, recorded_at, surface, interaction, mode, sample_type, duration_ms, error, ttfb_ms, transfer_ms, browser_settle_ms", { count: "exact" })
       .gte("recorded_at", lookbackStart)
       .lte("recorded_at", asOf)
       .order("recorded_at", { ascending: false })
@@ -431,17 +432,33 @@ export async function readPlatformFleetHealth(admin: PlatformAdminClient, reques
   let rawSamples: unknown[] = Array.isArray(attributedSamplesResult.data) ? attributedSamplesResult.data : [];
   let sampleCount = attributedSamplesResult.count;
   let schemaAvailable = !attributedSamplesResult.error;
+  let timingMetricsAvailable = !attributedSamplesResult.error;
   if (attributedSamplesResult.error) {
-    const legacySamplesResult = await admin
+    const attributedLegacySamplesResult = await admin
       .from("admin_performance_samples")
-      .select("id, recorded_at, surface, interaction, mode, sample_type, duration_ms, error", { count: "exact" })
+      .select("id, org_id, recorded_at, surface, interaction, mode, sample_type, duration_ms, error", { count: "exact" })
       .gte("recorded_at", lookbackStart)
       .lte("recorded_at", asOf)
       .order("recorded_at", { ascending: false })
       .limit(PLATFORM_FLEET_HEALTH_SAMPLE_LIMIT);
-    rawSamples = Array.isArray(legacySamplesResult.data) ? legacySamplesResult.data : [];
-    sampleCount = legacySamplesResult.count;
-    schemaAvailable = false;
+    if (!attributedLegacySamplesResult.error) {
+      rawSamples = Array.isArray(attributedLegacySamplesResult.data) ? attributedLegacySamplesResult.data : [];
+      sampleCount = attributedLegacySamplesResult.count;
+      schemaAvailable = true;
+      timingMetricsAvailable = false;
+    } else {
+      const legacySamplesResult = await admin
+        .from("admin_performance_samples")
+        .select("id, recorded_at, surface, interaction, mode, sample_type, duration_ms, error", { count: "exact" })
+        .gte("recorded_at", lookbackStart)
+        .lte("recorded_at", asOf)
+        .order("recorded_at", { ascending: false })
+        .limit(PLATFORM_FLEET_HEALTH_SAMPLE_LIMIT);
+      rawSamples = Array.isArray(legacySamplesResult.data) ? legacySamplesResult.data : [];
+      sampleCount = legacySamplesResult.count;
+      schemaAvailable = false;
+      timingMetricsAvailable = false;
+    }
   }
 
   const samples = rawSamples.flatMap((row) => normalizePlatformFleetSample(row));
@@ -460,6 +477,7 @@ export async function readPlatformFleetHealth(admin: PlatformAdminClient, reques
     schemaAvailable,
     organizationsAvailable: !organizationsResult.error,
     hasMore: (sampleCount ?? rawSamples.length) > rawSamples.length,
+    timingMetricsAvailable,
   };
 }
 
@@ -678,9 +696,17 @@ function normalizePlatformFleetSample(value: unknown): PlatformFleetHealthSample
     mode: value.mode,
     sampleType: value.sample_type,
     durationMs: value.duration_ms,
+    ttfbMs: readOptionalMilliseconds(value.ttfb_ms),
+    transferMs: readOptionalMilliseconds(value.transfer_ms),
+    browserSettleMs: readOptionalMilliseconds(value.browser_settle_ms),
     error: value.error,
     recordedAt: value.recorded_at,
   }];
+}
+
+function readOptionalMilliseconds(value: unknown) {
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 120_000 ? Math.round(parsed) : null;
 }
 
 function normalizePlatformSyncSample(value: unknown): PlatformSyncHealthSample[] {

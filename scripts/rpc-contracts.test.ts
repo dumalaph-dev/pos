@@ -7,14 +7,16 @@ import ts from "typescript";
 type RpcContract = readonly (readonly string[])[];
 
 const RPC_CONTRACTS = new Map<string, RpcContract>([
+  ["admin_products_top_items", [["p_org_id", "p_from", "p_to", "p_store_id", "p_limit"]]],
+  ["admin_sales_period_totals", [["p_org_id", "p_from", "p_to", "p_store_id"]]],
   ["admin_sales_top_items", [["p_org_id", "p_from", "p_to", "p_store_id", "p_limit"]]],
   ["advance_online_order_status", [["p_online_order_id", "p_next_status"]]],
   ["clone_menu", [["source_store", "target_store"]]],
   ["close_shift", [["p_shift_id", "p_declared_cash", "p_note"]]],
   ["complete_online_order", [["p_online_order_id", "p_pos_order_id"]]],
   ["create_platform_operator", [["p_email", "p_role", "p_actor_id", "p_actor_email"]]],
-  ["current_stock", [["p_org_id"]]],
-  ["current_inventory_stock", [["p_org_id"]]],
+  ["current_stock", [["p_org_id"], ["p_org_id", "p_store_id"]]],
+  ["current_inventory_stock", [["p_org_id"], ["p_org_id", "p_store_id"]]],
   ["change_platform_operator_role", [["p_operator_id", "p_role", "p_actor_id", "p_actor_email"]]],
   ["inventory_item_expected_stock", [["p_org_id", "p_store_id", "p_until"]]],
   ["expire_trialing_organization", [["p_org_id"]]],

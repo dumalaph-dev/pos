@@ -16,6 +16,9 @@ type PerformancePayload = Pick<
   | "resource_count"
   | "resource_transfer_bytes"
   | "resource_encoded_body_bytes"
+  | "ttfb_ms"
+  | "transfer_ms"
+  | "browser_settle_ms"
 > & {
   sample_type: "initial_document" | "soft_navigation";
   navigation_transfer_bytes: number;
@@ -35,6 +38,11 @@ function resourceTotals(): ResourceTotals {
     transferBytes: totals.transferBytes + (Number.isFinite(entry.transferSize) ? entry.transferSize : 0),
     encodedBodyBytes: totals.encodedBodyBytes + (Number.isFinite(entry.encodedBodySize) ? entry.encodedBodySize : 0),
   }), { count: 0, transferBytes: 0, encodedBodyBytes: 0 });
+}
+
+function timingDelta(start: number, end: number) {
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  return Math.round(end - start);
 }
 
 function routeSurface(pathname: string): AdminPerformanceSurface {
@@ -102,6 +110,9 @@ export function AdminPerformanceReporter() {
         resource_count: detail.resource_count,
         resource_transfer_bytes: detail.resource_transfer_bytes,
         resource_encoded_body_bytes: detail.resource_encoded_body_bytes,
+        ttfb_ms: detail.ttfb_ms,
+        transfer_ms: detail.transfer_ms,
+        browser_settle_ms: detail.browser_settle_ms,
         sample_type: "soft_navigation",
         navigation_transfer_bytes: 0,
         navigation_encoded_body_bytes: 0,
@@ -117,6 +128,8 @@ export function AdminPerformanceReporter() {
 
       initialReported = true;
       const resources = resourceTotals();
+      const responseEnd = Number.isFinite(navigation.responseEnd) ? navigation.responseEnd : navigation.responseStart;
+      const settledAt = navigation.loadEventEnd || navigation.domContentLoadedEventEnd || responseEnd;
       post({
         surface: routeSurface(window.location.pathname),
         interaction: "navigation",
@@ -129,6 +142,9 @@ export function AdminPerformanceReporter() {
         resource_count: resources.count,
         resource_transfer_bytes: Math.round(resources.transferBytes),
         resource_encoded_body_bytes: Math.round(resources.encodedBodyBytes),
+        ttfb_ms: timingDelta(navigation.requestStart, navigation.responseStart),
+        transfer_ms: timingDelta(navigation.responseStart, responseEnd),
+        browser_settle_ms: timingDelta(responseEnd, settledAt),
         sample_type: "initial_document",
         navigation_transfer_bytes: Number.isFinite(navigation.transferSize) ? Math.round(navigation.transferSize) : 0,
         navigation_encoded_body_bytes: Number.isFinite(navigation.encodedBodySize) ? Math.round(navigation.encodedBodySize) : 0,

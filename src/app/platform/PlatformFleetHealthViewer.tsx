@@ -17,11 +17,12 @@ import {
 
 const STATUS_FILTERS: Array<"all" | PlatformFleetHealthStatus> = ["all", "healthy", "needs_attention", "stale", "no_data"];
 
-export function PlatformFleetHealthViewer({ summaries, schemaAvailable, organizationsAvailable, hasMore }: {
+export function PlatformFleetHealthViewer({ summaries, schemaAvailable, organizationsAvailable, hasMore, timingMetricsAvailable }: {
   summaries: PlatformFleetHealthSummaries;
   schemaAvailable: boolean;
   organizationsAvailable: boolean;
   hasMore: boolean;
+  timingMetricsAvailable: boolean;
 }) {
   const [window, setWindow] = useState<PlatformFleetHealthWindow>("30d");
   const [search, setSearch] = useState("");
@@ -55,9 +56,11 @@ export function PlatformFleetHealthViewer({ summaries, schemaAvailable, organiza
           <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary"><AdminIcon name="chart" size={13} /> {summary.overall.sampleCount} samples</span>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Fleet health summary">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6" aria-label="Fleet health summary">
           <HealthMetric icon="chart" label="Samples" value={summary.overall.sampleCount} detail={fleetHealthWindowLabel(window)} />
           <HealthMetric icon="clock" label="P95 duration" value={formatMilliseconds(summary.overall.p95DurationMs)} detail="Admin interaction latency" />
+          <HealthMetric icon="clock" label="P95 TTFB" value={formatMilliseconds(summary.overall.p95TtfbMs)} detail="Request → response start" />
+          <HealthMetric icon="clock" label="P95 browser settle" value={formatMilliseconds(summary.overall.p95BrowserSettleMs)} detail="Response end → page settled" />
           <HealthMetric icon="alert" label="Error rate" value={`${summary.overall.errorRatePct}%`} detail={`${summary.overall.errorCount} failed samples`} tone={summary.overall.errorRatePct >= FLEET_HEALTH_ERROR_THRESHOLD_PCT ? "danger" : "default"} />
           <HealthMetric icon="branches" label="Healthy orgs" value={`${healthyCount}/${summary.organizationRows.length}`} detail="Fresh and below error threshold" tone={healthyCount === summary.organizationRows.length ? "success" : "default"} />
         </div>
@@ -88,6 +91,7 @@ export function PlatformFleetHealthViewer({ summaries, schemaAvailable, organiza
         </div>
         {hasMore && <p role="status" className="mt-3 rounded-xl border border-warning/25 bg-warning/10 px-3.5 py-3 text-xs font-semibold leading-5 text-ink">The sample window reached the reader limit. Narrow the time window to inspect the newest telemetry.</p>}
         {!schemaAvailable && <p role="status" className="mt-3 rounded-xl border border-warning/25 bg-warning/10 px-3.5 py-3 text-xs font-semibold leading-5 text-ink">Organization attribution is unavailable from this deployment. Legacy samples remain visible as unattributed history until the fleet-health schema is applied.</p>}
+        {!timingMetricsAvailable && <p role="status" className="mt-3 rounded-xl border border-warning/25 bg-warning/10 px-3.5 py-3 text-xs font-semibold leading-5 text-ink">Timing split fields are not available in this deployment yet. Overall P50/P95 remains valid; apply the performance timing migration to separate response-start from browser-settle time.</p>}
         {schemaAvailable && summary.unattributedSampleCount > 0 && <p role="status" className="mt-3 rounded-xl border border-primary/15 bg-primary-soft/45 px-3.5 py-3 text-xs font-semibold leading-5 text-ink">{summary.unattributedSampleCount} historical sample{summary.unattributedSampleCount === 1 ? " is" : "s are"} not assigned to an organization because they were recorded before attribution was added. New authenticated admin sessions will be attributable.</p>}
         {!organizationsAvailable && <p role="status" className="mt-3 rounded-xl border border-danger/25 bg-danger-soft px-3.5 py-3 text-xs font-semibold leading-5 text-danger">Organization names could not be loaded. Refresh the page or review the platform database connection.</p>}
       </div>

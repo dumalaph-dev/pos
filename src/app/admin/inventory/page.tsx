@@ -404,9 +404,10 @@ export default async function InventoryPage({
     .eq("is_active", true)
     .order("name")
     .limit(3000);
-  const inventoryUsageQuery = supabase
+  let inventoryUsageQuery = supabase
     .from("product_recipe_items")
     .select("inventory_item_id, product_recipes!inner(product_id, store_id, is_active)")
+    .eq("product_recipes.org_id", profile.org_id)
     .eq("product_recipes.is_active", true)
     .limit(10000);
   let recentMovementsQuery = supabase
@@ -430,6 +431,7 @@ export default async function InventoryPage({
     categoriesQuery = categoriesQuery.eq("store_id", selectedBranchId);
     productsQuery = productsQuery.eq("store_id", selectedBranchId);
     inventoryItemsQuery = inventoryItemsQuery.eq("store_id", selectedBranchId);
+    inventoryUsageQuery = inventoryUsageQuery.eq("product_recipes.store_id", selectedBranchId);
     recentMovementsQuery = recentMovementsQuery.eq("store_id", selectedBranchId);
     movedTodayQuery = movedTodayQuery.eq("store_id", selectedBranchId);
     posSaleCountQuery = posSaleCountQuery.eq("store_id", selectedBranchId);
@@ -450,8 +452,8 @@ export default async function InventoryPage({
     // On-hand totals come from the server-side ledger aggregation. The raw
     // movement query is intentionally small for the history preview and is
     // expanded only if the RPC is unavailable.
-    supabase.rpc("current_stock", { p_org_id: profile.org_id }),
-    supabase.rpc("current_inventory_stock", { p_org_id: profile.org_id }),
+    supabase.rpc("current_stock", { p_org_id: profile.org_id, p_store_id: selectedBranchId }),
+    supabase.rpc("current_inventory_stock", { p_org_id: profile.org_id, p_store_id: selectedBranchId }),
     movedTodayQuery,
     posSaleCountQuery,
   ]);
