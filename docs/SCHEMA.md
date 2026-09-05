@@ -466,6 +466,57 @@ when a later failed heartbeat upserts the same queue row. The platform reader
 accepts the legacy 0080 shape during rollout and labels the enhanced metrics
 unavailable until the new columns are present.
 
+Migration 0082 splits admin navigation timing and bounds the heaviest admin
+reads. `admin_performance_samples` gains nullable `ttfb_ms`, `transfer_ms`,
+and `browser_settle_ms`, each constrained to 0–120000, so Fleet Health can
+separate request/response time from client hydration and rendering without
+collecting URLs or tenant data. The columns are optional on both sides of the
+rollout: the reporting route retries the insert without them against a
+deployment that lacks the columns, and the platform reader falls back to the
+0079 and pre-0079 shapes and marks the split metrics unavailable. Existing rows
+keep null timing fields and are neither rewritten nor backfilled.
+
+The same migration adds branch-scoped read paths. `current_stock` and
+`current_inventory_stock` keep their one-argument signatures and gain
+`(p_org_id, p_store_id)` overloads that filter the stock ledger to a single
+branch when `p_store_id` is non-null. `admin_sales_period_totals` returns the
+reversal-aware order count and net total for a period, and
+`admin_products_top_items` returns the top items with a per-item
+`order_count`, which `admin_sales_top_items` deliberately omits so that the
+Sales page contract stays unchanged. All four are `stable` and
+`security invoker`, so RLS still scopes them to the caller;
+`current_inventory_stock` additionally keeps its
+`auth_is_admin() or i.store_id = auth_store_id()` guard, and all four are
+granted to `authenticated` only. `orders_completed_org_store_created_idx` is
+a partial index on `(org_id, store_id, created_at desc)` restricted to
+completed, non-reversal orders, matching the filter these reads share.
+`scripts/rpc-contracts.test.ts` pins both overload arities so a caller cannot
+silently regress to the unscoped signature.
+
+Migration 0083 repairs the RPC ACL invariant that 0064 and 0065 established.
+Those migrations enumerated the application RPCs by name, so functions created
+afterwards — and new overloads, which are separate functions — kept the hosted
+`PUBLIC` EXECUTE default that makes them callable by `anon`. 0073 and 0082
+both granted EXECUTE to `authenticated` without revoking that default first.
+0083 revokes `public` and `anon` EXECUTE from `current_stock(uuid, uuid)`,
+both arities of `current_inventory_stock`, `inventory_item_expected_stock`,
+`record_inventory_item_count`, `admin_sales_period_totals`, and
+`admin_products_top_items`, re-granting `authenticated` and `service_role`.
+Those seven are `security invoker`, so the table grants from 0004 and 0026
+were already refusing anon at the table rather than the function — the ACL was
+redundant defense that had lapsed, not an open door.
+
+`seed_default_employee_roles(uuid)` is the exception and the reason 0083 is a
+fix rather than tidying. It is `security definer`, so it runs with the owner's
+rights and table grants do not stop it; it carries no internal caller check;
+and it inserts the four default `employee_roles` rows for any `p_org_id`
+passed to it. It has no application call site — its only caller is the
+`security definer` trigger `seed_default_employee_roles_on_organization`,
+which executes as the function owner and therefore needs no EXECUTE grant on
+the function it invokes. 0083 revokes `public`, `anon`, and `authenticated`
+and grants only `service_role`. The migration changes ACLs only: no function
+body, table, policy, or row is touched.
+
 Two guards live in the function rather than in the console. `paused` has two
 unrelated causes — an expired trial, and a provider status of `unpaid` — so a
 revival back to `trialing` requires `paused` **and** a null

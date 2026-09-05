@@ -2,7 +2,7 @@
 
 **Project:** Dumala POS
 **Created:** 2026-08-29
-**Status:** Phase 4 in progress — the first cross-org read surface is deployed; fleet, sync/outbox, device, and schema-drift views remain
+**Status:** Phase 4 in progress — the audit, fleet, and sync/outbox read surfaces are deployed and their migrations are recorded through `0082`; device inventory and schema drift remain
 **Owner:** Product and engineering
 **Companion to:** [tasks.md](tasks.md) · [SCHEMA.md](SCHEMA.md) §8 · [SETUP.md](SETUP.md)
 
@@ -173,8 +173,8 @@ After Docker Desktop became available, the preserved local Supabase volume recov
 
 ### Phase 4 — Cross-org read surfaces
 
-**Status:** In progress — platform audit viewer, fleet health, and the enhanced sync/outbox health surface are deployed from `main`; linked migration `0081` is applied; device and schema-drift views remain queued
-**Migration:** `0079_scope_admin_performance_to_organizations.sql`, `0080_sync_health_snapshots.sql`, and `0081_sync_health_enhanced_metrics.sql` applied; platform readers are read-only, and legacy performance samples plus existing tenant data remain preserved
+**Status:** In progress — platform audit viewer, fleet health, and the enhanced sync/outbox health surface are deployed from `main`; linked migrations are applied and documented through `0082`; device and schema-drift views remain queued
+**Migration:** `0079_scope_admin_performance_to_organizations.sql`, `0080_sync_health_snapshots.sql`, `0081_sync_health_enhanced_metrics.sql`, and `0082_admin_latency_scoping.sql` applied; platform readers are read-only, and legacy performance samples plus existing tenant data remain preserved
 
 Powers that only need to look. Safe to build once Phase 3 can scope who looks.
 
@@ -277,6 +277,100 @@ local database or fixture state was changed. The live unauthenticated
 deployment `6205982303`, and GitHub CI run `33533961354` passed. The next gate
 is authenticated operator QA plus the first real POS/admin terminal
 heartbeats before device inventory.
+
+**Admin latency scoping close-out (2026-09-05).** Migration
+`0082_admin_latency_scoping.sql` shipped in commit `a3b2daa` without the
+paired documentation entry every earlier migration in this initiative has, so
+its hosted state could not be read off the repository. That gap is now closed.
+`npx --yes supabase@2.114.0 migration list --linked` reports local and remote
+matching through `0082`; the migration had already been applied, and no push
+was needed or attempted.
+
+A read-only hosted query confirmed the objects rather than inferring them from
+the ledger row: `ledger_max` `0082`; `ttfb_ms`, `transfer_ms`, and
+`browser_settle_ms` present as `integer` with their 3 check constraints;
+`org_id` still present from `0079`; all six function signatures present,
+`stable`, `security invoker`, and executable by `authenticated` — both
+arities of `current_stock` and `current_inventory_stock` plus
+`admin_sales_period_totals` and `admin_products_top_items`; and
+`orders_completed_org_store_created_idx` created as the expected partial index
+on completed, non-reversal orders. The query made no writes and created no
+fixtures.
+
+`admin_performance_samples` holds 643 rows, unchanged from the count recorded
+before `0079`, with 0 attributed to an organization, 0 carrying the new timing
+fields, and latest sample `2026-08-29T14:23:04`. Both zeros are the same
+fact and are expected: no authenticated admin session has been recorded since
+before `0079` shipped, so neither attribution nor the timing split has had
+traffic to capture. It also means the Fleet Health page has been verified
+against legacy history only. The first authenticated admin navigation after
+this deployment is what proves the write path end to end, which is the same
+gate as the sync heartbeats below.
+
+`npm run test:rpc-contracts` (3 passed), `npm run test:platform-fleet`
+(3 passed), `npm run test:platform-sync` (3 passed), `npm run typecheck`,
+`npm run lint`, and `git diff --check` pass. The migration is now recorded in
+[SETUP.md](SETUP.md) §4 as entry 82 with its own verification section, and in
+[SCHEMA.md](SCHEMA.md) §8; entry 81 was missing from the same numbered list and
+was added with it. The next gate is unchanged: authenticated operator QA plus
+the first real POS/admin terminal heartbeats, before device inventory.
+
+**Anon EXECUTE gap found by the close-out smoke (2026-09-05).** Writing a
+repeatable smoke for `0082` — `scripts/admin-latency-scoping-smoke.sql`, run
+as `npm run admin:latency:validate` — surfaced a defect the ledger check alone
+would have missed. `0064` and `0065` removed `PUBLIC`/`anon` EXECUTE from
+the application RPCs by enumerating them by name. Every RPC added since kept
+the hosted `PUBLIC` default, and because a new overload is a separate
+function, `0082` reintroduced the gap on signatures whose one-argument form
+`0065` had already hardened. Eight RPCs plus one writer were anon-executable;
+`current_stock(uuid)` was the lone hardened control that made the pattern
+unambiguous.
+
+Severity is split, and worth stating precisely. The seven read/count RPCs are
+`security invoker`, so the table grants from `0004`/`0026` still refuse
+anon — a hosted probe with the public anon key returns HTTP 401 `42501
+permission denied for table stock_movements` / `orders`. No tenant data was
+reachable. `seed_default_employee_roles(uuid)` is different: `security
+definer`, no internal caller check, no application call site, and it inserts
+the four default employee roles for any `p_org_id` given to it. Definer rights
+bypass the table grant that protected the others, so an unauthenticated caller
+holding the public anon key and an observable organization id could write into
+a tenant. It was not called or exercised during this pass.
+
+`supabase/migrations/0083_scoped_read_rpc_acl_hardening.sql` restores the
+invariant: `revoke ... from public, anon` then re-grant `authenticated` and
+`service_role` for the seven RPCs, and service-role-only for
+`seed_default_employee_roles`. It changes ACLs only — no body, table, policy,
+or row. **Applied to production 2026-09-05** on the owner's approval. The first push
+failed on an ambiguous `oid` reference across the joined `pg_proc`/
+`pg_namespace` catalogs and was rejected atomically, so nothing was applied;
+the reference was qualified to `p.oid` and the second push completed, emitting
+only the CLI's known optional pg-delta catalog-cache warning (Docker was not
+running on this workstation).
+
+The fix is verified rather than assumed, because the smoke asserts the boundary
+on both sides. Post-apply: `ledger_max` `0083`; `anon_execute_boundary`
+reports `false` for all nine signatures; `anon_callable_rpc_count` fell from
+18 to 10; and `authenticated` EXECUTE is retained on all six scoped read
+functions. A hosted probe with the public anon key now returns HTTP 401
+`42501 permission denied for function current_stock` /
+`admin_sales_period_totals` — the refusal moved from the table to the
+function, which is the defense-in-depth the invariant is for.
+
+No anon-facing regression: `https://dumala.store` serves, the public menu at
+`/menu/demo` renders its full catalog with no console errors, and
+`/platform/fleet` still redirects to the platform login. The public menu is
+the meaningful check here — it reads stock through `current_stock` on the
+service-role client, the grant `0083` re-issues explicitly.
+
+Ten other anon-executable functions were found and deliberately left alone: the
+`auth_*` profile helpers, `organization_has_current_access_grant`,
+`shift_variance_threshold`, `build_staff_login_slug`,
+`staff_login_slug_part`, and `subscription_access_is_current`. Some are
+invoked inside RLS policies, and a policy calling a function the querying role
+cannot execute fails the entire query, so revoking them risks breaking the
+anon-facing public menu and staff-login routes. That is a separate hardening
+pass with its own policy-by-policy verification, not a rider on this one.
 
 ### Phase 5 — Support access into a tenant
 

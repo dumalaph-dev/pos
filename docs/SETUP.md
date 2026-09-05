@@ -136,6 +136,9 @@ followed by `0062_public_menu_subdomains.sql` and
 78. `0078_adjust_platform_access_grant.sql` — inline entitlement directory support, in-place grant adjustment, and a single before/after audit row
 79. `0079_scope_admin_performance_to_organizations.sql` — preserve performance samples while attributing future authenticated samples to their server-resolved organization; legacy rows remain unattributed
 80. `0080_sync_health_snapshots.sql` — retain the latest bounded POS, audit, and admin-mutation queue heartbeat per organization, branch, local terminal key, and queue; browser reads remain denied
+81. `0081_sync_health_enhanced_metrics.sql` — add exact `stuck_count` and a monotonic, server-stamped `last_successful_sync_at` to the sync heartbeat without rewriting existing snapshots
+82. `0082_admin_latency_scoping.sql` — split admin navigation timing into optional `ttfb_ms`, `transfer_ms`, and `browser_settle_ms`, and add branch-scoped read paths (`current_stock`/`current_inventory_stock` two-argument overloads, `admin_sales_period_totals`, `admin_products_top_items`, and a partial completed-orders index)
+83. `0083_scoped_read_rpc_acl_hardening.sql` — restore the 0064/0065 invariant for RPCs added since: remove `public`/`anon` EXECUTE from the seven scoped read/count RPCs and make the unguarded `seed_default_employee_roles` writer service-role-only. ACL-only; no body, table, policy, or row changes
 
 **Apply them** either way:
 - **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push`
@@ -344,6 +347,144 @@ offline reporter, or an exact stuck item; `stale` means no heartbeat for over
 has no retry, delete, or tenant-data controls. A real POS or admin session will
 populate its branch rows after the enhanced client is deployed and reports its
 first heartbeat.
+
+### Admin latency scoping verification
+
+Migration `0082` serves two related goals. It splits the admin navigation
+timing that Fleet Health reports, and it bounds the two heaviest admin reads so
+that the latency being measured actually goes down.
+
+The timing split is additive and optional. `admin_performance_samples` gains
+nullable `ttfb_ms`, `transfer_ms`, and `browser_settle_ms`, each bounded to
+0–120000 by its own check constraint. The reporting route treats them as
+optional and retries the insert without them when a deployment has not yet
+applied the migration, so telemetry never blocks on rollout order; the fleet
+reader does the mirror of this on read and labels the split metrics unavailable
+rather than failing. No URL, record ID, or tenant payload is added.
+
+The read scoping is a set of branch-aware overloads. `current_stock` and
+`current_inventory_stock` keep their one-argument signatures for existing
+callers and gain `(p_org_id, p_store_id)` overloads, so Products and Inventory
+no longer aggregate every branch's stock ledger to render one branch.
+`admin_sales_period_totals` returns only the two period totals the Products
+page needs instead of every order header and line item, and
+`admin_products_top_items` adds the per-item order count that
+`admin_sales_top_items` deliberately does not return, leaving the Sales page
+contract unchanged. All four are `stable`, `security invoker`, and therefore
+still bound by the caller's RLS; `current_inventory_stock` keeps its own
+`auth_is_admin() or i.store_id = auth_store_id()` branch guard. The partial
+index `orders_completed_org_store_created_idx` covers the completed,
+non-reversal orders these reads scan.
+
+Run the deterministic contract and aggregation checks:
+
+```bash
+npm run test:rpc-contracts
+npm run test:platform-fleet
+```
+
+`scripts/rpc-contracts.test.ts` asserts both overload arities for
+`current_stock` and `current_inventory_stock`, so a caller that drops back to
+the unscoped signature is caught in CI.
+
+Apply and verify through the established linked workflow:
+
+```bash
+npx --yes supabase@2.114.0 db push --linked --dry-run
+npx --yes supabase@2.114.0 db push --linked --yes
+npx --yes supabase@2.114.0 migration list --linked
+```
+
+A read-only check should report the three nullable timing columns with their
+three check constraints, both arities of each stock function, the two new
+Products RPCs with `authenticated` EXECUTE, and the partial orders index.
+Existing samples are neither rewritten nor backfilled: rows recorded before the
+migration keep null timing fields and remain valid for the overall P50/P95.
+
+**Hosted state (2026-09-05).** `migration list --linked` reports local and
+remote matching through `0082`, so the migration was already applied. The
+read-only hosted check confirms `ledger_max` `0082`; `ttfb_ms`,
+`transfer_ms`, and `browser_settle_ms` present as `integer` with 3 check
+constraints; `org_id` still present from `0079`; all six function signatures
+present, `stable`, `security invoker`, with `authenticated` EXECUTE — both
+arities of `current_stock` and `current_inventory_stock` plus
+`admin_sales_period_totals` and `admin_products_top_items`; and
+`orders_completed_org_store_created_idx` created as the expected partial index.
+The sample table holds 643 rows, unchanged from the pre-`0079` count, with 0
+attributed and 0 carrying the new timing fields, latest
+`2026-08-29T14:23:04`. That zero is expected rather than a defect: no
+authenticated admin session has been recorded since before `0079` shipped, so
+attribution and the timing split have had no traffic to capture. The first
+authenticated admin navigation after this deployment is what fills them.
+
+**Anon EXECUTE gap found during this pass, fixed by `0083`.** The close-out
+smoke checks the anon boundary as well as the schema, and it found that
+`0082` had repeated a mistake `0065` exists to prevent. `0065` removed
+`PUBLIC`/`anon` EXECUTE from the application RPCs by enumerating them *by
+name*. Functions created afterwards never inherited that hardening, and
+overloads are separate functions, so the one-argument `current_stock` is
+hardened while everything added since is not:
+
+| RPC | Added by | anon EXECUTE before `0083` |
+| --- | --- | --- |
+| `current_stock(uuid)` | pre-`0065` | no — covered by `0065` |
+| `current_stock(uuid, uuid)` | `0082` | yes |
+| `current_inventory_stock(uuid)` | `0073` | yes |
+| `current_inventory_stock(uuid, uuid)` | `0082` | yes |
+| `inventory_item_expected_stock(uuid, uuid, timestamptz)` | `0073` | yes |
+| `record_inventory_item_count(uuid, date, jsonb)` | `0073` | yes |
+| `admin_sales_period_totals(...)` | `0082` | yes |
+| `admin_products_top_items(...)` | `0082` | yes |
+| `seed_default_employee_roles(uuid)` | `0049` | yes |
+
+The read RPCs are not a data leak on their own. They are `security invoker`,
+so the table grants from `0004`/`0026` still stop the call. A hosted probe
+with the public anon key confirms this: `current_stock` and
+`admin_sales_period_totals` both return HTTP 401 `42501 permission denied for
+table stock_movements` / `orders`. The function ACL was the layer that failed;
+the table ACL is what held.
+
+`seed_default_employee_roles` is the real exposure, because `security
+definer` bypasses exactly that table grant. It has no internal caller check,
+and it inserts the four default employee roles for whatever `p_org_id` it is
+given. Its only caller is the equally `security definer` trigger
+`seed_default_employee_roles_on_organization`, which runs as the function
+owner and so needs no EXECUTE grant on the role it invokes — there is no
+application call site at all. `0083` makes it service-role-only.
+`record_inventory_item_count` is also `security definer` but does guard
+itself with `auth_is_admin()`, so it was defended in depth; it is hardened
+anyway.
+
+Verify the boundary before and after applying `0083`:
+
+```bash
+npm run admin:latency:validate
+```
+
+`anon_execute_boundary` must report `false` for all nine signatures once
+`0083` is applied, and `anon_callable_rpc_count` should fall from 18.
+
+**Hosted state (2026-09-05).** `0083` is applied. `ledger_max` is `0083`,
+`anon_execute_boundary` is `false` for all nine signatures,
+`anon_callable_rpc_count` is 10, and `authenticated` EXECUTE is retained on
+all six scoped read functions. The anon probe that previously reached the table
+now stops at the function: HTTP 401 `42501 permission denied for function
+current_stock`. The live site, the `/menu/demo` public menu, and the
+`/platform/fleet` login redirect were all re-checked afterwards and are
+unaffected — the public menu reads stock through `current_stock` on the
+service-role client, which `0083` grants explicitly. Note that the first push
+attempt failed on an ambiguous `oid` across the joined catalogs and was
+rejected atomically; qualifying it to `p.oid` and re-pushing applied cleanly.
+
+**Not covered by `0083`, deliberately.** The same sweep found ten other
+anon-executable non-trigger functions — the `auth_*` profile helpers,
+`organization_has_current_access_grant`, `shift_variance_threshold`,
+`build_staff_login_slug`, `staff_login_slug_part`, and
+`subscription_access_is_current`. Several of these are invoked *inside* RLS
+policies, and a policy that calls a function the querying role cannot execute
+fails the whole query, so revoking them could break the anon-facing public menu
+and staff-login routes. That needs its own policy-by-policy check and its own
+verification pass rather than being folded into this one.
 
 Store owners can register from `/signup`. The flow uses Supabase Auth and the
 `0022_owner_signup.sql` trigger to create a private organization, first branch,
