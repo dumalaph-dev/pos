@@ -517,6 +517,27 @@ the function it invokes. 0083 revokes `public`, `anon`, and `authenticated`
 and grants only `service_role`. The migration changes ACLs only: no function
 body, table, policy, or row is touched.
 
+Migration 0084 adds `platform_schema_migrations()`, the read path for the
+console's schema-drift surface. `supabase_migrations` is not an exposed
+PostgREST schema, so the ledger cannot be selected directly; this `stable`,
+`security definer` function returns `version` and `name` ordered by version.
+It never selects `statements`, which holds the full SQL text of every
+migration. Following the 0083 lesson it revokes `public`, `anon`, and
+`authenticated` before granting `service_role`, so it is operator
+infrastructure and unreachable from any browser role.
+
+The surface it feeds compares that ledger against
+`PLATFORM_SCHEMA_MANIFEST`, a generated list of the migrations the deployment
+ships (`npm run schema:manifest`, pinned against `supabase/migrations` by
+`scripts/platform-schema-drift.test.ts`). A migration in the manifest but not
+the ledger is `pending`; one in the ledger but not the manifest is
+`unknown_remote`, which indicates an out-of-band apply or a file deleted after
+it shipped; a version present on both sides under a different name is reported
+as `renamed` rather than silently treated as equal. Because all organizations
+share one database, the ledger position is fleet-wide by construction — the
+per-organization reading the console offers instead is backfill readiness, the
+count of tenants that actually received the data a given migration introduced.
+
 Two guards live in the function rather than in the console. `paused` has two
 unrelated causes — an expired trial, and a provider status of `unpaid` — so a
 revival back to `trialing` requires `paused` **and** a null

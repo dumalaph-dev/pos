@@ -2,7 +2,7 @@
 
 **Project:** Dumala POS
 **Created:** 2026-08-29
-**Status:** Phase 4 in progress — the audit, fleet, and sync/outbox read surfaces are deployed and their migrations are recorded through `0082`; device inventory and schema drift remain
+**Status:** Phase 4 in progress — the audit, fleet, sync/outbox, and schema-drift read surfaces are deployed and their migrations are recorded through `0084`; device inventory remains, gated on the first real terminal heartbeats
 **Owner:** Product and engineering
 **Companion to:** [tasks.md](tasks.md) · [SCHEMA.md](SCHEMA.md) §8 · [SETUP.md](SETUP.md)
 
@@ -173,8 +173,8 @@ After Docker Desktop became available, the preserved local Supabase volume recov
 
 ### Phase 4 — Cross-org read surfaces
 
-**Status:** In progress — platform audit viewer, fleet health, and the enhanced sync/outbox health surface are deployed from `main`; linked migrations are applied and documented through `0082`; device and schema-drift views remain queued
-**Migration:** `0079_scope_admin_performance_to_organizations.sql`, `0080_sync_health_snapshots.sql`, `0081_sync_health_enhanced_metrics.sql`, and `0082_admin_latency_scoping.sql` applied; platform readers are read-only, and legacy performance samples plus existing tenant data remain preserved
+**Status:** In progress — the audit, fleet, sync/outbox, and schema-drift surfaces are deployed; linked migrations are applied and documented through `0084`; device and terminal inventory is the last Phase 4 item, gated on the first real terminal heartbeats
+**Migration:** `0079_scope_admin_performance_to_organizations.sql`, `0080_sync_health_snapshots.sql`, `0081_sync_health_enhanced_metrics.sql`, `0082_admin_latency_scoping.sql`, `0083_scoped_read_rpc_acl_hardening.sql`, and `0084_schema_drift_readout.sql` applied; platform readers are read-only, and legacy performance samples plus existing tenant data remain preserved
 
 Powers that only need to look. Safe to build once Phase 3 can scope who looks.
 
@@ -182,7 +182,7 @@ Powers that only need to look. Safe to build once Phase 3 can scope who looks.
 - [x] **Fleet health.** The deployed `/platform/fleet` page aggregates `admin_performance_samples` into p50/p95 interaction latency, error rate, sample freshness, and surface breakdowns per organization, with time-window, search, and status filters. Migration `0079` attributes future authenticated samples from the server-resolved profile organization; existing rows remain preserved as unattributed history, and no raw tenant activity is exposed.
 - [x] **Sync and outbox health.** The deployed `/platform/sync` page reports bounded POS-order, audit-event, and admin-mutation queue snapshots per organization and active branch, including pending depth, offline-sync failure/conflict counts, exact stuck-outbox depth, last successful sync per queue, oldest-pending age, reporter freshness, and explicit `healthy`, `needs attention`, `stale`, and `no telemetry` states. Search, queue, freshness, and health-status filters plus organization/branch/queue aggregate drill-downs are read-only; payloads never leave the terminal.
 - [ ] **Device and terminal inventory.** Last-seen heartbeat per device, so "the tablet at branch 2 has not synced in three days" is visible without asking.
-- [ ] **Schema drift.** Which organizations are on which migration ledger position, replacing the hand-maintained note in [tasks.md](tasks.md).
+- [x] **Schema drift.** The deployed `/platform/schema` page compares the migrations this deployment ships against the applied ledger, reporting `in sync`, `pending` (shipped but never applied), `unknown remote` (applied but absent from this build), `diverged`, and `renamed`, with search and state filters. It replaces the hand-typed "local X = remote X" note in [tasks.md](tasks.md). The plan wording assumed a per-tenant ledger; every organization shares one database, so the ledger position is fleet-wide by construction and the page says so, offering per-organization *backfill readiness* as the real per-tenant dimension. Migration `0084` adds the service-role-only reader, which returns version and name and never the `statements` SQL text.
 
 **Exit criteria:** The 2026-08-25-style production verification can be read off the console instead of assembled from scripts. No page exposes order, customer, or staff personal data to an operator not entitled to it.
 
@@ -371,6 +371,73 @@ invoked inside RLS policies, and a policy calling a function the querying role
 cannot execute fails the entire query, so revoking them risks breaking the
 anon-facing public menu and staff-login routes. That is a separate hardening
 pass with its own policy-by-policy verification, not a rider on this one.
+
+**Schema drift verification (2026-09-05).** The plan item asked for "which
+organizations are on which migration ledger position". That reading does not
+survive contact with the architecture: every organization shares one Postgres
+database and is isolated by RLS, so there is exactly one ledger and one applied
+position for the whole fleet, and no tenant can be behind another on it. The
+deployed page states this rather than implying a per-tenant ledger. What the
+hand-maintained note in tasks.md actually records — repeated dozens of times as
+"local X = remote X" after each hosted pass — is repository-versus-database
+sync, and that is what `/platform/schema` now reads off the database.
+
+The comparison names both directions. `pending` is a migration this deployment
+ships that the database never applied, which is a forgotten push. `unknown
+remote` is the reverse and the more dangerous one: a version the database
+applied that this build does not carry, meaning an out-of-band apply or a file
+deleted after it shipped. `renamed` catches a version present on both sides
+under a different name, because renaming an applied file does not change the
+ledger row. The genuinely per-tenant dimension is reported separately as
+backfill readiness — how many organizations actually received the data a
+migration introduced.
+
+The manifest of shipped migrations is generated
+(`npm run schema:manifest` → `src/lib/platform-schema-manifest.ts`) and pinned
+against `supabase/migrations` by the test suite, so adding a migration without
+regenerating fails CI instead of showing a false "in sync". This slice is what
+the 0082 close-out argued for: the drift that went unnoticed for three days
+would have been visible on the console.
+
+Migration `0084_schema_drift_readout.sql` adds the reader. `supabase_migrations`
+is not an exposed PostgREST schema, so the ledger cannot be selected directly.
+The function returns version and name only — `statements` holds the full SQL
+text of every migration and is never selected — and it revokes `public`,
+`anon`, and `authenticated` before granting `service_role`, applying the 0083
+lesson from the start rather than needing a later repair.
+
+`npm run test:platform-schema` (9 passed) covers in-sync, pending, unknown
+remote, diverged, renamed, the unreadable-ledger case, input-order
+independence, backfill clamping, and the manifest-versus-disk pin.
+`npm run test:rpc-contracts` initially failed on the unregistered RPC — the
+contract test doing its job — and passes now at 3. The adjacent platform, POS,
+accessibility, and entitlement suites, `npm run typecheck`, `npm run lint`,
+`npm run build`, and `git diff --check` all pass; the build exposes
+`/platform/schema`.
+
+Hosted `npm run platform:schema:validate` confirms the reader is present,
+`anon` and `authenticated` cannot execute it while `service_role` can, and its
+return type excludes `statements`. The ledger reports 84 applied with latest
+`0084`, matching the 84 migrations in the manifest, so the surface reads
+`in sync`. Backfill readiness: 5/5 branches carry a staff-login slug and 3/3
+organizations have their default employee roles, both complete; 0/5 branches
+have reported sync telemetry, which is the outstanding heartbeat gate below now
+visible on the console instead of only in a smoke script. The smoke performs no
+writes. The unauthenticated `/platform/schema` boundary redirects to
+`/platform/login`, matching every other console page. The authenticated render
+was not exercised, for the same reason the heartbeat gate is still open: it
+needs a real operator sign-in.
+
+**Remaining Phase 4 work.** Device and terminal inventory is the last item, and
+it stays gated on the same thing it was before: authenticated operator QA plus
+the first real POS/admin terminal heartbeats. The write path was reviewed end
+to end during this pass and is sound — the reporter fires on an empty queue as
+well as a full one, every hosted admin profile has the branch the reporter
+requires, and the route's `failed/conflict/stuck <= pending` validation cannot
+silently drop a well-formed report. `admin_sync_health_snapshots` is empty
+because no authenticated session has occurred since before `0079` shipped; the
+newest performance sample is `2026-08-29` with zero organization attribution,
+which corroborates the same conclusion from a second table.
 
 ### Phase 5 — Support access into a tenant
 

@@ -139,6 +139,7 @@ followed by `0062_public_menu_subdomains.sql` and
 81. `0081_sync_health_enhanced_metrics.sql` — add exact `stuck_count` and a monotonic, server-stamped `last_successful_sync_at` to the sync heartbeat without rewriting existing snapshots
 82. `0082_admin_latency_scoping.sql` — split admin navigation timing into optional `ttfb_ms`, `transfer_ms`, and `browser_settle_ms`, and add branch-scoped read paths (`current_stock`/`current_inventory_stock` two-argument overloads, `admin_sales_period_totals`, `admin_products_top_items`, and a partial completed-orders index)
 83. `0083_scoped_read_rpc_acl_hardening.sql` — restore the 0064/0065 invariant for RPCs added since: remove `public`/`anon` EXECUTE from the seven scoped read/count RPCs and make the unguarded `seed_default_employee_roles` writer service-role-only. ACL-only; no body, table, policy, or row changes
+84. `0084_schema_drift_readout.sql` — service-role-only `platform_schema_migrations()` reader returning migration version and name (never the `statements` SQL text), so the console can compare the shipped migrations against the applied ledger
 
 **Apply them** either way:
 - **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push`
@@ -485,6 +486,62 @@ policies, and a policy that calls a function the querying role cannot execute
 fails the whole query, so revoking them could break the anon-facing public menu
 and staff-login routes. That needs its own policy-by-policy check and its own
 verification pass rather than being folded into this one.
+
+### Platform schema drift verification
+
+The schema-drift surface at `/platform/schema` answers the question that has
+been hand-typed into [tasks.md](tasks.md) after every hosted pass — "local X =
+remote X" — by reading it off the database instead.
+
+A note on the wording in the plan. Every organization shares one Postgres
+database and is isolated by RLS, so there is exactly one migration ledger and
+one applied position for the whole fleet. No organization can sit on a
+different ledger position; the page states this rather than implying a
+per-tenant ledger that does not exist. The per-organization dimension that
+*is* real is whether the data a migration introduced actually reached each
+tenant, which the page reports separately as backfill readiness.
+
+The comparison has two sides, and the second is the one worth watching:
+
+- **Pending** — a migration ships in this deployment but the database never
+  applied it. The deployment is ahead, and everything depending on it is
+  silently absent.
+- **Unknown remote** — the database applied a version this deployment does not
+  carry. That is an out-of-band apply or a migration file deleted after it
+  shipped, and the next `db push` will compare against a ledger this build
+  cannot explain.
+- **Renamed** — the version matches but the name does not. Renaming a migration
+  file after it is applied does not change the ledger row, so it is reported
+  rather than treated as equal.
+
+The list of migrations this deployment ships is generated, not hand-kept:
+
+```bash
+npm run schema:manifest   # regenerate src/lib/platform-schema-manifest.ts
+npm run test:platform-schema
+```
+
+`scripts/platform-schema-drift.test.ts` fails when the generated manifest
+drifts from `supabase/migrations`, so adding a migration without regenerating
+is caught in CI rather than showing a false "in sync" on the console.
+
+Apply and verify through the established linked workflow:
+
+```bash
+npx --yes supabase@2.114.0 db push --linked --dry-run
+npx --yes supabase@2.114.0 db push --linked --yes
+npm run platform:schema:validate
+```
+
+The smoke asserts the reader exists, that `anon` and `authenticated` cannot
+execute it while `service_role` can, and that its return type does not include
+`statements` — that column holds the full SQL text of every migration and is
+never selected. It also reports the ledger position and the backfill counts the
+page shows, and performs no writes.
+
+Then open `/platform/schema` as a platform operator. It is read-only: there is
+no apply, retry, or rollback control, by design. Fixing drift stays a
+deliberate `db push` from a workstation.
 
 Store owners can register from `/signup`. The flow uses Supabase Auth and the
 `0022_owner_signup.sql` trigger to create a private organization, first branch,
