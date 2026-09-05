@@ -14,6 +14,7 @@ const PLATFORM_NAV_ITEMS: Array<{ label: string; href: string; icon: AdminIconNa
   { label: "Audit log", href: "/platform/audit", icon: "history", detail: "Platform actor actions" },
   { label: "Fleet health", href: "/platform/fleet", icon: "chart", detail: "Performance signals" },
   { label: "Sync & outbox", href: "/platform/sync", icon: "refresh", detail: "Branch queue health" },
+  { label: "Schema drift", href: "/platform/schema", icon: "columns", detail: "Migration ledger sync" },
   { label: "Operators", href: "/platform/operators", icon: "employees", detail: "Roles & access" },
   { label: "Policies", href: "/platform/policies", icon: "lock", detail: "Operating rules" },
   { label: "Operations", href: "/platform/operations", icon: "refresh", detail: "Lifecycle & support" },

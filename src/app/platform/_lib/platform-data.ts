@@ -28,6 +28,14 @@ import {
   type PlatformSyncHealthSummary,
 } from "@/lib/platform-sync-health";
 import type { PlatformAuditEvent } from "@/lib/platform-audit";
+import {
+  summarizePlatformSchemaBackfill,
+  summarizePlatformSchemaDrift,
+  type PlatformSchemaBackfillRow,
+  type PlatformSchemaDriftSummary,
+  type PlatformSchemaMigration,
+} from "@/lib/platform-schema-drift";
+import { PLATFORM_SCHEMA_MANIFEST } from "@/lib/platform-schema-manifest";
 
 export type PlatformAdminClient = NonNullable<ReturnType<typeof createAdminClient>>;
 
@@ -188,6 +196,13 @@ export type PlatformFleetHealthResult = {
   organizationsAvailable: boolean;
   hasMore: boolean;
   timingMetricsAvailable: boolean;
+};
+
+export type PlatformSchemaDriftResult = {
+  summary: PlatformSchemaDriftSummary;
+  backfill: PlatformSchemaBackfillRow[];
+  ledgerReadable: boolean;
+  backfillAvailable: boolean;
 };
 
 export type PlatformSyncHealthResult = {
@@ -531,6 +546,79 @@ export async function readPlatformSyncHealth(admin: PlatformAdminClient, request
     storesAvailable: !storesResult.error,
     hasMore: (samplesResult.count ?? rawSamples.length) > rawSamples.length,
   };
+}
+
+export async function readPlatformSchemaDrift(admin: PlatformAdminClient): Promise<PlatformSchemaDriftResult> {
+  const [ledgerResult, organizationsResult, storesResult, slugStoresResult, roleOrgsResult, snapshotStoresResult] = await Promise.all([
+    admin.rpc("platform_schema_migrations"),
+    admin.from("organizations").select("id", { count: "exact", head: true }),
+    admin.from("stores").select("id", { count: "exact", head: true }),
+    admin.from("stores").select("id", { count: "exact", head: true }).not("staff_login_slug", "is", null),
+    admin.from("employee_roles").select("org_id").limit(10000),
+    admin.from("admin_sync_health_snapshots").select("store_id").limit(10000),
+  ]);
+
+  // The ledger read depends on migration 0084. Before it is applied the page
+  // still renders, reporting every shipped migration as unverified rather than
+  // claiming a sync it could not check.
+  const applied = ledgerResult.error ? null : normalizePlatformSchemaMigrations(ledgerResult.data);
+  const summary = summarizePlatformSchemaDrift(PLATFORM_SCHEMA_MANIFEST, applied);
+
+  const organizationCount = organizationsResult.count ?? 0;
+  const storeCount = storesResult.count ?? 0;
+  const distinctRoleOrgs = countDistinctColumn(roleOrgsResult.data, "org_id");
+  const distinctSnapshotStores = countDistinctColumn(snapshotStoresResult.data, "store_id");
+
+  const backfill = summarizePlatformSchemaBackfill([
+    {
+      key: "staff_login_slug",
+      label: "Branch staff-login slugs",
+      detail: "Branches with the human-readable /staff/{slug} entry link backfilled.",
+      introducedIn: "0033",
+      total: storeCount,
+      ready: slugStoresResult.count ?? 0,
+    },
+    {
+      key: "employee_roles",
+      label: "Default employee roles",
+      detail: "Organizations with the four default employee roles seeded.",
+      introducedIn: "0049",
+      total: organizationCount,
+      ready: distinctRoleOrgs,
+    },
+    {
+      key: "sync_health",
+      label: "Branches reporting sync telemetry",
+      detail: "Branches that have sent at least one sync heartbeat.",
+      introducedIn: "0080",
+      total: storeCount,
+      ready: distinctSnapshotStores,
+    },
+  ]);
+
+  return {
+    summary,
+    backfill,
+    ledgerReadable: !ledgerResult.error,
+    backfillAvailable: !organizationsResult.error && !storesResult.error,
+  };
+}
+
+function normalizePlatformSchemaMigrations(value: unknown): PlatformSchemaMigration[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row): PlatformSchemaMigration[] => {
+    if (!isRecord(row) || typeof row.version !== "string" || !row.version.trim()) return [];
+    return [{ version: row.version, name: typeof row.name === "string" ? row.name : "" }];
+  });
+}
+
+function countDistinctColumn(value: unknown, column: string) {
+  if (!Array.isArray(value)) return 0;
+  const seen = new Set<string>();
+  for (const row of value) {
+    if (isRecord(row) && typeof row[column] === "string") seen.add(row[column]);
+  }
+  return seen.size;
 }
 
 export async function readPlatformOrganizationDetail(admin: PlatformAdminClient, organizationId: string): Promise<PlatformOrganizationDetail | null> {

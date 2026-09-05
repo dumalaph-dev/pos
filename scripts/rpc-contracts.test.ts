@@ -29,6 +29,7 @@ const RPC_CONTRACTS = new Map<string, RpcContract>([
   ["place_online_order", [["p_store_id", "p_request_id", "p_customer_name", "p_customer_phone", "p_fulfillment_method", "p_pickup_slot", "p_pickup_date", "p_delivery_address", "p_delivery_note", "p_note", "p_average_prep_minutes", "p_order_lead_minutes", "p_items", "p_client_ip"]]],
   ["place_order", [["p_order", "p_items"]]],
   ["platform_promotion_performance", [[]]],
+  ["platform_schema_migrations", [[]]],
   ["qualify_referral_for_paid_conversion", [["p_referred_org_id"]]],
   ["record_inventory_count", [["p_store_id", "p_count_date", "p_counts"], ["p_store_id", "p_count_date", "p_counts", "p_client_mutation_id"]]],
   ["record_inventory_item_count", [["p_store_id", "p_count_date", "p_counts"]]],
