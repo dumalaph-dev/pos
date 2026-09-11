@@ -4,7 +4,7 @@ import { legalContact } from "@/lib/legal-config";
 
 export const metadata: Metadata = {
   title: "Terms of service",
-  description: "The baseline terms for using Dumala POS and its owner workspace.",
+  description: "The terms for using Dumala POS and its owner workspace.",
   alternates: { canonical: "/legal/terms" },
 };
 
@@ -13,7 +13,8 @@ export default function TermsOfServicePage() {
     <LegalDocument
       eyebrow="Terms"
       title="Terms of service"
-      description="These draft terms govern access to Dumala POS, the owner workspace, public menus, and related services. They must be completed and reviewed for the final Dumala entity, commercial policy, and Philippine law before publication."
+      description="These terms govern access to Dumala POS, the owner workspace, public menus, and related services."
+      backToLegalCenter
     >
       <LegalSection title="1. Agreement and definitions">
         <p>These Terms of Service are between <strong className="text-ink">{legalContact.legalEntityName}</strong>, doing business as Dumala POS (“Dumala,” “we,” “us,” or “our”), and the person or organization using the service (“you”). “Service” means the Dumala website, POS application, owner workspace, public menu, online-ordering tools, APIs, support, and related features.</p>
@@ -84,7 +85,7 @@ export default function TermsOfServicePage() {
 
       <LegalSection title="12. Disclaimers and liability">
         <p>The Service is provided for general business operations and is not a substitute for a BIR-accredited invoicing system, accountant, lawyer, food-safety adviser, employment adviser, or other regulated professional. You remain responsible for reviewing records, prices, taxes, orders, staff actions, and legal obligations before relying on them.</p>
-        <p>To the extent permitted by law, Dumala will not be responsible for indirect, incidental, special, consequential, or lost-profit damages arising from use of the Service. Any liability cap, exclusions, and exceptions must be completed after legal review and will not apply to liability that cannot lawfully be limited.</p>
+        <p>To the extent permitted by law, Dumala will not be responsible for indirect, incidental, special, consequential, or lost-profit damages arising from use of the Service. Nothing in these Terms excludes or limits liability that cannot lawfully be excluded or limited.</p>
       </LegalSection>
 
       <LegalSection title="13. Governing law and changes">

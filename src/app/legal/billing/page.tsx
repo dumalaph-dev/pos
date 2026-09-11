@@ -13,7 +13,8 @@ export default function BillingPolicyPage() {
     <LegalDocument
       eyebrow="Subscriptions"
       title="Billing, cancellation, and refunds"
-      description="This draft policy explains the current Dumala POS subscription model. Confirm the final refund, tax-invoice, renewal, and support rules with Philippine legal and tax advisers before accepting paid subscriptions."
+      description="This policy explains the Dumala POS subscription model, including renewals, cancellation, refunds, invoices, and payment providers."
+      backToLegalCenter
     >
       <LegalSection title="1. Trial and paid plans">
         <p>Dumala currently offers a fourteen-day trial with no card required to start. During the trial, the account can use the features made available for the trial. A paid subscription begins only after the owner chooses an available plan and completes checkout.</p>
@@ -31,7 +32,7 @@ export default function BillingPolicyPage() {
       </LegalSection>
 
       <LegalSection title="4. Refunds and chargebacks">
-        <p>Except where required by law, for duplicate or unauthorized charges, or where Dumala approves an exception, paid subscription fees are not automatically prorated or refundable after a billing period begins. This rule is subject to the final policy approved for the business and does not waive non-waivable consumer rights.</p>
+        <p>Except where required by law, for duplicate or unauthorized charges, or where Dumala approves an exception, paid subscription fees are not automatically prorated or refundable after a billing period begins. This does not waive non-waivable consumer rights.</p>
         <p>For a suspected unauthorized charge, contact Dumala and the payment provider promptly. A chargeback should be used for a genuine unresolved payment dispute; fraudulent or abusive chargebacks may cause an account review or suspension.</p>
       </LegalSection>
 

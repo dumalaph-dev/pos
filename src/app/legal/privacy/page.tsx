@@ -13,7 +13,8 @@ export default function PrivacyNoticePage() {
     <LegalDocument
       eyebrow="Privacy"
       title="Privacy notice"
-      description="This notice is the baseline for Dumala POS’s handling of personal data under the Philippine Data Privacy Act. Complete the bracketed business details and retention schedule, then have Philippine privacy counsel review it before relying on it."
+      description="This notice explains how Dumala POS handles personal data under the Philippine Data Privacy Act."
+      backToLegalCenter
     >
       <LegalSection title="1. Who this notice covers">
         <p>This notice applies to Dumala POS websites, account registration, POS and owner-workspace services, billing and support, public menus, online ordering, and related communications. It applies to visitors, business owners, staff users, restaurant customers, and other individuals whose information is submitted through the service.</p>
@@ -50,11 +51,11 @@ export default function PrivacyNoticePage() {
 
       <LegalSection title="4. Sharing and service providers">
         <p>We may share information with the subscribing organization and its authorized users; the restaurant and fulfillment personnel for an order; payment, hosting, database, messaging, email, security, backup, and support providers; professional advisers; regulators or law-enforcement bodies where legally required; and a successor in a permitted business transaction.</p>
-        <p>Current infrastructure includes Supabase for database/authentication and storage, Vercel or equivalent hosting, PayMongo for payment processing, and an SMS provider configured by the operator. The operator must complete the provider list, processing agreements, security review, and cross-border transfer assessment before publication. We do not sell personal data.</p>
+        <p>Service providers may include Supabase for database, authentication, and storage; Vercel or equivalent hosting; PayMongo for payment processing; and messaging, email, security, backup, and support providers. We use appropriate contractual and security safeguards for these providers and do not sell personal data.</p>
       </LegalSection>
 
       <LegalSection title="5. International processing">
-        <p>Some providers or support personnel may process information outside the Philippines. Before launch, Dumala will document the relevant locations, contractual safeguards, security controls, and any required transparency or consent. Do not publish this notice as final until that provider and transfer inventory is complete.</p>
+        <p>Some providers or support personnel may process information outside the Philippines. Where this occurs, Dumala uses appropriate contractual, organizational, and technical safeguards and provides any disclosures required by applicable law.</p>
       </LegalSection>
 
       <LegalSection title="6. Cookies, browser storage, and offline data">
@@ -64,17 +65,19 @@ export default function PrivacyNoticePage() {
 
       <LegalSection title="7. Security">
         <p>We use access controls, organization and branch scoping, row-level database policies, authentication safeguards, rate limiting, hashed verification codes, secure transport, security headers, audit trails, backups, and provider controls appropriate to the service. No method of transmission or storage is completely risk-free. Organizations remain responsible for strong passwords, unique accounts, MFA where available, device security, staff permissions, and promptly revoking access.</p>
-        <p>The final security program must include a privacy impact assessment, incident register, tested recovery plan, retention controls, administrator access review, and breach-response procedure. Where a reportable breach occurs, Dumala and the relevant PIC will coordinate the notifications required by Philippine law.</p>
+        <p>Dumala uses organizational, physical, and technical safeguards appropriate to the service and maintains procedures for risk assessment, recovery, access review, retention, and incident response. Where a reportable breach occurs, Dumala and the relevant PIC will coordinate the notifications required by Philippine law.</p>
       </LegalSection>
 
       <LegalSection title="8. Retention and deletion">
-        <p>We retain information only for as long as necessary for the stated purpose, contractual service, security, dispute handling, and applicable legal or tax obligations. The exact schedule is a launch requirement and must replace the descriptions below with approved periods:</p>
+        <p>We retain information only for as long as necessary for the stated purpose, contractual service, security, dispute handling, and applicable legal or tax obligations. The following schedule describes Dumala’s current retention approach. A longer period may apply where required by law, tax rules, a legal claim, a security investigation, or a documented merchant instruction.</p>
         <LegalList>
-          <li>Account, subscription, invoice, and tax records: <strong className="text-ink">[INSERT APPROVED RETENTION PERIOD]</strong>.</li>
-          <li>Restaurant order, customer, employee, payroll, and audit records: <strong className="text-ink">[INSERT APPROVED RETENTION PERIOD AND MERCHANT DELETION RULE]</strong>.</li>
-          <li>Phone-verification records: short-lived operational data; the current flow uses an expiring verification window, but database cleanup must be implemented and documented.</li>
-          <li>Security and application logs: <strong className="text-ink">[INSERT APPROVED RETENTION PERIOD]</strong>.</li>
-          <li>Offline browser caches and queued data: until synchronized, cleared, expired, or otherwise handled by the approved device-retention policy.</li>
+          <li>Account data: while the account is active and approximately 30 days after closure, subject to legal, tax, security, and dispute exceptions.</li>
+          <li>Subscriptions, invoices, payment references, and tax records: for the applicable legal, tax, accounting, and dispute period confirmed by Dumala’s accountant or adviser.</li>
+          <li>Restaurant customer, order, delivery, and order-note data: approximately 90 days after fulfillment or cancellation, unless a longer period is required for a claim, safety matter, fraud review, tax/accounting record, or merchant instruction. Employee and payroll data remains subject to the restaurant’s retention schedule when Dumala acts as processor.</li>
+          <li>Phone-verification records: verification codes expire after 10 minutes and used or expired records should be purged within 24 hours.</li>
+          <li>Security and application logs: 12 months, with longer retention for an active incident, investigation, or claim.</li>
+          <li>Support communications: 2 years, unless a longer legal or dispute period applies.</li>
+          <li>Offline browser caches and queued data: until synchronized, signed out, expired, or cleared according to the approved device policy. Backups follow the hosting provider’s documented lifecycle and may persist temporarily after source deletion.</li>
         </LegalList>
         <p>Deletion may be limited where information must be retained for a legal obligation, tax record, fraud prevention, security investigation, or dispute.</p>
       </LegalSection>

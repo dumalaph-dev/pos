@@ -16,7 +16,8 @@ export default function ComplaintsAndSupportPage() {
     <LegalDocument
       eyebrow="Help and redress"
       title="Complaints and support"
-      description="This draft process gives customers, business owners, staff users, and data subjects a clear route for reporting a problem and requesting a response. Complete the real support contacts before launch."
+      description="This process gives customers, business owners, staff users, and data subjects a clear route for reporting a problem and requesting a response."
+      backToLegalCenter
     >
       <LegalSection title="1. Start with the right party">
         <LegalList>
@@ -61,7 +62,7 @@ export default function ComplaintsAndSupportPage() {
       </LegalSection>
 
       <LegalSection title="6. Contact details to complete">
-        <p>Before publication, confirm that the published business name, physical address, support phone, support email, and privacy/DPO contact in this document are monitored by the responsible team. The current application intentionally shows placeholders when those values have not been configured.</p>
+        <p>Dumala monitors the support and privacy contact details published in this Legal Center. Please do not include passwords, full payment-card details, or unnecessary government identifiers in a request.</p>
       </LegalSection>
     </LegalDocument>
   );

@@ -13,6 +13,7 @@ const requiredValue = (value: string | undefined, fallback: string) => value?.tr
 export const legalContact = {
   tradeName: "Dumala POS",
   legalEntityName: requiredValue(process.env.NEXT_PUBLIC_LEGAL_ENTITY_NAME, "[LEGAL ENTITY NAME — COMPLETE BEFORE PUBLISHING]"),
+  businessRegistration: requiredValue(process.env.NEXT_PUBLIC_LEGAL_BUSINESS_REGISTRATION, "[BUSINESS REGISTRATION — COMPLETE BEFORE PUBLISHING]"),
   businessAddress: requiredValue(process.env.NEXT_PUBLIC_LEGAL_BUSINESS_ADDRESS, "[PHYSICAL BUSINESS ADDRESS — COMPLETE BEFORE PUBLISHING]"),
   supportEmail: requiredValue(process.env.NEXT_PUBLIC_LEGAL_SUPPORT_EMAIL, "[SUPPORT EMAIL — COMPLETE BEFORE PUBLISHING]"),
   supportPhone: requiredValue(process.env.NEXT_PUBLIC_LEGAL_SUPPORT_PHONE, "[SUPPORT PHONE — COMPLETE BEFORE PUBLISHING]"),
@@ -40,6 +41,7 @@ const isConfigured = (value: string) => !value.startsWith("[");
 export function isLegalConfigurationComplete() {
   return [
     legalContact.legalEntityName,
+    legalContact.businessRegistration,
     legalContact.businessAddress,
     legalContact.supportEmail,
     legalContact.supportPhone,

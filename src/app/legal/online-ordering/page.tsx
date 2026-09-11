@@ -12,11 +12,12 @@ export default function OnlineOrderingTermsPage() {
     <LegalDocument
       eyebrow="Customer orders"
       title="Online ordering terms"
-      description="These draft terms explain how pickup and delivery requests work on Dumala-powered restaurant menus. The restaurant shown on the menu remains responsible for the food transaction unless the checkout expressly says otherwise."
+      description="These terms explain how pickup and delivery requests work on Dumala-powered restaurant menus. The restaurant shown on the menu remains responsible for the food transaction unless the checkout expressly says otherwise."
+      backToLegalCenter
     >
       <LegalSection title="1. Who is selling to you">
         <p>Dumala provides ordering software and may host the public menu. The restaurant, café, or food business named on the menu is normally the seller of the food and the party responsible for preparation, availability, fulfillment, food information, refunds, complaints, permits, and the applicable sales invoice. If a checkout identifies another seller or merchant of record, that identification controls for the relevant transaction.</p>
-        <p>Before placing an order, review the store name, branch address, contact information, menu, prices, VAT display, delivery area, estimated timing, payment method, and store-specific cancellation policy. The restaurant must complete those details accurately.</p>
+        <p>Before placing an order, review the store name, branch address, contact information, menu, prices, VAT display, delivery area, estimated timing, payment method, and store-specific cancellation policy. The restaurant is responsible for keeping those details accurate.</p>
       </LegalSection>
 
       <LegalSection title="2. Placing an order">

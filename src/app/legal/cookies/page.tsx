@@ -12,10 +12,11 @@ export default function CookiesAndOfflineStoragePage() {
     <LegalDocument
       eyebrow="Browser storage"
       title="Cookies and offline storage"
-      description="This draft explains the essential cookies and local browser storage used by Dumala POS. It is especially important for shared tablets, terminals, and offline POS devices."
+      description="This notice explains the essential cookies and local browser storage used by Dumala POS, including on shared tablets, terminals, and offline POS devices."
+      backToLegalCenter
     >
       <LegalSection title="1. What we use">
-        <p>Dumala uses small files and browser storage to keep the service secure, remember necessary session or branch context, provide the app-like POS experience, and support offline operation. We do not currently use non-essential advertising or analytics cookies in the reviewed application. If that changes, this document must be updated and any required consent or opt-out must be added.</p>
+        <p>Dumala uses small files and browser storage to keep the service secure, remember necessary session or branch context, provide the app-like POS experience, and support offline operation. We do not currently use non-essential advertising or analytics cookies. If that changes, we will provide the notices and choices required by applicable law.</p>
       </LegalSection>
 
       <LegalSection title="2. Necessary cookies">
@@ -40,7 +41,7 @@ export default function CookiesAndOfflineStoragePage() {
       </LegalSection>
 
       <LegalSection title="4. Service worker and public assets">
-        <p>Dumala may use a service worker to cache public application assets and support installation or offline behavior. The reviewed design avoids caching private authenticated HTML, but users should still treat a POS device as a sensitive endpoint and keep its operating system, browser, lock, and user access secure.</p>
+          <p>Dumala may use a service worker to cache public application assets and support installation or offline behavior. Private authenticated HTML is not intentionally cached by the service worker. Users should still treat a POS device as a sensitive endpoint and keep its operating system, browser, lock, and user access secure.</p>
       </LegalSection>
 
       <LegalSection title="5. Payment-provider sessions">
