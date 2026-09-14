@@ -581,6 +581,9 @@ export default function OrderHistory({
       backdropClassName="order-history-overlay"
       dialogClassName="order-history-shell"
       initialFocusSelector="[data-order-dialog-autofocus]"
+      // Keep the dialog inside the themed POS shell so it inherits the active
+      // register variables instead of falling back to the admin theme on body.
+      portal={false}
     >
         <header className="order-history-header">
           <div className="order-history-header__brand">

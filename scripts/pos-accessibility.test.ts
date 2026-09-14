@@ -133,3 +133,15 @@ test("all POS dialogs use the shared overlay entry point", () => {
   assert.doesNotMatch(shift, /fixed inset-0 z-40/);
   assert.doesNotMatch(history, /role="dialog"/);
 });
+
+test("POS Orders dialog stays inside the active register theme", () => {
+  const history = read("src/components/pos/OrderHistory.tsx");
+  const cashierCss = read("src/components/pos/SellScreen.css");
+
+  // OverlayDialog portals to document.body by default. Orders must opt out so
+  // the dialog inherits the POS shell's per-run theme variables.
+  assert.match(history, /dialogClassName="order-history-shell"[\s\S]*portal=\{false\}/);
+  assert.match(cashierCss, /\.pos-app \.order-history-shell/);
+  assert.match(cashierCss, /--order-panel-gradient:\s*var\(--pos-theme-panel-gradient/);
+  assert.match(cashierCss, /\.pos-app \.order-history-header[\s\S]*var\(--pos-theme-topbar/);
+});

@@ -4655,8 +4655,19 @@
   --order-ink: var(--pos-theme-text, var(--text));
   --order-muted: var(--pos-theme-text-muted, var(--text-muted));
   --order-primary: var(--pos-theme-topbar, var(--primary));
+  --order-primary-fg: var(--pos-theme-topbar-text, var(--primary-fg));
   --order-accent: var(--pos-theme-highlight, var(--accent));
   --order-accent-soft: var(--pos-theme-highlight-soft, var(--primary-soft));
+  --order-font: var(--pos-theme-font, inherit);
+  --order-weight: var(--pos-theme-weight, 650);
+  --order-letter-spacing: var(--pos-theme-letter-spacing, 0);
+  --order-radius-card: var(--pos-theme-radius-card, var(--radius-card));
+  --order-radius-btn: var(--pos-theme-radius-btn, var(--radius-btn));
+  --order-shadow-card: var(--pos-theme-shadow-card, var(--shadow-card));
+  --order-shadow-pop: var(--pos-theme-shadow-pop, var(--shadow-pop));
+  --order-panel-gradient: var(--pos-theme-panel-gradient, var(--order-panel));
+  --order-card-gradient: var(--pos-theme-card-gradient, var(--order-raised));
+  --order-control-gradient: var(--pos-theme-control-gradient, var(--order-raised));
 }
 
 .order-history-shell,
@@ -4689,7 +4700,7 @@
 .order-history-shell .order-history-filter button.is-active,
 .order-history-shell .online-queue-row__number,
 .order-history-shell .order-history-button--close {
-  color: var(--pos-theme-topbar-text, var(--primary-fg));
+  color: var(--order-primary-fg);
   background: var(--order-primary);
 }
 
@@ -4722,6 +4733,185 @@
 .order-history-shell .order-history-status.is-online-picked-up {
   color: var(--success);
   background: color-mix(in srgb, var(--success) 12%, var(--order-surface));
+}
+
+/* Orders is a POS register surface, not an admin dialog. Keep the shell and
+   its navigation visibly tied to the active register theme. */
+.pos-app .order-history-overlay {
+  background: color-mix(in srgb, var(--pos-theme-topbar, var(--primary)) 44%, transparent);
+}
+
+.pos-app .order-history-shell {
+  border-color: var(--pos-theme-border, var(--border));
+  border-radius: var(--order-radius-card);
+  background: var(--order-panel-gradient);
+  box-shadow: var(--order-shadow-pop);
+  font-family: var(--order-font);
+  font-weight: var(--order-weight);
+  letter-spacing: var(--order-letter-spacing);
+}
+
+.pos-app .order-history-header {
+  border-bottom-color: color-mix(in srgb, var(--pos-theme-topbar-text, #fff) 18%, transparent);
+  color: var(--pos-theme-topbar-text, var(--text));
+  background: var(--pos-theme-topbar, var(--surface));
+  box-shadow: inset 0 -3px 0 var(--pos-theme-highlight, var(--primary));
+}
+
+.pos-app .order-history-header__brand p,
+.pos-app .order-history-header__context,
+.pos-app .order-history-header__context > span:not(:first-child) {
+  color: color-mix(in srgb, var(--pos-theme-topbar-text, #fff) 72%, transparent);
+}
+
+.pos-app .order-history-header__brand h1 {
+  color: var(--pos-theme-topbar-text, var(--text));
+}
+
+.pos-app .order-history-header__mark {
+  border-color: color-mix(in srgb, var(--pos-theme-topbar-text, #fff) 32%, transparent);
+  color: var(--pos-theme-topbar);
+  background: var(--pos-theme-topbar-text, var(--surface));
+}
+
+.pos-app .order-history-header__context b {
+  color: var(--pos-theme-topbar-text, var(--text));
+  background: color-mix(in srgb, var(--pos-theme-highlight, var(--primary)) 32%, transparent);
+}
+
+.pos-app .order-history-header .order-history-button--soft {
+  border-color: color-mix(in srgb, var(--pos-theme-topbar-text, #fff) 26%, transparent);
+  color: color-mix(in srgb, var(--pos-theme-topbar-text, #fff) 88%, transparent);
+  background: color-mix(in srgb, var(--pos-theme-topbar-text, #fff) 8%, transparent);
+}
+
+.pos-app .order-history-header .order-history-button--soft:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--pos-theme-topbar-text, #fff) 48%, transparent);
+  color: var(--pos-theme-topbar-text, var(--text));
+  background: color-mix(in srgb, var(--pos-theme-topbar-text, #fff) 16%, transparent);
+}
+
+.pos-app .order-history-header .order-history-button--close {
+  border-color: var(--primary);
+  border-radius: var(--order-radius-btn);
+  color: var(--primary-fg);
+  background: var(--primary);
+}
+
+.pos-app .order-history-header .order-history-button--close:hover:not(:disabled) {
+  border-color: var(--primary-hover);
+  color: var(--primary-fg);
+  background: var(--primary-hover);
+}
+
+.pos-app .order-history-toolbar,
+.pos-app .order-history-online-toolbar,
+.pos-app .order-history-list-panel,
+.pos-app .order-history-detail {
+  border-color: var(--pos-theme-border, var(--border));
+  background: var(--pos-theme-surface-panel, var(--surface-panel));
+}
+
+.pos-app .order-history-filter,
+.pos-app .order-history-view-switch,
+.pos-app .order-history-pending-note,
+.pos-app .online-queue-fulfillment-card {
+  background: var(--pos-theme-primary-soft, var(--primary-soft));
+}
+
+.pos-app .order-history-filter button.is-active,
+.pos-app .order-history-view-switch button.is-active {
+  color: var(--primary-fg);
+  background: var(--primary);
+  box-shadow: var(--order-shadow-card);
+}
+
+.pos-app .order-history-search,
+.pos-app .order-history-button,
+.pos-app .order-history-row,
+.pos-app .order-history-button--soft {
+  border-radius: var(--order-radius-btn);
+  border-color: var(--pos-theme-border-strong, var(--border-strong));
+  background: var(--order-control-gradient);
+}
+
+.pos-app .order-history-row:hover,
+.pos-app .order-history-row.is-selected {
+  border-color: var(--pos-theme-highlight, var(--primary));
+  background: var(--order-card-gradient);
+  box-shadow: var(--order-shadow-card);
+}
+
+.pos-app .order-history-ticket {
+  border-radius: var(--order-radius-card);
+  background: var(--order-card-gradient);
+  box-shadow: var(--order-shadow-card);
+}
+
+.pos-app .order-history-meta-grid {
+  border-radius: var(--order-radius-card);
+  background: var(--pos-theme-border, var(--border));
+}
+
+.pos-app .order-history-meta-grid > div,
+.pos-app .order-history-detail__footer,
+.pos-app .order-history-notice {
+  background: color-mix(in srgb, var(--pos-theme-surface, var(--surface)) 88%, transparent);
+}
+
+.pos-app .online-queue-fulfillment-card > div {
+  background: color-mix(in srgb, var(--pos-theme-highlight, var(--primary)) 10%, var(--pos-theme-surface, var(--surface)));
+}
+
+/* Preserve the action hierarchy after the shared controls receive the active
+   theme's control gradient. */
+.pos-app .order-history-button--online-action {
+  border-color: var(--primary);
+  color: var(--primary-fg);
+  background: var(--primary);
+}
+
+.pos-app .order-history-button--online-action:hover:not(:disabled) {
+  border-color: var(--primary-hover);
+  color: var(--primary-fg);
+  background: var(--primary-hover);
+}
+
+.pos-app .order-history-button--online-open {
+  border-color: var(--accent);
+  color: var(--accent-fg);
+  background: var(--accent);
+}
+
+.pos-app .order-history-button--online-open:hover:not(:disabled) {
+  border-color: var(--accent-hover);
+  color: var(--accent-fg);
+  background: var(--accent-hover);
+}
+
+.pos-app .order-history-button--void {
+  border-color: color-mix(in srgb, var(--danger) 34%, var(--pos-theme-border-strong, var(--border-strong)));
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.pos-app .order-history-button--void:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: #fff;
+  background: var(--danger);
+}
+
+.pos-app .order-history-button--reprint {
+  border-color: var(--accent);
+  color: var(--accent-fg);
+  background: var(--accent);
+  box-shadow: var(--order-shadow-card);
+}
+
+.pos-app .order-history-button--reprint:hover:not(:disabled) {
+  border-color: var(--accent-hover);
+  color: var(--accent-fg);
+  background: var(--accent-hover);
 }
 
 .order-history-overlay {
