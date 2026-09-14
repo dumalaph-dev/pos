@@ -27,9 +27,26 @@ This section is the current source of truth for delivered work and the next gate
 | Store-owner onboarding and guidance | Implemented | Verify first-run and mobile behavior on the deployed app |
 | Admin workspace themes | Live main deployment previews verified 2026-08-09 | Maintain regression coverage |
 | Production pilot | In progress; `dumala.store` is live, production identity/deployment preflight passed 2026-08-25, the paid-branch entitlement drift was repaired in hosted migration `0072`, and the logical restore rehearsal passed 2026-09-14 | Complete the physical-device pilot gates, off-machine backup copy/plan decision, Vercel log/alert setup, real data intake, pilot week, and branch #2 |
-| Platform owner powers | Phase 4 audit, fleet, sync/outbox, and schema-drift surfaces deployed through migration `0084`; device/terminal inventory implemented locally on 2026-09-14 | Deploy device inventory, run authenticated operator QA, and collect the first real terminal heartbeats |
+| Platform owner powers | Phase 4 audit, fleet, sync/outbox, and schema-drift surfaces deployed through migration `0084`; device/terminal inventory deployed to production on 2026-09-14 | Run authenticated operator QA on `/platform/devices` and collect the first real terminal heartbeats |
 
 ### Recent delivery log
+
+- **2026-09-14 - Production deployment unblocked:** Every Vercel build from
+  `2c5e77f` through `1727b8e` failed because the production legal assertion in
+  `src/lib/legal-config.ts` ran during `next build` ("Failed to collect page
+  data for /sitemap.xml") while Vercel had no final `NEXT_PUBLIC_LEGAL_*`
+  values. The last good production build was `a298f64`. GitHub CI passed
+  throughout because it supplies its own test legal values. A local build with
+  the nine variables blanked reproduced the exact failure. The owner copied
+  the final values into Vercel Production, and the redeploy of `f8cbf9a`
+  (containing every stalled commit, including the device inventory, POS
+  interface themes, display promotions, and orders theme fixes) is Ready. The
+  live `/`, `/sitemap.xml`, `/legal`, and `/legal/privacy` return `200`; the
+  privacy notice shows the `2026-09-15` effective date and no placeholder text.
+  The Vercel Preview environment must carry the same nine variables or
+  preview builds fail the same way. The older red deployments are superseded
+  and were intentionally not redeployed, because promoting them would roll
+  production back.
 
 - **2026-09-14 - Device and terminal inventory (local implementation):** Added
   `/platform/devices`, protected by `console_read`, with organization/device/ID
@@ -53,8 +70,8 @@ This section is the current source of truth for delivered work and the next gate
   responsive layouts without page overflow. The temporary synthetic route was
   removed after QA. `npm run typecheck`, `npm run lint`, and `git diff --check`
   passed. The local unauthenticated route returned `307` to `/platform/login`.
-  The initial build/preflight failures came from draft values in local
-  `.env.local`, not missing Vercel Production configuration. With the owner's
+  The initial local build/preflight failures came from draft values in local
+  `.env.local`. With the owner's
   supplied effective date `2026-09-15` and document version `legal-2026-09-15`
   now applied locally, `npm run build` and `npm run production:preflight` both
   pass, including legal validation, linked schema, and all three live HTTP probes.
