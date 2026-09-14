@@ -14,6 +14,7 @@ const PLATFORM_NAV_ITEMS: Array<{ label: string; href: string; icon: AdminIconNa
   { label: "Audit log", href: "/platform/audit", icon: "history", detail: "Platform actor actions" },
   { label: "Fleet health", href: "/platform/fleet", icon: "chart", detail: "Performance signals" },
   { label: "Sync & outbox", href: "/platform/sync", icon: "refresh", detail: "Branch queue health" },
+  { label: "Devices & terminals", href: "/platform/devices", icon: "pos", detail: "Terminal inventory" },
   { label: "Schema drift", href: "/platform/schema", icon: "columns", detail: "Migration ledger sync" },
   { label: "Operators", href: "/platform/operators", icon: "employees", detail: "Roles & access" },
   { label: "Policies", href: "/platform/policies", icon: "lock", detail: "Operating rules" },
@@ -87,7 +88,6 @@ function PlatformNavItem({ item, pathname, compact = false }: { item: (typeof PL
     >
       <span className={compact ? "" : active ? "text-[#15382a]" : "text-[#d2a15c]"}><AdminIcon name={item.icon} size={compact ? 14 : 17} /></span>
       <span className="whitespace-nowrap">{item.label}</span>
-      {!compact && <span className="ml-auto hidden text-[10px] font-bold text-current/55 xl:block">{item.detail}</span>}
     </Link>
   );
 }

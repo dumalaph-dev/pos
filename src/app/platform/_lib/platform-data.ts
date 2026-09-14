@@ -36,6 +36,7 @@ import {
   type PlatformSchemaMigration,
 } from "@/lib/platform-schema-drift";
 import { PLATFORM_SCHEMA_MANIFEST } from "@/lib/platform-schema-manifest";
+import { summarizePlatformDevices, type PlatformRegisteredDevice } from "@/lib/platform-devices";
 
 export type PlatformAdminClient = NonNullable<ReturnType<typeof createAdminClient>>;
 
@@ -496,7 +497,7 @@ export async function readPlatformFleetHealth(admin: PlatformAdminClient, reques
   };
 }
 
-export async function readPlatformSyncHealth(admin: PlatformAdminClient, requestedAsOf = new Date().toISOString()): Promise<PlatformSyncHealthResult> {
+async function readPlatformSyncInputs(admin: PlatformAdminClient, requestedAsOf = new Date().toISOString()) {
   const parsedAsOf = Date.parse(requestedAsOf);
   const asOf = Number.isFinite(parsedAsOf) ? new Date(parsedAsOf).toISOString() : new Date().toISOString();
   const [richSamplesResult, organizationsResult, storesResult] = await Promise.all([
@@ -504,9 +505,10 @@ export async function readPlatformSyncHealth(admin: PlatformAdminClient, request
       .from("admin_sync_health_snapshots")
       .select("id, recorded_at, org_id, store_id, device_key, queue, pending_count, failed_count, conflict_count, stuck_count, oldest_pending_at, last_successful_sync_at, online", { count: "exact" })
       .order("recorded_at", { ascending: false })
+      .order("id")
       .limit(PLATFORM_SYNC_HEALTH_SAMPLE_LIMIT),
-    admin.from("organizations").select("id, name").order("name").limit(1000),
-    admin.from("stores").select("id, org_id, name, is_active").order("name").limit(10000),
+    admin.from("organizations").select("id, name", { count: "exact" }).order("name").order("id").limit(1000),
+    admin.from("stores").select("id, org_id, name, is_active", { count: "exact" }).order("name").order("id").limit(10000),
   ]);
 
   let samplesResult: { data: unknown[] | null; count: number | null; error: unknown } = richSamplesResult;
@@ -519,6 +521,7 @@ export async function readPlatformSyncHealth(admin: PlatformAdminClient, request
       .from("admin_sync_health_snapshots")
       .select("id, recorded_at, org_id, store_id, device_key, queue, pending_count, failed_count, conflict_count, oldest_pending_at, online", { count: "exact" })
       .order("recorded_at", { ascending: false })
+      .order("id")
       .limit(PLATFORM_SYNC_HEALTH_SAMPLE_LIMIT);
     enhancedMetricsAvailable = false;
   }
@@ -539,12 +542,46 @@ export async function readPlatformSyncHealth(admin: PlatformAdminClient, request
   });
 
   return {
-    summary: summarizePlatformSyncHealth(samples, organizations, stores, asOf),
+    samples, organizations, stores, asOf,
     schemaAvailable: !samplesResult.error,
     enhancedMetricsAvailable,
     organizationsAvailable: !organizationsResult.error,
     storesAvailable: !storesResult.error,
-    hasMore: (samplesResult.count ?? rawSamples.length) > rawSamples.length,
+    hasMore: (samplesResult.count ?? rawSamples.length) > rawSamples.length
+      || (organizationsResult.count ?? organizations.length) > organizations.length
+      || (storesResult.count ?? stores.length) > stores.length,
+  };
+}
+
+export async function readPlatformSyncHealth(admin: PlatformAdminClient, requestedAsOf = new Date().toISOString()): Promise<PlatformSyncHealthResult> {
+  const { samples, organizations, stores, asOf, ...availability } = await readPlatformSyncInputs(admin, requestedAsOf);
+  return { summary: summarizePlatformSyncHealth(samples, organizations, stores, asOf), ...availability };
+}
+
+export async function readPlatformDevices(admin: PlatformAdminClient) {
+  const [inputs, devicesResult] = await Promise.all([
+    readPlatformSyncInputs(admin),
+    admin.from("devices")
+      .select("id, org_id, store_id, name, device_prefix, is_active, last_seen_at", { count: "exact" })
+      .order("id").limit(10000),
+  ]);
+  const devices = (Array.isArray(devicesResult.data) ? devicesResult.data : []).flatMap((row): PlatformRegisteredDevice[] => {
+    if (!isRecord(row) || typeof row.id !== "string" || typeof row.org_id !== "string" || typeof row.store_id !== "string" || typeof row.device_prefix !== "string") return [];
+    return [{
+      id: row.id, organizationId: row.org_id, storeId: row.store_id,
+      name: typeof row.name === "string" && row.name.trim() ? row.name : "Unnamed device",
+      devicePrefix: row.device_prefix, isActive: row.is_active !== false,
+      lastSeenAt: typeof row.last_seen_at === "string" ? row.last_seen_at : null,
+    }];
+  });
+  return {
+    summary: summarizePlatformDevices(inputs.samples, inputs.organizations, inputs.stores, devices, inputs.asOf),
+    schemaAvailable: inputs.schemaAvailable,
+    enhancedMetricsAvailable: inputs.enhancedMetricsAvailable,
+    organizationsAvailable: inputs.organizationsAvailable,
+    storesAvailable: inputs.storesAvailable,
+    devicesAvailable: !devicesResult.error,
+    hasMore: inputs.hasMore || (devicesResult.count ?? devices.length) > devices.length,
   };
 }
 

@@ -2,7 +2,7 @@
 
 **Project:** Dumala POS
 **Created:** 2026-08-29
-**Status:** Phase 4 in progress — the audit, fleet, sync/outbox, and schema-drift read surfaces are deployed and their migrations are recorded through `0084`; device inventory remains, gated on the first real terminal heartbeats
+**Status:** Phase 4 in progress — the audit, fleet, sync/outbox, and schema-drift read surfaces are deployed through `0084`; device inventory is implemented locally, pending deployment and real terminal heartbeat validation
 **Owner:** Product and engineering
 **Companion to:** [tasks.md](tasks.md) · [SCHEMA.md](SCHEMA.md) §8 · [SETUP.md](SETUP.md)
 
@@ -173,7 +173,7 @@ After Docker Desktop became available, the preserved local Supabase volume recov
 
 ### Phase 4 — Cross-org read surfaces
 
-**Status:** In progress — the audit, fleet, sync/outbox, and schema-drift surfaces are deployed; linked migrations are applied and documented through `0084`; device and terminal inventory is the last Phase 4 item, gated on the first real terminal heartbeats
+**Status:** In progress — audit, fleet, sync/outbox, and schema-drift surfaces are deployed through `0084`; device and terminal inventory is implemented locally, pending deployment, authenticated operator QA, and the first real terminal heartbeats
 **Migration:** `0079_scope_admin_performance_to_organizations.sql`, `0080_sync_health_snapshots.sql`, `0081_sync_health_enhanced_metrics.sql`, `0082_admin_latency_scoping.sql`, `0083_scoped_read_rpc_acl_hardening.sql`, and `0084_schema_drift_readout.sql` applied; platform readers are read-only, and legacy performance samples plus existing tenant data remain preserved
 
 Powers that only need to look. Safe to build once Phase 3 can scope who looks.
@@ -181,7 +181,7 @@ Powers that only need to look. Safe to build once Phase 3 can scope who looks.
 - [x] **Platform audit viewer.** The deployed `/platform/audit` page combines platform-scoped `audit_logs` rows with `platform_operator_audit_logs`, and supports search plus source, action, organization, and time-window filters. Before/after snapshots remain expandable; the page is read-only and excludes tenant order, customer, and staff activity.
 - [x] **Fleet health.** The deployed `/platform/fleet` page aggregates `admin_performance_samples` into p50/p95 interaction latency, error rate, sample freshness, and surface breakdowns per organization, with time-window, search, and status filters. Migration `0079` attributes future authenticated samples from the server-resolved profile organization; existing rows remain preserved as unattributed history, and no raw tenant activity is exposed.
 - [x] **Sync and outbox health.** The deployed `/platform/sync` page reports bounded POS-order, audit-event, and admin-mutation queue snapshots per organization and active branch, including pending depth, offline-sync failure/conflict counts, exact stuck-outbox depth, last successful sync per queue, oldest-pending age, reporter freshness, and explicit `healthy`, `needs attention`, `stale`, and `no telemetry` states. Search, queue, freshness, and health-status filters plus organization/branch/queue aggregate drill-downs are read-only; payloads never leave the terminal.
-- [ ] **Device and terminal inventory.** Last-seen heartbeat per device, so "the tablet at branch 2 has not synced in three days" is visible without asking.
+- [ ] **Device and terminal inventory.** Implemented locally on 2026-09-14 at `/platform/devices`; deployment and real heartbeat validation remain open. Shows registered devices and unmatched browser reporters, scoped exact-prefix associations, branch/health/search filters, inactive entries, last heartbeat and success, pending orders, and queue details. Each reporting queue contributes to freshness so a newer admin report cannot hide a silent POS queue. Device-record last-seen activity never implies sync success. The hosted read-only check found 2 active registered devices and 0 heartbeat reporters. No schema change is needed; the page uses the existing device directory and `0080`/`0081` telemetry, with explicit missing/partial-data states. See the 2026-09-14 delivery log in [tasks.md](tasks.md) for verification. Physical printer testing is deferred by the owner.
 - [x] **Schema drift.** The deployed `/platform/schema` page compares the migrations this deployment ships against the applied ledger, reporting `in sync`, `pending` (shipped but never applied), `unknown remote` (applied but absent from this build), `diverged`, and `renamed`, with search and state filters. It replaces the hand-typed "local X = remote X" note in [tasks.md](tasks.md). The plan wording assumed a per-tenant ledger; every organization shares one database, so the ledger position is fleet-wide by construction and the page says so, offering per-organization *backfill readiness* as the real per-tenant dimension. Migration `0084` adds the service-role-only reader, which returns version and name and never the `statements` SQL text.
 
 **Exit criteria:** The 2026-08-25-style production verification can be read off the console instead of assembled from scripts. No page exposes order, customer, or staff personal data to an operator not entitled to it.
