@@ -370,7 +370,7 @@ export default function DisplayPromotionsPanel({
           </div>
           <div className="pos-display-setting-grid">
             <DisplayToggle title="Shop promotions" description="Rotate cards while the display is idle." checked={settings.showPromotions} disabled={!canWrite} onChange={(value) => updateSetting("showPromotions", value)} />
-            <DisplayToggle title="Gallery playback" description="Use the source pills below to choose what rotates." checked={settings.showMarketingGallery || settings.showMenuGallery} disabled={!canWrite} onChange={updateAllGallerySources} />
+            <DisplayToggle title="Full-screen gallery" description="Show rich, full-screen visuals between orders." checked={settings.showMarketingGallery || settings.showMenuGallery} disabled={!canWrite} onChange={updateAllGallerySources} />
             <DisplayToggle title="Item quantities" description="Show quantities and weights in the order." checked={settings.showQuantity} disabled={!canWrite} onChange={(value) => updateSetting("showQuantity", value)} />
             <DisplayToggle title="Subtotal" description="Show the pre-discount subtotal." checked={settings.showSubtotal} disabled={!canWrite} onChange={(value) => updateSetting("showSubtotal", value)} />
             <DisplayToggle title="Discounts" description="Show applied discounts before payment." checked={settings.showDiscount} disabled={!canWrite} onChange={(value) => updateSetting("showDiscount", value)} />

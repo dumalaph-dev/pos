@@ -57,15 +57,6 @@ const DISPLAY_PROMOTIONS = [
   },
 ] satisfies DisplayPromotion[];
 
-const PRODUCT_MARQUEE_PRODUCTS = [
-  { id: "marquee-cafe-latte", title: "Cafe latte", imageUrl: "/food/cafe-latte.webp" },
-  { id: "marquee-croissant", title: "Butter croissant", imageUrl: "/food/bakery-croissant.webp" },
-  { id: "marquee-lechon-belly", title: "Lechon belly", imageUrl: "/food/lechon-belly-one.webp" },
-  { id: "marquee-matcha", title: "Matcha latte", imageUrl: "/food/cafe-matcha-latte.webp" },
-  { id: "marquee-lechon-kawali", title: "Lechon kawali", imageUrl: "/food/lechon-kawali.webp" },
-  { id: "marquee-blueberry-muffin", title: "Blueberry muffin", imageUrl: "/food/cafe-blueberry-muffin.webp" },
-] as const;
-
 const EMPTY_GALLERY: DisplayGalleryItem[] = [];
 const GALLERY_TRANSITION_MS = 1800;
 
@@ -110,45 +101,33 @@ function displayThemeStyle(themeId: PosThemeId) {
   } as CSSProperties;
 }
 
-function ProductMarquee({ promotions }: { promotions: DisplayPromotion[] }) {
-  const promotionItems = promotions.map(({ id, title, imageUrl }) => ({ id, title, imageUrl }));
-  const marqueeItems = [
-    ...promotionItems,
-    ...PRODUCT_MARQUEE_PRODUCTS.filter((product) => !promotionItems.some((promotion) => promotion.imageUrl === product.imageUrl)),
-  ];
-  const loopItems = [...marqueeItems, ...marqueeItems];
-
-  return (
-    <div className={styles.productMarquee} aria-hidden="true">
-      <div className={styles.productMarqueeTrack}>
-        {loopItems.map((product, index) => (
-          <span key={`${product.id}-${index}`} className={styles.productMarqueeItem}>
-            <span className={styles.productMarqueeImage}>
-              <Image src={product.imageUrl ?? "/food/whole-lechon-small.webp"} alt="" fill sizes="2.35rem" className={styles.productMarqueeImageAsset} />
-            </span>
-            <span>{product.title}</span>
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function BrandBar({ state, promotions, showMarquee = true }: { state: DisplayState; promotions: DisplayPromotion[]; showMarquee?: boolean }) {
+function BrandBar({ state }: { state: DisplayState }) {
+  const steps = ["Your order", "Payment", "All set"];
+  const currentStep = state.kind === "active" ? 0 : state.kind === "payment" ? 1 : 2;
   return (
     <header className={styles.brandBar}>
       <div className={styles.brand}>
         <AdminBrandLogo logoUrl={state.branding.logoUrl} className={styles.brandMark} iconSize={30} label={`${state.branding.storeName} logo`} />
         <div className={styles.brandCopy}>
           <strong>{state.branding.storeName}</strong>
+          <span>Welcome to our counter</span>
         </div>
       </div>
-      {showMarquee ? <ProductMarquee promotions={promotions} /> : null}
+      {state.kind === "idle" ? <span className={styles.welcomeLabel}>Make yourself at home</span> : (
+        <ol className={styles.orderSteps} aria-label="Order progress">
+          {steps.map((step, index) => (
+            <li key={step} aria-current={index === currentStep ? "step" : undefined} data-complete={index < currentStep}>
+              <span className={styles.stepNumber} aria-hidden="true">{index < currentStep ? "✓" : String(index + 1).padStart(2, "0")}</span>
+              <span>{step}</span>
+            </li>
+          ))}
+        </ol>
+      )}
     </header>
   );
 }
 
-function GalleryState({ state, item, promotions }: { state: Extract<DisplayState, { kind: "idle" }>; item: DisplayGalleryItem; promotions: DisplayPromotion[] }) {
+function GalleryState({ state, item }: { state: Extract<DisplayState, { kind: "idle" }>; item: DisplayGalleryItem }) {
   const displayItemRef = useRef(item);
   const [displayItem, setDisplayItem] = useState(item);
   const [outgoingItem, setOutgoingItem] = useState<DisplayGalleryItem | null>(null);
@@ -182,10 +161,12 @@ function GalleryState({ state, item, promotions }: { state: Extract<DisplayState
       {outgoingItem ? <Image src={outgoingItem.imageUrl} alt="" fill sizes="100vw" className={`${styles.galleryImage} ${styles.galleryImageOutgoing}`} aria-hidden="true" /> : null}
       <Image key={`${displayItem.id}-${displayItem.imageUrl}-${displayItem.title}`} src={displayItem.imageUrl} alt={displayItem.title} fill sizes="100vw" priority className={`${styles.galleryImage} ${styles.galleryImageCurrent}`} />
       <div className={styles.galleryScrim} aria-hidden="true" />
-      <div className={styles.galleryBrand}><BrandBar state={state} promotions={promotions} showMarquee={displayItem.kind !== "menu"} /></div>
+      <div className={styles.galleryBrand}><BrandBar state={state} /></div>
       <div key={`${displayItem.id}-${displayItem.title}`} className={`${styles.galleryOverlay} ${styles.galleryOverlayEnter}${isRight ? ` ${styles.galleryOverlayRight}` : ""}`}>
-        <span>{displayItem.kind === "menu" ? "Menu showcase" : "Featured today"}</span>
+        <span>{displayItem.kind === "menu" ? "On the menu" : "Featured today"}</span>
         <h1 id="display-gallery-title">{displayItem.title}</h1>
+        <p>{displayItem.kind === "menu" ? "Take a look while we get your order ready." : `A little something from ${state.branding.storeName}.`}</p>
+        <span className={styles.galleryOverlayHint}>{displayItem.kind === "menu" ? "Ask our team about today’s favorites" : "Made fresh for you"}</span>
       </div>
     </section>
   );
@@ -209,11 +190,12 @@ function PromotionCard({ promotion, storeName, compact = false }: { promotion: D
 
 function IdleState({ state, promotion }: { state: Extract<DisplayState, { kind: "idle" }>; promotion: DisplayPromotion | null }) {
   return (
-    <section className={styles.idleLayout} aria-labelledby="display-idle-title">
+    <section className={styles.idleLayout} data-has-promotion={Boolean(promotion)} aria-labelledby="display-idle-title">
       <div className={styles.idle}>
-        <AdminBrandLogo logoUrl={state.branding.logoUrl} className={styles.idleMark} iconSize={64} label={`${state.branding.storeName} logo`} />
+        <span className={styles.sectionLabel}>A little something to look forward to</span>
         <h1 id="display-idle-title" className={styles.idleTitle}>{resolveDisplayCopy(state.settings?.idleTitle ?? DEFAULT_DISPLAY_SETTINGS.idleTitle, state.branding.storeName)}</h1>
         <p className={styles.idleSubtitle}>{resolveDisplayCopy(state.settings?.idleSubtitle ?? DEFAULT_DISPLAY_SETTINGS.idleSubtitle, state.branding.storeName)}</p>
+        <div className={styles.idleNote}><span aria-hidden="true">↳</span> Your order will appear here as we prepare it.</div>
       </div>
       {promotion ? <PromotionCard promotion={promotion} storeName={state.branding.storeName} /> : null}
     </section>
@@ -230,7 +212,7 @@ function ActiveState({ state, promotions, settings }: { state: Extract<DisplaySt
         </div>
         <ul className={styles.lines} aria-label="Current order items">
           {state.lines.map((line) => (
-            <li key={line.id} className={styles.line}>
+            <li key={line.id} className={styles.line} data-show-quantity={settings.showQuantity}>
               <span className={styles.lineName}>{line.name}</span>
               {settings.showQuantity ? <span className={styles.lineQuantity}>{lineQuantity(line)}</span> : null}
               <span className={styles.lineTotal}>{displayPeso(line.lineTotal)}</span>
@@ -244,7 +226,7 @@ function ActiveState({ state, promotions, settings }: { state: Extract<DisplaySt
       </div>
       <div className={styles.totalStack}>
         <div className={styles.totalCard} aria-label={`Total ${displayPeso(state.total)}`}>
-          <span className={styles.totalLabel}>Total</span>
+          <span className={styles.totalLabel}>Total to pay</span>
           <strong className={styles.totalValue}>{displayPeso(state.total)}</strong>
           <span className={styles.totalHint}>Please review your order before paying.</span>
         </div>
@@ -277,7 +259,6 @@ function ThankYouState({ state, settings }: { state: Extract<DisplayState, { kin
       <span className={styles.thankyouMark} aria-hidden="true">✓</span>
       <h1 id="display-thankyou-title">{resolveDisplayCopy(settings.completedOrderTitle, state.branding.storeName)}</h1>
       <p className={styles.thankyouMessage}>{settings.showOrderNumber ? `Order ${state.orderNo} / ` : ""}{resolveDisplayCopy(settings.completedOrderMessage, state.branding.storeName)}</p>
-      <p>{settings.showOrderNumber ? `Order ${state.orderNo} · ` : ""}Your order is being prepared.</p>
     </section>
   );
 }
@@ -361,9 +342,9 @@ export default function CustomerDisplayScreen({ pairingToken }: { pairingToken: 
 
   return (
     <main className={`${styles.display}${galleryItem ? ` ${styles.displayGallery}` : ""}`} data-display-state={state.kind} data-display-mode={galleryItem ? "gallery" : state.kind} data-display-theme={themeId} style={themeStyle}>
-      {galleryItem && state.kind === "idle" ? <GalleryState state={state} item={galleryItem} promotions={promotions} /> : (
+      {galleryItem && state.kind === "idle" ? <GalleryState state={state} item={galleryItem} /> : (
         <div className={styles.shell}>
-          <BrandBar state={state} promotions={promotions} />
+          <BrandBar state={state} />
           {state.kind === "idle" && <IdleState state={state} promotion={promotion} />}
           {state.kind === "active" && <ActiveState state={state} promotions={displayPromotions} settings={settings} />}
           {state.kind === "payment" && <PaymentState state={state} />}

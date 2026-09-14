@@ -32,65 +32,11 @@
   place-items: center;
   padding: clamp(1.25rem, 4vw, 4.5rem);
   color: var(--display-ink);
-  background:
-    var(--display-pattern),
-    repeating-radial-gradient(circle at 14% 18%, rgba(255, 255, 255, 0.14) 0 0.7px, transparent 0.7px 4px),
-    repeating-linear-gradient(116deg, rgba(0, 0, 0, 0.025) 0 1px, transparent 1px 8px),
-    var(--display-bg);
+  background: var(--display-bg);
   font-family: var(--display-font);
   font-weight: var(--display-weight);
   letter-spacing: var(--display-letter-spacing);
   font-variant-numeric: tabular-nums;
-}
-
-/* High-energy and low-light themes keep their backgrounds intentionally quiet; their
-   repeated tile patterns compete with product imagery and the standby message. */
-.display[data-display-theme="sunset"],
-.display[data-display-theme="bold"],
-.display[data-display-theme="dark"],
-.display[data-display-theme="ledger"],
-.display[data-display-theme="ramen"],
-.display[data-display-theme="deco"] {
-  background: var(--display-bg);
-}
-
-.display[data-display-theme="sunset"]::before,
-.display[data-display-theme="sunset"]::after,
-.display[data-display-theme="bold"]::before,
-.display[data-display-theme="bold"]::after,
-.display[data-display-theme="dark"]::before,
-.display[data-display-theme="dark"]::after,
-.display[data-display-theme="ledger"]::before,
-.display[data-display-theme="ledger"]::after,
-.display[data-display-theme="ramen"]::before,
-.display[data-display-theme="ramen"]::after,
-.display[data-display-theme="deco"]::before,
-.display[data-display-theme="deco"]::after {
-  display: none;
-}
-
-.display::before,
-.display::after {
-  position: absolute;
-  width: min(28rem, 42vw);
-  height: min(28rem, 42vw);
-  border: 1px solid var(--display-border);
-  border-radius: 50%;
-  content: "";
-  pointer-events: none;
-  opacity: 0.45;
-}
-
-.display::before {
-  top: -16rem;
-  left: -12rem;
-}
-
-.display::after {
-  right: -16rem;
-  bottom: -18rem;
-  border-color: var(--display-accent);
-  opacity: 0.35;
 }
 
 .shell {
@@ -98,10 +44,10 @@
   z-index: 1;
   display: flex;
   width: min(110rem, 100%);
-  min-height: min(48rem, calc(100svh - 2.5rem));
+  min-height: calc(100svh - clamp(2.5rem, 8vw, 9rem));
   flex-direction: column;
-  justify-content: center;
-  gap: clamp(1.5rem, 4vw, 3.75rem);
+  justify-content: flex-start;
+  gap: clamp(2rem, 4vw, 4rem);
 }
 
 .brandBar {
@@ -110,6 +56,8 @@
   justify-content: space-between;
   gap: 1rem;
   min-height: 3rem;
+  padding-bottom: clamp(1rem, 2vw, 1.75rem);
+  border-bottom: 1px solid var(--display-border);
 }
 
 .brand {
@@ -148,103 +96,154 @@
   color: var(--display-heading);
   font-family: var(--display-font);
   font-size: clamp(1.15rem, 2.6vw, 2rem);
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
   line-height: 1.05;
 }
 
-.productMarquee {
-  position: relative;
-  min-width: 0;
-  max-width: 58rem;
-  margin-left: auto;
-  overflow: hidden;
-  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+.brandCopy > span {
+  display: block;
+  margin-top: 0.45rem;
+  color: var(--display-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
 }
 
-.productMarqueeTrack {
+.welcomeLabel {
+  color: var(--display-muted);
+  font-size: clamp(0.8rem, 1.2vw, 1rem);
+  font-weight: 500;
+  text-align: right;
+}
+
+.orderSteps {
   display: flex;
-  width: max-content;
-  align-items: center;
-  gap: clamp(1rem, 2.4vw, 2rem);
-  padding: 0.2rem 1.5rem;
-  animation: productMarquee 34s linear infinite;
+  flex-wrap: wrap;
+  gap: clamp(0.75rem, 2vw, 2rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.productMarqueeItem {
-  display: inline-flex;
-  flex: 0 0 auto;
+.orderSteps li {
+  display: flex;
   align-items: center;
   gap: 0.55rem;
   color: var(--display-muted);
-  font-size: clamp(0.58rem, 0.8vw, 0.72rem);
-  font-weight: 900;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  white-space: nowrap;
+  font-size: clamp(0.75rem, 1vw, 0.95rem);
 }
 
-.productMarqueeImage {
-  position: relative;
-  display: block;
-  width: clamp(2rem, 3vw, 2.35rem);
-  flex: 0 0 auto;
-  aspect-ratio: 1;
-  overflow: hidden;
+.stepNumber {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
   border: 1px solid var(--display-border);
   border-radius: 50%;
-  background: var(--display-surface-panel);
-  box-shadow: var(--display-shadow);
+  font-size: 0.7rem;
 }
 
-.productMarqueeImageAsset {
-  object-fit: cover;
+.orderSteps li[aria-current="step"] {
+  color: var(--display-ink);
 }
+
+.orderSteps li[aria-current="step"] .stepNumber {
+  color: var(--display-topbar-text);
+  background: var(--display-primary);
+  border-color: var(--display-primary);
+}
+
+.orderSteps li[data-complete="true"] .stepNumber {
+  color: var(--display-ink);
+  background: var(--display-surface-panel);
+}
+
+.sectionLabel {
+  color: var(--display-muted);
+  font-size: clamp(0.7rem, 1vw, 0.85rem);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.idleNote {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  margin-top: clamp(1rem, 3vw, 3rem);
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--display-border);
+  color: var(--display-muted);
+  font-size: clamp(0.8rem, 1.25vw, 1rem);
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.idleNote > span { color: var(--display-heading); font-size: 1.5rem; }
 
 .idle {
   display: grid;
-  justify-items: center;
-  gap: clamp(1.2rem, 3vw, 2.2rem);
-  padding: clamp(1.5rem, 5vw, 5rem) 1rem;
-  text-align: center;
-}
-
-.idleMark {
-  display: grid;
-  width: clamp(7rem, 18vw, 13rem);
-  aspect-ratio: 1;
-  place-items: center;
-  overflow: hidden;
-  border: 1px solid var(--display-border);
-  border-radius: calc(var(--display-radius) * 1.4);
-  color: var(--display-primary);
-  background: var(--display-surface-raised);
-  box-shadow: var(--display-shadow-pop);
+  justify-items: start;
+  align-content: center;
+  gap: clamp(1.2rem, 2vw, 2rem);
+  padding: clamp(1.5rem, 3vw, 3rem) 0;
+  text-align: left;
 }
 
 .idleTitle {
   max-width: 16ch;
   color: var(--display-heading);
   font-family: var(--display-font);
-  font-size: clamp(2.7rem, 8vw, 7.2rem);
+  margin: 0;
+  font-size: clamp(2.75rem, 6.4vw, 6.5rem);
   font-weight: 700;
-  letter-spacing: -0.055em;
-  line-height: 0.94;
+  letter-spacing: 0;
+  line-height: 1.05;
 }
 
 .idleSubtitle {
-  max-width: 36rem;
+  max-width: 36ch;
+  margin: 0;
   color: var(--display-muted);
-  font-size: clamp(0.9rem, 1.8vw, 1.25rem);
-  font-weight: 700;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
+  font-size: clamp(1rem, 1.8vw, 1.4rem);
+  font-weight: 500;
+  line-height: 1.6;
 }
 
 .idleLayout {
   display: grid;
   align-items: center;
   gap: clamp(1rem, 3vw, 2.25rem);
-  grid-template-columns: minmax(0, 1.05fr) minmax(20rem, 0.95fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  flex: 1;
+}
+
+.idleLayout[data-has-promotion="false"] {
+  grid-template-columns: 1fr;
+}
+
+.idleLayout[data-has-promotion="false"] .idle {
+  justify-items: center;
+  text-align: center;
+}
+
+.idleLayout > .promoCard {
+  grid-template-columns: 1fr;
+}
+
+.idleLayout > .promoCard .promoImage {
+  height: clamp(15rem, 30svh, 26rem);
+}
+
+.idleLayout > .promoCard .promoTitle {
+  max-width: 24ch;
+  font-size: clamp(1.6rem, 2.4vw, 2.5rem);
+}
+
+.idleLayout > .promoCard .promoBody {
+  padding: clamp(1.25rem, 2.5vw, 2rem);
+}
+
+.idleLayout > .promoCard .promoDetail {
+  max-width: 48ch;
 }
 
 .displayGallery {
@@ -305,14 +304,10 @@
   text-shadow: 0 2px 16px rgba(0, 0, 0, 0.28);
 }
 
-.galleryBrand .productMarqueeItem {
-  color: rgba(255, 250, 241, 0.78);
-}
+.galleryBrand .brandBar { border-color: rgba(255, 255, 255, 0.25); }
 
-.galleryBrand .productMarqueeImage {
-  border-color: rgba(255, 250, 241, 0.28);
-  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.18);
-}
+.galleryBrand .brandCopy > span,
+.galleryBrand .welcomeLabel { color: #fffaf1; }
 
 .galleryOverlay {
   position: relative;
@@ -358,13 +353,29 @@
   text-transform: uppercase;
 }
 
+.galleryOverlay > p {
+  max-width: 34ch;
+  margin: 0.25rem 0 0;
+  color: rgba(255, 250, 241, 0.88);
+  font-size: clamp(0.95rem, 1.7vw, 1.25rem);
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.galleryOverlayHint {
+  margin-top: 0.35rem;
+  color: var(--display-accent) !important;
+  font-size: clamp(0.65rem, 1vw, 0.82rem) !important;
+  letter-spacing: 0.12em;
+}
+
 .galleryOverlay h1 {
   max-width: 15ch;
   color: #fffaf1;
   font-family: var(--display-font);
   font-size: clamp(2.5rem, 8vw, 8rem);
   font-weight: 800;
-  letter-spacing: -0.065em;
+  letter-spacing: 0;
   line-height: 0.88;
 }
 
@@ -447,7 +458,7 @@
 }
 
 .promoEyebrow {
-  color: var(--display-accent);
+  color: var(--display-muted);
   font-size: clamp(0.62rem, 1vw, 0.78rem);
   font-weight: 900;
   letter-spacing: 0.14em;
@@ -460,8 +471,8 @@
   color: var(--display-heading);
   font-family: var(--display-font);
   font-size: clamp(1.45rem, 3vw, 2.8rem);
-  letter-spacing: -0.045em;
-  line-height: 0.98;
+  letter-spacing: 0;
+  line-height: 1.15;
 }
 
 .promoDetail {
@@ -477,9 +488,8 @@
   display: inline-flex;
   margin-top: 1rem;
   padding: 0.45rem 0.7rem;
-  border-radius: 999px;
-  color: var(--display-heading);
-  background: var(--display-accent-soft);
+  color: var(--display-ink);
+  background: var(--display-surface-panel);
   border-radius: var(--display-radius);
   font-size: clamp(0.66rem, 1vw, 0.8rem);
   font-weight: 800;
@@ -496,7 +506,7 @@
   display: flex;
   min-height: clamp(13rem, 17vw, 16rem);
   flex-direction: column;
-  border-radius: clamp(1rem, 1.8vw, 1.5rem);
+  border-radius: var(--display-radius);
 }
 
 .promoCardCompact .promoImage {
@@ -550,6 +560,7 @@
 }
 
 .totalStack {
+  min-width: 0;
   display: grid;
   gap: clamp(0.8rem, 2vw, 1.25rem);
   grid-template-rows: minmax(0, 1fr) auto;
@@ -564,33 +575,6 @@
   border-radius: var(--display-radius);
   background: var(--display-card-gradient);
   box-shadow: var(--display-shadow);
-}
-
-.orderCard::before,
-.totalCard::before {
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  content: "";
-  pointer-events: none;
-  background-image:
-    repeating-radial-gradient(circle at 12% 22%, rgba(255, 255, 255, 0.18) 0 0.8px, transparent 0.8px 4px),
-    repeating-linear-gradient(112deg, rgba(0, 0, 0, 0.035) 0 1px, transparent 1px 7px);
-  opacity: 0.12;
-  mix-blend-mode: soft-light;
-}
-
-.totalCard::before {
-  background-image:
-    repeating-radial-gradient(circle at 18% 24%, rgba(255, 250, 235, 0.2) 0 0.8px, transparent 0.8px 4px),
-    repeating-linear-gradient(108deg, rgba(255, 255, 255, 0.07) 0 1px, transparent 1px 7px);
-  opacity: 0.22;
-}
-
-.orderCard > *,
-.totalCard > * {
-  position: relative;
-  z-index: 1;
 }
 
 .orderCard {
@@ -612,7 +596,7 @@
   color: var(--display-heading);
   font-size: clamp(1.25rem, 2.5vw, 2.25rem);
   font-weight: 800;
-  letter-spacing: -0.04em;
+  letter-spacing: 0;
 }
 
 .orderHeading span {
@@ -636,11 +620,17 @@
   align-items: center;
   gap: 0.75rem;
   grid-template-columns: minmax(0, 1fr) auto auto;
-  padding: 0.35rem 0;
+  padding: 0.9rem 0;
+  border-bottom: 1px solid var(--display-border);
 }
+
+.line[data-show-quantity="false"] { grid-template-columns: minmax(0, 1fr) auto; }
+
+.line:last-child { border-bottom: 0; }
 
 .lineName {
   min-width: 0;
+  overflow-wrap: anywhere;
   color: var(--display-ink);
   font-size: clamp(1rem, 2.2vw, 1.7rem);
   font-weight: 700;
@@ -678,7 +668,7 @@
 }
 
 .summaryDiscount {
-  color: var(--display-accent);
+  color: var(--display-ink);
 }
 
 .totalCard {
@@ -705,9 +695,10 @@
 .totalValue {
   margin-top: 0.65rem;
   color: var(--display-topbar-text);
-  font-size: clamp(3.5rem, 9vw, 8rem);
+  font-size: clamp(2.5rem, 5vw, 6rem);
+  overflow-wrap: anywhere;
   font-weight: 800;
-  letter-spacing: -0.075em;
+  letter-spacing: 0;
   line-height: 0.9;
 }
 
@@ -768,7 +759,7 @@
 .paymentLabel {
   grid-area: label;
   justify-self: start;
-  color: var(--display-accent);
+  color: var(--display-heading);
   opacity: 1;
 }
 
@@ -776,9 +767,11 @@
   grid-area: total;
   justify-self: start;
   color: var(--display-heading);
-  font-size: clamp(3.25rem, 9vw, 8rem);
+  font-size: clamp(2.25rem, 7vw, 7rem);
+  overflow-wrap: anywhere;
+  max-width: 100%;
   font-weight: 800;
-  letter-spacing: -0.075em;
+  letter-spacing: 0;
   line-height: 0.88;
 }
 
@@ -797,9 +790,11 @@
   grid-area: change;
   justify-self: center;
   color: var(--display-topbar-text);
-  font-size: clamp(3.5rem, 10vw, 9rem);
+  font-size: clamp(2.25rem, 7vw, 7rem);
+  overflow-wrap: anywhere;
+  max-width: 100%;
   font-weight: 800;
-  letter-spacing: -0.08em;
+  letter-spacing: 0;
   line-height: 0.9;
 }
 
@@ -838,7 +833,7 @@
   color: var(--display-heading);
   font-family: var(--display-font);
   font-size: clamp(3rem, 9vw, 8rem);
-  letter-spacing: -0.06em;
+  letter-spacing: 0;
   line-height: 0.92;
 }
 
@@ -849,9 +844,6 @@
   font-weight: 700;
 }
 
-.thankyou > p:not(.thankyouMessage) {
-  display: none;
-}
 
 .thankyouMessage {
   max-width: 42ch;
@@ -859,6 +851,7 @@
 
 .pairing {
   width: min(38rem, 100%);
+  margin: auto;
   padding: clamp(1.5rem, 5vw, 3.5rem);
   border: 1px solid var(--display-border);
   border-radius: var(--display-radius);
@@ -872,7 +865,7 @@
   color: var(--display-heading);
   font-family: var(--display-font);
   font-size: clamp(2rem, 5vw, 3.8rem);
-  letter-spacing: -0.055em;
+  letter-spacing: 0;
 }
 
 .pairing p {
@@ -904,11 +897,9 @@
     flex-wrap: wrap;
   }
 
-  .productMarquee {
-    flex: 1 1 100%;
-    max-width: none;
-    margin: 0;
-  }
+  .orderSteps { width: 100%; justify-content: space-between; }
+
+  .welcomeLabel { display: none; }
 
   .activeLayout {
     grid-template-columns: 1fr;
@@ -969,15 +960,6 @@
   }
 }
 
-@keyframes productMarquee {
-  from {
-    transform: translateX(0);
-  }
-
-  to {
-    transform: translateX(-50%);
-  }
-}
 
 @media (prefers-reduced-motion: reduce) {
   .display * {
