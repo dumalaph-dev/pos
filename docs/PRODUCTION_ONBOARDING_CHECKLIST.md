@@ -9,6 +9,8 @@ Use one copy per branch and one device section per POS terminal. Mark a box only
 - [ ] Real employee names, Employee IDs, roles, branch assignments, and schedules supplied through the secure intake process.
 - [ ] Staff PINs delivered through a private channel or set in Admin; no raw PIN is stored in Git, a spreadsheet, or a chat transcript.
 - [ ] Admin account uses a unique password and MFA where available; cashier accounts are not shared.
+- [ ] Owner supplied final values for all nine `NEXT_PUBLIC_LEGAL_*` variables in [SETUP.md](SETUP.md), including the legal entity, registration, physical address, monitored support/privacy contacts, DPO contact, effective date, and non-draft document version.
+- [ ] Production Legal Center gate passed: no legal variable is blank, bracketed, `draft-*`, `review-*`, `TODO`, `TBD`, `N/A`, or marked “not yet effective / local review.”
 - [ ] Backup posture and restore owner confirmed; Vercel log access and alert recipients confirmed.
 
 ## 2. Tablet and browser setup

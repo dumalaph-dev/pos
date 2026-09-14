@@ -9,6 +9,19 @@ const execFileAsync = promisify(execFile);
 export const DEFAULT_EXPECTED_SUPABASE_PROJECT_REF = "uzavkjftwcuixidxyopr";
 export const BRANCH_ENTITLEMENT_SCHEMA_FILE = "scripts/branch-entitlement-schema-check.sql";
 export const SUPABASE_CLI_VERSION = "2.114.0";
+// Keep this standalone list in sync with src/lib/legal-config.ts so the
+// deployment check can run before the TypeScript application is built.
+export const REQUIRED_LEGAL_ENV_KEYS = [
+  "NEXT_PUBLIC_LEGAL_ENTITY_NAME",
+  "NEXT_PUBLIC_LEGAL_BUSINESS_REGISTRATION",
+  "NEXT_PUBLIC_LEGAL_BUSINESS_ADDRESS",
+  "NEXT_PUBLIC_LEGAL_SUPPORT_EMAIL",
+  "NEXT_PUBLIC_LEGAL_SUPPORT_PHONE",
+  "NEXT_PUBLIC_LEGAL_PRIVACY_EMAIL",
+  "NEXT_PUBLIC_LEGAL_DPO_CONTACT",
+  "NEXT_PUBLIC_LEGAL_EFFECTIVE_DATE",
+  "NEXT_PUBLIC_LEGAL_DOCUMENT_VERSION",
+];
 const LINKED_PROJECT_REF_FILES = ["supabase/.temp/project-ref", ".supabase/project-ref"];
 const READ_ONLY_SCHEMA_QUERY = `npx --yes supabase@${SUPABASE_CLI_VERSION} db query --linked --agent yes --file ${BRANCH_ENTITLEMENT_SCHEMA_FILE} --output json`;
 
@@ -45,6 +58,7 @@ export async function runProductionPreflight({
   emit("Dumala production preflight");
   emit("Safe mode: secret values are never printed; the linked branch-schema query is read-only.");
 
+  checkLegalConfiguration(environment, issues, emit);
   checkHttpsOrigin("NEXT_PUBLIC_SITE_URL", siteUrl, issues, warnings, emit);
   const supabaseCheck = checkSupabaseUrl(supabaseUrl, expectedProjectRef, issues, emit);
 
@@ -91,9 +105,9 @@ export function printPreflightResult(result, log = console.log) {
 
   log("");
   if (result.remote) {
-    log("Preflight passed: production identity, deployment endpoints, and branch checkout schema are ready.");
+    log("Preflight passed: production identity, legal configuration, deployment endpoints, and branch checkout schema are ready.");
   } else {
-    log("Preflight passed: production identity and deployment endpoints are ready.");
+    log("Preflight passed: production identity, legal configuration, and deployment endpoints are ready.");
   }
 }
 
@@ -248,6 +262,32 @@ function checkSupabaseUrl(supabaseUrl, expectedProjectRef, issues, emit) {
     issues.push(`NEXT_PUBLIC_SUPABASE_URL points to ${projectRef}; expected production project ${expectedProjectRef}.`);
   }
   return { projectRef, matchesExpected };
+}
+
+function isLegalPlaceholder(value) {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) return true;
+
+  return /^\[[\s\S]*\]$/i.test(normalized)
+    || /\b(?:complete before publishing|not yet effective|local review|replace every|replace this|fill in)\b/i.test(normalized)
+    || /^(?:draft|review|todo|tbd|tba|n\/a|na|placeholder|example|sample|changeme|your)(?:[\s_.:-]|$)/i.test(normalized);
+}
+
+export function getInvalidLegalConfigurationKeys(environment = {}) {
+  return REQUIRED_LEGAL_ENV_KEYS.filter((key) => isLegalPlaceholder(environment[key]));
+}
+
+function checkLegalConfiguration(environment, issues, emit) {
+  const invalidKeys = getInvalidLegalConfigurationKeys(environment);
+  if (invalidKeys.length === 0) {
+    emit("PASS legal configuration: all required public legal values are set.");
+    return true;
+  }
+
+  for (const key of invalidKeys) {
+    issues.push(`${key} is missing or still a placeholder. Set the owner's final legal value in the production deployment environment.`);
+  }
+  return false;
 }
 
 async function checkLinkedBranchEntitlementSchema({

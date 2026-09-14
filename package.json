@@ -27,6 +27,7 @@
     "test:public-menu-domain": "node --experimental-strip-types --test scripts/public-menu-domain.test.ts",
     "test:site-url": "node --experimental-strip-types --test scripts/site-url.test.ts",
     "test:metadata": "node --experimental-strip-types --test scripts/page-metadata.test.ts",
+    "test:legal-config": "node --experimental-strip-types --test scripts/legal-config.test.ts",
     "test:production-preflight": "node --experimental-strip-types --test scripts/production-preflight.test.ts",
     "trial:validate": "npx --yes supabase@2.114.0 db query --linked --file scripts/trial-lifecycle-smoke.sql --output json",
     "platform:trial:validate": "npx --yes supabase@2.114.0 db query --linked --file scripts/platform-trial-extension-smoke.sql --output json",

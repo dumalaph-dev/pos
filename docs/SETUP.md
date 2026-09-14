@@ -27,6 +27,15 @@ Fill `.env.local` from Supabase → **Settings → API**:
 | `NEXT_PUBLIC_PUBLIC_MENU_ROOT_DOMAIN` | root domain for customer menu hostnames such as `branch.dumala.store` (defaults to `dumala.store`) | client + server |
 | `NEXT_PUBLIC_SUPABASE_URL` | Project URL | client + server |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon/public key | client + server |
+| `NEXT_PUBLIC_LEGAL_ENTITY_NAME` | Exact registered legal/business entity name to publish in the Legal Center | client + server — owner must provide for production |
+| `NEXT_PUBLIC_LEGAL_BUSINESS_REGISTRATION` | Exact registration identifier and issuing authority (for example, the final DTI/SEC/BIR reference) | client + server — owner must provide for production |
+| `NEXT_PUBLIC_LEGAL_BUSINESS_ADDRESS` | Exact physical business address for the published legal entity | client + server — owner must provide for production |
+| `NEXT_PUBLIC_LEGAL_SUPPORT_EMAIL` | Monitored support address for account, subscription, and service complaints | client + server — owner must provide for production |
+| `NEXT_PUBLIC_LEGAL_SUPPORT_PHONE` | Monitored support phone number, including country/area code | client + server — owner must provide for production |
+| `NEXT_PUBLIC_LEGAL_PRIVACY_EMAIL` | Monitored privacy/DPO request address | client + server — owner must provide for production |
+| `NEXT_PUBLIC_LEGAL_DPO_CONTACT` | Named DPO or privacy contact and role | client + server — owner must provide for production |
+| `NEXT_PUBLIC_LEGAL_EFFECTIVE_DATE` | Final effective date shown on every legal document | client + server — owner must provide for production |
+| `NEXT_PUBLIC_LEGAL_DOCUMENT_VERSION` | Final non-draft document version identifier, shared by the acceptance gates | client + server — owner must provide for production |
 | `NEXT_PUBLIC_PAYMONGO_PUBLIC_KEY` | PayMongo public key for browser-side payment-method tokenization | client + server |
 | `PAYMONGO_SECRET_KEY` | PayMongo secret API key for server-side plan/customer/subscription calls | **server only** |
 | `PAYMONGO_WEBHOOK_SECRET` | PayMongo webhook signing secret | **server only** |
@@ -36,6 +45,24 @@ Fill `.env.local` from Supabase → **Settings → API**:
 | `SUPABASE_SERVICE_ROLE_KEY` | service_role key | **server only — never ship to client** |
 
 `.env.local` is gitignored. Set the same vars in Vercel (Project → Settings → Environment Variables) for preview + production.
+
+### Legal Center production gate
+
+The owner must provide a final value for all nine `NEXT_PUBLIC_LEGAL_*` variables
+listed above before the first public deployment. These values are displayed in
+the public Legal Center, footer, and legal-acceptance records; they are not
+developer defaults. Do not leave a value blank or use bracketed guidance,
+`draft-*`, `review-*`, `TODO`, `TBD`, `N/A`, `Example`, or a “not yet effective /
+local review” value.
+
+Local `npm run dev` remains usable with blank or draft values so the legal
+pages can be reviewed before the owner signs off. That development allowance
+does not apply to a production build or production preflight.
+
+Because `NEXT_PUBLIC_*` values are embedded by Next.js at build time, set them
+in the Vercel Production environment before deploying and redeploy after any
+change. The production build and `npm run production:preflight` both fail and
+list the exact variable names that remain missing or placeholder values.
 
 For a local PayMongo test, use matching `pk_test_...` and `sk_test_...` keys. Create a separate enabled test-mode webhook endpoint, copy its signing secret into `.env.local` as `PAYMONGO_WEBHOOK_SECRET`, then run `npm run paymongo:preflight`. The preflight prints only safe mode and status information; it never prints keys, webhook secrets, or API response bodies.
 
@@ -675,6 +702,7 @@ A real-printer pass means the bridge acknowledged the ESC/POS bytes at `ip:port`
 
 ## 8. Build & deploy
 ```bash
+npm run production:preflight  # requires the final production env and linked project
 npm run build     # production build (also typechecks)
 npm run start     # run the production build locally
 ```

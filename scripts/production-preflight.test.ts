@@ -4,6 +4,8 @@ import path from "node:path";
 import test from "node:test";
 import {
   BRANCH_ENTITLEMENT_SCHEMA_FILE,
+  REQUIRED_LEGAL_ENV_KEYS,
+  getInvalidLegalConfigurationKeys,
   parseLinkedSchemaResult,
   printPreflightResult,
   runLinkedSchemaQuery,
@@ -18,6 +20,15 @@ const BASE_ENV = {
   NEXT_PUBLIC_SITE_URL: "https://dumala.store",
   NEXT_PUBLIC_SUPABASE_URL: `https://${PROJECT_REF}.supabase.co`,
   EXPECTED_SUPABASE_PROJECT_REF: PROJECT_REF,
+  NEXT_PUBLIC_LEGAL_ENTITY_NAME: "Dumala Software Development Services",
+  NEXT_PUBLIC_LEGAL_BUSINESS_REGISTRATION: "DTI Business Name No. 8335466",
+  NEXT_PUBLIC_LEGAL_BUSINESS_ADDRESS: "San Carlos City, Negros Occidental, Philippines",
+  NEXT_PUBLIC_LEGAL_SUPPORT_EMAIL: "support@example.invalid",
+  NEXT_PUBLIC_LEGAL_SUPPORT_PHONE: "+639155555555",
+  NEXT_PUBLIC_LEGAL_PRIVACY_EMAIL: "privacy@example.invalid",
+  NEXT_PUBLIC_LEGAL_DPO_CONTACT: "Privacy Contact",
+  NEXT_PUBLIC_LEGAL_EFFECTIVE_DATE: "2026-09-14",
+  NEXT_PUBLIC_LEGAL_DOCUMENT_VERSION: "legal-2026-09-14",
 };
 
 function healthyFetch() {
@@ -41,6 +52,28 @@ function runWithSchemaResult(stdout: string) {
     log: () => {},
   });
 }
+
+test("the production preflight requires every public legal value", async () => {
+  assert.deepEqual(getInvalidLegalConfigurationKeys({}), REQUIRED_LEGAL_ENV_KEYS);
+
+  const incompleteEnv = {
+    ...BASE_ENV,
+    NEXT_PUBLIC_LEGAL_SUPPORT_PHONE: "",
+    NEXT_PUBLIC_LEGAL_DOCUMENT_VERSION: "draft-2026-09-14",
+  };
+  const result = await runProductionPreflight({
+    args: [],
+    cwd: ROOT,
+    env: incompleteEnv,
+    log: () => {},
+  });
+
+  assert.equal(result.passed, false);
+  const issues = result.issues.join("\n");
+  assert.match(issues, /NEXT_PUBLIC_LEGAL_SUPPORT_PHONE is missing or still a placeholder/);
+  assert.match(issues, /NEXT_PUBLIC_LEGAL_DOCUMENT_VERSION is missing or still a placeholder/);
+  assert.doesNotMatch(issues, /draft-2026-09-14/);
+});
 
 test("the linked schema command uses a read-only SQL file and the linked project", async () => {
   let invocation: { executable: string; args: string[]; options: Record<string, unknown> } | null = null;
