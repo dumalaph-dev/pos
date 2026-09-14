@@ -7,7 +7,7 @@
 
 ## Current project status
 
-**Last updated:** 2026-09-01
+**Last updated:** 2026-09-14
 
 This section is the current source of truth for delivered work and the next gate. Keep it updated in the same change as every feature, migration, QA pass, commit, or deployment.
 
@@ -26,10 +26,50 @@ This section is the current source of truth for delivered work and the next gate
 | Shifts, till, and Z-readings | Complete; hosted authenticated RPC, manual open/close QA, and real-day report reconciliation passed 2026-08-12; shift-label collision fixed and verified 2026-08-09 | Keep regression coverage green |
 | Store-owner onboarding and guidance | Implemented | Verify first-run and mobile behavior on the deployed app |
 | Admin workspace themes | Live main deployment previews verified 2026-08-09 | Maintain regression coverage |
-| Production pilot | In progress; `dumala.store` is live, production identity/deployment preflight passed 2026-08-25, and the paid-branch entitlement drift was repaired in hosted migration `0072` | Complete the physical-device pilot gates, restore rehearsal/backup decision, Vercel log/alert setup, real data intake, pilot week, and branch #2 |
+| Production pilot | In progress; `dumala.store` is live, production identity/deployment preflight passed 2026-08-25, the paid-branch entitlement drift was repaired in hosted migration `0072`, and the logical restore rehearsal passed 2026-09-14 | Complete the physical-device pilot gates, off-machine backup copy/plan decision, Vercel log/alert setup, real data intake, pilot week, and branch #2 |
 | Platform owner powers | Phase 4 audit viewer, fleet-health, and enhanced sync/outbox-health slices deployed from `main`; linked migration `0081` is applied, and the hosted smoke/ACL/build checks pass. Phases 1–3 remain complete, including the owner-reported authenticated console gates | Run authenticated operator QA and collect the first bounded terminal heartbeats; then continue Phase 4 with device inventory and schema-drift visibility |
 
 ### Recent delivery log
+
+- **2026-09-14 - Production logical restore rehearsal:** Rehearsed the latest
+  checkpoint from `backups/2026-08-25T08-19-50Z` (production ref
+  `uzavkjftwcuixidxyopr`, captured `2026-08-25T08:19:50Z`) into the separate
+  scratch project `dumala-restore-rehearsal-20260914` (`zpqbodmtgekkmyqokevg`,
+  `ap-southeast-2`). The scratch schema replay used the exact migration set
+  present at the checkpoint commit, through `0071_automatic_shift_reports.sql`;
+  scratch verification reported migration ledger `71`, latest `0071`, all 35
+  manifest tables present, all 35 with RLS enabled, 10 critical application
+  functions, and 12 non-internal public triggers.
+
+  An independent post-load reread matched **35/35 tables and 621/621 rows**
+  with zero mismatches. Exact restored counts were:
+  `organizations=3`, `stores=5`, `profiles=6`, `devices=2`, `categories=12`,
+  `suppliers=2`, `products=19`, `customers=0`, `employee_roles=12`,
+  `employee_records=4`, `shifts=4`, `orders=16`, `order_items=39`,
+  `stock_movements=61`, `discount_approvals=2`, `order_action_approvals=0`,
+  `z_readings=2`, `inventory_counts=9`, `expenses=0`, `attendance_logs=0`,
+  `payroll_records=0`, `leave_requests=0`, `display_promotions=2`,
+  `display_gallery_items=0`, `audit_logs=123`, `admin_mutation_receipts=9`,
+  `admin_performance_samples=279`, `billing_provider_events=2`,
+  `platform_billing_settings=1`, `platform_billing_variants=4`,
+  `platform_policies=2`, `platform_promotions=1`,
+  `platform_promotion_redemptions=0`, `support_cases=0`, `trial_feedback=0`.
+  The three organization owner pointers and both sides of the two-row circular
+  inventory-count/stock-movement references were also verified after load.
+
+  The loader used two scratch-only dependency bridges required by the live
+  foreign keys: organization owner pointers were held null until profiles
+  loaded, and inventory-count adjustment pointers were held null until stock
+  movements loaded. Six dummy Auth users with scratch-only addresses were
+  created solely to satisfy the profiles foreign key; Auth users and Storage
+  objects remain excluded from the logical checkpoint as documented in the
+  runbook. No production link, migration push, insert, update, delete, Auth,
+  or Storage operation was issued. The production checkout still links to
+  `uzavkjftwcuixidxyopr`; its read-only migration list remains through `0084`,
+  and the production preflight identity/schema checks plus GETs for `/`,
+  `/manifest.webmanifest`, and `/sw.js` passed. The preflight still reports the
+  pre-existing missing legal effective-date/document-version environment
+  values. The off-machine backup copy and Free-plan/PITR decision remain open.
 
 - **2026-09-02 - Phase 4 sync/outbox health enhancement:** Expanded the
   read-only `/platform/sync` surface across organizations and active branches.
@@ -545,7 +585,7 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 ## P9 — Pilot & Production Readiness
 *Goal: live in a real store, then a second branch as the true multi-branch test.*
 
-**Current state (2026-08-25):** Production deployment and the PWA foundation are live. The remote production preflight passes for `dumala.store`, hosted Supabase project `uzavkjftwcuixidxyopr`, `/manifest.webmanifest`, `/sw.js`, and the paid-branch entitlement schema after hosted migration `0072` repaired drift recorded against `0070`. P9 is active rather than not started: the onboarding/device checklist, secure real-data intake packet, logical backup exporter, restore runbook, structured runtime diagnostics, and offline-drill verification are ready; the remaining P9 work is physical-device verification, owner data/configuration, external monitoring setup, backup restore rehearsal, and production use.
+**Current state (2026-09-14):** Production deployment and the PWA foundation are live. The remote production preflight passes for `dumala.store`, hosted Supabase project `uzavkjftwcuixidxyopr`, `/manifest.webmanifest`, `/sw.js`, and the paid-branch entitlement schema after hosted migration `0072` repaired drift recorded against `0070`. P9 is active rather than not started: the onboarding/device checklist, secure real-data intake packet, logical backup exporter, restore runbook, structured runtime diagnostics, and offline-drill verification are ready; the logical restore rehearsal passed into an isolated scratch project on 2026-09-14. The remaining P9 work is physical-device verification, owner data/configuration, off-machine backup copy/Free-plan decision, external monitoring setup, and production use.
 
 - [x] Production Supabase (separate project from dev); run migrations; verify RLS in prod. *(Hosted project is connected; local and hosted migration ledgers match through `0072`; hosted RLS, privileges, and authenticated QA are recorded above. Migration `0072` repaired the paid-branch guard drift and the read-only preflight now passes.)*
 - [x] Vercel production deployment + custom domain. *(`https://dumala.store` is live and serving the connected GitHub deployment.)*
@@ -554,7 +594,7 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 - [ ] Seed the real org, first branch, real menu/prices, staff accounts + PINs.
 - [x] Prepare the production onboarding/device checklist and secure real-data intake packet. *(See `docs/PRODUCTION_ONBOARDING_CHECKLIST.md` and `docs/PRODUCTION_DATA_INTAKE.md`; the actual owner data is still required.)*
 - [ ] On-device checklist: printer paired, customer display paired, offline drill passed, receipt looks right.
-- [ ] Backups: confirm Supabase PITR/backups on; document restore steps. *(Corrected 2026-08-15: the project is on the **Free** plan, so `backups: []` is literal — Supabase takes no automated backups at all, and PITR is unavailable without first upgrading to Pro. Managed backups are therefore a billing decision, not a configuration one. A fresh no-cost logical checkpoint on 2026-08-25 exported all 35 application tables, 621 rows, and 290 KB. Restore procedure and pilot cadence are in [PRODUCTION_BACKUP_AND_RESTORE.md](PRODUCTION_BACKUP_AND_RESTORE.md). The gate stays open until the checkpoint is copied off-machine, restored into a scratch project, and the owner decides on the plan.)*
+- [ ] Backups: confirm Supabase PITR/backups on; document restore steps. *(Corrected 2026-08-15: the project is on the **Free** plan, so `backups: []` is literal — Supabase takes no automated backups at all, and PITR is unavailable without first upgrading to Pro. Managed backups are therefore a billing decision, not a configuration one. A fresh no-cost logical checkpoint on 2026-08-25 exported all 35 application tables, 621 rows, and 290 KB. The 2026-09-14 restore rehearsal into isolated scratch project `zpqbodmtgekkmyqokevg` matched 35/35 tables and 621/621 rows; the remaining gate is copying the checkpoint off-machine and deciding on the plan.)*
 - [ ] Basic monitoring: Vercel runtime error logging and sync-failure alerting. *(Structured `server_request_error`, handled-error, and deduplicated offline-sync events are implemented and the live site/preflight are healthy; configure Vercel log access/notifications and name the pilot alert recipient.)*
 - [ ] **Pilot week:** run one branch alongside the notebook; log every issue; fix fast.
 - [ ] **Add branch #2** from the account as the real multi-branch validation; sign off against MVP success bars. *(The entitlement schema preflight and rollback-scoped smoke test pass after hosted migration `0072`; actual branch creation still waits for owner billing/data approval and the pilot.)*
