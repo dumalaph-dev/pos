@@ -4643,13 +4643,94 @@
 /* POS order history / receipt register                                      */
 /* -------------------------------------------------------------------------- */
 
+/* The register is rendered inside the themed POS shell. Keep its older
+   receipt-specific rules expressive, but route surfaces and accents through
+   the active theme so dark, paper, playful, and seasonal themes stay coherent. */
+.order-history-shell {
+  --order-surface: var(--pos-theme-surface, var(--surface));
+  --order-panel: var(--pos-theme-surface-panel, var(--surface-panel));
+  --order-raised: var(--pos-theme-surface-raised, var(--surface-raised));
+  --order-border: var(--pos-theme-border, var(--border));
+  --order-border-strong: var(--pos-theme-border-strong, var(--border-strong));
+  --order-ink: var(--pos-theme-text, var(--text));
+  --order-muted: var(--pos-theme-text-muted, var(--text-muted));
+  --order-primary: var(--pos-theme-topbar, var(--primary));
+  --order-accent: var(--pos-theme-highlight, var(--accent));
+  --order-accent-soft: var(--pos-theme-highlight-soft, var(--primary-soft));
+}
+
+.order-history-shell,
+.order-history-shell .order-history-detail,
+.order-history-shell .order-history-list-panel,
+.order-history-shell .order-history-ticket,
+.order-history-shell .order-history-meta-grid {
+  color: var(--order-ink);
+  border-color: var(--order-border);
+}
+
+.order-history-shell .order-history-header,
+.order-history-shell .order-history-toolbar,
+.order-history-shell .order-history-online-toolbar,
+.order-history-shell .order-history-list-panel,
+.order-history-shell .order-history-detail,
+.order-history-shell .order-history-ticket,
+.order-history-shell .order-history-meta-grid {
+  background: var(--order-surface);
+}
+
+.order-history-shell .order-history-filter,
+.order-history-shell .order-history-view-switch,
+.order-history-shell .online-queue-fulfillment-card,
+.order-history-shell .order-history-pending-note {
+  background: var(--order-accent-soft);
+}
+
+.order-history-shell .order-history-view-switch button.is-active,
+.order-history-shell .order-history-filter button.is-active,
+.order-history-shell .online-queue-row__number,
+.order-history-shell .order-history-button--close {
+  color: var(--pos-theme-topbar-text, var(--primary-fg));
+  background: var(--order-primary);
+}
+
+.order-history-shell .order-history-button,
+.order-history-shell .order-history-search,
+.order-history-shell .order-history-row,
+.order-history-shell .order-history-button--soft {
+  border-color: var(--order-border-strong);
+  background: var(--order-raised);
+}
+
+.order-history-shell .order-history-row:hover,
+.order-history-shell .order-history-row.is-selected {
+  background: color-mix(in srgb, var(--order-accent-soft) 72%, var(--order-raised));
+}
+
+.order-history-shell .order-history-status.is-online-new,
+.order-history-shell .order-history-status.is-online-cancelled {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.order-history-shell .order-history-status.is-online-confirmed,
+.order-history-shell .order-history-status.is-online-preparing {
+  color: var(--order-primary);
+  background: var(--order-accent-soft);
+}
+
+.order-history-shell .order-history-status.is-online-ready,
+.order-history-shell .order-history-status.is-online-picked-up {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 12%, var(--order-surface));
+}
+
 .order-history-overlay {
   position: fixed;
   z-index: 60;
   inset: 0;
   display: flex;
   padding: 18px;
-  background: rgba(46, 28, 16, 0.42);
+  background: color-mix(in srgb, var(--bg) 42%, #000 58%);
   backdrop-filter: blur(5px);
   animation: fade-in 160ms ease both;
 }
@@ -4665,9 +4746,9 @@
   border: 1px solid var(--border);
   border-radius: 22px;
   background:
-    radial-gradient(circle at 85% 0%, rgba(255, 255, 255, 0.7), transparent 30%),
+    radial-gradient(circle at 85% 0%, color-mix(in srgb, var(--surface-raised) 70%, transparent), transparent 30%),
     var(--bg);
-  box-shadow: 0 24px 70px rgba(46, 28, 16, 0.24);
+  box-shadow: 0 24px 70px color-mix(in srgb, var(--primary-deep) 24%, transparent);
   animation: success-pop 260ms cubic-bezier(.2,.8,.2,1) both;
 }
 
@@ -4677,7 +4758,7 @@
   gap: 18px;
   padding: 18px 22px 16px;
   border-bottom: 1px solid var(--border);
-  background: rgba(251, 248, 242, 0.82);
+  background: color-mix(in srgb, var(--surface-raised) 84%, transparent);
 }
 
 .order-history-header__brand,
@@ -4797,7 +4878,7 @@
 .order-history-button--soft {
   border-color: var(--border);
   color: var(--text-muted);
-  background: rgba(251, 248, 242, 0.8);
+  background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
 }
 
 .order-history-button--close {
@@ -4818,7 +4899,7 @@
   gap: 14px;
   padding: 12px 22px;
   border-bottom: 1px solid var(--border);
-  background: rgba(248, 244, 236, 0.76);
+  background: color-mix(in srgb, var(--surface-panel) 82%, transparent);
 }
 
 .order-history-filter {
@@ -4966,7 +5047,7 @@
   gap: 12px;
   padding: 10px 22px;
   border-bottom: 1px solid var(--border);
-  background: rgba(248, 244, 236, 0.76);
+  background: color-mix(in srgb, var(--surface-panel) 82%, transparent);
 }
 
 .order-history-online-toolbar .order-history-filter {
