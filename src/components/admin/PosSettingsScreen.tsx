@@ -1,6 +1,7 @@
 "use client";
 
 import "./PosSettingsScreen.css";
+import "@/components/pos/PosThemeArt.css";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition, type CSSProperties, type SVGProps } from "react";
@@ -1105,7 +1106,7 @@ function AppearancePanel({ config, choosePalette, updateConfig, customPaletteOpe
           <span className="pos-theme-active-pill"><MiniIcon name="check" size={11} /> Active</span>
         </div>
         <div className={`pos-theme-active-summary pos-theme-active-summary--${activeTheme.id}`}>
-          <span className={`pos-style-thumbnail pos-style-thumbnail--${activeTheme.id}`} aria-hidden="true"><i className="pos-style-thumbnail__top" /><i className="pos-style-thumbnail__rail" /><i className="pos-style-thumbnail__card" /><i className="pos-style-thumbnail__order" /><i className="pos-style-thumbnail__accent" /></span>
+          <span className={`pos-style-thumbnail pos-style-thumbnail--${activeTheme.id}`} style={activeTheme.variables as CSSProperties} aria-hidden="true"><i className="pos-style-thumbnail__top" /><i className="pos-style-thumbnail__rail" /><i className="pos-style-thumbnail__card" /><i className="pos-style-thumbnail__order" /><i className="pos-style-thumbnail__accent" /></span>
           <span><small>Selected theme</small><strong>{activeTheme.label}</strong><p>{activeTheme.description}</p><em>{activeTheme.mood}</em></span>
         </div>
         <PosThemePicker value={config.uiStyle} onChange={(uiStyle) => updateConfig({ uiStyle })} ariaLabel="POS interface theme" />

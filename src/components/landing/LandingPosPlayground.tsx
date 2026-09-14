@@ -5,6 +5,7 @@
 // page's critical path even though nothing above the fold uses it. Importing it
 // here means the stylesheet follows the lazily-loaded component.
 import "@/components/admin/PosSettingsScreen.css";
+import "@/components/pos/PosThemeArt.css";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type SVGProps } from "react";
 import { getPosPalette, POS_PALETTE_OPTIONS, type PosPaletteId } from "@/lib/pos-palette";
@@ -117,7 +118,7 @@ function ThemeOption({
 }) {
   return (
     <button type="button" role="radio" aria-checked={selected} className={`pos-style-option ${selected ? "is-selected" : ""}`} onClick={onSelect}>
-      <span className={`pos-style-thumbnail pos-style-thumbnail--${theme.id}`} aria-hidden="true">
+      <span className={`pos-style-thumbnail pos-style-thumbnail--${theme.id}`} style={theme.variables as CSSProperties} aria-hidden="true">
         <i className="pos-style-thumbnail__top" />
         <i className="pos-style-thumbnail__rail" />
         <i className="pos-style-thumbnail__card" />

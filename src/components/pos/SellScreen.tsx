@@ -1,6 +1,7 @@
 "use client";
 
 import "./SellScreen.css";
+import "@/components/pos/PosThemeArt.css";
 
 /**
  * POS Sell Screen (P1+P2). Catalog grid + cart + weight keypad + discounts +

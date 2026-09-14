@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { POS_THEME_OPTIONS, type PosThemeId } from "@/lib/pos-theme";
 
 export function PosThemePicker({
@@ -26,7 +27,7 @@ export function PosThemePicker({
             aria-label={`Use ${theme.label} theme`}
             title={theme.description}
           >
-            <span className={`pos-style-thumbnail pos-style-thumbnail--${theme.id}`} aria-hidden="true">
+            <span className={`pos-style-thumbnail pos-style-thumbnail--${theme.id}`} style={theme.variables as CSSProperties} aria-hidden="true">
               <i className="pos-style-thumbnail__top" />
               <i className="pos-style-thumbnail__rail" />
               <i className="pos-style-thumbnail__card" />

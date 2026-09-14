@@ -53,7 +53,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "modern",
     label: "Modern Workspace",
     shortLabel: "Modern",
-    description: "Layered neutrals, crisp controls, and a calm command-center feel.",
+    description: "Flat workspace tiles, crisp dividers, and a quiet checkout panel.",
     mood: "Crisp · focused · adaptable",
     variables: {
       ...shared,
@@ -89,7 +89,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "classic",
     label: "Classic Counter",
     shortLabel: "Classic",
-    description: "Warm paper tones, ink-like rules, and a considered heritage register style.",
+    description: "Letterpress menu cards, double ink rules, and a heritage receipt.",
     mood: "Warm · crafted · familiar",
     variables: {
       ...shared,
@@ -127,7 +127,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "soft",
     label: "Soft Studio",
     shortLabel: "Soft",
-    description: "Lavender mist, friendly curves, and diffused surfaces for a lighter rhythm.",
+    description: "Soft inset photo wells and rounded studio cards with generous curves.",
     mood: "Gentle · welcoming · relaxed",
     variables: {
       ...shared,
@@ -163,7 +163,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "dark",
     label: "Dark Night Shift",
     shortLabel: "Dark",
-    description: "Low-glare navy layers, luminous mint signals, and crisp data rails for focused evening service.",
+    description: "Instrument-panel tiles, mint data rails, and a low-glare checkout.",
     mood: "Low-glare · precise · resilient",
     variables: {
       ...shared,
@@ -277,7 +277,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "coastal",
     label: "Coastal Counter",
     shortLabel: "Coastal",
-    description: "Sea-glass surfaces, navy anchors, and coral action cues for a bright island-service mood.",
+    description: "Postcard photo frames, nautical double rules, and a sea-glass counter.",
     mood: "Fresh · breezy · confident",
     variables: {
       ...shared,
@@ -313,7 +313,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "sunset",
     label: "Sunset Market",
     shortLabel: "Sunset",
-    description: "Terracotta warmth balanced by indigo depth, designed to make the checkout moment feel energetic.",
+    description: "Arched market-stall cards and terracotta blocks with indigo rules.",
     mood: "Warm · expressive · social",
     variables: {
       ...shared,
@@ -349,7 +349,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "botanical",
     label: "Botanical Grove",
     shortLabel: "Botanical",
-    description: "Sage layers, forest ink, and citrus highlights for a grounded, natural service rhythm.",
+    description: "Specimen-style photo mats, leaf corners, and a forest-green frame.",
     mood: "Grounded · organic · steady",
     variables: {
       ...shared,
@@ -385,7 +385,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "ledger",
     label: "Monochrome Ledger",
     shortLabel: "Ledger",
-    description: "Ink, paper, and a single signal-yellow action color for fast, high-clarity counter work.",
+    description: "Squared ledger cells, monospaced figures, and ruled receipt sections.",
     mood: "Precise · editorial · direct",
     variables: {
       ...shared,
@@ -423,7 +423,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "lechon",
     label: "Lechon House Ember",
     shortLabel: "Lechon House",
-    description: "Roasted copper, charcoal accents, and woven-table texture for proud Filipino feast service.",
+    description: "Roast-house menu plaques with ember footers and a carved counter frame.",
     mood: "Smoky · festive · proudly local",
     variables: {
       ...shared,
@@ -461,7 +461,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "restaurant",
     label: "Restaurant Maison",
     shortLabel: "Restaurant",
-    description: "Linen neutrals, merlot details, and editorial typography for polished table-service dining.",
+    description: "Fine-dining menu mounts, serif titles, and double-rule order framing.",
     mood: "Refined · composed · hospitable",
     variables: {
       ...shared,
@@ -499,7 +499,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "cafe",
     label: "Café Daylight",
     shortLabel: "Café",
-    description: "Sunlit cream, fresh sage, and terracotta cues for an airy all-day café counter.",
+    description: "Bistro tile cards, gingham details, and a simple café order pad.",
     mood: "Bright · social · easygoing",
     variables: {
       ...shared,
@@ -537,7 +537,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "coffee",
     label: "Coffee Roastery",
     shortLabel: "Coffee Shop",
-    description: "Espresso layers, caramel highlights, and a moody roastery texture for specialty coffee service.",
+    description: "Roastery label cards, kraft-style rules, and stamped order sections.",
     mood: "Crafted · focused · aromatic",
     variables: {
       ...shared,
@@ -575,7 +575,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "latte",
     label: "Latte Minimal",
     shortLabel: "Warm Coffee",
-    description: "Milk-foam neutrals, espresso ink, and a quiet caramel accent for modern specialty coffee counters.",
+    description: "Open, unboxed product photography and hairline dividers for a minimal counter.",
     mood: "Warm · minimal · refined",
     variables: {
       ...shared,
@@ -613,7 +613,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "bakery",
     label: "Bakery Pâtisserie",
     shortLabel: "Bakery",
-    description: "Buttercream surfaces, berry ink, and delicate pastry-shop details for a joyful display counter.",
+    description: "Patisserie display arches, delicate dotted rules, and a pastry-box frame.",
     mood: "Delicate · joyful · handcrafted",
     variables: {
       ...shared,
@@ -651,7 +651,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "planner",
     label: "Evergreen Planner",
     shortLabel: "Planner",
-    description: "Notebook lines, tabbed navigation, and deep evergreen details for a calm, modern café counter.",
+    description: "Index cards, notebook margins, and dotted separators for an organized counter.",
     mood: "Minimal · tactile · organized",
     variables: {
       ...shared,
@@ -689,7 +689,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "chicken",
     label: "Golden Crunch Chicken",
     shortLabel: "Crispy Chicken",
-    description: "Ketchup red, golden fry-box yellow, checkerboard details, and bold quick-service controls.",
+    description: "Diner tiles, checkerboard trim, and punchy takeaway-box framing.",
     mood: "Crispy · playful · high-energy",
     variables: {
       ...shared,
@@ -727,7 +727,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "ramen",
     label: "Neon Noodle Alley",
     shortLabel: "Ramen Alley",
-    description: "Midnight indigo, neon signage, and glowing ticket rails for high-tempo ramen and night-market service.",
+    description: "Neon sign frames, dark photo windows, and an illuminated ticket counter.",
     mood: "Electric · nocturnal · kinetic",
     variables: {
       ...shared,
@@ -765,7 +765,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "taqueria",
     label: "Papel Picado Taqueria",
     shortLabel: "Taqueria",
-    description: "Cut-paper color, corn-tortilla warmth, and hand-painted menu shapes for lively street-food counters.",
+    description: "Cut-paper frames, stitched dividers, and festive market-stall details.",
     mood: "Festive · handmade · generous",
     variables: {
       ...shared,
@@ -803,7 +803,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "sushi",
     label: "Ink & Nori Sushi",
     shortLabel: "Sushi Bar",
-    description: "Washi paper, indigo ink, and vermilion stamp details for a quiet, precise sushi counter.",
+    description: "Washi photo mounts, fine ink rules, and restrained vermilion details.",
     mood: "Precise · serene · crafted",
     variables: {
       ...shared,
@@ -841,7 +841,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "deco",
     label: "Deco Supper Club",
     shortLabel: "Supper Club",
-    description: "Obsidian surfaces, quiet champagne accents, and precise spacing for a modern premium dining room.",
+    description: "Champagne double frames, geometric corners, and a cinematic supper-club menu.",
     mood: "Glamorous · cinematic · composed",
     variables: {
       ...shared,
@@ -879,7 +879,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "paper",
     label: "Paper & Press",
     shortLabel: "Paper Press",
-    description: "Deckled-paper warmth, ink rules, and red-pencil accents for a tactile vintage counter.",
+    description: "Newspaper photo blocks, editorial serif titles, and perforated receipt rules.",
     mood: "Tactile · nostalgic · editorial",
     variables: {
       ...shared,
@@ -917,7 +917,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "icecream",
     label: "Scoops & Sprinkles",
     shortLabel: "Ice Cream",
-    description: "Pastel scoops, sunny sprinkles, and friendly rounded controls for a joyful family counter.",
+    description: "Scoop-shaped photo windows, rounded sundae cards, and a pastel counter.",
     mood: "Playful · sunny · welcoming",
     variables: {
       ...shared,
@@ -955,7 +955,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "candy",
     label: "Candy Counter",
     shortLabel: "Candy Shop",
-    description: "Bubblegum brights, taffy stripes, and deep plum ink for an upbeat confectionery storefront.",
+    description: "Taffy-wrapper stripes, lozenge controls, and bold confectionery framing.",
     mood: "Colorful · energetic · sweet",
     variables: {
       ...shared,
@@ -993,7 +993,7 @@ export const POS_THEME_DEFINITIONS: Record<PosThemeId, PosThemeDefinition> = {
     id: "christmas",
     label: "Noel Market",
     shortLabel: "Christmas",
-    description: "Evergreen ink, cranberry ribbons, and warm paper texture for a polished holiday service counter.",
+    description: "Gift-tag cards, ribbon dividers, and an evergreen holiday order book.",
     mood: "Festive · warm · composed",
     variables: {
       ...shared,
