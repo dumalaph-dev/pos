@@ -16,7 +16,7 @@ This section is the current source of truth for delivered work and the next gate
 | Foundation and infrastructure | Complete (9/9 checklist items) | Keep CI and preview deployments green |
 | POS online core | Complete | Pilot validation |
 | Offline layer | Complete | Full 15-sale pilot drill |
-| Printing | In progress (6/7) | Physical LAN printer slip validation on the real branch LAN |
+| Printing | In progress (6/7); physical check deferred by owner on 2026-09-14 | Resume physical LAN printer slip validation later |
 | Multi-branch | Complete | Production second-branch sign-off |
 | Customer display | Hosted migration `0042` applied; RLS/grants verified; one real Main Branch promotion is active; paired browser two-screen QA passed for cart, weight, discount, payment/change, thank-you, rotation, and disconnect | Complete the separate physical display/LAN and offline pilot gate |
 | Online ordering and public menu | Deployed; pay-at-pickup queue/ETA, QR link, POS pickup handoff, mobile-first customer menu, and owner copy/theme editor are implemented; production preflight and public-menu smoke check pass | Owner acceptance with one real pickup order; keep the physical pilot gate moving |
@@ -27,9 +27,40 @@ This section is the current source of truth for delivered work and the next gate
 | Store-owner onboarding and guidance | Implemented | Verify first-run and mobile behavior on the deployed app |
 | Admin workspace themes | Live main deployment previews verified 2026-08-09 | Maintain regression coverage |
 | Production pilot | In progress; `dumala.store` is live, production identity/deployment preflight passed 2026-08-25, the paid-branch entitlement drift was repaired in hosted migration `0072`, and the logical restore rehearsal passed 2026-09-14 | Complete the physical-device pilot gates, off-machine backup copy/plan decision, Vercel log/alert setup, real data intake, pilot week, and branch #2 |
-| Platform owner powers | Phase 4 audit viewer, fleet-health, and enhanced sync/outbox-health slices deployed from `main`; linked migration `0081` is applied, and the hosted smoke/ACL/build checks pass. Phases 1–3 remain complete, including the owner-reported authenticated console gates | Run authenticated operator QA and collect the first bounded terminal heartbeats; then continue Phase 4 with device inventory and schema-drift visibility |
+| Platform owner powers | Phase 4 audit, fleet, sync/outbox, and schema-drift surfaces deployed through migration `0084`; device/terminal inventory implemented locally on 2026-09-14 | Deploy device inventory, run authenticated operator QA, and collect the first real terminal heartbeats |
 
 ### Recent delivery log
+
+- **2026-09-14 - Device and terminal inventory (local implementation):** Added
+  `/platform/devices`, protected by `console_read`, with organization/device/ID
+  search, branch and health filters, inactive-device visibility, refresh, and
+  expandable queue details. Registered devices without matching telemetry remain
+  visible. Browser identities only match registered prefixes within the same
+  organization and branch; unmatched browsers remain separate entries and are
+  not counted as unique physical tablets. A fresh queue cannot hide another
+  queue's stale heartbeat. Device-record activity is distinct from sync success.
+  Reads exclude printer settings, pairing tokens, and tenant payloads; no
+  migration or production writes were needed. Large lists render 50 entries at
+  a time and capped/error reads show an explicit incomplete-inventory notice.
+
+  The hosted read-only check found **2 active registered devices, 0 browser
+  terminals, 0 matching registrations, and no heartbeat timestamp**. Device RLS
+  is enabled, service-role reads are allowed, and authenticated telemetry reads
+  remain denied. Six new identity/health/filter/boundary tests, adjacent sync
+  and access/operator tests, and synthetic browser checks passed. Browser QA covered
+  keyboard disclosure, ID search, health/branch filters, inactive devices,
+  refresh persistence, empty/partial/legacy/unavailable states, and 390px/820px
+  responsive layouts without page overflow. The temporary synthetic route was
+  removed after QA. `npm run typecheck`, `npm run lint`, and `git diff --check`
+  passed. The local unauthenticated route returned `307` to `/platform/login`.
+  The initial build/preflight failures came from draft values in local
+  `.env.local`, not missing Vercel Production configuration. With the owner's
+  supplied effective date `2026-09-15` and document version `legal-2026-09-15`
+  now applied locally, `npm run build` and `npm run production:preflight` both
+  pass, including legal validation, linked schema, and all three live HTTP probes.
+  The aggregate inventory check is repeatable with `npm run platform:devices:validate`.
+  Deployment and real authenticated terminal heartbeat validation remain open.
+  The owner deferred the physical printer check until later.
 
 - **2026-09-14 - Production logical restore rehearsal:** Rehearsed the latest
   checkpoint from `backups/2026-08-25T08-19-50Z` (production ref
