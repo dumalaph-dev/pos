@@ -650,6 +650,7 @@ P4 implementation is complete (8/8 checklist items). The progress table above pr
 ### Future product plan
 
 - Deferred: offer an optional business subdomain with a templated mobile-first website for each customer, then add opt-in online delivery ordering and online payment. This remains roadmap-only while the `/staff/{slug}` entry-link foundation is implemented.
+- Deferred: store promotions and discount codes — owner-managed holiday/event promotions at `/admin/promotions` with codes, schedules and expiry, POS and/or online-store channels, usage limits, and a redemption ledger. The detailed plan is saved in [STORE_PROMOTIONS_DISCOUNT_CODES_PLAN.md](STORE_PROMOTIONS_DISCOUNT_CODES_PLAN.md); implementation waits for owner scheduling and the §15 decisions (Senior/PWD stacking, whole-order scope, offline caps, reversal usage, manager permissions).
 
 ---
 
