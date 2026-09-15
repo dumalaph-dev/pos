@@ -157,6 +157,7 @@ export async function placeOnlineOrder(_previousState: PublicOnlineOrderResult, 
   const storeSlug = readText(formData, "store_slug");
   const customerName = readText(formData, "customer_name");
   const customerPhone = readText(formData, "customer_phone");
+  const customerPhoneDigits = customerPhone.replace(/\D/g, "");
   const fulfillmentMethod = (readText(formData, "fulfillment_method") || "pickup") as OnlineOrderingFulfillmentMethod;
   const pickupDate = readText(formData, "pickup_date") || singaporeDateKey();
   const pickupSlot = readText(formData, "pickup_slot") || "asap";
@@ -172,7 +173,7 @@ export async function placeOnlineOrder(_previousState: PublicOnlineOrderResult, 
   if (!isUuid(requestId)) return fail("Refresh the menu and try placing your online order again.");
   if (!legalAcknowledged || legalTermsVersion !== LEGAL_DOCUMENT_VERSION || legalPrivacyNoticeVersion !== LEGAL_DOCUMENT_VERSION) return fail("Review and accept the current ordering terms and privacy notice, then try again.");
   if (customerName.length < 2 || customerName.length > 80) return fail("Add your name so the store knows who to call.");
-  if (customerPhone.length < 5 || customerPhone.length > 40) return fail("Add a phone number the store can reach you on.");
+  if (customerPhone.length > 40 || customerPhoneDigits.length < 7 || customerPhoneDigits.length > 15) return fail("Add a phone number the store can reach you on.");
   if (fulfillmentMethod !== "pickup" && fulfillmentMethod !== "delivery") return fail("Choose pickup or delivery to continue.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(pickupDate)) return fail("Choose a valid pickup date.");
   if (deliveryAddress.length > 240 || (fulfillmentMethod === "delivery" && deliveryAddress.length < 8)) return fail("Add a complete delivery address so the rider can find you.");

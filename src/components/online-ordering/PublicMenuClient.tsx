@@ -417,7 +417,7 @@ function LegacyCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfil
         </div>
       </fieldset>
 
-      <div className="mt-5 grid gap-4 sm:grid-cols-2"><CheckoutField label="Your name" name="customer_name" placeholder="e.g. Mara Santos" autoComplete="name" required /><CheckoutField label="Mobile number" name="customer_phone" placeholder="09XX XXX XXXX" type="tel" autoComplete="tel" required /></div>
+      <div className="mt-5 grid gap-4 sm:grid-cols-2"><CheckoutField label="Your name" name="customer_name" placeholder="e.g. Mara Santos" autoComplete="name" required minLength={2} /><CheckoutField label="Mobile number" name="customer_phone" placeholder="09XX XXX XXXX" type="tel" autoComplete="tel" required minLength={7} maxLength={40} /></div>
       {isDelivery && <div className="mt-4 grid gap-4 sm:grid-cols-2"><CheckoutField label="Delivery address" name="delivery_address" placeholder="Street, building, barangay" autoComplete="street-address" maxLength={240} required /><CheckoutField label="Landmark or rider note" name="delivery_note" placeholder="Gate color, floor, nearby landmark" maxLength={160} /></div>}
       <label className="mt-4 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]" htmlFor="pickup-slot">{isDelivery ? "Delivery time" : "Pickup time"}<select id="pickup-slot" name="pickup_slot" defaultValue="asap" className="mt-1.5 block h-11 w-full rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 text-sm font-bold normal-case tracking-normal text-[var(--public-menu-raised-text)] outline-none focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10">{PICKUP_SLOTS.map((slot) => <option key={slot} value={slot}>{pickupSlotLabel(slot)}{slot === "asap" ? ` · about ${isDelivery ? menu.settings.delivery.etaMinutes : menu.settings.averagePrepMinutes} min` : ""}</option>)}</select></label>
       <label className="mt-4 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]" htmlFor="order-note">Note for the store <span className="font-medium normal-case tracking-normal text-[var(--public-menu-subtle)]">optional</span><textarea id="order-note" name="note" rows={2} maxLength={240} placeholder="Less ice, extra sauce, etc." className="mt-1.5 block w-full resize-y rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-[var(--public-menu-raised-text)] outline-none placeholder:text-[var(--public-menu-subtle)] focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10" /></label>
@@ -443,6 +443,7 @@ function SmarterCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfi
   const [note, setNote] = useState("");
   const [legalAcknowledged, setLegalAcknowledged] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [submittedReview, setSubmittedReview] = useState(false);
   const [formError, setFormError] = useState("");
   const selectedPickupDate = dateOptions.some((option) => option.value === pickupDate) ? pickupDate : dateOptions[0]?.value ?? "";
   const slots = useMemo(() => selectedPickupDate ? generateOnlineOrderingSlots(menu.settings, selectedPickupDate) : [], [menu.settings, selectedPickupDate]);
@@ -450,10 +451,26 @@ function SmarterCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfi
   const totals = calculateOnlineOrderTotals(cartTotal, fulfillmentMethod, menu.settings, menu.vatRegistered, menu.vatRate);
   const prepMinutes = menu.settings.averagePrepMinutes + (isDelivery ? menu.settings.delivery.etaMinutes : 0);
 
+  const reviewFailed = submittedReview && !pending && !orderState.ok;
+  const showReview = reviewing && !reviewFailed;
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    if (reviewing) return;
+    if (showReview) {
+      setSubmittedReview(true);
+      return;
+    }
     event.preventDefault();
+    setSubmittedReview(false);
     setFormError("");
+    if (customerName.trim().length < 2) {
+      setFormError("Add your name so the store knows who to call.");
+      return;
+    }
+    const phoneDigits = customerPhone.replace(/\D/g, "");
+    if (phoneDigits.length < 7 || phoneDigits.length > 15) {
+      setFormError("Add a phone number the store can reach you on.");
+      return;
+    }
     if (!event.currentTarget.reportValidity()) return;
     if (!totals.minimumOrderMet) {
       setFormError(`Orders start at ${formatPeso(totals.minimumOrderCentavos)}.`);
@@ -469,6 +486,11 @@ function SmarterCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfi
     setReviewing(true);
   }
 
+  function editDetails() {
+    setReviewing(false);
+    setSubmittedReview(false);
+  }
+
   const whenLabel = selectedPickupSlot === "asap" ? `ASAP · about ${prepMinutes} min` : `${formatOnlineOrderingDate(selectedPickupDate)} · ${pickupSlotLabel(selectedPickupSlot)}`;
 
   return (
@@ -480,7 +502,7 @@ function SmarterCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfi
        <input type="hidden" name="pickup_slot" value={selectedPickupSlot} />
        <input type="hidden" name="legal_terms_version" value={LEGAL_DOCUMENT_VERSION} />
        <input type="hidden" name="legal_privacy_notice_version" value={LEGAL_DOCUMENT_VERSION} />
-      {reviewing && <>
+      {showReview && <>
         <input type="hidden" name="fulfillment_method" value={fulfillmentMethod} />
         <input type="hidden" name="customer_name" value={customerName} />
         <input type="hidden" name="customer_phone" value={customerPhone} />
@@ -497,22 +519,22 @@ function SmarterCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfi
       </div>
 
        {dateOptions.length === 0 && <p role="alert" className="mt-4 rounded-xl border border-[var(--public-menu-danger-soft)] bg-[var(--public-menu-danger-soft)] px-3 py-2.5 text-xs font-semibold leading-5 text-[var(--public-menu-danger-text)]">No pickup or delivery slots remain in the current scheduling window. Please try again later.</p>}
-       {reviewing ? <ReviewPanel cart={cart} totals={totals} isDelivery={isDelivery} customerName={customerName} customerPhone={customerPhone} deliveryAddress={deliveryAddress} deliveryNote={deliveryNote} note={note} whenLabel={whenLabel} cancellationPolicy={menu.settings.cancellationPolicy} onBack={() => setReviewing(false)} /> : <>
+       {showReview ? <ReviewPanel cart={cart} totals={totals} isDelivery={isDelivery} customerName={customerName} customerPhone={customerPhone} deliveryAddress={deliveryAddress} deliveryNote={deliveryNote} note={note} whenLabel={whenLabel} cancellationPolicy={menu.settings.cancellationPolicy} onBack={editDetails} /> : <>
         <fieldset className="mt-5"><legend className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]">How would you like to receive it?</legend><div className="mt-2 grid gap-2 sm:grid-cols-2"><label className={`cursor-pointer rounded-2xl border p-3 transition ${!isDelivery ? "border-[var(--public-menu-primary)] bg-[var(--public-menu-primary-soft)]" : "border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] hover:border-[var(--public-menu-border-strong)]"}`}><input type="radio" name="fulfillment_method" value="pickup" checked={!isDelivery} onChange={() => onFulfillmentMethodChange("pickup")} className="sr-only" /><span className="flex items-start gap-2.5"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--public-menu-primary)] text-[var(--public-menu-primary-text)]"><AdminIcon name="bag" size={15} /></span><span><strong className="block text-sm font-extrabold text-[var(--public-menu-heading)]">Pick up</strong><small className="mt-0.5 block text-[11px] leading-4 text-[var(--public-menu-muted)]">Ready at the counter · pay when you arrive</small></span></span></label>{menu.settings.delivery.enabled && <label className={`cursor-pointer rounded-2xl border p-3 transition ${isDelivery ? "border-[var(--public-menu-primary)] bg-[var(--public-menu-primary-soft)]" : "border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] hover:border-[var(--public-menu-border-strong)]"}`}><input type="radio" name="fulfillment_method" value="delivery" checked={isDelivery} onChange={() => onFulfillmentMethodChange("delivery")} className="sr-only" /><span className="flex items-start gap-2.5"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--public-menu-accent)] text-[var(--public-menu-accent-text)]"><AdminIcon name="arrow" size={15} /></span><span><strong className="block text-sm font-extrabold text-[var(--public-menu-heading)]">Deliver to me</strong><small className="mt-0.5 block text-[11px] leading-4 text-[var(--public-menu-muted)]">{formatPeso(menu.settings.delivery.feeCentavos)} fee · about {menu.settings.delivery.etaMinutes} min</small></span></span></label>}</div></fieldset>
-        <div className="mt-5 grid gap-4 sm:grid-cols-2"><CheckoutField label="Your name" name="customer_name" placeholder="e.g. Mara Santos" autoComplete="name" required value={customerName} onChange={setCustomerName} /><CheckoutField label="Mobile number" name="customer_phone" placeholder="09XX XXX XXXX" type="tel" autoComplete="tel" required value={customerPhone} onChange={setCustomerPhone} /></div>
+         <div className="mt-5 grid gap-4 sm:grid-cols-2"><CheckoutField label="Your name" name="customer_name" placeholder="e.g. Mara Santos" autoComplete="name" required minLength={2} value={customerName} onChange={setCustomerName} /><CheckoutField label="Mobile number" name="customer_phone" placeholder="09XX XXX XXXX" type="tel" autoComplete="tel" required minLength={7} maxLength={40} value={customerPhone} onChange={setCustomerPhone} /></div>
         {isDelivery && <div className="mt-4 grid gap-4 sm:grid-cols-2"><CheckoutField label="Delivery address" name="delivery_address" placeholder="Street, building, barangay" autoComplete="street-address" maxLength={240} required value={deliveryAddress} onChange={setDeliveryAddress} /><CheckoutField label="Landmark or rider note" name="delivery_note" placeholder="Gate color, floor, nearby landmark" maxLength={160} value={deliveryNote} onChange={setDeliveryNote} /></div>}
          <div className="mt-4 grid gap-4 sm:grid-cols-2"><label className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]" htmlFor="pickup-date">{isDelivery ? "Delivery date" : "Pickup date"}<select id="pickup-date" value={selectedPickupDate} onChange={(event) => setPickupDate(event.target.value)} className="mt-1.5 block h-11 w-full rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 text-sm font-bold normal-case tracking-normal text-[var(--public-menu-raised-text)] outline-none focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10">{dateOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]" htmlFor="pickup-slot">{isDelivery ? "Delivery time" : "Pickup time"}<select id="pickup-slot" value={selectedPickupSlot} onChange={(event) => setPickupSlot(event.target.value)} className="mt-1.5 block h-11 w-full rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 text-sm font-bold normal-case tracking-normal text-[var(--public-menu-raised-text)] outline-none focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10">{slots.map((slot) => <option key={slot} value={slot}>{pickupSlotLabel(slot)}{slot === "asap" ? ` · about ${prepMinutes} min` : ""}</option>)}</select></label></div>
         <label className="mt-4 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]" htmlFor="order-note">Note for the store <span className="font-medium normal-case tracking-normal text-[var(--public-menu-subtle)]">optional</span><textarea id="order-note" name="note" rows={2} maxLength={240} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Less ice, extra sauce, etc." className="mt-1.5 block w-full resize-y rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-[var(--public-menu-raised-text)] outline-none placeholder:text-[var(--public-menu-subtle)] focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10" /></label>
         {isDelivery && <p className="mt-3 rounded-xl bg-[var(--public-menu-primary-soft)] px-3 py-2.5 text-[11px] leading-5 text-[var(--public-menu-primary-soft-text)]">{menu.settings.delivery.note}{menu.settings.delivery.serviceArea && ` Service area: ${menu.settings.delivery.serviceArea}.`}</p>}
       </>}
       {formError && <p role="alert" className="mt-4 rounded-xl border border-[var(--public-menu-danger-soft)] bg-[var(--public-menu-danger-soft)] px-3 py-2.5 text-xs font-semibold leading-5 text-[var(--public-menu-danger-text)]">{formError}</p>}
-       {orderState.message && <p role="alert" className="mt-4 rounded-xl border border-[var(--public-menu-danger-soft)] bg-[var(--public-menu-danger-soft)] px-3 py-2.5 text-xs font-semibold leading-5 text-[var(--public-menu-danger-text)]">{orderState.message}</p>}
+       {orderState.message && !showReview && <p role="alert" className="mt-4 rounded-xl border border-[var(--public-menu-danger-soft)] bg-[var(--public-menu-danger-soft)] px-3 py-2.5 text-xs font-semibold leading-5 text-[var(--public-menu-danger-text)]">{orderState.message}</p>}
        <div className="mt-4 flex items-start gap-2 rounded-xl border border-[var(--public-menu-danger-soft)] bg-[var(--public-menu-danger-soft)] px-3 py-2.5 text-[11px] leading-5 text-[var(--public-menu-danger-text)]"><AdminIcon name="lock" size={14} /><p><strong className="font-extrabold">Please check before placing.</strong> Submit only a genuine order with accurate information; fake, prank, duplicate, or fraudulent orders may be cancelled and reviewed by the store.</p></div>
        <label className="mt-4 flex items-start gap-3 text-[11px] leading-5 text-[var(--public-menu-muted)]" htmlFor="order-legal-acknowledged">
          <input id="order-legal-acknowledged" name="legal_acknowledged" type="checkbox" value="yes" required checked={legalAcknowledged} onChange={(event) => setLegalAcknowledged(event.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-[var(--public-menu-primary)]" />
          <span>I agree to the <Link href="/legal/online-ordering" target="_blank" rel="noreferrer" className="font-extrabold text-[var(--public-menu-heading)] underline underline-offset-4">Online Ordering Terms</Link> and acknowledge the <Link href="/legal/privacy" target="_blank" rel="noreferrer" className="font-extrabold text-[var(--public-menu-heading)] underline underline-offset-4">Privacy Notice</Link>.</span>
        </label>
-       <button type="submit" disabled={pending || cart.length === 0 || !requestId || dateOptions.length === 0 || !selectedPickupDate || !selectedPickupSlot} className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--public-menu-primary)] px-4 py-3 text-xs font-extrabold uppercase tracking-wide text-[var(--public-menu-primary-text)] transition hover:bg-[var(--public-menu-primary-hover)] disabled:cursor-not-allowed disabled:opacity-55">{pending ? "Placing your order…" : reviewing ? "Confirm and place order" : "Review order"}<AdminIcon name="arrow" size={14} /></button>
+       <button type="submit" disabled={pending || cart.length === 0 || !requestId || dateOptions.length === 0 || !selectedPickupDate || !selectedPickupSlot} className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--public-menu-primary)] px-4 py-3 text-xs font-extrabold uppercase tracking-wide text-[var(--public-menu-primary-text)] transition hover:bg-[var(--public-menu-primary-hover)] disabled:cursor-not-allowed disabled:opacity-55">{pending ? "Placing your order…" : showReview ? "Confirm and place order" : "Review order"}<AdminIcon name="arrow" size={14} /></button>
       <p className="mt-3 text-center text-[10px] leading-4 text-[var(--public-menu-subtle)]">By placing this order, you agree to be contacted about {isDelivery ? "delivery" : "pickup"}. {menu.settings.cancellationPolicy}</p>
     </form>
   );
@@ -526,8 +548,8 @@ function ReviewRow({ label, value }: { label: string; value: string }) {
   return <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-3"><span className="font-extrabold uppercase tracking-[0.08em] text-[var(--public-menu-subtle)]">{label}</span><strong className="min-w-0 break-words text-right font-semibold text-[var(--public-menu-heading)]">{value}</strong></div>;
 }
 
-function CheckoutField({ label, name, placeholder, type = "text", required = false, value, onChange, autoComplete, maxLength = 80 }: { label: string; name: string; placeholder: string; type?: string; required?: boolean; value?: string; onChange?: (value: string) => void; autoComplete?: string; maxLength?: number }) {
-  return <label className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]" htmlFor={name}>{label}<input id={name} name={name} type={type} placeholder={placeholder} required={required} maxLength={maxLength} autoComplete={autoComplete} value={value} onChange={onChange ? (event) => onChange(event.target.value) : undefined} className="mt-1.5 block h-11 w-full rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 text-sm font-semibold normal-case tracking-normal text-[var(--public-menu-raised-text)] outline-none placeholder:text-[var(--public-menu-subtle)] focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10" /></label>;
+function CheckoutField({ label, name, placeholder, type = "text", required = false, value, onChange, autoComplete, minLength, maxLength = 80 }: { label: string; name: string; placeholder: string; type?: string; required?: boolean; value?: string; onChange?: (value: string) => void; autoComplete?: string; minLength?: number; maxLength?: number }) {
+  return <label className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]" htmlFor={name}>{label}<input id={name} name={name} type={type} placeholder={placeholder} required={required} minLength={minLength} maxLength={maxLength} autoComplete={autoComplete} value={value} onChange={onChange ? (event) => onChange(event.target.value) : undefined} className="mt-1.5 block h-11 w-full rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 text-sm font-semibold normal-case tracking-normal text-[var(--public-menu-raised-text)] outline-none placeholder:text-[var(--public-menu-subtle)] focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10" /></label>;
 }
 
 function OrderConfirmation({ menu, orderState, status, etaAt, queuePosition, copied, onCopy }: { menu: PublicMenuStore; orderState: PublicOnlineOrderResult; status: OnlineOrderStatus; etaAt: string | null; queuePosition: number | null; copied: boolean; onCopy: () => void }) {
