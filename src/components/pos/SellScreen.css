@@ -5294,28 +5294,34 @@
   color: var(--text-muted);
 }
 
-.order-history-button--online-toggle {
+.pos-app .order-history-button--online-toggle {
   border-color: var(--primary);
   color: var(--primary-fg);
   background: var(--primary);
 }
 
-.order-history-button--online-toggle:hover:not(:disabled) {
+.pos-app .order-history-button--online-toggle:hover:not(:disabled) {
   border-color: var(--primary-hover);
   color: var(--primary-fg);
   background: var(--primary-hover);
 }
 
-.order-history-button--online-toggle.is-paused {
+.pos-app .order-history-button--online-toggle.is-paused {
   border-color: var(--warning);
   color: var(--warning);
   background: color-mix(in srgb, var(--warning) 12%, var(--surface-raised));
 }
 
-.order-history-button--online-toggle.is-paused:hover:not(:disabled) {
+.pos-app .order-history-button--online-toggle.is-paused:hover:not(:disabled) {
   border-color: var(--warning);
   color: var(--warning);
   background: color-mix(in srgb, var(--warning) 20%, var(--surface-raised));
+}
+
+.pos-app .order-history-button--online-toggle.is-compact {
+  width: 44px;
+  min-width: 44px;
+  padding: 0;
 }
 
 .order-history-online-live i {
