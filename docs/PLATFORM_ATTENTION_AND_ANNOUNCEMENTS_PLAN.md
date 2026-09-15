@@ -1,7 +1,7 @@
 # Platform Owner Attention Inbox and Announcement Center
 
 **Project:** Dumala POS  
-**Status:** Phase 1 and the announcement console slice implemented; migrations 0083–0085 are applied and verified in the local Docker Supabase stack. The linked project still needs its normal migration review and deployment step.  
+**Status:** Phase 1 and the announcement console slice implemented; migrations 0083–0085 are applied and verified in both the local Docker Supabase stack and the linked project.  
 **Created:** 2026-09-15
 
 ## Purpose
@@ -42,7 +42,7 @@ The inbox is a read-first, cross-organization queue on the platform overview. It
 
 ## Phase 2 — Announcement center
 
-**Implementation status:** The operator workspace and audited lifecycle actions are implemented at `/platform/announcements`. Apply `0085_platform_announcements.sql` before using create, publish, schedule, or archive actions.
+**Implementation status:** The operator workspace and audited lifecycle actions are implemented at `/platform/announcements`. Migration `0085_platform_announcements.sql` is applied to the local and linked projects.
 
 ### Scope
 
@@ -86,4 +86,5 @@ Use a `platform_announcements` table with service-role access only. Store the au
 
 - Local migration dry run is up to date after applying `0083`, `0084`, and `0085`.
 - `npm run platform:announcements:validate:local` confirms both tables, RLS, service-role access, and the status/audit constraints.
+- Linked schema smoke reports 85 applied migrations with latest version `0085`; the announcement boundary check passes with authenticated reads/inserts denied and service-role access enabled.
 - The local announcement transaction smoke test verified draft insertion, audit insertion, audience fields, and rollback; no smoke rows remain persisted.
