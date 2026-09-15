@@ -134,8 +134,16 @@ const DEFAULT_STORE_NAME = "Your Store";
 
 /** Backstop interval for customer-display settings. See the poll effect below. */
 const DISPLAY_SETTINGS_POLL_MS = 60_000;
+const ONLINE_PICKUP_LOAD_TIMEOUT_MS = 15_000;
 
 const displayPeso = (cents: number) => formatPeso(cents).replace(/\.00$/, "");
+
+function clearOnlineOrderQueryFromUrl() {
+  const nextUrl = new URL(window.location.href);
+  if (!nextUrl.searchParams.has("onlineOrder")) return;
+  nextUrl.searchParams.delete("onlineOrder");
+  window.history.replaceState({}, "", `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+}
 
 type PosRuntimeConfig = {
   palette: PosPaletteId;
@@ -818,25 +826,31 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
       onlinePickupRequestRef.current = onlineOrderId;
       // eslint-disable-next-line react-hooks/set-state-in-effect -- surface a terminal-state error at the URL handoff boundary.
       setOnlinePickup({ status: "error", message: "Reconnect this terminal before loading an online pickup." });
+      clearOnlineOrderQueryFromUrl();
       return;
     }
     if (cart.length > 0) {
       onlinePickupRequestRef.current = onlineOrderId;
       setOnlinePickup({ status: "error", message: "Clear the current sale before opening an online pickup." });
+      clearOnlineOrderQueryFromUrl();
       return;
     }
     if (products.length === 0) {
       onlinePickupRequestRef.current = onlineOrderId;
       setOnlinePickup({ status: "error", message: "The current branch catalog is empty, so this pickup cannot be loaded." });
+      clearOnlineOrderQueryFromUrl();
       return;
     }
 
     onlinePickupRequestRef.current = onlineOrderId;
-    const nextUrl = new URL(window.location.href);
-    nextUrl.searchParams.delete("onlineOrder");
-    window.history.replaceState({}, "", `${nextUrl.pathname}${nextUrl.search}`);
     setOnlinePickup({ status: "loading", orderId: onlineOrderId });
     let cancelled = false;
+
+    const showOnlinePickupError = (message: string) => {
+      if (cancelled) return;
+      clearOnlineOrderQueryFromUrl();
+      setOnlinePickup({ status: "error", message });
+    };
 
     async function loadOnlinePickup() {
       const { data: order, error: orderError } = await supabase
@@ -846,7 +860,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
         .maybeSingle();
       if (cancelled) return;
       if (orderError || !order) {
-        setOnlinePickup({ status: "error", message: "That online pickup is not available to this terminal." });
+        showOnlinePickupError("That online pickup is not available to this terminal.");
         return;
       }
       const onlineOrder = order as {
@@ -864,7 +878,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
         note: string | null;
       };
       if (onlineOrder.status === "picked_up" || onlineOrder.status === "cancelled") {
-        setOnlinePickup({ status: "error", message: `This online pickup is already ${onlineOrder.status.replace("_", " ")}.` });
+        showOnlinePickupError(`This online pickup is already ${onlineOrder.status.replace("_", " ")}.`);
         return;
       }
 
@@ -875,7 +889,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
         .order("id");
       if (cancelled) return;
       if (itemError || !itemRows || itemRows.length === 0) {
-        setOnlinePickup({ status: "error", message: "This pickup has no readable item list. Ask a manager to review it." });
+        showOnlinePickupError("This pickup has no readable item list. Ask a manager to review it.");
         return;
       }
 
@@ -889,7 +903,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
         const quantity = Number(row.qty);
         const unitPrice = Number(row.unit_price_snapshot);
         if (!sourceProduct || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPrice) || unitPrice <= 0) {
-          setOnlinePickup({ status: "error", message: "One pickup item is no longer available in the current branch catalog." });
+          showOnlinePickupError("One pickup item is no longer available in the current branch catalog.");
           return;
         }
 
@@ -911,6 +925,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
         });
       }
 
+      if (cancelled) return;
       setDiscount(NO_DISCOUNT);
       setCart(cartLines);
       setOrderType((current) => onlineOrder.fulfillment_method === "delivery"
@@ -931,13 +946,25 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
         total: Number(onlineOrder.total) || 0,
         items: pickupItems,
       });
+      clearOnlineOrderQueryFromUrl();
     }
 
-    void loadOnlinePickup().catch(() => {
-      if (!cancelled) setOnlinePickup({ status: "error", message: "The online pickup could not be loaded. Try opening it again." });
-    });
+    const timeoutId = window.setTimeout(() => {
+      if (cancelled) return;
+      cancelled = true;
+      clearOnlineOrderQueryFromUrl();
+      setOnlinePickup({ status: "error", message: "The online pickup is taking too long to load. Check the connection and try again." });
+    }, ONLINE_PICKUP_LOAD_TIMEOUT_MS);
+
+    void loadOnlinePickup()
+      .then(() => window.clearTimeout(timeoutId))
+      .catch(() => {
+        window.clearTimeout(timeoutId);
+        showOnlinePickupError("The online pickup could not be loaded. Check the connection and try again.");
+      });
     return () => {
       cancelled = true;
+      window.clearTimeout(timeoutId);
     };
   }, [cart.length, loading, offline, onlineOrderId, posConfig.orderTypes, products, profile, setCart, setDiscount, supabase]);
 
@@ -1436,6 +1463,17 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     setUnlockedOfflineProfile(cached.profile);
   }
 
+  function dismissOnlinePickup() {
+    onlinePickupRequestRef.current = null;
+    setOnlinePickup({ status: "idle" });
+  }
+
+  function closeOnlinePickup() {
+    clearCart();
+    dismissOnlinePickup();
+    setOrderType(posConfig.defaultOrderType);
+  }
+
   if (!loading && !offlineProfile && requiresOfflineUnlock) {
     return (
       <main className="min-h-full flex items-center justify-center bg-bg p-6">
@@ -1747,7 +1785,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
         {onlinePickup.status !== "idle" && (
           <section className={`online-pickup-banner${onlinePickup.status === "error" ? " is-error" : onlinePickup.status === "loading" ? " is-loading" : ""}`} aria-live="polite">
             {onlinePickup.status === "loading" && <><strong>Loading online pickup…</strong><span>Checking the queue and item list for this terminal.</span></>}
-            {onlinePickup.status === "error" && <><strong>Online pickup unavailable</strong><span>{onlinePickup.message}</span><button type="button" onClick={() => setOnlinePickup({ status: "idle" })}>Dismiss</button></>}
+            {onlinePickup.status === "error" && <><strong>Online pickup unavailable</strong><span>{onlinePickup.message}</span><button type="button" onClick={dismissOnlinePickup}>Dismiss</button></>}
             {onlinePickup.status === "ready" && (
               <>
                 <div className="online-pickup-banner__identity">
@@ -1760,7 +1798,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
                   <strong>{displayPeso(onlinePickup.total)}</strong>
                   <small>{onlinePickup.items.length} item{onlinePickup.items.length === 1 ? "" : "s"}{onlinePickup.deliveryNote ? ` · ${onlinePickup.deliveryNote}` : ""}{onlinePickup.note ? ` · ${onlinePickup.note}` : ""}</small>
                 </div>
-                <button type="button" onClick={() => { clearCart(); setOnlinePickup({ status: "idle" }); setOrderType(posConfig.defaultOrderType); }} disabled={payOpen} className="online-pickup-banner__dismiss">Close pickup</button>
+                <button type="button" onClick={closeOnlinePickup} disabled={payOpen} className="online-pickup-banner__dismiss">Close pickup</button>
               </>
             )}
           </section>
