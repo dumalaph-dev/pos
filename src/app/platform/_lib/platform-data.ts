@@ -183,6 +183,12 @@ export type PlatformEntitlementRecords = {
   trialExtensionsSchemaAvailable: boolean;
 };
 
+export type PlatformSupportCaseResult = {
+  records: Array<SupportCaseRecord & { organizationName: string }>;
+  schemaAvailable: boolean;
+  organizationsAvailable: boolean;
+};
+
 export type PlatformAuditResult = {
   events: PlatformAuditEvent[];
   schemaAvailable: boolean;
@@ -321,6 +327,51 @@ export async function readPlatformDirectory(admin: PlatformAdminClient): Promise
   };
 }
 
+/**
+ * Read the bounded support metadata needed by the platform attention inbox.
+ * The overview does not need case descriptions or tenant payloads, so keep
+ * this query intentionally narrow and resolve organization names separately.
+ */
+export async function readPlatformSupportCases(admin: PlatformAdminClient): Promise<PlatformSupportCaseResult> {
+  const [casesResult, organizationsResult] = await Promise.all([
+    admin
+      .from("support_cases")
+      .select("id, org_id, created_by, subject, priority, status, first_response_due_at, created_at, updated_at, resolved_at")
+      .in("status", ["open", "in_progress", "waiting_on_customer"])
+      .order("first_response_due_at", { ascending: true })
+      .limit(250),
+    admin.from("organizations").select("id, name").limit(1000),
+  ]);
+
+  if (casesResult.error) return { records: [], schemaAvailable: false, organizationsAvailable: !organizationsResult.error };
+
+  const names = new Map<string, string>();
+  for (const row of organizationsResult.data ?? []) {
+    if (typeof row.id === "string") names.set(row.id, typeof row.name === "string" && row.name.trim() ? row.name : "Unnamed organization");
+  }
+  const records = (casesResult.data ?? []).flatMap((row): Array<SupportCaseRecord & { organizationName: string }> => {
+    if (!isRecord(row) || typeof row.id !== "string" || typeof row.org_id !== "string" || typeof row.subject !== "string" || typeof row.created_at !== "string" || typeof row.updated_at !== "string") return [];
+    const priority = row.priority === "urgent" ? "urgent" : "normal";
+    const status = row.status === "in_progress" || row.status === "waiting_on_customer" ? row.status : "open";
+    return [{
+      id: row.id,
+      org_id: row.org_id,
+      created_by: typeof row.created_by === "string" ? row.created_by : "",
+      subject: row.subject,
+      description: "",
+      priority,
+      status,
+      first_response_due_at: typeof row.first_response_due_at === "string" ? row.first_response_due_at : row.created_at,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      resolved_at: typeof row.resolved_at === "string" ? row.resolved_at : null,
+      organizationName: names.get(row.org_id) ?? "Unnamed organization",
+    }];
+  });
+
+  return { records, schemaAvailable: true, organizationsAvailable: !organizationsResult.error };
+}
+
 export async function readPlatformEntitlementRecords(admin: PlatformAdminClient): Promise<PlatformEntitlementRecords> {
   const [grantsResult, trialExtensionsResult] = await Promise.all([
     readAllPlatformAccessGrants(admin),
@@ -348,7 +399,7 @@ export async function readPlatformEntitlementRecords(admin: PlatformAdminClient)
 }
 
 export async function readPlatformAudit(admin: PlatformAdminClient): Promise<PlatformAuditResult> {
-  const [organizationAuditResult, operatorAuditResult] = await Promise.all([
+  const [organizationAuditResult, operatorAuditResult, announcementAuditResult] = await Promise.all([
     admin
       .from("audit_logs")
       .select("id, org_id, actor_id, action, entity, entity_id, before, after, created_at")
@@ -360,6 +411,11 @@ export async function readPlatformAudit(admin: PlatformAdminClient): Promise<Pla
       .select("id, operator_id, action, actor_id, actor_email, before, after, created_at")
       .order("created_at", { ascending: false })
       .limit(PLATFORM_AUDIT_LIMIT),
+    admin
+      .from("platform_announcement_audit_logs")
+      .select("id, announcement_id, action, actor_id, actor_email, before, after, created_at")
+      .order("created_at", { ascending: false })
+      .limit(PLATFORM_AUDIT_LIMIT),
   ]);
 
   const organizationRows = !organizationAuditResult.error && Array.isArray(organizationAuditResult.data)
@@ -367,6 +423,9 @@ export async function readPlatformAudit(admin: PlatformAdminClient): Promise<Pla
     : [];
   const operatorRows = !operatorAuditResult.error && Array.isArray(operatorAuditResult.data)
     ? operatorAuditResult.data
+    : [];
+  const announcementRows = !announcementAuditResult.error && Array.isArray(announcementAuditResult.data)
+    ? announcementAuditResult.data
     : [];
   const organizationIds = [...new Set(organizationRows
     .map((row) => typeof row.org_id === "string" ? row.org_id : null)
@@ -416,7 +475,24 @@ export async function readPlatformAudit(admin: PlatformAdminClient): Promise<Pla
       createdAt: row.created_at,
     }];
   });
-  const events = [...organizationEvents, ...operatorEvents].sort((left, right) => {
+  const announcementEvents = announcementRows.flatMap<PlatformAuditEvent>((row) => {
+    if (typeof row.id !== "string" || typeof row.action !== "string" || typeof row.created_at !== "string") return [];
+    return [{
+      id: row.id,
+      source: "operator",
+      organizationId: null,
+      organizationName: "Platform-wide",
+      action: row.action,
+      entity: "platform_announcements",
+      entityId: typeof row.announcement_id === "string" ? row.announcement_id : null,
+      actorId: typeof row.actor_id === "string" ? row.actor_id : null,
+      actorEmail: typeof row.actor_email === "string" ? row.actor_email : null,
+      before: row.before,
+      after: row.after,
+      createdAt: row.created_at,
+    }];
+  });
+  const events = [...organizationEvents, ...operatorEvents, ...announcementEvents].sort((left, right) => {
     const rightTime = Date.parse(right.createdAt);
     const leftTime = Date.parse(left.createdAt);
     return (Number.isNaN(rightTime) ? 0 : rightTime) - (Number.isNaN(leftTime) ? 0 : leftTime);

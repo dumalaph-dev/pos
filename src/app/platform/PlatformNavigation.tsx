@@ -8,6 +8,8 @@ import { platformOperatorRoleLabel, type PlatformOperatorRole } from "@/lib/plat
 
 const PLATFORM_NAV_ITEMS: Array<{ label: string; href: string; icon: AdminIconName; detail: string }> = [
   { label: "Overview", href: "/platform", icon: "dashboard", detail: "Command center" },
+  { label: "Attention inbox", href: "/platform#platform-attention-heading", icon: "bell", detail: "Open payment, support, access, and sync signals" },
+  { label: "Announcements", href: "/platform/announcements", icon: "bell", detail: "Merchant communications" },
   { label: "Plans & Pricing", href: "/platform/plans", icon: "wallet", detail: "Subscription catalog" },
   { label: "Promo & Marketing", href: "/platform/promotions", icon: "tag", detail: "Campaign codes & performance" },
   { label: "Directory", href: "/platform/users", icon: "customers", detail: "Users & organizations" },
