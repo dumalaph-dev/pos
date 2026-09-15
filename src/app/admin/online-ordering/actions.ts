@@ -69,10 +69,10 @@ function actionRedirect(message: string): never {
   redirect(`/admin/online-ordering?error=${encodeURIComponent(message)}`);
 }
 
-function onlineOrderingRpcError(error: { message?: string | null } | null, fallback: string) {
+function onlineOrderingRpcError(error: { message?: string | null } | null, fallback: string, migration = "0063_online_ordering_protection.sql") {
   const message = error?.message?.trim() ?? "";
   if (/schema cache|could not find the function public\./i.test(message)) {
-    return "The online-ordering database schema is still syncing. Apply migration 0063_online_ordering_protection.sql, refresh the page, and try again.";
+    return `The online-ordering database schema is still syncing. Apply migration ${migration}, refresh the page, and try again.`;
   }
   return message || fallback;
 }
@@ -443,4 +443,51 @@ export async function updatePosOnlineOrderStatus(
 
   const label = formatOrderStatusLabel(status) ?? "updated";
   return { ok: true, message: `Online order ${label.toLowerCase()}.` };
+}
+
+/**
+ * Pause or resume online customer ordering from the POS without changing
+ * in-store sales or exposing the broader fulfillment settings action.
+ */
+export async function togglePosOnlineOrdering(
+  storeId: string,
+  enabled: boolean,
+): Promise<PosOnlineOrderStatusResult> {
+  const normalizedStoreId = storeId.trim();
+  if (!normalizedStoreId) return { ok: false, message: "This POS terminal is not assigned to a branch." };
+  if (typeof enabled !== "boolean") return { ok: false, message: "Choose whether online ordering should be paused or resumed." };
+
+  const user = await getAuthenticatedUser();
+  if (!user) return { ok: false, message: "Your session has expired. Sign in again before changing online ordering." };
+
+  const supabase = await createClient();
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("org_id, store_id, role")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profileError || !profile) return { ok: false, message: "Your POS profile is not available. Sign in again and try once more." };
+
+  const role = profile.role as OwnerProfile["role"];
+  if (role !== "admin" && role !== "manager" && role !== "cashier") {
+    return { ok: false, message: "Your POS role cannot change online ordering." };
+  }
+  if (role !== "admin" && profile.store_id !== normalizedStoreId) {
+    return { ok: false, message: "That branch is not available to this POS terminal." };
+  }
+
+  const { error } = await supabase.rpc("set_online_ordering_status", {
+    p_store_id: normalizedStoreId,
+    p_enabled: enabled,
+  });
+  if (error) {
+    return { ok: false, message: onlineOrderingRpcError(error, "Online ordering status could not be changed.", "0087_online_ordering_status_control.sql") };
+  }
+
+  return {
+    ok: true,
+    message: enabled
+      ? "Online orders resumed. In-store POS sales are unaffected."
+      : "Online orders paused. In-store POS sales are unaffected.",
+  };
 }

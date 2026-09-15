@@ -36,20 +36,24 @@ export function OnlineFulfillmentSettings({
 
   return (
     <section className="overflow-hidden rounded-[24px] border border-line bg-surface shadow-[var(--shadow-card)]" aria-labelledby="fulfillment-settings-heading">
-      <div className="border-b border-line px-5 py-5 sm:px-6">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-accent">Fulfillment settings</p>
-            <h2 id="fulfillment-settings-heading" className="mt-1 text-xl font-extrabold tracking-[-0.03em] text-ink">Set promises your team can keep.</h2>
-            <p className="mt-1 max-w-xl text-sm leading-5 text-ink-muted">Choose when customers can order, how much notice the team needs, and which fulfillment methods appear at checkout.</p>
+      <form action={updateOnlineOrderingSettings}>
+        <div className="border-b border-line px-5 py-5 sm:px-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-accent">Fulfillment settings</p>
+              <h2 id="fulfillment-settings-heading" className="mt-1 text-xl font-extrabold tracking-[-0.03em] text-ink">Set promises your team can keep.</h2>
+              <p className="mt-1 max-w-xl text-sm leading-5 text-ink-muted">Choose when customers can order, how much notice the team needs, and which fulfillment methods appear at checkout.</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <SettingsSaveButton />
+              <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary-soft text-primary"><AdminIcon name="clock" size={17} /></span>
+            </div>
           </div>
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary"><AdminIcon name="clock" size={17} /></span>
         </div>
-      </div>
 
-      <form action={updateOnlineOrderingSettings} className="p-5 sm:p-6">
-        <input type="hidden" name="store_id" value={storeId} />
-        <label className="flex items-center justify-between gap-4 rounded-2xl border border-line bg-raised px-3.5 py-3">
+        <div className="p-5 sm:p-6">
+          <input type="hidden" name="store_id" value={storeId} />
+          <label className="flex items-center justify-between gap-4 rounded-2xl border border-line bg-raised px-3.5 py-3">
           <span><strong className="block text-sm font-extrabold text-ink">Accept online orders</strong><small className="mt-0.5 block text-xs text-ink-muted">Customers can place pickup or delivery orders now</small></span>
           <span className="relative inline-flex shrink-0">
             <input type="checkbox" name="enabled" checked={enabled} onChange={(event) => onEnabledChange(event.target.checked)} className="peer sr-only" />
@@ -115,9 +119,9 @@ export function OnlineFulfillmentSettings({
           <textarea id="cancellation-policy" name="cancellation_policy" defaultValue={settings.cancellationPolicy} rows={3} maxLength={360} className="mt-1.5 block w-full resize-y rounded-xl border border-line-strong bg-raised px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10" />
         </label>
 
-        <div className="mt-5 flex items-center justify-between gap-3 border-t border-line pt-4">
-          <p className="max-w-[28ch] text-[11px] leading-4 text-ink-muted">ETAs use active orders, prep time, and the delivery buffer when applicable.</p>
-          <SettingsSaveButton />
+          <div className="mt-5 border-t border-line pt-4">
+            <p className="max-w-[28ch] text-[11px] leading-4 text-ink-muted">ETAs use active orders, prep time, and the delivery buffer when applicable.</p>
+          </div>
         </div>
       </form>
     </section>
@@ -155,5 +159,5 @@ function TimeField({ label, name, defaultValue, disabled = false }: { label: str
 
 function SettingsSaveButton() {
   const { pending } = useFormStatus();
-  return <button type="submit" disabled={pending} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60">{pending ? "Saving…" : "Save settings"}<AdminIcon name="check" size={14} /></button>;
+  return <button type="submit" disabled={pending} className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60">{pending ? "Saving…" : "Save settings"}<AdminIcon name="check" size={14} /></button>;
 }

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AdminIcon } from "@/components/admin/AdminIcon";
-import { updatePosOnlineOrderStatus } from "@/app/admin/online-ordering/actions";
+import { togglePosOnlineOrdering, updatePosOnlineOrderStatus } from "@/app/admin/online-ordering/actions";
 import { formatPeso } from "@/lib/money";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -167,6 +167,8 @@ export default function OnlineQueuePanel({
   const [notice, setNotice] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [onlineOrderingEnabled, setOnlineOrderingEnabled] = useState<boolean | null>(null);
+  const [onlineOrderingUpdating, setOnlineOrderingUpdating] = useState(false);
+  const canToggleOnlineOrdering = Boolean(profile.store_id) && (profile.role === "admin" || profile.role === "manager" || profile.role === "cashier");
 
   const loadQueue = useCallback(async (silent = false) => {
     const requestId = requestIdRef.current + 1;
@@ -356,6 +358,27 @@ export default function OnlineQueuePanel({
     }
   };
 
+  const toggleOnlineOrdering = async () => {
+    const storeId = profile.store_id;
+    if (!canToggleOnlineOrdering || !storeId || onlineOrderingEnabled === null || onlineOrderingUpdating) return;
+    const nextEnabled = !onlineOrderingEnabled;
+    setOnlineOrderingUpdating(true);
+    try {
+      const result = await togglePosOnlineOrdering(storeId, nextEnabled);
+      if (result.ok) {
+        setOnlineOrderingEnabled(nextEnabled);
+        onToast(result.message);
+        await loadQueue(true);
+      } else {
+        setNotice(result.message);
+      }
+    } catch {
+      setNotice("Online ordering could not be changed. In-store POS sales are unaffected; try again when connected.");
+    } finally {
+      setOnlineOrderingUpdating(false);
+    }
+  };
+
   const advanceSelectedOrder = async () => {
     if (!selectedOrder || !nextAction || actionId) return;
     setActionId(selectedOrder.id);
@@ -392,7 +415,12 @@ export default function OnlineQueuePanel({
           </button>
         </div>
         <div className="order-history-online-toolbar__actions">
-          <span className={`order-history-online-live${onlineOrderingEnabled === false ? " is-paused" : onlineOrderingEnabled === null ? " is-checking" : ""}`}><i />{onlineOrderingEnabled === false ? "Paused · existing orders" : onlineOrderingEnabled === null ? "Checking order status" : lastUpdatedAt ? `Live · ${formatQueueTime(lastUpdatedAt)}` : "Live queue"}</span>
+          <span className="order-history-online-scope" title="These controls affect online customer orders only, not in-store POS sales."><AdminIcon name="bag" size={13} />Online orders only</span>
+          <span className={`order-history-online-live${onlineOrderingEnabled === false ? " is-paused" : onlineOrderingEnabled === null ? " is-checking" : ""}`} aria-live="polite"><i />{onlineOrderingEnabled === false ? "Online orders · Paused" : onlineOrderingEnabled === null ? "Online orders · Checking status" : lastUpdatedAt ? `Online orders · Live · ${formatQueueTime(lastUpdatedAt)}` : "Online orders · Live"}</span>
+          {canToggleOnlineOrdering && <button type="button" className={`order-history-button order-history-button--online-toggle${onlineOrderingEnabled === false ? " is-paused" : ""}`} onClick={() => void toggleOnlineOrdering()} disabled={offline || onlineOrderingEnabled === null || onlineOrderingUpdating} aria-label={onlineOrderingEnabled === false ? "Resume online orders" : onlineOrderingEnabled === null ? "Checking online order status" : "Pause online orders"} title="Changes online customer ordering only; in-store POS sales are unaffected.">
+            <AdminIcon name={onlineOrderingEnabled === false ? "check" : onlineOrderingEnabled === null ? "refresh" : "pause"} size={15} />
+            {onlineOrderingUpdating ? "Saving…" : onlineOrderingEnabled === null ? "Checking…" : onlineOrderingEnabled === false ? "Resume online orders" : "Pause online orders"}
+          </button>}
           <button type="button" className="order-history-button order-history-button--soft" onClick={() => void refreshQueue()} disabled={loading || refreshing}>
             <AdminIcon name="refresh" size={15} />
             {refreshing ? "Refreshing…" : "Refresh"}
