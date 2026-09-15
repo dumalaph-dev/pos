@@ -347,6 +347,13 @@ export function PublicMenuClient({ menu }: { menu: PublicMenuStore }) {
   }
 
   const orderingPaused = !menu.settings.enabled;
+  const readyForHandoff = orderState.ok && trackedStatus === "ready";
+  const checkoutEyebrow = readyForHandoff ? "Order ready" : orderState.ok ? "Order received" : "Almost there";
+  const checkoutHeading = readyForHandoff
+    ? `${orderState.fulfillmentMethod === "delivery" ? "Your delivery" : "Your pickup"} is ready.`
+    : orderState.ok
+      ? `${orderState.fulfillmentMethod === "delivery" ? "Your delivery" : "Your pickup"} is in the queue.`
+      : "Set your order details.";
 
   return (
     <main className="public-menu min-h-[100svh] overflow-x-hidden" data-public-menu-theme={menu.settings.theme} style={themeStyle}>
@@ -398,7 +405,17 @@ export function PublicMenuClient({ menu }: { menu: PublicMenuStore }) {
 
       {trackOpen && <TrackOrderDialog orderNo={trackOrderNo} phone={trackPhone} state={trackState} onOrderNoChange={setTrackOrderNo} onPhoneChange={setTrackPhone} onSubmit={findOrder} onClose={() => setTrackOpen(false)} />}
 
-      {drawerOpen && <div className="fixed inset-0 z-40 flex items-end justify-center overscroll-contain bg-[var(--public-menu-primary)]/35 p-0 backdrop-blur-[2px] sm:items-center sm:p-5" role="dialog" aria-modal="true" aria-labelledby="checkout-heading"><div className="public-menu__sheet max-h-[92dvh] w-full max-w-xl overflow-y-auto rounded-t-[24px] bg-[var(--public-menu-raised)] p-4 shadow-[var(--public-menu-shadow-pop)] sm:rounded-[var(--public-menu-radius-card)] sm:p-7"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[var(--public-menu-accent-ink)]">{orderState.ok ? "Order received" : "Almost there"}</p><h2 id="checkout-heading" className="mt-1 text-[1.4rem] font-black leading-tight tracking-[-0.045em] text-[var(--public-menu-heading)] sm:text-2xl">{orderState.ok ? `${orderState.fulfillmentMethod === "delivery" ? "Your delivery" : "Your pickup"} is in the queue.` : "Set your order details."}</h2></div><button type="button" onClick={() => setDrawerOpen(false)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-[var(--public-menu-muted)] transition hover:bg-[var(--public-menu-sidebar)] hover:text-[var(--public-menu-heading)]" aria-label="Close checkout"><AdminIcon name="close" size={18} /></button></div>{orderState.ok ? <OrderConfirmation orderState={orderState} status={trackedStatus} etaAt={trackedEta ?? orderState.etaAt ?? null} queuePosition={trackedQueuePosition ?? orderState.queuePosition ?? null} copied={copied} onCopy={copyOrderNumber} menu={menu} /> : <SmarterCheckoutForm menu={menu} cart={cart} cartTotal={cartTotal} fulfillmentMethod={fulfillmentMethod} onFulfillmentMethodChange={setFulfillmentMethod} requestId={checkoutRequestId} action={formAction} pending={pending} orderState={orderState} />}</div></div>}
+      {drawerOpen && (
+        <div className="fixed inset-0 z-40 flex items-end justify-center overscroll-contain bg-[var(--public-menu-primary)]/35 p-0 backdrop-blur-[2px] sm:items-center sm:p-5" role="dialog" aria-modal="true" aria-labelledby={readyForHandoff ? "ready-order-heading" : "checkout-heading"}>
+          <div className="public-menu__sheet max-h-[92dvh] w-full max-w-xl overflow-y-auto rounded-t-[24px] bg-[var(--public-menu-raised)] p-4 shadow-[var(--public-menu-shadow-pop)] sm:rounded-[var(--public-menu-radius-card)] sm:p-7">
+            <div className={`flex items-start gap-4 ${readyForHandoff ? "justify-end" : "justify-between"}`}>
+              {!readyForHandoff && <div><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[var(--public-menu-accent-ink)]">{checkoutEyebrow}</p><h2 id="checkout-heading" className="mt-1 text-[1.4rem] font-black leading-tight tracking-[-0.045em] text-[var(--public-menu-heading)] sm:text-2xl">{checkoutHeading}</h2></div>}
+              <button type="button" onClick={() => setDrawerOpen(false)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-[var(--public-menu-muted)] transition hover:bg-[var(--public-menu-sidebar)] hover:text-[var(--public-menu-heading)]" aria-label="Close checkout"><AdminIcon name="close" size={18} /></button>
+            </div>
+            {orderState.ok ? <OrderConfirmation orderState={orderState} status={trackedStatus} etaAt={trackedEta ?? orderState.etaAt ?? null} queuePosition={trackedQueuePosition ?? orderState.queuePosition ?? null} copied={copied} onCopy={copyOrderNumber} menu={menu} /> : <SmarterCheckoutForm menu={menu} cart={cart} cartTotal={cartTotal} fulfillmentMethod={fulfillmentMethod} onFulfillmentMethodChange={setFulfillmentMethod} requestId={checkoutRequestId} action={formAction} pending={pending} orderState={orderState} />}
+          </div>
+        </div>
+      )}
 
         <footer className="border-t border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] px-4 py-7 text-center text-[11px] font-semibold text-[var(--public-menu-subtle)] sm:px-6">
           <span className="font-extrabold text-[var(--public-menu-heading)]">{brandName}</span> · order ahead with Dumala POS
@@ -728,8 +745,52 @@ function CheckoutField({ label, name, placeholder, type = "text", required = fal
   return <label className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]" htmlFor={name}>{label}<input id={name} name={name} type={type} placeholder={placeholder} required={required} minLength={minLength} maxLength={maxLength} autoComplete={autoComplete} value={value} onChange={onChange ? (event) => onChange(event.target.value) : undefined} className="mt-1.5 block h-11 w-full rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 text-sm font-semibold normal-case tracking-normal text-[var(--public-menu-raised-text)] outline-none placeholder:text-[var(--public-menu-subtle)] focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10" /></label>;
 }
 
+function ReadyOrderMetric({ label, value }: { label: string; value: string }) {
+  return <div className="min-w-0 rounded-xl border border-[var(--public-menu-border)] bg-[var(--public-menu-raised)] px-3 py-3"><p className="text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--public-menu-subtle)]">{label}</p><strong className="mt-1 block truncate text-sm font-extrabold tabular-nums text-[var(--public-menu-heading)]">{value}</strong></div>;
+}
+
+function ReadyOrderAlert({ orderState, isDelivery, copied, onCopy }: { orderState: PublicOnlineOrderResult; isDelivery: boolean; copied: boolean; onCopy: () => void }) {
+  const totalLabel = isDelivery ? "Total due on delivery" : "Total due at pickup";
+  const total = orderState.total !== undefined ? formatPeso(orderState.total) : "—";
+
+  return (
+    <div className="mt-2 sm:mt-4">
+      <div role="status" aria-live="polite" className="overflow-hidden rounded-[var(--public-menu-radius-card)] border-2 border-[var(--public-menu-accent)]/55 bg-[var(--public-menu-surface)] shadow-[var(--public-menu-shadow-pop)]">
+        <div className="bg-[var(--public-menu-primary)] p-5 text-[var(--public-menu-primary-text)] sm:p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <span className="inline-flex items-center gap-2 rounded-full bg-[var(--public-menu-accent)] px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[var(--public-menu-accent-text)]"><i className="h-1.5 w-1.5 rounded-full bg-[var(--public-menu-accent-text)]" />Order ready</span>
+              <h3 id="ready-order-heading" className="mt-4 text-[1.75rem] font-black tracking-[-0.045em] sm:text-2xl">{isDelivery ? "Your delivery is ready to go!" : "Your pickup is ready!"}</h3>
+              <p className="mt-2 max-w-md text-sm leading-6 text-[var(--public-menu-primary-text)]">Thank you for ordering ahead. {isDelivery ? "The store team is getting your order ready to leave." : "Your order is ready at the counter."}</p>
+            </div>
+            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[var(--public-menu-accent)] text-[var(--public-menu-accent-text)]"><AdminIcon name="check" size={22} /></span>
+          </div>
+        </div>
+
+        <div className="p-4 sm:p-5">
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            <ReadyOrderMetric label="Order number" value={orderState.orderNo ?? "—"} />
+            <ReadyOrderMetric label={totalLabel} value={total} />
+          </div>
+          <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-[var(--public-menu-success-soft)] bg-[var(--public-menu-success-soft)] px-3 py-3 text-[11px] leading-5 text-[var(--public-menu-success-ink)]">
+            <AdminIcon name="bag" size={15} />
+            <p><strong className="font-extrabold">{isDelivery ? "Next step." : "Please head to the pickup counter when you’re nearby."}</strong>{" "}{isDelivery ? "Keep your phone nearby and be ready to receive your order. Payment is collected when it arrives." : "Show this order number and pay the total shown above at the counter when you arrive."}</p>
+          </div>
+          <p className="mt-4 text-center text-xs leading-5 text-[var(--public-menu-muted)]">{isDelivery ? "Thank you for ordering with us — we’ll be in touch soon!" : "Thank you for ordering with us — we’ll see you at the counter!"}</p>
+          <button type="button" onClick={onCopy} className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3.5 py-2.5 text-xs font-extrabold text-[var(--public-menu-heading)] transition hover:bg-[var(--public-menu-primary-soft)]">{copied ? "Order number copied" : "Copy order number"}<AdminIcon name={copied ? "check" : "arrow"} size={13} /></button>
+          <p className="mt-3 text-center text-[10px] font-semibold text-[var(--public-menu-subtle)]">Need help? Show this confirmation to the store team.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OrderConfirmation({ menu, orderState, status, etaAt, queuePosition, copied, onCopy }: { menu: PublicMenuStore; orderState: PublicOnlineOrderResult; status: OnlineOrderStatus; etaAt: string | null; queuePosition: number | null; copied: boolean; onCopy: () => void }) {
   const isDelivery = orderState.fulfillmentMethod === "delivery";
+
+  if (status === "ready") {
+    return <ReadyOrderAlert orderState={orderState} isDelivery={isDelivery} copied={copied} onCopy={onCopy} />;
+  }
 
   return (
     <div className="mt-6">
