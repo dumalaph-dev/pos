@@ -15,7 +15,7 @@ export default async function PlatformConsoleLayout({ children }: Readonly<{ chi
   return (
     <div className="min-h-screen bg-bg text-ink">
       <PlatformNavigation userEmail={actor.email} role={actor.role} isBootstrap={actor.isBootstrap} />
-      <div className="min-h-screen lg:pl-[248px]">{children}</div>
+      <div className="min-h-screen lg:pl-[236px]">{children}</div>
     </div>
   );
 }
