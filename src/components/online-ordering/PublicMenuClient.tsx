@@ -52,6 +52,123 @@ const INITIAL_ORDER_STATE: PublicOnlineOrderResult = { ok: false, message: "" };
 const PICKUP_SLOTS = ["asap"];
 const TRACKED_STATUSES: OnlineOrderStatus[] = ["new", "confirmed", "preparing", "ready", "picked_up", "cancelled"];
 const INITIAL_TRACK_STATE: TrackState = { status: "idle", message: "", orderNo: "", orderStatus: null, fulfillmentMethod: null, etaAt: null, queuePosition: null };
+const ORDER_PROGRESS_LABELS = ["Received", "Preparing", "Ready"] as const;
+const ORDER_TIMING_GRACE_MS = 60_000;
+
+type OrderTimingTone = "neutral" | "positive" | "late" | "complete" | "cancelled";
+
+type OrderTimingCopy = {
+  tone: OrderTimingTone;
+  title: string;
+  detail: string;
+  countdown: string;
+};
+
+function orderProgressForStatus(status: OnlineOrderStatus) {
+  if (status === "cancelled") return 0;
+  if (status === "ready" || status === "picked_up") return 3;
+  if (status === "preparing") return 2;
+  return 1;
+}
+
+function parseOrderEta(etaAt: string | null) {
+  if (!etaAt) return null;
+  const value = new Date(etaAt).getTime();
+  return Number.isFinite(value) ? value : null;
+}
+
+function formatOrderCountdown(remainingMs: number) {
+  const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return hours + "h " + String(minutes).padStart(2, "0") + "m left";
+  return String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0") + " left";
+}
+
+function getOrderTimingCopy(status: OnlineOrderStatus, etaAt: string | null, isDelivery: boolean, now: number | null): OrderTimingCopy {
+  const etaMs = parseOrderEta(etaAt);
+  const isEarly = now !== null && etaMs !== null && status === "ready" && now < etaMs - ORDER_TIMING_GRACE_MS;
+  const isLate = now !== null && etaMs !== null && status !== "ready" && status !== "picked_up" && status !== "cancelled" && now > etaMs + ORDER_TIMING_GRACE_MS;
+  let countdown = "Live estimate";
+
+  if (status === "picked_up") {
+    countdown = isDelivery ? "Delivered" : "Picked up";
+  } else if (status === "cancelled") {
+    countdown = "Cancelled";
+  } else if (now === null) {
+    countdown = etaMs === null ? "Timing soon" : "Live estimate";
+  } else if (etaMs === null) {
+    countdown = "Timing soon";
+  } else if (etaMs <= now) {
+    countdown = status === "ready" ? "Ready now" : "Estimate passed";
+  } else {
+    countdown = formatOrderCountdown(etaMs - now);
+  }
+
+  if (status === "picked_up") {
+    return {
+      tone: "complete",
+      title: isDelivery ? "Delivered safely — enjoy your order!" : "All done — enjoy your order!",
+      detail: isDelivery ? "Your order has been delivered. Thanks for ordering ahead." : "Your order has been picked up. Thanks for ordering ahead.",
+      countdown,
+    };
+  }
+  if (status === "cancelled") {
+    return {
+      tone: "cancelled",
+      title: "We’re sorry — this order was cancelled.",
+      detail: "Please contact the store if you need help.",
+      countdown,
+    };
+  }
+  if (status === "ready") {
+    if (isEarly) {
+      return {
+        tone: "positive",
+        title: "Great news — your order is ready early!",
+        detail: isDelivery ? "The store team is getting it out to you ahead of schedule." : "Head to the pickup counter whenever you’re nearby.",
+        countdown,
+      };
+    }
+    return {
+      tone: "positive",
+      title: "Your order is ready.",
+      detail: isDelivery ? "Your order is ready to leave the store. We’ll see you soon." : "Head to the pickup counter when you are nearby.",
+      countdown,
+    };
+  }
+  if (isLate) {
+    return {
+      tone: "late",
+      title: "We’re sorry — this is taking a little longer.",
+      detail: "The store team is still working on it. We’ll refresh the estimate as the queue moves.",
+      countdown,
+    };
+  }
+  if (status === "preparing") {
+    return {
+      tone: "neutral",
+      title: "Your order is being prepared.",
+      detail: "The store team is working on it now. We’ll keep the estimate updated as the queue moves.",
+      countdown,
+    };
+  }
+  if (status === "confirmed") {
+    return {
+      tone: "neutral",
+      title: "Your order is confirmed.",
+      detail: "The store has it in the queue and will start preparing it shortly.",
+      countdown,
+    };
+  }
+  return {
+    tone: "neutral",
+    title: "Your order is in the queue.",
+    detail: "The store has your order. We’ll keep you posted as it moves forward.",
+    countdown,
+  };
+}
 
 export function PublicMenuClient({ menu }: { menu: PublicMenuStore }) {
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -325,7 +442,6 @@ function CategoryButton({ label, active, disabled = false, onClick }: { label: s
 function TrackOrderDialog({ orderNo, phone, state, onOrderNoChange, onPhoneChange, onSubmit, onClose }: { orderNo: string; phone: string; state: TrackState; onOrderNoChange: (value: string) => void; onPhoneChange: (value: string) => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onClose: () => void }) {
   const trackedOrderStatus = state.orderStatus ?? "new";
   const isDelivery = state.fulfillmentMethod === "delivery";
-  const progress = trackedOrderStatus === "ready" || trackedOrderStatus === "picked_up" ? 3 : trackedOrderStatus === "preparing" ? 2 : 1;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center overscroll-contain bg-[var(--public-menu-primary)]/35 p-0 backdrop-blur-[2px] sm:items-center sm:p-5" role="dialog" aria-modal="true" aria-labelledby="track-order-heading">
@@ -352,12 +468,72 @@ function TrackOrderDialog({ orderNo, phone, state, onOrderNoChange, onPhoneChang
                 <span className="grid h-10 w-10 place-items-center rounded-xl bg-[var(--public-menu-primary-soft)] text-[var(--public-menu-primary-soft-text)]"><AdminIcon name={trackedOrderStatus === "ready" ? "check" : "clock"} size={16} /></span>
               </div>
               <div className="mt-4 grid grid-cols-2 gap-2"><TrackMetric label="Queue" value={state.queuePosition ? `#${state.queuePosition}` : "—"} /><TrackMetric label="ETA" value={formatOnlineEta(state.etaAt)} /></div>
-              <div className="mt-4 grid grid-cols-3 gap-2">{["Received", "Preparing", "Ready"].map((label, index) => <div key={label}><div className={`h-2 rounded-full ${index < progress ? "bg-[var(--public-menu-success)]" : "bg-[var(--public-menu-border)]"}`} /><p className={`mt-2 text-[10px] font-extrabold ${index < progress ? "text-[var(--public-menu-heading)]" : "text-[var(--public-menu-subtle)]"}`}>{label}</p></div>)}</div>
-              <p className="mt-4 text-xs leading-5 text-[var(--public-menu-muted)]">{trackedOrderStatus === "picked_up" ? isDelivery ? "This order has already been delivered." : "This order has already been picked up." : trackedOrderStatus === "cancelled" ? "This order was cancelled. Please contact the store if you need help." : trackedOrderStatus === "ready" ? isDelivery ? "Your order is ready to leave the store. We’ll see you soon." : "Your order is ready. Head to the pickup counter when you are nearby." : `We're using the current queue to keep your ETA around ${formatOnlineEta(state.etaAt)}.`}</p>
+               <OrderProgressTracker status={trackedOrderStatus} etaAt={state.etaAt} isDelivery={isDelivery} compact />
             </div>
           )}
           <button type="submit" disabled={state.status === "loading"} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[var(--public-menu-primary)] px-4 py-3 text-xs font-extrabold uppercase tracking-wide text-[var(--public-menu-primary-text)] transition hover:bg-[var(--public-menu-primary-hover)] disabled:cursor-not-allowed disabled:opacity-55">{state.status === "loading" ? "Checking status…" : state.status === "success" ? "Refresh status" : "Check order status"}<AdminIcon name="arrow" size={14} /></button>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function OrderProgressTracker({ status, etaAt, isDelivery, compact = false }: { status: OnlineOrderStatus; etaAt: string | null; isDelivery: boolean; compact?: boolean }) {
+  const [now, setNow] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!etaAt || status === "picked_up" || status === "cancelled") return;
+    const tick = () => {
+      setNow(Date.now());
+    };
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [etaAt, status]);
+
+  const progress = orderProgressForStatus(status);
+  const timing = getOrderTimingCopy(status, etaAt, isDelivery, now);
+  const progressText = status === "cancelled"
+    ? "Order cancelled"
+    : formatOrderStatusLabel(status) + " — " + progress + " of " + ORDER_PROGRESS_LABELS.length + " steps complete";
+  const icon = timing.tone === "late" ? "alert" : timing.tone === "cancelled" ? "close" : timing.tone === "neutral" ? "clock" : "check";
+  const countdownClass = timing.tone === "late" || timing.tone === "cancelled"
+    ? "bg-[var(--public-menu-danger-soft)] text-[var(--public-menu-danger-text)]"
+    : timing.tone === "positive" || timing.tone === "complete"
+      ? "bg-[var(--public-menu-success-soft)] text-[var(--public-menu-success-ink)]"
+      : "bg-[var(--public-menu-primary-soft)] text-[var(--public-menu-primary-soft-text)]";
+  const timingClass = timing.tone === "late" || timing.tone === "cancelled"
+    ? "border-[var(--public-menu-danger-soft)] bg-[var(--public-menu-danger-soft)] text-[var(--public-menu-danger-text)]"
+    : timing.tone === "positive" || timing.tone === "complete"
+      ? "border-[var(--public-menu-success-soft)] bg-[var(--public-menu-success-soft)] text-[var(--public-menu-success-ink)]"
+      : "border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] text-[var(--public-menu-muted)]";
+  const containerClass = compact
+    ? "mt-4 border-t border-[var(--public-menu-border)] pt-4"
+    : "mt-4 rounded-2xl border border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] p-4";
+
+  return (
+    <div className={containerClass}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-extrabold text-[var(--public-menu-heading)]">Order progress</p>
+          <p className="mt-1 text-[10px] font-bold text-[var(--public-menu-muted)]">{progressText}</p>
+        </div>
+        <div className="text-right">
+          <span aria-label={timing.countdown} className={"inline-flex rounded-full px-2.5 py-1.5 text-[10px] font-extrabold " + countdownClass}>{timing.countdown}</span>
+          <span className="mt-1 block text-[10px] font-bold text-[var(--public-menu-subtle)]">Auto-updates</span>
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-2" role="progressbar" aria-label="Order progress" aria-valuemin={0} aria-valuemax={ORDER_PROGRESS_LABELS.length} aria-valuenow={progress} aria-valuetext={progressText}>
+        {ORDER_PROGRESS_LABELS.map((label, index) => (
+          <div key={label}>
+            <div className={"h-2 rounded-full " + (index < progress ? "bg-[var(--public-menu-success)]" : "bg-[var(--public-menu-border)]")} />
+            <p className={"mt-2 text-[10px] font-extrabold " + (index < progress ? "text-[var(--public-menu-heading)]" : "text-[var(--public-menu-subtle)]")}>{label}</p>
+          </div>
+        ))}
+      </div>
+      <div role="status" aria-live="polite" className={"mt-4 flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-[11px] leading-5 " + timingClass}>
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[var(--public-menu-raised)]/70"><AdminIcon name={icon} size={14} /></span>
+        <p><strong className="font-extrabold">{timing.title}</strong> {timing.detail}</p>
       </div>
     </div>
   );
@@ -553,8 +729,6 @@ function CheckoutField({ label, name, placeholder, type = "text", required = fal
 }
 
 function OrderConfirmation({ menu, orderState, status, etaAt, queuePosition, copied, onCopy }: { menu: PublicMenuStore; orderState: PublicOnlineOrderResult; status: OnlineOrderStatus; etaAt: string | null; queuePosition: number | null; copied: boolean; onCopy: () => void }) {
-  const progress = status === "ready" || status === "picked_up" ? 3 : status === "preparing" ? 2 : 1;
-  const progressLabels = ["Received", "Preparing", "Ready"];
   const isDelivery = orderState.fulfillmentMethod === "delivery";
 
   return (
@@ -568,7 +742,7 @@ function OrderConfirmation({ menu, orderState, status, etaAt, queuePosition, cop
             </span>
             <h3 className="mt-4 text-[1.65rem] font-black tracking-[-0.045em] sm:text-2xl">You&apos;re all set.</h3>
             <p className="mt-2 max-w-sm text-sm leading-6 text-[var(--public-menu-primary-text)]">
-              {isDelivery ? "We’ll prepare your order and bring it to the address you provided. Payment is collected when it arrives." : "We&apos;ll prepare your order for pickup. Payment is collected at the counter when you arrive."}
+              {isDelivery ? "We’ll prepare your order and bring it to the address you provided. Payment is collected when it arrives." : "We’ll prepare your order for pickup. Payment is collected at the counter when you arrive."}
             </p>
           </div>
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[var(--public-menu-accent)] text-[var(--public-menu-accent-text)]">
@@ -590,29 +764,7 @@ function OrderConfirmation({ menu, orderState, status, etaAt, queuePosition, cop
 
       {orderState.total !== undefined && <div className="mt-4 rounded-2xl border border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] p-4"><div className="flex items-center justify-between text-xs text-[var(--public-menu-muted)]"><span>Total due {isDelivery ? "on delivery" : "at pickup"}</span><strong className="text-lg font-black text-[var(--public-menu-heading)]">{formatPeso(orderState.total)}</strong></div><p className="mt-1 text-[10px] text-[var(--public-menu-subtle)]">{orderState.taxAmount ? `Includes ${formatPeso(orderState.taxAmount)} VAT` : "No tax added"}{orderState.deliveryFee ? ` · ${formatPeso(orderState.deliveryFee)} delivery fee` : ""}</p></div>}
 
-      <div className="mt-4 rounded-2xl border border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] p-4">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs font-extrabold text-[var(--public-menu-heading)]">Order progress</p>
-          <span className="text-[10px] font-bold text-[var(--public-menu-muted)]">Updates automatically</span>
-        </div>
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          {progressLabels.map((label, index) => (
-            <div key={label}>
-              <div className={`h-2 rounded-full ${index < progress ? "bg-[var(--public-menu-success)]" : "bg-[var(--public-menu-border)]"}`} />
-              <p className={`mt-2 text-[10px] font-extrabold ${index < progress ? "text-[var(--public-menu-heading)]" : "text-[var(--public-menu-subtle)]"}`}>{label}</p>
-            </div>
-          ))}
-        </div>
-        <p className="mt-4 text-xs leading-5 text-[var(--public-menu-muted)]">
-          {status === "picked_up"
-            ? isDelivery ? "This order has been delivered. Thanks for ordering ahead." : "This order has been picked up. Thanks for ordering ahead."
-            : status === "cancelled"
-              ? "This order was cancelled. Please contact the store if you need help."
-              : status === "ready"
-                ? isDelivery ? "Your order is ready to leave the store. We’ll see you soon." : "Your order is ready. Head to the pickup counter when you are nearby."
-                : `We're using the current queue to keep your ETA around ${formatOnlineEta(etaAt)}.`}
-        </p>
-      </div>
+      <OrderProgressTracker status={status} etaAt={etaAt} isDelivery={isDelivery} />
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
         <button type="button" onClick={onCopy} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3.5 py-2.5 text-xs font-extrabold text-[var(--public-menu-heading)] transition hover:bg-[var(--public-menu-primary-soft)]">
