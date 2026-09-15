@@ -11,6 +11,7 @@ import "@/components/pos/PosThemeArt.css";
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import Image from "next/image";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatPeso, weightLineTotal } from "@/lib/money";
 import { formatStockQuantity, stockMovementDelta, stockStatus } from "@/lib/inventory";
@@ -21,6 +22,7 @@ import { AdminBrandLogo } from "@/components/admin/AdminBrandLogo";
 import { AdminMenu } from "@/components/admin/AdminMenu";
 import { OnlineOrderAlertBanner } from "@/components/online-ordering/OnlineOrderAlertBanner";
 import { useOnlineOrderAttention } from "@/components/online-ordering/useOnlineOrderAttention";
+import PosLoadingScreen from "@/components/pos/PosLoadingScreen";
 import { SignOutButton } from "@/components/SignOutButton";
 import OfflinePinSetup from "@/components/OfflinePinSetup";
 import OfflinePinUnlock from "@/components/OfflinePinUnlock";
@@ -384,6 +386,8 @@ function categoryIcon(name: string): IconName {
 
 export default function SellScreen({ offlineProfile: initialOfflineProfile }: { offlineProfile?: OfflineProfileSnapshot } = {}) {
   const supabase = useMemo(() => createClient(), []);
+  const searchParams = useSearchParams();
+  const onlineOrderId = searchParams.get("onlineOrder")?.trim() ?? "";
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -808,7 +812,6 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
   }, [refreshCatalog]);
 
   useEffect(() => {
-    const onlineOrderId = new URLSearchParams(window.location.search).get("onlineOrder")?.trim() ?? "";
     if (!onlineOrderId || onlinePickupRequestRef.current === onlineOrderId) return;
     if (!profile || loading) return;
     if (offline) {
@@ -936,7 +939,7 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
     return () => {
       cancelled = true;
     };
-  }, [cart.length, loading, offline, posConfig.orderTypes, products, profile, setCart, setDiscount, supabase]);
+  }, [cart.length, loading, offline, onlineOrderId, posConfig.orderTypes, products, profile, setCart, setDiscount, supabase]);
 
   const refreshOnlinePickupAlerts = useCallback(async () => {
     if (offlineProfile || offline || !profile?.org_id || !profile.store_id || !navigator.onLine) {
@@ -2087,12 +2090,9 @@ export default function SellScreen({ offlineProfile: initialOfflineProfile }: { 
 
 
   // The block above returns for every non-loading state, so reaching here means
-  // the catalog is still loading. This is the component's only other exit.
-  return (
-    <main className="min-h-full p-6">
-      <p className="text-ink-muted">Loading catalog…</p>
-    </main>
-  );
+  // the catalog is still loading. Keep the same meaningful loading state used
+  // by the route boundary so a slow catalog request never looks like a hang.
+  return <PosLoadingScreen variant="catalog" />;
 }
 
 /* ── Weight keypad ─────────────────────────────────────────────────────── */

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { updatePosOnlineOrderStatus } from "@/app/admin/online-ordering/actions";
 import { formatPeso } from "@/lib/money";
@@ -491,10 +492,10 @@ export default function OnlineQueuePanel({
                     </button>
                   )}
                   {selectedOrder.status !== "picked_up" && selectedOrder.status !== "cancelled" && (
-                    <a href={`/pos?onlineOrder=${encodeURIComponent(selectedOrder.id)}`} onClick={onClose} className="order-history-button order-history-button--online-open">
+                    <Link href={`/pos?onlineOrder=${encodeURIComponent(selectedOrder.id)}`} prefetch={null} onClick={onClose} className="order-history-button order-history-button--online-open">
                       <AdminIcon name="bag" size={15} />
                       Open in POS
-                    </a>
+                    </Link>
                   )}
                 </div>
               </footer>
