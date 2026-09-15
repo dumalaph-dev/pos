@@ -282,15 +282,7 @@ export function OnlineOrderingWorkspace({
       </section>
 
       <section id="online-ordering-appearance-panel" role="tabpanel" aria-labelledby="online-ordering-appearance-tab" tabIndex={0} hidden={activeTab !== "appearance"} className="mt-5 outline-none">
-        <div className="flex flex-col gap-4 rounded-[22px] border border-line bg-primary p-5 text-primary-fg shadow-[var(--shadow-card)] sm:flex-row sm:items-center sm:justify-between sm:p-6">
-          <div>
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary-fg/60">Customer-facing menu</p>
-            <h2 className="mt-1 text-2xl font-extrabold tracking-[-0.04em]">Shape what customers see.</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-primary-fg/70">Choose a POS-synced theme and tune the welcome copy for the public QR menu. Preview changes on a phone before publishing.</p>
-          </div>
-          <a href={shareUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-accent px-4 py-3 text-xs font-extrabold uppercase tracking-wide text-accent-fg transition hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-fg">View live menu <AdminIcon name="arrow" size={14} /></a>
-        </div>
-        <OnlineMenuEditor store={store} settings={settings} onlineBrandDefaults={onlineBrandDefaults} canManage={canManage} canUploadLogo={canUploadLogo} />
+        <OnlineMenuEditor shareUrl={shareUrl} store={store} settings={settings} onlineBrandDefaults={onlineBrandDefaults} canManage={canManage} canUploadLogo={canUploadLogo} />
       </section>
     </>
   );

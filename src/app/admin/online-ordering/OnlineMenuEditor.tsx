@@ -33,12 +33,14 @@ export function OnlineMenuEditor({
   onlineBrandDefaults,
   canManage,
   canUploadLogo,
+  shareUrl,
 }: {
   store: { id: string; name: string; address: string | null };
   settings: OnlineOrderingSettings;
   onlineBrandDefaults: OnlineOrderingBrandDefaults;
   canManage: boolean;
   canUploadLogo: boolean;
+  shareUrl: string;
 }) {
   const [theme, setTheme] = useState<PosThemeId>(settings.theme);
   const [copy, setCopy] = useState<OnlineOrderingCopy>(settings.copy);
@@ -87,21 +89,23 @@ export function OnlineMenuEditor({
   }
 
   return (
-    <section className="mt-5 overflow-hidden rounded-[24px] border border-line bg-surface shadow-[var(--shadow-card)]" aria-labelledby="public-menu-editor-heading">
-      <div className="border-b border-line px-5 py-5 sm:px-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-accent">Public menu editor</p>
-            <h2 id="public-menu-editor-heading" className="mt-1 text-xl font-extrabold tracking-[-0.03em] text-ink">Make the customer view feel like your store.</h2>
-            <p className="mt-1 max-w-2xl text-sm leading-5 text-ink-muted">Edit the welcome copy and use the same interface themes as the POS. The phone preview updates instantly before you publish.</p>
-          </div>
-          <span className={`inline-flex w-fit items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-extrabold ${hasChanges ? "bg-accent/15 text-accent-hover" : "bg-success/10 text-success"}`} aria-live="polite"><i className={`h-1.5 w-1.5 rounded-full ${hasChanges ? "bg-accent" : "bg-success"}`} />{hasChanges ? "Unsaved changes" : "Published appearance"}</span>
+    <form action={updateOnlineOrderingPresentation} className="online-menu-editor" aria-labelledby="public-menu-editor-heading">
+      <header className="online-menu-editor__toolbar">
+        <div className="min-w-0">
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-ink-muted">Theme &amp; copy</p>
+          <h2 id="public-menu-editor-heading" className="mt-1 text-xl font-extrabold text-ink">Your menu. Your character.</h2>
+          <p className="mt-1 text-xs leading-5 text-ink-muted">Bring your POS style to browsing, baskets, and checkout.</p>
         </div>
-      </div>
-
-      <div className="grid min-w-0 gap-5 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_minmax(300px,360px)]">
-        <div className="order-2 min-w-0 xl:order-1">
-          <form action={updateOnlineOrderingPresentation} className="space-y-5">
+        <div className="flex flex-col gap-2 sm:items-end">
+          <div className="flex flex-wrap items-center gap-2">
+            <a href={shareUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-xs font-extrabold text-ink transition hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">View live menu <AdminIcon name="arrow" size={14} /></a>
+            <PresentationSaveButton disabled={!canManage || !hasChanges} />
+          </div>
+          <span className="text-[11px] font-semibold text-ink-muted" role="status">{hasChanges ? "Unsaved changes · preview only" : "Published appearance"}</span>
+        </div>
+      </header>
+      <div className="grid min-w-0 items-start gap-5 pt-5 xl:grid-cols-[minmax(0,1fr)_minmax(300px,360px)]">
+        <div className="min-w-0 space-y-6 rounded-2xl border border-line bg-surface p-4 sm:p-6">
             <input type="hidden" name="store_id" value={store.id} />
             <input type="hidden" name="theme" value={theme} />
             <input type="hidden" name="brand_logo_url" value={branding.logoUrl ?? ""} />
@@ -145,12 +149,12 @@ export function OnlineMenuEditor({
                   <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted">Color direction</p>
                   <p className="mt-1 text-xs leading-5 text-ink-muted">Keep the POS theme or bring your own primary and accent colors.</p>
                   <div className="mt-3 grid grid-cols-2 gap-2">
-                    <label className={`cursor-pointer rounded-xl border p-2.5 transition ${branding.colorMode === "theme" ? "border-primary bg-primary-soft" : "border-line bg-surface hover:border-line-strong"}`}>
+                    <label className={`cursor-pointer rounded-xl border p-2.5 transition has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-primary ${branding.colorMode === "theme" ? "border-primary bg-primary-soft" : "border-line bg-surface hover:border-line-strong"}`}>
                       <input type="radio" name="color_mode" value="theme" checked={branding.colorMode === "theme"} onChange={() => updateBranding({ colorMode: "theme" })} className="sr-only" />
                       <strong className="block text-[11px] font-extrabold text-ink">Use POS theme</strong>
                       <small className="mt-0.5 block text-[10px] leading-4 text-ink-muted">Same visual system</small>
                     </label>
-                    <label className={`cursor-pointer rounded-xl border p-2.5 transition ${branding.colorMode === "brand" ? "border-primary bg-primary-soft" : "border-line bg-surface hover:border-line-strong"}`}>
+                    <label className={`cursor-pointer rounded-xl border p-2.5 transition has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-primary ${branding.colorMode === "brand" ? "border-primary bg-primary-soft" : "border-line bg-surface hover:border-line-strong"}`}>
                       <input type="radio" name="color_mode" value="brand" checked={branding.colorMode === "brand"} onChange={() => updateBranding({ colorMode: "brand" })} className="sr-only" />
                       <strong className="block text-[11px] font-extrabold text-ink">Use brand colors</strong>
                       <small className="mt-0.5 block text-[10px] leading-4 text-ink-muted">Your own palette</small>
@@ -199,24 +203,19 @@ export function OnlineMenuEditor({
               <EditorTextarea label="Hero description" name="hero_description" value={copy.heroDescription} onChange={(value) => updateCopy({ heroDescription: value })} maxLength={240} />
             </fieldset>
 
-            <div className="flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
-              <p className="flex items-start gap-2 text-[11px] leading-4 text-ink-muted"><AdminIcon name="eye" size={14} /><span>Changes publish to the QR menu after saving.</span></p>
-              <PresentationSaveButton disabled={!canManage || !hasChanges} />
-            </div>
-          </form>
         </div>
 
-        <aside className="order-1 min-w-0 xl:order-2" aria-label="Public menu mobile preview">
-          <div className="sticky top-4 rounded-2xl border border-line bg-panel p-3 sm:p-4">
+        <aside className="min-w-0 xl:sticky xl:top-36" aria-label="Public menu mobile preview">
+          <div className="rounded-2xl border border-line bg-panel p-3 sm:p-4">
             <div className="mb-3 flex items-center justify-between gap-3 px-1">
-              <div><p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-accent">Live preview</p><p className="mt-0.5 text-sm font-extrabold text-ink">Customer mobile view</p></div>
+              <div><p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-accent">Draft preview</p><p className="mt-0.5 text-sm font-extrabold text-ink">{selectedTheme.label}</p></div>
               <span className="inline-flex items-center gap-1 rounded-full bg-primary-soft px-2 py-1 text-[9px] font-extrabold text-primary"><i className="h-1.5 w-1.5 rounded-full bg-success" />Phone</span>
             </div>
             <PublicMenuPreview store={store} settings={settings} branding={previewBranding} theme={theme} copy={copy} />
           </div>
         </aside>
       </div>
-    </section>
+    </form>
   );
 }
 
@@ -256,7 +255,7 @@ function BrandColorField({ label, name, value, onChange }: { label: string; name
 
 function PresentationSaveButton({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus();
-  return <button type="submit" disabled={disabled || pending} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50">{pending ? "Publishing…" : "Publish menu appearance"}<AdminIcon name={pending ? "refresh" : "check"} size={14} /></button>;
+  return <button type="submit" disabled={disabled || pending} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50">{pending ? "Publishing…" : "Publish menu appearance"}<AdminIcon name={pending ? "refresh" : "check"} size={14} /></button>;
 }
 
 function PublicMenuPreview({ store, settings, branding, theme, copy }: { store: { name: string; address: string | null }; settings: OnlineOrderingSettings; branding: OnlineOrderingBranding; theme: PosThemeId; copy: OnlineOrderingCopy }) {
@@ -268,7 +267,7 @@ function PublicMenuPreview({ store, settings, branding, theme, copy }: { store: 
 
   return (
     <div className="relative isolate mx-auto w-full max-w-[340px] rounded-[34px] bg-[#10261f] p-[7px] shadow-[var(--shadow-pop)] ring-1 ring-black/10" style={{ fontFamily: previewFont }}>
-      <div className="relative z-0 overflow-hidden rounded-[26px]" style={{ ...themeStyle, clipPath: "inset(0 round 26px)" }}>
+      <div className="public-menu relative z-0 overflow-hidden rounded-[26px]" data-public-menu-theme={theme} style={{ ...themeStyle, clipPath: "inset(0 round 26px)" }}>
         <div className="public-menu__scrollbar-hidden max-h-[620px] overflow-y-auto overscroll-contain">
           <div className="min-h-[620px]" style={{ background: "var(--public-menu-bg)", color: "var(--public-menu-text)", backgroundImage: "var(--public-menu-pattern)" }}>
           <div className="sticky top-0 z-10 border-b px-3 py-2.5 backdrop-blur" style={{ borderColor: "var(--public-menu-border)", background: "color-mix(in srgb, var(--public-menu-surface) 94%, transparent)" }}>
@@ -278,7 +277,7 @@ function PublicMenuPreview({ store, settings, branding, theme, copy }: { store: 
             </div>
           </div>
 
-          <div className="relative overflow-hidden border-b px-3 py-5" style={{ borderColor: "var(--public-menu-border)", background: "var(--public-menu-panel-gradient)" }}>
+          <div className="public-menu__hero relative overflow-hidden border-b px-3 py-5" style={{ borderColor: "var(--public-menu-border)", background: "var(--public-menu-panel-gradient)" }}>
             <span className="inline-flex rounded-full px-2.5 py-1 text-[8px] font-extrabold uppercase tracking-[0.12em]" style={{ background: "var(--public-menu-primary)", color: "var(--public-menu-primary-text)" }}>{copy.heroEyebrow}</span>
             <h3 className="mt-3 text-[1.55rem] font-black leading-[0.98] tracking-[-0.06em]" style={{ color: "var(--public-menu-heading)" }}>{copy.heroTitle}<br /><span style={{ color: "var(--public-menu-accent-ink)" }}>{copy.heroAccent}</span></h3>
             <p className="mt-3 text-[10px] leading-4" style={{ color: "var(--public-menu-muted)" }}>{copy.heroDescription}</p>
@@ -302,7 +301,7 @@ function PublicMenuPreview({ store, settings, branding, theme, copy }: { store: 
             <div className="mt-3 flex h-9 items-center rounded-xl border px-3 text-[10px]" style={{ borderColor: "var(--public-menu-border-strong)", background: "var(--public-menu-raised)", color: "var(--public-menu-subtle)" }}><AdminIcon name="search" size={12} /> <span className="ml-1.5">{copy.searchPlaceholder}</span></div>
             <div className="mt-3 flex gap-1.5 overflow-hidden"><span className="rounded-full px-3 py-1.5 text-[9px] font-extrabold" style={{ background: "var(--public-menu-primary)", color: "var(--public-menu-primary-text)" }}>All items</span><span className="rounded-full px-3 py-1.5 text-[9px] font-extrabold" style={{ background: "var(--public-menu-raised)", color: "var(--public-menu-muted)" }}>Coffee</span><span className="rounded-full px-3 py-1.5 text-[9px] font-extrabold" style={{ background: "var(--public-menu-raised)", color: "var(--public-menu-muted)" }}>Pastries</span></div>
             <div className="mt-3 grid grid-cols-2 gap-2">
-              {previewProducts.map((product) => <div key={product.name} className="overflow-hidden rounded-2xl border" style={{ borderColor: "var(--public-menu-border)", background: "var(--public-menu-card-gradient)", boxShadow: "var(--public-menu-shadow-card)" }}><div className="aspect-square" style={{ background: product.tone }} /><div className="p-2"><strong className="block truncate text-[10px]" style={{ color: "var(--public-menu-heading)" }}>{product.name}</strong><span className="mt-1 block text-[9px] font-bold" style={{ color: "var(--public-menu-accent-ink)" }}>{product.price}</span></div></div>)}
+              {previewProducts.map((product) => <div key={product.name} className="public-menu__product overflow-hidden rounded-2xl border"><div className="public-menu__product-image aspect-square" style={{ background: product.tone }} /><div className="public-menu__product-copy p-2"><strong className="block truncate text-[10px]" style={{ color: "var(--public-menu-heading)" }}>{product.name}</strong><span className="mt-1 block text-[9px] font-bold" style={{ color: "var(--public-menu-accent-ink)" }}>{product.price}</span></div></div>)}
             </div>
           </div>
           </div>
