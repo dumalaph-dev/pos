@@ -48,7 +48,7 @@ function isPublicCacheEntry(request: Request): boolean {
     const url = new URL(request.url);
     if (url.origin !== window.location.origin) return false;
     if (url.pathname === "/login" || url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/food/")) return true;
-    if (["/manifest.webmanifest", "/icon.svg", "/icon-192x192.png", "/icon-512x512.png", "/logo.png", "/badge.png"].includes(url.pathname)) return true;
+    if (["/manifest.webmanifest", "/icon.svg", "/icon-192x192.png", "/icon-512x512.png", "/icon-maskable-512x512.png", "/apple-touch-icon.png", "/logo.png", "/badge.png"].includes(url.pathname)) return true;
     return url.pathname === "/_next/image" && (url.searchParams.get("url") || "").startsWith("/food/");
   } catch {
     return false;
