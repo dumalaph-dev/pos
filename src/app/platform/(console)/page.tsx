@@ -7,8 +7,11 @@ import { getCheckoutReadiness, isPolicyGateOpen, readPolicyNumber } from "@/lib/
 import { readPayMongoSubscriptionReadiness, readPlatformOperations, payMongoConfiguration, supportCasesSchemaAvailable } from "@/lib/platform-operations-server";
 import { requirePlatformOperator } from "@/lib/platform-operators-server";
 import { derivePlatformEntitlementSummary } from "@/lib/platform-entitlements";
+import { sortPlatformAttentionItems, type PlatformAttentionItem } from "@/lib/platform-attention";
+import { syncHealthFreshnessLabel, syncHealthStatusLabel } from "@/lib/platform-sync-health";
 import { PlatformAccessDenied, PlatformMetric, PlatformMigrationNotice, PlatformPageHeader, PlatformSectionHeading } from "../PlatformUI";
-import { countByOrg, formatDate, readPlatformDirectory, readPlatformEntitlementRecords } from "../_lib/platform-data";
+import { PlatformAttentionInbox } from "../PlatformAttentionInbox";
+import { countByOrg, formatDate, readPlatformDirectory, readPlatformEntitlementRecords, readPlatformSupportCases, readPlatformSyncHealth, type OrganizationRecord, type PlatformSupportCaseResult, type PlatformSyncHealthResult } from "../_lib/platform-data";
 
 export const dynamic = "force-dynamic";
 
@@ -20,11 +23,14 @@ export default async function PlatformOverviewPage() {
   }
   const admin = actor.admin;
 
-  const [directory, operations, supportCasesReady, paymongoSubscriptionReadiness] = await Promise.all([
+  const canViewSupport = actor.role !== "billing";
+  const [directory, operations, supportCasesReady, paymongoSubscriptionReadiness, syncHealth, supportCases] = await Promise.all([
     readPlatformDirectory(admin),
     readPlatformOperations(admin),
     supportCasesSchemaAvailable(admin),
     readPayMongoSubscriptionReadiness(),
+    readPlatformSyncHealth(admin),
+    canViewSupport ? readPlatformSupportCases(admin) : Promise.resolve({ records: [], schemaAvailable: false, organizationsAvailable: true }),
   ]);
 
   const { organizations, profiles, stores, employees, authEmailById, organizationsResult } = directory;
@@ -66,6 +72,15 @@ export default async function PlatformOverviewPage() {
   });
   const checkoutReady = checkoutReadiness.ready;
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+  const attentionItems = buildAttentionItems({
+    organizations,
+    entitlementSummaries,
+    policies,
+    checkoutReady,
+    syncHealth,
+    supportCases: supportCases.records,
+    canViewSupport,
+  });
 
   return (
     <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
@@ -75,6 +90,7 @@ export default async function PlatformOverviewPage() {
           title="Platform overview"
           description="See what needs attention across subscription revenue, workspace access, policy gates, and account operations."
           actions={<>
+            <Link href="#platform-attention-heading" className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-line-strong bg-surface px-3.5 py-2.5 text-xs font-extrabold text-primary transition hover:border-primary hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"><AdminIcon name="bell" size={14} /> Needs attention</Link>
             <Link href="/platform/plans" className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-line-strong bg-surface px-3.5 py-2.5 text-xs font-extrabold text-primary transition hover:border-primary hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"><AdminIcon name="wallet" size={14} /> Manage plans</Link>
             <Link href="/admin" className="inline-flex min-h-10 items-center rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold text-primary-fg transition hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">Owner dashboard</Link>
           </>}
@@ -101,6 +117,7 @@ export default async function PlatformOverviewPage() {
               <FeatureLink href="/platform/sync" icon="refresh" label="Sync & outbox" detail="Find stuck queues by branch" />
               <FeatureLink href="/platform/policies" icon="lock" label="Policies" detail={`${publishedPolicies}/2 published · controls stay gated until complete`} />
               <FeatureLink href="/platform/operations" icon="refresh" label="Operations" detail={accountOperationsReady ? `${trialExpiring + grantsExpiring} trial or grant expiry signal${trialExpiring + grantsExpiring === 1 ? "" : "s"} · access controls available` : "Finish migrations before using account controls"} />
+              <FeatureLink href="/platform/announcements" icon="bell" label="Announcements" detail="Draft, schedule, and retire merchant updates" />
             </div>
           </article>
 
@@ -125,6 +142,8 @@ export default async function PlatformOverviewPage() {
           </article>
         </section>
 
+        <PlatformAttentionInbox items={attentionItems} />
+
         <section className="mt-8 overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)]" aria-labelledby="recent-businesses-heading">
           <div className="px-5 py-5 sm:px-6">
             <PlatformSectionHeading eyebrow="Recent workspaces" title="Business directory" description="A quick view of the latest accounts. Open Users for access records or Operations for lifecycle controls." action={<Link href="/platform/users" className="inline-flex items-center gap-1.5 text-xs font-extrabold text-primary hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">View all users <AdminIcon name="arrow" size={13} /></Link>} />
@@ -148,7 +167,72 @@ export default async function PlatformOverviewPage() {
   );
 }
 
-function FeatureLink({ href, icon, label, detail }: { href: string; icon: "wallet" | "customers" | "history" | "chart" | "lock" | "refresh" | "tag"; label: string; detail: string }) {
+function buildAttentionItems({
+  organizations,
+  entitlementSummaries,
+  policies,
+  checkoutReady,
+  syncHealth,
+  supportCases,
+  canViewSupport,
+}: {
+  organizations: OrganizationRecord[];
+  entitlementSummaries: Array<ReturnType<typeof derivePlatformEntitlementSummary>>;
+  policies: Awaited<ReturnType<typeof readPlatformOperations>>["policies"];
+  checkoutReady: boolean;
+  syncHealth: PlatformSyncHealthResult;
+  supportCases: PlatformSupportCaseResult["records"];
+  canViewSupport: boolean;
+}): PlatformAttentionItem[] {
+  const items: PlatformAttentionItem[] = [];
+  for (const organization of organizations) {
+    const status = organization.subscription_status ? normalizeSubscriptionStatus(organization.subscription_status) : null;
+    if (status === "past_due") items.push({ id: `billing:${organization.id}:past_due`, category: "billing", severity: "critical", title: "Payment is due", detail: "Subscription access may pause if the outstanding payment is not recovered.", organizationName: organization.name, organizationId: organization.id, href: `/platform/organizations/${organization.id}`, actionLabel: "Review account" });
+    if (status === "paused") items.push({ id: `billing:${organization.id}:paused`, category: "billing", severity: "critical", title: "Subscription is paused", detail: "Confirm whether this is a failed payment or an expired trial before restoring access.", organizationName: organization.name, organizationId: organization.id, href: `/platform/organizations/${organization.id}`, actionLabel: "Review billing state" });
+    if (status === "incomplete") items.push({ id: `billing:${organization.id}:incomplete`, category: "billing", severity: "high", title: "Subscription setup is incomplete", detail: "The owner has not completed the subscription setup needed for paid access.", organizationName: organization.name, organizationId: organization.id, href: `/platform/organizations/${organization.id}`, actionLabel: "Review account" });
+    if (organization.account_status === "suspended") items.push({ id: `access:${organization.id}:suspended`, category: "access", severity: "high", title: "Account is suspended", detail: organization.suspension_reason ? `Reason: ${organization.suspension_reason}` : "Review the account controls and recorded lifecycle history.", organizationName: organization.name, organizationId: organization.id, href: `/platform/organizations/${organization.id}`, actionLabel: "Review access" });
+  }
+
+  for (const summary of entitlementSummaries) {
+    if (summary.filterKeys.includes("trial_expiring")) items.push({ id: `access:${summary.organizationId}:trial_expiring`, category: "access", severity: "high", title: "Trial ends within seven days", detail: summary.trial.endsAt ? `Access ends ${formatDate(summary.trial.endsAt)}.` : summary.accessDetail, organizationName: summary.organizationName, organizationId: summary.organizationId, href: `/platform/organizations/${summary.organizationId}`, actionLabel: "Review entitlement", createdAt: summary.trial.endsAt ?? undefined });
+    if (summary.filterKeys.includes("grant_expiring")) items.push({ id: `access:${summary.organizationId}:grant_expiring`, category: "access", severity: "medium", title: "Complimentary access ends within seven days", detail: summary.currentGrant?.endsAt ? `Grant ends ${formatDate(summary.currentGrant.endsAt)}.` : "Review the current grant before access ends.", organizationName: summary.organizationName, organizationId: summary.organizationId, href: `/platform/organizations/${summary.organizationId}`, actionLabel: "Review grant", createdAt: summary.currentGrant?.endsAt });
+  }
+
+  if (canViewSupport) {
+    const now = Date.now();
+    for (const supportCase of supportCases) {
+      const overdue = Date.parse(supportCase.first_response_due_at) <= now;
+      items.push({ id: `support:${supportCase.id}`, category: "support", severity: supportCase.priority === "urgent" ? "critical" : overdue ? "high" : "medium", title: supportCase.priority === "urgent" ? `Urgent case: ${supportCase.subject}` : supportCase.subject, detail: `First response ${overdue ? "overdue" : "due"} ${formatDate(supportCase.first_response_due_at)} · ${supportCase.status.replaceAll("_", " ")}.`, organizationName: supportCase.organizationName, organizationId: supportCase.org_id, href: `/platform/organizations/${supportCase.org_id}`, actionLabel: "Open support history", createdAt: supportCase.first_response_due_at });
+    }
+  }
+
+  for (const branch of syncHealth.summary.branchRows.filter((row) => row.status !== "healthy")) {
+    const severity = branch.status === "needs_attention" ? "high" : "medium";
+    const detail = branch.status === "needs_attention"
+      ? `${branch.failedCount} failed · ${branch.conflictCount} conflict${branch.conflictCount === 1 ? "" : "s"} · ${branch.stuckCount} stuck.`
+      : branch.status === "stale"
+        ? `Last reporter update is ${syncHealthAge(branch.lastReportedAt, syncHealth.summary.asOf)} old.`
+        : "No branch heartbeat is available yet.";
+    items.push({ id: `sync:${branch.storeId}`, category: "sync", severity, title: `${syncHealthStatusLabel(branch.status)} at ${branch.storeName}`, detail: `${detail} ${syncHealthFreshnessLabel(branch.freshness)}.`, organizationName: branch.organizationName, organizationId: branch.organizationId, branchName: branch.storeName, href: "/platform/sync", actionLabel: "Open sync health", createdAt: branch.lastReportedAt ?? undefined });
+  }
+
+  if (policies.billing.status !== "published") items.push({ id: "readiness:billing-policy", category: "readiness", severity: "high", title: "Billing policy is still a draft", detail: "Checkout and billing actions remain gated until the billing policy is published.", href: "/platform/policies", actionLabel: "Review policies" });
+  if (policies.support.status !== "published") items.push({ id: "readiness:support-policy", category: "readiness", severity: "high", title: "Support policy is still a draft", detail: "Support and account lifecycle actions remain gated until the support policy is published.", href: "/platform/policies", actionLabel: "Review policies" });
+  if (!checkoutReady) items.push({ id: "readiness:checkout", category: "readiness", severity: "high", title: "Checkout setup is incomplete", detail: "Review the provider, subscription, and catalog readiness checks before sending owners to checkout.", href: "/platform/plans", actionLabel: "Review checkout setup" });
+
+  return sortPlatformAttentionItems(items).slice(0, 60);
+}
+
+function syncHealthAge(value: string | null, asOf: string) {
+  if (!value) return "unknown";
+  const difference = Math.max(0, Date.parse(asOf) - Date.parse(value));
+  const minutes = Math.round(difference / 60_000);
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  const hours = Math.round(minutes / 60);
+  return `${hours} hour${hours === 1 ? "" : "s"}`;
+}
+
+function FeatureLink({ href, icon, label, detail }: { href: string; icon: "wallet" | "customers" | "history" | "chart" | "lock" | "refresh" | "tag" | "bell"; label: string; detail: string }) {
   return <Link href={href} className="group flex min-h-[104px] items-start gap-3 rounded-[18px] border border-line bg-raised/60 p-4 transition hover:-translate-y-0.5 hover:border-primary/35 hover:bg-primary-soft/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary transition group-hover:bg-primary group-hover:text-primary-fg"><AdminIcon name={icon} size={16} /></span><span><strong className="block text-sm font-extrabold">{label}</strong><span className="mt-1 block text-xs leading-5 text-ink-muted">{detail}</span></span><AdminIcon name="arrow" size={14} /></Link>;
 }
 

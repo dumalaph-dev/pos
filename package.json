@@ -38,6 +38,7 @@
     "platform:fleet:validate": "npx --yes supabase@2.114.0 db query --linked --file scripts/platform-fleet-health-smoke.sql --output json",
     "platform:sync:validate": "npx --yes supabase@2.114.0 db query --linked --file scripts/platform-sync-health-smoke.sql --output json",
     "platform:devices:validate": "npx --yes supabase@2.114.0 db query --linked --file scripts/platform-devices-smoke.sql --output json",
+    "platform:announcements:validate:local": "npx --yes supabase@2.114.0 db query --local --file scripts/platform-announcements-smoke.sql --output json",
     "admin:latency:validate": "npx --yes supabase@2.114.0 db query --linked --file scripts/admin-latency-scoping-smoke.sql --output json",
     "platform:schema:validate": "npx --yes supabase@2.114.0 db query --linked --file scripts/platform-schema-drift-smoke.sql --output json",
     "pos:void:validate": "npx --yes supabase@2.114.0 db query --linked --file scripts/pos-void-smoke.sql --output json",
