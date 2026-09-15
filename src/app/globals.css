@@ -277,3 +277,88 @@ textarea.inventory-input {
 }
 
 }
+
+/* Shared by the customer storefront and the owner's draft preview. */
+.online-menu-editor__toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.online-menu-editor { min-width: 0; }
+.public-menu .public-menu__product {
+  border-radius: var(--public-menu-radius-card);
+  background: var(--public-menu-card-gradient);
+  border-color: var(--public-menu-border);
+  box-shadow: var(--public-menu-shadow-card);
+}
+.public-menu .public-menu__basket,
+.public-menu .public-menu__sheet {
+  background-image: var(--public-menu-panel-gradient);
+  border: 1px solid var(--public-menu-border-strong);
+}
+.public-menu :where(button, input, select, textarea) {
+  border-radius: var(--public-menu-radius-button);
+}
+.public-menu :where(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--public-menu-primary);
+  outline-offset: 3px;
+}
+.public-menu :where(h1, h2, h3, h4) { letter-spacing: var(--public-menu-letter-spacing); }
+.public-menu__product-copy { border-top: 1px solid var(--public-menu-border); }
+.public-menu:is([data-public-menu-theme="classic"], [data-public-menu-theme="coastal"], [data-public-menu-theme="restaurant"], [data-public-menu-theme="deco"]) .public-menu__product {
+  border: 3px double var(--public-menu-border-strong);
+  padding: 5px;
+}
+.public-menu:is([data-public-menu-theme="soft"], [data-public-menu-theme="botanical"], [data-public-menu-theme="sushi"]) .public-menu__product-image {
+  margin: 8px;
+  border-radius: var(--public-menu-radius-card);
+}
+.public-menu:is([data-public-menu-theme="sunset"], [data-public-menu-theme="bakery"], [data-public-menu-theme="icecream"]) .public-menu__product-image {
+  border-radius: 45% 45% 0 0;
+  margin: 8px 8px 0;
+}
+.public-menu:is([data-public-menu-theme="ledger"], [data-public-menu-theme="paper"], [data-public-menu-theme="planner"], [data-public-menu-theme="coffee"]) .public-menu__product-copy {
+  border-top: 1px dashed var(--public-menu-border-strong);
+}
+.public-menu:is([data-public-menu-theme="bold"], [data-public-menu-theme="chicken"], [data-public-menu-theme="taqueria"], [data-public-menu-theme="candy"]) .public-menu__product {
+  border: 2px solid var(--public-menu-border-strong);
+  box-shadow: 3px 3px 0 var(--public-menu-border-strong);
+}
+.public-menu[data-public-menu-theme="chicken"] .public-menu__product-copy::before {
+  content: "";
+  display: block;
+  height: 6px;
+  margin-bottom: 8px;
+  background: repeating-conic-gradient(var(--public-menu-primary) 0% 25%, transparent 0% 50%) 0 / 12px 12px;
+}
+.public-menu[data-public-menu-theme="system"] .public-menu__product {
+  border: 3px outset var(--public-menu-border-strong);
+}
+.public-menu:is([data-public-menu-theme="dark"], [data-public-menu-theme="ramen"]) .public-menu__product {
+  border-color: var(--public-menu-accent);
+  box-shadow: inset 0 -3px var(--public-menu-accent), var(--public-menu-shadow-card);
+}
+.public-menu[data-public-menu-theme="ramen"] :where(input, select, textarea) { color-scheme: dark; }
+.public-menu:is([data-public-menu-theme="lechon"], [data-public-menu-theme="christmas"]) .public-menu__product-copy {
+  border-top: 4px solid var(--public-menu-accent);
+}
+.public-menu[data-public-menu-theme="cafe"] .public-menu__product-image { border-bottom: 4px double var(--public-menu-border-strong); }
+.public-menu[data-public-menu-theme="latte"] .public-menu__product {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+@media (max-width: 639px) {
+  .online-menu-editor__toolbar { position: static; flex-direction: column; align-items: stretch; padding: 1rem; }
+}
+
+.public-menu__hero { background-image: var(--public-menu-panel-gradient); }
