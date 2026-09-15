@@ -20,7 +20,10 @@
  * Nothing needs purging — no existing cache key changed content, only a new one
  * was added — and these bytes changing is already enough for the browser to
  * install a new worker, whose precache writes the icon into this same cache.
- * A bump here would only force every field tablet to refetch the whole shell. */
+ * A bump here would only force every field tablet to refetch the whole shell.
+ * The same holds for the Dumala badge rebrand and /apple-touch-icon.png: adding
+ * that entry changes these bytes, and the reinstall re-precaches every icon URL
+ * (overwriting the old artwork in this cache) without purging anything else. */
 const VERSION = "pos-shell-v8";
 
 /* The login page at "/login" is the only document safe to serve to anyone.
@@ -40,6 +43,7 @@ const PUBLIC_ASSETS = [
   "/icon-192x192.png",
   "/icon-512x512.png",
   "/icon-maskable-512x512.png",
+  "/apple-touch-icon.png",
 ];
 
 /** Only the public login document may enter the cache; query string ignored. */
@@ -54,7 +58,7 @@ function isCacheableShellResponse(res) {
 
 function isPublicAsset(url) {
   if (url.pathname.startsWith("/food/")) return true;
-  if (["/manifest.webmanifest", "/logo.png", "/badge.png", "/icon.svg", "/icon-192x192.png", "/icon-512x512.png", "/icon-maskable-512x512.png"].includes(url.pathname)) return true;
+  if (["/manifest.webmanifest", "/logo.png", "/badge.png", "/icon.svg", "/icon-192x192.png", "/icon-512x512.png", "/icon-maskable-512x512.png", "/apple-touch-icon.png"].includes(url.pathname)) return true;
   // Next Image proxies the local demo/catalog images through this route. Only
   // allow the public /food source path; remote product images stay uncached.
   return url.pathname === "/_next/image" && (url.searchParams.get("url") || "").startsWith("/food/");
