@@ -41,7 +41,7 @@ export function OnlineAvailabilityEditor({
   }
 
   return (
-    <section className="mt-5 overflow-hidden rounded-[24px] border border-line bg-surface shadow-[var(--shadow-card)]" aria-labelledby="online-availability-heading">
+    <section className="overflow-hidden rounded-[24px] border border-line bg-surface shadow-[var(--shadow-card)]" aria-labelledby="online-availability-heading">
       <div className="border-b border-line px-5 py-5 sm:px-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>

@@ -25,11 +25,44 @@ export type OnlineOrderingBrandDefaults = {
 
 export type OnlineOrderingFulfillmentMethod = "pickup" | "delivery";
 
+export const ONLINE_ORDERING_WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+
+export type OnlineOrderingWeekday = (typeof ONLINE_ORDERING_WEEKDAYS)[number];
+
+export type OnlineOrderingBusinessDay = {
+  enabled: boolean;
+  openingTime: string;
+  closingTime: string;
+};
+
+export type OnlineOrderingBusinessHours = Record<OnlineOrderingWeekday, OnlineOrderingBusinessDay>;
+
+export const ONLINE_ORDERING_WEEKDAY_LABELS: Record<OnlineOrderingWeekday, string> = {
+  mon: "Monday",
+  tue: "Tuesday",
+  wed: "Wednesday",
+  thu: "Thursday",
+  fri: "Friday",
+  sat: "Saturday",
+  sun: "Sunday",
+};
+
+export const DEFAULT_ONLINE_ORDERING_BUSINESS_HOURS: OnlineOrderingBusinessHours = {
+  mon: { enabled: true, openingTime: "09:00", closingTime: "18:00" },
+  tue: { enabled: true, openingTime: "09:00", closingTime: "18:00" },
+  wed: { enabled: true, openingTime: "09:00", closingTime: "18:00" },
+  thu: { enabled: true, openingTime: "09:00", closingTime: "18:00" },
+  fri: { enabled: true, openingTime: "09:00", closingTime: "18:00" },
+  sat: { enabled: true, openingTime: "09:00", closingTime: "18:00" },
+  sun: { enabled: true, openingTime: "09:00", closingTime: "18:00" },
+};
+
 export type OnlineOrderingScheduleSettings = {
   slotIntervalMinutes: number;
   maxDaysAhead: number;
   openingTime: string;
   closingTime: string;
+  businessHours: OnlineOrderingBusinessHours;
 };
 
 export type OnlineOrderingDeliverySettings = {
@@ -177,6 +210,7 @@ export const DEFAULT_ONLINE_ORDERING_SETTINGS: OnlineOrderingSettings = {
     maxDaysAhead: 2,
     openingTime: "09:00",
     closingTime: "18:00",
+    businessHours: DEFAULT_ONLINE_ORDERING_BUSINESS_HOURS,
   },
   delivery: {
     enabled: false,
@@ -240,13 +274,34 @@ function readOnlineOrderingDelivery(value: unknown): OnlineOrderingDeliverySetti
   };
 }
 
+function readOnlineOrderingBusinessHours(value: unknown, fallbackOpeningTime: string, fallbackClosingTime: string): OnlineOrderingBusinessHours {
+  const source = asRecord(value);
+  return Object.fromEntries(ONLINE_ORDERING_WEEKDAYS.map((day) => {
+    const configured = asRecord(source[day]);
+    const openingTime = readTime(configured.opening_time, fallbackOpeningTime);
+    const closingTime = readTime(configured.closing_time, fallbackClosingTime);
+    const hasValidWindow = closingTime > openingTime;
+    return [day, {
+      enabled: configured.enabled !== false && configured.closed !== true,
+      openingTime: hasValidWindow ? openingTime : DEFAULT_ONLINE_ORDERING_SETTINGS.schedule.openingTime,
+      closingTime: hasValidWindow ? closingTime : DEFAULT_ONLINE_ORDERING_SETTINGS.schedule.closingTime,
+    }];
+  })) as OnlineOrderingBusinessHours;
+}
+
 function readOnlineOrderingSchedule(value: unknown): OnlineOrderingScheduleSettings {
   const schedule = asRecord(value);
+  const openingTime = readTime(schedule.opening_time, DEFAULT_ONLINE_ORDERING_SETTINGS.schedule.openingTime);
+  const closingTime = readTime(schedule.closing_time, DEFAULT_ONLINE_ORDERING_SETTINGS.schedule.closingTime);
+  const hasValidWindow = closingTime > openingTime;
+  const normalizedOpeningTime = hasValidWindow ? openingTime : DEFAULT_ONLINE_ORDERING_SETTINGS.schedule.openingTime;
+  const normalizedClosingTime = hasValidWindow ? closingTime : DEFAULT_ONLINE_ORDERING_SETTINGS.schedule.closingTime;
   return {
     slotIntervalMinutes: readNumber(schedule.slot_interval_minutes, DEFAULT_ONLINE_ORDERING_SETTINGS.schedule.slotIntervalMinutes, 5, 120),
     maxDaysAhead: readNumber(schedule.max_days_ahead, DEFAULT_ONLINE_ORDERING_SETTINGS.schedule.maxDaysAhead, 0, 14),
-    openingTime: readTime(schedule.opening_time, DEFAULT_ONLINE_ORDERING_SETTINGS.schedule.openingTime),
-    closingTime: readTime(schedule.closing_time, DEFAULT_ONLINE_ORDERING_SETTINGS.schedule.closingTime),
+    openingTime: normalizedOpeningTime,
+    closingTime: normalizedClosingTime,
+    businessHours: readOnlineOrderingBusinessHours(schedule.business_hours, normalizedOpeningTime, normalizedClosingTime),
   };
 }
 
@@ -332,6 +387,11 @@ export function mergeOnlineOrderingSettings(settings: unknown, next: Partial<Onl
         max_days_ahead: merged.schedule.maxDaysAhead,
         opening_time: merged.schedule.openingTime,
         closing_time: merged.schedule.closingTime,
+        business_hours: Object.fromEntries(ONLINE_ORDERING_WEEKDAYS.map((day) => [day, {
+          enabled: merged.schedule.businessHours[day].enabled,
+          opening_time: merged.schedule.businessHours[day].openingTime,
+          closing_time: merged.schedule.businessHours[day].closingTime,
+        }])),
       },
       delivery: {
         enabled: merged.delivery.enabled,
@@ -474,25 +534,45 @@ export function formatOnlineOrderingDate(dateKey: string) {
   return new Intl.DateTimeFormat("en-PH", { weekday: "short", month: "short", day: "numeric", timeZone: "Asia/Singapore" }).format(date);
 }
 
+export function onlineOrderingWeekdayForDate(dateKey: string): OnlineOrderingWeekday {
+  const date = new Date(`${dateKey}T12:00:00Z`);
+  const dayIndex = Number.isNaN(date.getTime()) ? 0 : date.getUTCDay();
+  const day = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][dayIndex] as OnlineOrderingWeekday | undefined;
+  return day ?? "mon";
+}
+
+export function onlineOrderingBusinessHoursForDate(settings: OnlineOrderingSettings, dateKey: string) {
+  return settings.schedule.businessHours[onlineOrderingWeekdayForDate(dateKey)];
+}
+
 export function generateOnlineOrderingDateOptions(settings: OnlineOrderingSettings, now = new Date()) {
   const today = singaporeDateKey(now);
   return Array.from({ length: settings.schedule.maxDaysAhead + 1 }, (_, index) => {
     const value = addCalendarDays(today, index);
     return { value, label: index === 0 ? `Today · ${formatOnlineOrderingDate(value)}` : formatOnlineOrderingDate(value) };
-  });
+  }).filter((option) => onlineOrderingBusinessHoursForDate(settings, option.value).enabled);
 }
 
 export function generateOnlineOrderingSlots(settings: OnlineOrderingSettings, dateKey: string, now = new Date()) {
   const slots: string[] = [];
   const today = singaporeDateKey(now);
-  const [openHour, openMinute] = settings.schedule.openingTime.split(":").map(Number);
-  const [closeHour, closeMinute] = settings.schedule.closingTime.split(":").map(Number);
+  const businessHours = onlineOrderingBusinessHoursForDate(settings, dateKey);
+  if (!businessHours.enabled) return slots;
+  const [openHour, openMinute] = businessHours.openingTime.split(":").map(Number);
+  const [closeHour, closeMinute] = businessHours.closingTime.split(":").map(Number);
   const start = openHour * 60 + openMinute;
   const end = closeHour * 60 + closeMinute;
+  const [scheduleOpenHour, scheduleOpenMinute] = settings.schedule.openingTime.split(":").map(Number);
+  const scheduleStart = scheduleOpenHour * 60 + scheduleOpenMinute;
   const minimumTime = dateKey === today ? now.getTime() + settings.orderLeadMinutes * 60_000 : 0;
-  const closingDate = dateKey === today ? new Date(`${dateKey}T${settings.schedule.closingTime}:00+08:00`) : null;
-  if (dateKey === today && closingDate && minimumTime < closingDate.getTime()) slots.push("asap");
-  for (let minutes = start; minutes < end; minutes += settings.schedule.slotIntervalMinutes) {
+  const openingDate = dateKey === today ? new Date(`${dateKey}T${businessHours.openingTime}:00+08:00`) : null;
+  const closingDate = dateKey === today ? new Date(`${dateKey}T${businessHours.closingTime}:00+08:00`) : null;
+  if (dateKey === today && openingDate && closingDate && minimumTime >= openingDate.getTime() && minimumTime < closingDate.getTime()) slots.push("asap");
+  // The placement RPC validates the slot interval from the branch-wide
+  // schedule opening. Keep that grid as the source of truth, then trim it to
+  // this weekday's own opening and closing window.
+  for (let minutes = scheduleStart; minutes < end; minutes += settings.schedule.slotIntervalMinutes) {
+    if (minutes < start) continue;
     const hours = Math.floor(minutes / 60);
     const minute = minutes % 60;
     const value = `${String(hours).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;

@@ -12,6 +12,7 @@ import {
   getOnlineOrderNextAction,
   ONLINE_ORDER_STATUSES,
   pickupSlotLabel,
+  readOnlineOrderingSettings,
   type OnlineOrderStatus,
   type OnlineOrderingFulfillmentMethod,
 } from "@/lib/online-ordering";
@@ -165,6 +166,7 @@ export default function OnlineQueuePanel({
   const [actionId, setActionId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const [onlineOrderingEnabled, setOnlineOrderingEnabled] = useState<boolean | null>(null);
 
   const loadQueue = useCallback(async (silent = false) => {
     const requestId = requestIdRef.current + 1;
@@ -172,6 +174,7 @@ export default function OnlineQueuePanel({
 
     if (!profile.store_id) {
       setOrders([]);
+      setOnlineOrderingEnabled(null);
       setNotice("This terminal is not assigned to a branch, so the online queue is unavailable.");
       setLoading(false);
       return;
@@ -179,6 +182,7 @@ export default function OnlineQueuePanel({
 
     if (offline || (typeof navigator !== "undefined" && !navigator.onLine)) {
       setOrders([]);
+      setOnlineOrderingEnabled(null);
       setNotice("Reconnect this terminal to check the online order queue.");
       setLoading(false);
       return;
@@ -187,21 +191,35 @@ export default function OnlineQueuePanel({
     if (!silent) setLoading(true);
     let data: unknown[] | null = null;
     let error: { message?: string } | null = null;
+    let nextOnlineOrderingEnabled: boolean | null = null;
     try {
-      const result = await supabase
-        .from("online_orders")
-        .select("id, order_no, customer_name, customer_phone, fulfillment_method, delivery_address, delivery_note, delivery_fee, pickup_slot, status, queue_position, subtotal, total, note, eta_at, created_at")
-        .eq("org_id", profile.org_id)
-        .eq("store_id", profile.store_id)
-        .order("created_at", { ascending: false })
-        .limit(100);
+      const [result, settingsResult] = await Promise.all([
+        supabase
+          .from("online_orders")
+          .select("id, order_no, customer_name, customer_phone, fulfillment_method, delivery_address, delivery_note, delivery_fee, pickup_slot, status, queue_position, subtotal, total, note, eta_at, created_at")
+          .eq("org_id", profile.org_id)
+          .eq("store_id", profile.store_id)
+          .order("created_at", { ascending: false })
+          .limit(100),
+        supabase
+          .from("stores")
+          .select("settings")
+          .eq("id", profile.store_id)
+          .eq("org_id", profile.org_id)
+          .eq("is_active", true)
+          .maybeSingle(),
+      ]);
       data = result.data as unknown[] | null;
       error = result.error;
+      if (!settingsResult.error && settingsResult.data) {
+        nextOnlineOrderingEnabled = readOnlineOrderingSettings(settingsResult.data.settings).enabled;
+      }
     } catch {
       error = { message: "Online queue request failed." };
     }
 
     if (requestId !== requestIdRef.current) return;
+    setOnlineOrderingEnabled(nextOnlineOrderingEnabled);
     if (error) {
       setOrders([]);
       setNotice("The online queue could not be loaded. Check the online-ordering setup and try again.");
@@ -279,6 +297,7 @@ export default function OnlineQueuePanel({
     const handleOffline = () => {
       requestIdRef.current += 1;
       setOrders([]);
+      setOnlineOrderingEnabled(null);
       setLoading(false);
       setLastUpdatedAt(null);
       setNotice("Reconnect this terminal to check the online order queue.");
@@ -373,7 +392,7 @@ export default function OnlineQueuePanel({
           </button>
         </div>
         <div className="order-history-online-toolbar__actions">
-          <span className="order-history-online-live"><i />{lastUpdatedAt ? `Live · ${formatQueueTime(lastUpdatedAt)}` : "Live queue"}</span>
+          <span className={`order-history-online-live${onlineOrderingEnabled === false ? " is-paused" : onlineOrderingEnabled === null ? " is-checking" : ""}`}><i />{onlineOrderingEnabled === false ? "Paused · existing orders" : onlineOrderingEnabled === null ? "Checking order status" : lastUpdatedAt ? `Live · ${formatQueueTime(lastUpdatedAt)}` : "Live queue"}</span>
           <button type="button" className="order-history-button order-history-button--soft" onClick={() => void refreshQueue()} disabled={loading || refreshing}>
             <AdminIcon name="refresh" size={15} />
             {refreshing ? "Refreshing…" : "Refresh"}
@@ -393,11 +412,18 @@ export default function OnlineQueuePanel({
         </div>
       )}
 
+      {onlineOrderingEnabled === false && (
+        <div className="order-history-notice order-history-notice--paused" role="status">
+          <AdminIcon name="pause" size={16} />
+          <span>Online ordering is paused. Existing orders remain visible here; new customer orders are blocked until you resume it.</span>
+        </div>
+      )}
+
       <div className="order-history-content online-queue-content">
         <section className="order-history-list-panel online-queue-list-panel" aria-label="Online order queue">
           <div className="order-history-list-panel__heading">
             <div>
-              <p>Live online queue</p>
+              <p>{onlineOrderingEnabled === false ? "Online order queue" : onlineOrderingEnabled === null ? "Online queue" : "Live online queue"}</p>
               <strong>{loading ? "Loading orders…" : `${filteredOrders.length} order${filteredOrders.length === 1 ? "" : "s"}`}</strong>
             </div>
             <span>{activeCount} active</span>

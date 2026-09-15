@@ -5268,6 +5268,14 @@
   white-space: nowrap;
 }
 
+.order-history-online-live.is-paused {
+  color: var(--warning);
+}
+
+.order-history-online-live.is-checking {
+  color: var(--text-muted);
+}
+
 .order-history-online-live i {
   width: 7px;
   height: 7px;
@@ -5405,6 +5413,11 @@
   background: rgba(239, 231, 214, 0.65);
   font-size: 11px;
   font-weight: 700;
+}
+
+.order-history-notice--paused {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
 }
 
 .order-history-content {

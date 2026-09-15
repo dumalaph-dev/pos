@@ -7,6 +7,8 @@ import { formatPeso } from "@/lib/money";
 import { LEGAL_DOCUMENT_VERSION } from "@/lib/legal-config";
 import {
   calculateOnlineOrderTotals,
+  generateOnlineOrderingDateOptions,
+  generateOnlineOrderingSlots,
   getDemoOnlineOrderNo,
   singaporeDateKey,
   type OnlineOrderingFulfillmentMethod,
@@ -122,6 +124,8 @@ async function sendOnlineOrderVerificationCode(phone: string, orderNo: string, c
 
 function placementErrorMessage(message: string) {
   const normalized = message.toLowerCase();
+  if (normalized.includes("closed on the selected day")) return "That day is closed for online orders. Choose another date.";
+  if (normalized.includes("outside the available pickup hours")) return "That pickup time is outside the store’s business hours. Choose another slot.";
   if (normalized.includes("sold out") || normalized.includes("unavailable")) return "One of the items just became unavailable. Refresh the menu and review your basket.";
   if (normalized.includes("minimum order")) return "Your order is below the store’s minimum order amount.";
   if (normalized.includes("rate limit") || normalized.includes("too many order attempts")) return "We’ve paused new attempts for a few minutes. Please wait and try again.";
@@ -186,6 +190,9 @@ export async function placeOnlineOrder(_previousState: PublicOnlineOrderResult, 
   if (!menu) return fail("This menu is no longer available. Refresh and try again.");
   if (!menu.settings.enabled) return fail("This store is not accepting online orders right now.");
   if (fulfillmentMethod === "delivery" && !menu.settings.delivery.enabled) return fail("Delivery is not available right now. Choose pickup instead.");
+  const dateOptions = generateOnlineOrderingDateOptions(menu.settings);
+  if (!dateOptions.some((option) => option.value === pickupDate)) return fail("That day is closed or outside the store’s scheduling window. Choose another date.");
+  if (!generateOnlineOrderingSlots(menu.settings, pickupDate).includes(pickupSlot)) return fail("That time is no longer available. Choose another slot and try again.");
 
   const productById = new Map(menu.products.map((product) => [product.id, product]));
   const items = drafts.map((draft) => {

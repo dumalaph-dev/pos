@@ -12,7 +12,7 @@ import {
 import { isProductImageUrl } from "@/lib/product-images";
 import { toCentavos } from "@/lib/money";
 import { isPosThemeId } from "@/lib/pos-theme";
-import { formatOrderStatusLabel, isOnlineOrderingHexColor, mergeOnlineOrderingSettings, ONLINE_ORDER_STATUSES, publicMenuPath, readOnlineOrderingSettings, type OnlineOrderStatus } from "@/lib/online-ordering";
+import { formatOrderStatusLabel, isOnlineOrderingHexColor, mergeOnlineOrderingSettings, ONLINE_ORDERING_WEEKDAYS, ONLINE_ORDERING_WEEKDAY_LABELS, ONLINE_ORDER_STATUSES, publicMenuPath, readOnlineOrderingSettings, type OnlineOrderingBusinessHours, type OnlineOrderingBusinessDay, type OnlineOrderStatus } from "@/lib/online-ordering";
 import { isValidPublicMenuSubdomain, normalizePublicMenuSubdomain } from "@/lib/public-menu-domain";
 
 type OwnerProfile = {
@@ -29,6 +29,33 @@ export type PosOnlineOrderStatusResult =
 function readText(formData: FormData, name: string) {
   const value = formData.get(name);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function readEnabled(formData: FormData) {
+  const value = formData.get("enabled");
+  return value === "on" || value === "true";
+}
+
+function isValidTime(value: string) {
+  return /^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(value);
+}
+
+function readBusinessHours(formData: FormData, current: OnlineOrderingBusinessHours): OnlineOrderingBusinessHours {
+  return Object.fromEntries(ONLINE_ORDERING_WEEKDAYS.map((day) => {
+    const fallback = current[day];
+    const enabled = formData.get(`business_hours_${day}_closed`) !== "on";
+    const openingTime = readText(formData, `business_hours_${day}_opening_time`) || fallback.openingTime;
+    const closingTime = readText(formData, `business_hours_${day}_closing_time`) || fallback.closingTime;
+    const label = ONLINE_ORDERING_WEEKDAY_LABELS[day];
+    if (!isValidTime(openingTime) || !isValidTime(closingTime)) {
+      actionRedirect(`${label} hours must use valid opening and closing times.`);
+    }
+    if (enabled && openingTime >= closingTime) {
+      actionRedirect(`${label} closing time must be later than its opening time.`);
+    }
+    const nextDay: OnlineOrderingBusinessDay = { enabled, openingTime, closingTime };
+    return [day, nextDay];
+  })) as OnlineOrderingBusinessHours;
 }
 
 function readPresentationText(formData: FormData, name: string, maxLength: number) {
@@ -131,10 +158,13 @@ export async function updateOnlineOrderingSettings(formData: FormData) {
   const maxItemQuantity = Number(readText(formData, "max_item_quantity"));
   const slotIntervalMinutes = Number(readText(formData, "slot_interval_minutes"));
   const maxDaysAhead = Number(readText(formData, "max_days_ahead"));
-  const openingTime = readText(formData, "opening_time");
-  const closingTime = readText(formData, "closing_time");
+  const currentSettings = readOnlineOrderingSettings(store.settings);
+  const businessHours = readBusinessHours(formData, currentSettings.schedule.businessHours);
+  const openDays = ONLINE_ORDERING_WEEKDAYS.map((day) => businessHours[day]).filter((day) => day.enabled);
+  const openingTime = openDays.slice(1).reduce((earliest, day) => day.openingTime < earliest ? day.openingTime : earliest, openDays[0]?.openingTime ?? currentSettings.schedule.openingTime);
+  const closingTime = openDays.slice(1).reduce((latest, day) => day.closingTime > latest ? day.closingTime : latest, openDays[0]?.closingTime ?? currentSettings.schedule.closingTime);
   const cancellationPolicy = readText(formData, "cancellation_policy");
-  const enabled = formData.get("enabled") === "on";
+  const enabled = readEnabled(formData);
 
   if (!Number.isInteger(averagePrepMinutes) || averagePrepMinutes < 5 || averagePrepMinutes > 180) {
     actionRedirect("Average prep time must be a whole number from 5 to 180 minutes.");
@@ -162,9 +192,6 @@ export async function updateOnlineOrderingSettings(formData: FormData) {
   if (!Number.isInteger(maxDaysAhead) || maxDaysAhead < 0 || maxDaysAhead > 14) {
     actionRedirect("Scheduled orders can be offered from 0 to 14 days ahead.");
   }
-  if (!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(openingTime) || !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(closingTime)) {
-    actionRedirect("Choose valid opening and closing times.");
-  }
   if (openingTime >= closingTime) actionRedirect("Closing time must be later than opening time.");
   if (serviceArea.length > 240) actionRedirect("Delivery service areas must be 240 characters or fewer.");
   if (!cancellationPolicy || cancellationPolicy.length > 360) actionRedirect("Add a cancellation policy under 360 characters.");
@@ -189,6 +216,7 @@ export async function updateOnlineOrderingSettings(formData: FormData) {
       maxDaysAhead,
       openingTime,
       closingTime,
+      businessHours,
     },
   });
   const { error } = await supabase.rpc("set_online_ordering_settings", {
@@ -201,6 +229,23 @@ export async function updateOnlineOrderingSettings(formData: FormData) {
   revalidatePath("/admin/online-ordering");
   revalidatePath(publicMenuPath(store.staff_login_slug));
   redirect("/admin/online-ordering?saved=settings");
+}
+
+export async function toggleOnlineOrdering(formData: FormData) {
+  const { supabase, profile } = await requireOnlineOrderingUser();
+  const storeId = readText(formData, "store_id");
+  const store = await readStoreContext(supabase, profile.org_id, storeId);
+  const nextSettings = mergeOnlineOrderingSettings(store.settings, { enabled: readEnabled(formData) });
+  const { error } = await supabase.rpc("set_online_ordering_settings", {
+    p_store_id: store.id,
+    p_settings: nextSettings,
+  });
+
+  if (error) actionRedirect(onlineOrderingRpcError(error, "Online ordering status could not be changed."));
+
+  revalidatePath("/admin/online-ordering");
+  revalidatePath(publicMenuPath(store.staff_login_slug));
+  redirect("/admin/online-ordering?saved=online-status");
 }
 
 export async function updateOnlineOrderingPresentation(formData: FormData) {

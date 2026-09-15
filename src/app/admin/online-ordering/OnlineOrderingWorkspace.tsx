@@ -10,6 +10,7 @@ import { OnlineOrderAlertBanner } from "@/components/online-ordering/OnlineOrder
 import { useOnlineOrderAttention } from "@/components/online-ordering/useOnlineOrderAttention";
 import { OnlineMenuEditor } from "./OnlineMenuEditor";
 import { OnlineAvailabilityEditor } from "./OnlineAvailabilityEditor";
+import { OnlineFulfillmentSettings } from "./OnlineFulfillmentSettings";
 import {
   formatOnlineEta,
   formatOrderStatusLabel,
@@ -22,7 +23,7 @@ import {
 } from "@/lib/online-ordering";
 import { ONLINE_ORDER_ALERT_POLL_MS } from "@/lib/online-order-alerts";
 import { formatPeso } from "@/lib/money";
-import { updateOnlineMenuSubdomain, updateOnlineOrderStatus, updateOnlineOrderingSettings, verifyOnlineOrderPhone } from "./actions";
+import { toggleOnlineOrdering, updateOnlineMenuSubdomain, updateOnlineOrderStatus, verifyOnlineOrderPhone } from "./actions";
 
 type QueueOrder = {
   id: string;
@@ -107,6 +108,12 @@ export function OnlineOrderingWorkspace({
     scopeKey: `${store.orgId}:${store.id}`,
     enabled: !queryError,
   });
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- keep controlled settings aligned after a server-action refresh.
+    setEnabled(settings.enabled);
+    setDeliveryEnabled(settings.delivery.enabled);
+  }, [settings.delivery.enabled, settings.enabled]);
 
   function refreshQueue() {
     setRefreshing(true);
@@ -222,7 +229,7 @@ export function OnlineOrderingWorkspace({
             id="online-ordering-availability-tab"
             panelId="online-ordering-availability-panel"
             label="Availability"
-            detail="Pause products or categories"
+            detail="Menu controls · business hours"
             icon="pause"
             active={activeTab === "availability"}
             onClick={() => setActiveTab("availability")}
@@ -246,16 +253,12 @@ export function OnlineOrderingWorkspace({
       <QueueDashboard
         hidden={activeTab !== "queue"}
         store={store}
-        settings={settings}
         publicMenuRootDomain={publicMenuRootDomain}
         shareUrl={shareUrl}
         orders={orders}
         queryError={queryError}
         canManage={canManage}
         enabled={enabled}
-        setEnabled={setEnabled}
-        deliveryEnabled={deliveryEnabled}
-        setDeliveryEnabled={setDeliveryEnabled}
         activeOrders={activeOrders}
         readyOrders={readyOrders}
         attentionCount={attentionCount}
@@ -274,11 +277,22 @@ export function OnlineOrderingWorkspace({
       />
 
       <section id="online-ordering-availability-panel" role="tabpanel" aria-labelledby="online-ordering-availability-tab" tabIndex={0} hidden={activeTab !== "availability"} className="mt-5 outline-none">
-        {availabilityError ? (
-          <div className="rounded-[22px] border border-warning/30 bg-warning/10 px-5 py-5 text-sm leading-6 text-ink sm:px-6">{availabilityError} Apply the latest online-ordering migrations to enable product and category controls.</div>
-        ) : (
-          <OnlineAvailabilityEditor storeId={store.id} categories={availability.categories} products={availability.products} canManage={canManage} />
-        )}
+        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
+          {availabilityError ? (
+            <div className="rounded-[22px] border border-warning/30 bg-warning/10 px-5 py-5 text-sm leading-6 text-ink sm:px-6">{availabilityError} Apply the latest online-ordering migrations to enable product and category controls.</div>
+          ) : (
+            <OnlineAvailabilityEditor storeId={store.id} categories={availability.categories} products={availability.products} canManage={canManage} />
+          )}
+          <OnlineFulfillmentSettings
+            key={JSON.stringify(settings)}
+            storeId={store.id}
+            settings={settings}
+            enabled={enabled}
+            onEnabledChange={setEnabled}
+            deliveryEnabled={deliveryEnabled}
+            onDeliveryEnabledChange={setDeliveryEnabled}
+          />
+        </div>
       </section>
 
       <section id="online-ordering-appearance-panel" role="tabpanel" aria-labelledby="online-ordering-appearance-tab" tabIndex={0} hidden={activeTab !== "appearance"} className="mt-5 outline-none">
@@ -299,16 +313,12 @@ function WorkspaceTabButton({ id, panelId, label, detail, icon, active, onClick,
 type QueueDashboardProps = {
   hidden: boolean;
   store: { id: string; orgId: string; name: string; address: string | null; slug: string; publicMenuSubdomain: string | null };
-  settings: OnlineOrderingSettings;
   publicMenuRootDomain: string;
   shareUrl: string;
   orders: QueueOrder[];
   queryError: string | null;
   canManage: boolean;
   enabled: boolean;
-  setEnabled: (value: boolean) => void;
-  deliveryEnabled: boolean;
-  setDeliveryEnabled: (value: boolean) => void;
   activeOrders: QueueOrder[];
   readyOrders: QueueOrder[];
   attentionCount: number;
@@ -326,7 +336,7 @@ type QueueDashboardProps = {
   downloadQrCode: () => void;
 };
 
-function QueueDashboard({ hidden, store, settings, publicMenuRootDomain, shareUrl, orders, queryError, canManage, enabled, setEnabled, deliveryEnabled, setDeliveryEnabled, activeOrders, readyOrders, attentionCount, preparingCount, todaySales, filteredOrders, filter, setFilter, lastUpdatedAt, refreshing, refreshQueue, copied, copyShareUrl, qrCode, downloadQrCode }: QueueDashboardProps) {
+function QueueDashboard({ hidden, store, publicMenuRootDomain, shareUrl, orders, queryError, canManage, enabled, activeOrders, readyOrders, attentionCount, preparingCount, todaySales, filteredOrders, filter, setFilter, lastUpdatedAt, refreshing, refreshQueue, copied, copyShareUrl, qrCode, downloadQrCode }: QueueDashboardProps) {
   return (
     <section id="online-ordering-queue-panel" role="tabpanel" aria-labelledby="online-ordering-queue-tab" tabIndex={0} hidden={hidden} className="mt-5 outline-none">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -336,7 +346,12 @@ function QueueDashboard({ hidden, store, settings, publicMenuRootDomain, shareUr
           <p className="mt-1 max-w-2xl text-sm leading-6 text-ink-muted">Keep the next handoff visible: confirm the order, move it through prep, then complete pickup or delivery.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-primary-soft px-3 py-2 text-[10px] font-extrabold text-primary" aria-live="polite"><i className="h-1.5 w-1.5 rounded-full bg-success" />{lastUpdatedAt ? `Live · ${formatQueueLastUpdated(lastUpdatedAt)}` : "Live · checking every 15 sec"}</span>
+          <span className={`inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 py-2 text-[10px] font-extrabold ${enabled ? "bg-primary-soft text-primary" : "bg-warning/15 text-warning"}`} aria-live="polite"><i className={`h-1.5 w-1.5 rounded-full ${enabled ? "bg-success" : "bg-warning"}`} />{enabled ? (lastUpdatedAt ? `Live · ${formatQueueLastUpdated(lastUpdatedAt)}` : "Live · checking every 15 sec") : "Paused · existing orders remain"}</span>
+          {canManage && <form action={toggleOnlineOrdering} className="inline-flex">
+            <input type="hidden" name="store_id" value={store.id} />
+            <input type="hidden" name="enabled" value={String(!enabled)} />
+            <QueueOnlineOrderingToggleButton enabled={enabled} />
+          </form>}
           <button type="button" onClick={refreshQueue} disabled={refreshing} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 py-2 text-[10px] font-extrabold uppercase tracking-wide text-primary transition hover:bg-primary-soft disabled:cursor-not-allowed disabled:opacity-60" aria-label="Refresh online order queue"><AdminIcon name="refresh" size={12} />{refreshing ? "Refreshing…" : "Refresh"}</button>
         </div>
       </div>
@@ -352,7 +367,7 @@ function QueueDashboard({ hidden, store, settings, publicMenuRootDomain, shareUr
         <section className="min-w-0 overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)]" aria-labelledby="pickup-queue-heading">
           <div className="flex flex-col gap-4 border-b border-line px-5 py-5 sm:flex-row sm:items-end sm:justify-between sm:px-6">
             <div>
-              <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-accent">Live pickup queue</p>
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-accent">{enabled ? "Live pickup queue" : "Online queue · paused"}</p>
               <h3 id="pickup-queue-heading" className="mt-1 text-xl font-extrabold tracking-[-0.025em] text-ink">Orders to prepare</h3>
               <p className="mt-1 text-sm leading-5 text-ink-muted">New online orders land here with their promised pickup or delivery time.</p>
             </div>
@@ -380,71 +395,6 @@ function QueueDashboard({ hidden, store, settings, publicMenuRootDomain, shareUr
         <div className="grid gap-5">
           <QueueShareCard store={store} publicMenuRootDomain={publicMenuRootDomain} shareUrl={shareUrl} qrCode={qrCode} copied={copied} copyShareUrl={copyShareUrl} downloadQrCode={downloadQrCode} canManage={canManage} />
 
-          <form action={updateOnlineOrderingSettings} className="rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="pickup-settings-heading">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-accent">Fulfillment settings</p>
-                <h3 id="pickup-settings-heading" className="mt-1 text-xl font-extrabold tracking-[-0.025em] text-ink">Set promises your team can keep.</h3>
-              </div>
-              <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary-soft text-primary"><AdminIcon name="clock" size={17} /></span>
-            </div>
-            <input type="hidden" name="store_id" value={store.id} />
-            <label className="mt-5 flex items-center justify-between gap-4 rounded-2xl border border-line bg-raised px-3.5 py-3">
-              <span><strong className="block text-sm font-extrabold text-ink">Accept online orders</strong><small className="mt-0.5 block text-xs text-ink-muted">Customers can place pickup or delivery orders now</small></span>
-              <span className="relative inline-flex shrink-0">
-                <input type="checkbox" name="enabled" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} className="peer sr-only" />
-                <span className="h-6 w-11 rounded-full bg-line-strong transition peer-checked:bg-success peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary" />
-                <span className="pointer-events-none absolute left-1 top-1 h-4 w-4 rounded-full bg-white shadow-sm transition peer-checked:translate-x-5" />
-              </span>
-            </label>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <SettingField label="Average prep time" name="average_prep_minutes" defaultValue={settings.averagePrepMinutes} suffix="min" min={5} max={180} />
-              <SettingField label="Lead time" name="order_lead_minutes" defaultValue={settings.orderLeadMinutes} suffix="min" min={0} max={180} />
-              <SettingField label="Minimum order" name="minimum_order_amount" defaultValue={settings.minimumOrderCentavos / 100} suffix="₱" min={0} max={1000000} step={0.01} />
-              <SettingField label="Max quantity per item" name="max_item_quantity" defaultValue={settings.maxItemQuantity} suffix="items" min={1} max={100} />
-            </div>
-            <label className="mt-4 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted" htmlFor="pickup-note">Pickup note
-              <textarea id="pickup-note" name="pickup_note" defaultValue={settings.pickupNote} rows={3} maxLength={240} className="mt-1.5 block w-full resize-y rounded-xl border border-line-strong bg-raised px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10" />
-            </label>
-            <div className="mt-4 rounded-2xl border border-line bg-raised p-3.5">
-              <label className="flex items-center justify-between gap-4">
-                <span><strong className="block text-sm font-extrabold text-ink">Offer delivery</strong><small className="mt-0.5 block text-xs text-ink-muted">Add a delivery choice to the customer checkout</small></span>
-                <span className="relative inline-flex shrink-0">
-                  <input type="checkbox" name="delivery_enabled" checked={deliveryEnabled} onChange={(event) => setDeliveryEnabled(event.target.checked)} className="peer sr-only" />
-                  <span className="h-6 w-11 rounded-full bg-line-strong transition peer-checked:bg-success peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary" />
-                  <span className="pointer-events-none absolute left-1 top-1 h-4 w-4 rounded-full bg-white shadow-sm transition peer-checked:translate-x-5" />
-                </span>
-              </label>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <SettingField label="Delivery fee" name="delivery_fee" defaultValue={settings.delivery.feeCentavos / 100} suffix="₱" min={0} max={10000} step={0.01} />
-                <SettingField label="Delivery ETA buffer" name="delivery_eta_minutes" defaultValue={settings.delivery.etaMinutes} suffix="min" min={15} max={180} />
-              </div>
-              <label className="mt-3 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted" htmlFor="delivery-note">Delivery note
-                <textarea id="delivery-note" name="delivery_note" defaultValue={settings.delivery.note} rows={2} maxLength={240} className="mt-1.5 block w-full resize-y rounded-xl border border-line-strong bg-surface px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10" />
-              </label>
-              <label className="mt-3 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted" htmlFor="delivery-service-area">Delivery service area <span className="font-semibold normal-case tracking-normal text-ink-subtle">(comma-separated places)</span>
-                <textarea id="delivery-service-area" name="delivery_service_area" defaultValue={settings.delivery.serviceArea} rows={2} maxLength={240} placeholder="Makati, Poblacion, Salcedo" className="mt-1.5 block w-full resize-y rounded-xl border border-line-strong bg-surface px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10" />
-              </label>
-              <p className="mt-2 text-[11px] leading-4 text-ink-muted">Delivery uses pay-on-delivery for now. Online payments can be added later.</p>
-            </div>
-            <div className="mt-4 rounded-2xl border border-line bg-raised p-3.5">
-              <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted">Scheduled orders</p><p className="mt-1 text-xs leading-5 text-ink-muted">Customers choose from slots inside these branch hours. ASAP remains available today.</p></div><AdminIcon name="calendar" size={17} /></div>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <SettingField label="Slot interval" name="slot_interval_minutes" defaultValue={settings.schedule.slotIntervalMinutes} suffix="min" min={5} max={120} />
-                <SettingField label="Days ahead" name="max_days_ahead" defaultValue={settings.schedule.maxDaysAhead} suffix="days" min={0} max={14} />
-                <TimeField label="Opening time" name="opening_time" defaultValue={settings.schedule.openingTime} />
-                <TimeField label="Closing time" name="closing_time" defaultValue={settings.schedule.closingTime} />
-              </div>
-            </div>
-            <label className="mt-4 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted" htmlFor="cancellation-policy">Cancellation policy
-              <textarea id="cancellation-policy" name="cancellation_policy" defaultValue={settings.cancellationPolicy} rows={3} maxLength={360} className="mt-1.5 block w-full resize-y rounded-xl border border-line-strong bg-raised px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10" />
-            </label>
-            <div className="mt-5 flex items-center justify-between gap-3 border-t border-line pt-4">
-              <p className="max-w-[28ch] text-[11px] leading-4 text-ink-muted">ETAs use active orders, prep time, and the delivery buffer when applicable.</p>
-              <SettingsSaveButton />
-            </div>
-          </form>
-
           <aside className="rounded-[22px] border border-[#e2d7c5] bg-[#f7efe1] p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="flow-heading">
             <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#a77c3f]">How the flow works</p>
             <h3 id="flow-heading" className="mt-1 text-xl font-extrabold tracking-[-0.025em] text-primary">A clearer morning for everyone.</h3>
@@ -458,6 +408,11 @@ function QueueDashboard({ hidden, store, settings, publicMenuRootDomain, shareUr
       </div>
     </section>
   );
+}
+
+function QueueOnlineOrderingToggleButton({ enabled }: { enabled: boolean }) {
+  const { pending } = useFormStatus();
+  return <button type="submit" disabled={pending} className={`inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 py-2 text-[10px] font-extrabold uppercase tracking-wide transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60 ${enabled ? "border border-danger/25 bg-danger-soft text-danger hover:bg-danger/15" : "bg-primary text-primary-fg hover:bg-primary-hover"}`} aria-label={enabled ? "Pause online ordering" : "Resume online ordering"}><AdminIcon name={enabled ? "pause" : "check"} size={12} />{pending ? "Saving…" : enabled ? "Pause orders" : "Resume orders"}</button>;
 }
 
 function QueueMetric({ label, value, detail, tone }: { label: string; value: string; detail: string; tone: "attention" | "preparing" | "ready" | "value" }) {
@@ -608,19 +563,6 @@ function QueueEmptyState({ filter }: { filter: QueueFilter }) {
   const title = filter === "ready" ? "Nothing waiting on the pickup shelf" : filter === "preparing" ? "The prep line is clear" : filter === "all" ? "No online orders yet" : "No orders need attention";
   const detail = filter === "all" ? "Once a customer orders from the public menu, their queue number and ETA will appear here." : "You are caught up. New orders will show up in this queue when customers place them.";
   return <div className="px-6 py-14 text-center"><span className="mx-auto grid h-11 w-11 place-items-center rounded-2xl bg-primary-soft text-primary"><AdminIcon name="check" size={19} /></span><p className="mt-3 text-sm font-extrabold text-ink">{title}</p><p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-ink-muted">{detail}</p></div>;
-}
-
-function SettingField({ label, name, defaultValue, suffix, min, max, step = 1 }: { label: string; name: string; defaultValue: number; suffix: string; min: number; max: number; step?: number }) {
-  return <label className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted" htmlFor={name}>{label}<span className="relative mt-1.5 block"><input id={name} name={name} type="number" defaultValue={defaultValue} min={min} max={max} step={step} required className="block w-full rounded-xl border border-line-strong bg-raised px-3 py-2.5 pr-12 text-sm font-extrabold normal-case tracking-normal text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10" /><span className="pointer-events-none absolute inset-y-0 right-3 grid place-items-center text-[10px] font-bold normal-case tracking-normal text-ink-muted">{suffix}</span></span></label>;
-}
-
-function TimeField({ label, name, defaultValue }: { label: string; name: string; defaultValue: string }) {
-  return <label className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted" htmlFor={name}>{label}<input id={name} name={name} type="time" defaultValue={defaultValue} required className="mt-1.5 block w-full rounded-xl border border-line-strong bg-raised px-3 py-2.5 text-sm font-extrabold normal-case tracking-normal text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10" /></label>;
-}
-
-function SettingsSaveButton() {
-  const { pending } = useFormStatus();
-  return <button type="submit" disabled={pending} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold uppercase tracking-wide text-primary-fg transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60">{pending ? "Saving…" : "Save settings"}<AdminIcon name="check" size={14} /></button>;
 }
 
 function FlowStep({ number, title, detail }: { number: string; title: string; detail: string }) {

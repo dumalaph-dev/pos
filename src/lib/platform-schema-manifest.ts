@@ -93,4 +93,5 @@ export const PLATFORM_SCHEMA_MANIFEST: readonly PlatformSchemaMigration[] = [
   { version: "0083", name: "scoped_read_rpc_acl_hardening" },
   { version: "0084", name: "schema_drift_readout" },
   { version: "0085", name: "platform_announcements" },
+  { version: "0086", name: "online_ordering_business_hours" },
 ];

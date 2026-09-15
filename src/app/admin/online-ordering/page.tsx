@@ -192,6 +192,8 @@ export default async function OnlineOrderingPage({
   const saved = readParam(params.saved);
   const savedMessage = saved === "settings"
     ? "Online ordering settings saved."
+    : saved === "online-status"
+      ? "Online ordering status updated across the public menu and POS."
     : saved === "appearance"
       ? "Public menu appearance saved."
       : saved === "status"
@@ -222,7 +224,7 @@ export default async function OnlineOrderingPage({
         <div className="mt-5 flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-accent">Store owner feature · {store.name}</p>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-ink-muted">Manage the live pickup queue first, then tune the customer-facing menu and copy from the separate Theme &amp; copy tab.</p>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-ink-muted">Manage the live pickup queue, branch hours, and menu availability, then tune the customer-facing menu from the separate Theme &amp; copy tab.</p>
           </div>
           <span className="inline-flex items-center gap-2 rounded-full bg-primary-soft px-3 py-2 text-xs font-extrabold text-primary"><i className={`h-2 w-2 rounded-full ${settings.enabled ? "bg-success" : "bg-warning"}`} />{settings.enabled ? "Accepting orders" : "Paused"}</span>
         </div>
