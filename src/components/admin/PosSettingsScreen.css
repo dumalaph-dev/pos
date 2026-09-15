@@ -8114,3 +8114,116 @@
     justify-content: center;
   }
 }
+
+/* 32-Bit System palette refresh — keep the bevels, bring in console color. */
+.pos-preview-window--system {
+  border-color: var(--pos-theme-border-strong);
+  background: var(--pos-theme-app-pattern), var(--pos-theme-bg);
+  box-shadow: var(--pos-theme-shadow-pop);
+}
+
+.pos-preview-window--system .pos-preview-topbar {
+  border-bottom-color: var(--pos-theme-border-strong);
+  background:
+    linear-gradient(90deg, var(--pos-theme-highlight) 0 25%, #7f9fd2 25% 50%, #f0b44e 50% 75%, #46a49a 75%) left bottom / 220px 5px no-repeat,
+    linear-gradient(180deg, #3d5792 0%, var(--pos-theme-topbar) 100%);
+}
+
+.pos-preview-window--system .pos-preview-brand-mark {
+  border-color: #f6f9ff var(--pos-theme-border-strong) var(--pos-theme-border-strong) #f6f9ff;
+  background: var(--pos-theme-sidebar);
+}
+
+.pos-preview-window--system .pos-preview-categories {
+  border-right-color: var(--pos-theme-border-strong);
+  background: var(--pos-theme-sidebar);
+}
+
+.pos-preview-window--system .pos-preview-category-list button,
+.pos-preview-window--system .pos-preview-custom-item,
+.pos-preview-window--system .pos-preview-clear-cart,
+.pos-preview-window--system .pos-preview-search,
+.pos-preview-window--system .pos-preview-scan,
+.pos-preview-window--system .pos-preview-view-toggle,
+.pos-preview-window--system .pos-preview-order-actions select,
+.pos-preview-window--system .pos-preview-more,
+.pos-preview-window--system .pos-preview-line-controls,
+.pos-preview-window--system .pos-preview-note-area > button,
+.pos-preview-window--system .pos-preview-payment-options button,
+.pos-preview-window--system .pos-preview-tendered {
+  border-color: #f6f9ff var(--pos-theme-border-strong) var(--pos-theme-border-strong) #f6f9ff;
+  color: var(--pos-theme-text);
+  background: var(--pos-theme-control-gradient);
+  box-shadow: 2px 2px 0 rgba(47, 66, 106, 0.28);
+}
+
+.pos-preview-window--system .pos-preview-category-list button.is-active,
+.pos-preview-window--system .pos-preview-view-toggle button.is-active,
+.pos-preview-window--system .pos-preview-payment-options button.is-active {
+  border-color: var(--pos-theme-border-strong);
+  color: var(--pos-theme-topbar-text);
+  background: linear-gradient(180deg, #3d5792 0%, var(--pos-theme-topbar) 100%);
+}
+
+.pos-preview-window--system .pos-preview-category-list button:nth-child(4n + 1) svg,
+.pos-preview-window--system .pos-preview-product:nth-child(4n + 2) {
+  --system-window-accent: #3f70b6;
+}
+
+.pos-preview-window--system .pos-preview-category-list button:nth-child(4n + 2) svg,
+.pos-preview-window--system .pos-preview-product {
+  --system-window-accent: var(--pos-theme-highlight);
+}
+
+.pos-preview-window--system .pos-preview-category-list button:nth-child(4n + 3) svg,
+.pos-preview-window--system .pos-preview-product:nth-child(4n) {
+  --system-window-accent: #46a49a;
+}
+
+.pos-preview-window--system .pos-preview-category-list button:nth-child(4n) svg,
+.pos-preview-window--system .pos-preview-product:nth-child(4n + 3) {
+  --system-window-accent: #f0b44e;
+}
+
+.pos-preview-window--system .pos-preview-product {
+  border-color: var(--pos-theme-border-strong);
+  background: var(--pos-theme-card-gradient);
+  box-shadow: var(--pos-theme-shadow-card);
+}
+
+.pos-preview-window--system .pos-preview-product-image {
+  border-color: var(--pos-theme-border-strong) #f6f9ff #f6f9ff var(--pos-theme-border-strong);
+  background: var(--pos-theme-surface-panel);
+}
+
+.pos-preview-window--system .pos-preview-product-copy span,
+.pos-preview-window--system .pos-preview-change strong {
+  color: var(--pos-theme-highlight);
+}
+
+.pos-preview-window--system .pos-preview-order {
+  border-color: var(--pos-theme-border-strong);
+  background: var(--pos-theme-panel-gradient);
+  box-shadow: var(--pos-theme-shadow-pop);
+}
+
+.pos-preview-window--system .pos-preview-order-head {
+  border-color: var(--pos-theme-border-strong);
+  background: linear-gradient(90deg, #3d5792 0%, var(--pos-theme-topbar) 100%);
+}
+
+.pos-preview-window--system .pos-preview-total {
+  border-color: var(--pos-theme-border-strong);
+  color: var(--pos-theme-topbar-text);
+  background: var(--pos-theme-topbar);
+}
+
+.pos-preview-window--system .pos-preview-total strong {
+  color: #cbd8ef;
+}
+
+.pos-preview-window--system .pos-preview-complete {
+  border-color: #f6f9ff var(--pos-theme-border-strong) var(--pos-theme-border-strong) #f6f9ff;
+  color: var(--pos-theme-topbar-text);
+  background: linear-gradient(180deg, #4d7bc0 0%, #293866 100%);
+}

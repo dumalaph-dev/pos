@@ -7091,3 +7091,115 @@
     right: 12px;
   }
 }
+
+/* 32-Bit System palette refresh — keep the bevels, bring in console color. */
+.pos-app--system .pos-topbar {
+  border-bottom-color: var(--pos-theme-border-strong);
+  background:
+    linear-gradient(90deg, var(--pos-theme-highlight) 0 25%, #7f9fd2 25% 50%, #f0b44e 50% 75%, #46a49a 75%) left bottom / 220px 5px no-repeat,
+    linear-gradient(180deg, #3d5792 0%, var(--pos-theme-topbar) 100%);
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.28), inset -1px -1px 0 var(--pos-theme-border-strong);
+}
+
+.pos-app--system .brand-lockup__mark,
+.pos-app--system .pos-topbar__collapsed-mark,
+.pos-app--system .profile-avatar {
+  border-color: #f6f9ff var(--pos-theme-border-strong) var(--pos-theme-border-strong) #f6f9ff;
+  background: var(--pos-theme-sidebar);
+}
+
+.pos-app--system .pos-mode-tabs,
+.pos-app--system .catalog-search,
+.pos-app--system .category-toggle,
+.pos-app--system .order-type-select,
+.pos-app--system .order-discount-button,
+.pos-app--system .stepper,
+.pos-app--system .icon-button--soft,
+.pos-app--system .view-toggle {
+  border-color: #f6f9ff var(--pos-theme-border-strong) var(--pos-theme-border-strong) #f6f9ff;
+  background: var(--pos-theme-control-gradient);
+  box-shadow: 2px 2px 0 rgba(47, 66, 106, 0.28);
+}
+
+.pos-app--system .pos-mode-tab.is-active,
+.pos-app--system .view-toggle button.is-active,
+.pos-app--system .order-discount-button.is-active,
+.pos-app--system .category-toggle.is-active {
+  border-color: var(--pos-theme-border-strong);
+  color: var(--pos-theme-topbar-text);
+  background: linear-gradient(180deg, #3d5792 0%, var(--pos-theme-topbar) 100%);
+}
+
+.pos-app--system .category-rail {
+  border-right-color: var(--pos-theme-border-strong);
+  background: var(--pos-theme-sidebar);
+  box-shadow: inset 2px 0 0 rgba(255, 255, 255, 0.58), inset -2px 0 0 rgba(47, 66, 106, 0.20);
+}
+
+.pos-app--system .category-item {
+  border-color: #f6f9ff var(--pos-theme-border-strong) var(--pos-theme-border-strong) #f6f9ff;
+  color: var(--pos-theme-text);
+  background: var(--pos-theme-control-gradient);
+  box-shadow: 1px 1px 0 rgba(47, 66, 106, 0.32);
+}
+
+.pos-app--system .category-item.is-active {
+  border-color: var(--pos-theme-border-strong);
+  color: var(--pos-theme-topbar-text);
+  background: linear-gradient(180deg, #3d5792 0%, var(--pos-theme-topbar) 100%);
+}
+
+.pos-app--system .product-card {
+  border-color: var(--pos-theme-border-strong);
+  background: var(--pos-theme-card-gradient);
+  box-shadow: var(--pos-theme-shadow-card);
+}
+
+.pos-app--system .product-card__image {
+  border-color: var(--pos-theme-border-strong) #f6f9ff #f6f9ff var(--pos-theme-border-strong);
+  background: var(--pos-theme-surface-panel);
+}
+
+.pos-app--system .product-card__body span {
+  color: var(--pos-theme-highlight);
+}
+
+.pos-app--system .product-card__stock {
+  border-color: var(--pos-theme-border);
+  background: var(--pos-theme-primary-soft);
+}
+
+.pos-app--system .order-panel {
+  border-color: #f6f9ff var(--pos-theme-border-strong) var(--pos-theme-border-strong) #f6f9ff;
+  background: var(--pos-theme-panel-gradient);
+  box-shadow: var(--pos-theme-shadow-pop);
+}
+
+.pos-app--system .order-header {
+  border-color: var(--pos-theme-border-strong);
+  background: linear-gradient(90deg, #3d5792 0%, var(--pos-theme-topbar) 100%);
+}
+
+.pos-app--system .order-summary__total {
+  border-color: var(--pos-theme-border-strong);
+  color: var(--pos-theme-topbar-text) !important;
+  background: var(--pos-theme-topbar);
+}
+
+.pos-app--system .order-summary__total strong {
+  color: #cbd8ef !important;
+}
+
+.pos-app--system .button--save {
+  border-color: #f6f9ff var(--pos-theme-border-strong) var(--pos-theme-border-strong) #f6f9ff;
+  color: var(--pos-theme-text);
+  background: var(--pos-theme-control-gradient);
+}
+
+.pos-app--system .button--charge {
+  border-color: #f6f9ff var(--pos-theme-border-strong) var(--pos-theme-border-strong) #f6f9ff;
+  color: var(--pos-theme-topbar-text);
+  background:
+    linear-gradient(90deg, var(--pos-theme-highlight) 0 25%, #7f9fd2 25% 50%, #f0b44e 50% 75%, #46a49a 75%) left top / 100% 4px no-repeat,
+    linear-gradient(180deg, #4d7bc0 0%, var(--pos-theme-topbar) 100%);
+}

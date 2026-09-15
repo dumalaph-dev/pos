@@ -314,6 +314,53 @@ textarea.inventory-input {
 }
 .public-menu :where(h1, h2, h3, h4) { letter-spacing: var(--public-menu-letter-spacing); }
 .public-menu__product-copy { border-top: 1px solid var(--public-menu-border); }
+.public-menu__product-info {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.75rem;
+}
+.public-menu__product-name {
+  display: -webkit-box;
+  overflow: hidden;
+  min-width: 0;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.public-menu__product-category,
+.public-menu__product-status {
+  z-index: 1;
+  max-width: calc(100% - 1.5rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.public-menu__product-category {
+  top: 0.75rem;
+  left: 0.75rem;
+}
+.public-menu__product-status {
+  bottom: 0.75rem;
+  left: 0.75rem;
+}
+.public-menu:is([data-public-menu-theme="soft"], [data-public-menu-theme="botanical"], [data-public-menu-theme="sushi"]) .public-menu__product-category,
+.public-menu:is([data-public-menu-theme="sunset"], [data-public-menu-theme="bakery"], [data-public-menu-theme="icecream"]) .public-menu__product-category {
+  left: 50%;
+  max-width: calc(100% - 2rem);
+  transform: translateX(-50%);
+}
+.public-menu:is([data-public-menu-theme="soft"], [data-public-menu-theme="botanical"], [data-public-menu-theme="sushi"]) .public-menu__product-category {
+  top: 0.5rem;
+}
+.public-menu:is([data-public-menu-theme="sunset"], [data-public-menu-theme="bakery"], [data-public-menu-theme="icecream"]) .public-menu__product-category {
+  top: 2.25rem;
+  text-align: center;
+}
+.public-menu__product-info > button {
+  align-self: start;
+}
 .public-menu:is([data-public-menu-theme="classic"], [data-public-menu-theme="coastal"], [data-public-menu-theme="restaurant"], [data-public-menu-theme="deco"]) .public-menu__product {
   border: 3px double var(--public-menu-border-strong);
   padding: 5px;
@@ -362,3 +409,483 @@ textarea.inventory-input {
 }
 
 .public-menu__hero { background-image: var(--public-menu-panel-gradient); }
+
+/* -------------------------------------------------------------------------- */
+/* Public menu theme surfaces                                                 */
+/*
+   The POS themes already have distinct art direction. These selectors carry
+   that same surface language into the customer menu so each product grid has
+   a recognizable shape, frame, and rhythm.
+*/
+
+/* Modern Workspace — quiet, squared workspace tiles. */
+.public-menu[data-public-menu-theme="modern"] .public-menu__hero {
+  border-top: 6px solid var(--public-menu-primary);
+}
+
+.public-menu[data-public-menu-theme="modern"] .public-menu__product {
+  border: 1px solid var(--public-menu-border-strong);
+  border-radius: 8px;
+  box-shadow: 0 5px 16px rgba(35, 68, 76, 0.08);
+}
+
+.public-menu[data-public-menu-theme="modern"] .public-menu__product-image {
+  border-bottom: 3px solid var(--public-menu-primary);
+}
+
+.public-menu[data-public-menu-theme="modern"] .public-menu__basket {
+  border-left: 4px solid var(--public-menu-primary);
+  border-radius: 8px;
+}
+
+/* Classic Counter — an inked menu mount with square corners. */
+.public-menu[data-public-menu-theme="classic"] .public-menu__product,
+.public-menu[data-public-menu-theme="classic"] .public-menu__basket {
+  border: 3px double var(--public-menu-border-strong);
+  border-radius: 3px;
+}
+
+.public-menu[data-public-menu-theme="classic"] .public-menu__product {
+  padding: 5px;
+  box-shadow: 0 4px 0 rgba(109, 70, 35, 0.12), var(--public-menu-shadow-card);
+}
+
+.public-menu[data-public-menu-theme="classic"] .public-menu__product-image {
+  border-bottom: 3px double var(--public-menu-border-strong);
+}
+
+/* Soft Studio — rounded photo wells with a deliberate inset frame. */
+.public-menu[data-public-menu-theme="soft"] .public-menu__product {
+  border-radius: 26px 26px 16px 16px;
+  box-shadow: 0 10px 26px rgba(95, 67, 116, 0.12);
+}
+
+.public-menu[data-public-menu-theme="soft"] .public-menu__product-image {
+  margin: 8px 8px 0;
+  border-radius: 22px 22px 12px 12px;
+}
+
+.public-menu[data-public-menu-theme="soft"] .public-menu__product-copy {
+  border-top: 0;
+}
+
+.public-menu[data-public-menu-theme="soft"] .public-menu__basket {
+  border-radius: 24px 24px 14px 14px;
+}
+
+/* Dark Night Shift — instrument rails instead of soft containers. */
+.public-menu[data-public-menu-theme="dark"] .public-menu__product {
+  border-radius: 5px;
+  border-left: 4px solid var(--public-menu-accent);
+  box-shadow: inset 0 -3px var(--public-menu-accent), var(--public-menu-shadow-card);
+}
+
+.public-menu[data-public-menu-theme="dark"] .public-menu__product-image {
+  border-bottom: 1px solid var(--public-menu-border-strong);
+}
+
+.public-menu[data-public-menu-theme="dark"] .public-menu__basket {
+  border-radius: 5px;
+  border-left: 4px solid var(--public-menu-accent);
+}
+
+/* Retro Comic Market — offset ink, angular corners, and a poster-like hero. */
+.public-menu[data-public-menu-theme="bold"] .public-menu__hero {
+  border-top: 8px solid var(--public-menu-accent);
+  border-bottom: 4px solid var(--public-menu-primary);
+}
+
+.public-menu[data-public-menu-theme="bold"] .public-menu__product {
+  border-radius: 4px 14px 4px 14px;
+  border: 2px solid var(--public-menu-border-strong);
+  box-shadow: 4px 4px 0 var(--public-menu-border-strong);
+}
+
+.public-menu[data-public-menu-theme="bold"] .public-menu__product:nth-child(3n + 2) {
+  border-radius: 14px 4px 14px 4px;
+}
+
+.public-menu[data-public-menu-theme="bold"] .public-menu__product-image {
+  border-bottom: 4px solid var(--public-menu-accent);
+}
+
+/* 32-Bit System — cobalt title bars, silver bevels, coral save points. */
+.public-menu[data-public-menu-theme="system"] > header {
+  color: var(--public-menu-primary-text);
+  border-bottom: 4px solid var(--public-menu-accent);
+  background: var(--public-menu-primary);
+}
+
+.public-menu[data-public-menu-theme="system"] .public-menu__hero {
+  border-top: 8px solid var(--public-menu-primary);
+  border-bottom: 4px solid var(--public-menu-accent);
+}
+
+.public-menu[data-public-menu-theme="system"] .public-menu__product {
+  border: 3px outset var(--public-menu-border-strong);
+  border-radius: 2px;
+  box-shadow: var(--public-menu-shadow-card);
+}
+
+.public-menu[data-public-menu-theme="system"] .public-menu__product-image {
+  border-bottom: 3px solid var(--public-menu-primary);
+}
+
+.public-menu[data-public-menu-theme="system"] .public-menu__product-copy {
+  border-top: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent);
+}
+
+.public-menu[data-public-menu-theme="system"] .public-menu__product-category,
+.public-menu[data-public-menu-theme="system"] .public-menu__product-status {
+  border-radius: 2px;
+}
+
+.public-menu[data-public-menu-theme="system"] .public-menu__product-category {
+  color: var(--public-menu-primary-text);
+  background: var(--public-menu-primary);
+}
+
+.public-menu[data-public-menu-theme="system"] .public-menu__basket {
+  border: 3px outset var(--public-menu-border-strong);
+  border-top: 8px solid var(--public-menu-primary);
+  border-radius: 2px;
+}
+
+/* Coastal Counter — postcard frames and a clipped photo edge. */
+.public-menu[data-public-menu-theme="coastal"] .public-menu__product {
+  border: 3px double var(--public-menu-border-strong);
+  border-radius: 4px;
+  padding: 5px;
+}
+
+.public-menu[data-public-menu-theme="coastal"] .public-menu__product-image {
+  border-radius: 2px;
+  border-bottom: 2px solid var(--public-menu-accent);
+}
+
+.public-menu[data-public-menu-theme="coastal"] .public-menu__basket {
+  border: 3px double var(--public-menu-border-strong);
+  border-radius: 4px;
+}
+
+/* Sunset Market — arched stall fronts with a terracotta footer. */
+.public-menu[data-public-menu-theme="sunset"] .public-menu__product {
+  border-radius: 24px 24px 6px 6px;
+  border-top: 6px solid var(--public-menu-accent);
+}
+
+.public-menu[data-public-menu-theme="sunset"] .public-menu__product-image {
+  margin: 8px 8px 0;
+  border-radius: 48% 48% 4px 4px;
+}
+
+.public-menu[data-public-menu-theme="sunset"] .public-menu__product-copy {
+  border-top: 0;
+}
+
+.public-menu[data-public-menu-theme="sunset"] .public-menu__basket {
+  border-radius: 18px 18px 6px 6px;
+  border-top: 6px solid var(--public-menu-accent);
+}
+
+/* Botanical Grove — asymmetrical specimen cards. */
+.public-menu[data-public-menu-theme="botanical"] .public-menu__product {
+  border-radius: 24px 8px 24px 8px;
+}
+
+.public-menu[data-public-menu-theme="botanical"] .public-menu__product-image {
+  margin: 8px 8px 0;
+  border-radius: 18px 4px 18px 4px;
+}
+
+.public-menu[data-public-menu-theme="botanical"] .public-menu__product-copy {
+  border-top: 0;
+}
+
+.public-menu[data-public-menu-theme="botanical"] .public-menu__basket {
+  border-radius: 20px 8px 20px 8px;
+}
+
+/* Monochrome Ledger — rules, tabs, and hard left edges. */
+.public-menu[data-public-menu-theme="ledger"] .public-menu__product {
+  border-radius: 0;
+  border-left: 4px solid var(--public-menu-primary);
+  box-shadow: none;
+}
+
+.public-menu[data-public-menu-theme="ledger"] .public-menu__product-image {
+  border-bottom: 1px dashed var(--public-menu-border-strong);
+}
+
+.public-menu[data-public-menu-theme="ledger"] .public-menu__product-copy {
+  border-top: 1px dashed var(--public-menu-border-strong);
+}
+
+.public-menu[data-public-menu-theme="ledger"] .public-menu__product-name {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  letter-spacing: 0.015em;
+}
+
+.public-menu[data-public-menu-theme="ledger"] .public-menu__basket {
+  border-radius: 0;
+  border-left: 4px solid var(--public-menu-primary);
+}
+
+/* Lechon House Ember — carved plaques with an ember footer. */
+.public-menu[data-public-menu-theme="lechon"] .public-menu__product {
+  border-radius: 4px 18px 4px 18px;
+  border: 2px solid var(--public-menu-border-strong);
+}
+
+.public-menu[data-public-menu-theme="lechon"] .public-menu__product-copy {
+  border-top: 5px solid var(--public-menu-accent);
+}
+
+.public-menu[data-public-menu-theme="lechon"] .public-menu__basket {
+  border-radius: 4px 18px 4px 18px;
+  border-top: 5px solid var(--public-menu-accent);
+}
+
+/* Restaurant Maison — fine-dining mounts with a restrained double rule. */
+.public-menu[data-public-menu-theme="restaurant"] .public-menu__product,
+.public-menu[data-public-menu-theme="restaurant"] .public-menu__basket {
+  border: 3px double var(--public-menu-border-strong);
+  border-radius: 2px;
+}
+
+.public-menu[data-public-menu-theme="restaurant"] .public-menu__product {
+  padding: 5px;
+}
+
+.public-menu[data-public-menu-theme="restaurant"] .public-menu__product-image {
+  border-radius: 1px;
+}
+
+.public-menu[data-public-menu-theme="restaurant"] .public-menu__product-name,
+.public-menu[data-public-menu-theme="restaurant"] .public-menu__basket h2 {
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+/* Café Daylight — tiled bistro cards with a checked footer. */
+.public-menu[data-public-menu-theme="cafe"] .public-menu__product {
+  border-radius: 12px;
+  border: 2px solid var(--public-menu-border-strong);
+}
+
+.public-menu[data-public-menu-theme="cafe"] .public-menu__product-image {
+  border-bottom: 4px double var(--public-menu-border-strong);
+}
+
+.public-menu[data-public-menu-theme="cafe"] .public-menu__product-copy {
+  background-image: repeating-linear-gradient(135deg, transparent 0 8px, rgba(255, 255, 255, 0.28) 8px 10px);
+}
+
+.public-menu[data-public-menu-theme="cafe"] .public-menu__basket {
+  border-radius: 12px;
+  border-top: 4px solid var(--public-menu-accent);
+}
+
+/* Coffee Roastery — stamped kraft labels with dashed boundaries. */
+.public-menu[data-public-menu-theme="coffee"] .public-menu__product {
+  border: 1px dashed var(--public-menu-border-strong);
+  border-radius: 8px 8px 3px 3px;
+  box-shadow: 0 4px 0 rgba(91, 65, 40, 0.13);
+}
+
+.public-menu[data-public-menu-theme="coffee"] .public-menu__product-image {
+  margin: 5px 5px 0;
+  border-radius: 5px 5px 0 0;
+}
+
+.public-menu[data-public-menu-theme="coffee"] .public-menu__product-copy {
+  border-top: 1px dashed var(--public-menu-border-strong);
+}
+
+/* Latte Minimal — open photography and a single hairline rule. */
+.public-menu[data-public-menu-theme="latte"] .public-menu__product {
+  border-radius: 0;
+  border-color: transparent transparent var(--public-menu-border) transparent;
+  box-shadow: none;
+}
+
+.public-menu[data-public-menu-theme="latte"] .public-menu__product-image {
+  margin-bottom: 10px;
+  border-radius: 18px;
+}
+
+.public-menu[data-public-menu-theme="latte"] .public-menu__product-copy {
+  border-top: 0;
+}
+
+.public-menu[data-public-menu-theme="latte"] .public-menu__basket {
+  border-radius: 0;
+  border-left: 3px solid var(--public-menu-accent);
+}
+
+/* Bakery Pâtisserie — display arches with a pastry-box footer. */
+.public-menu[data-public-menu-theme="bakery"] .public-menu__product {
+  border-radius: 24px 24px 8px 8px;
+  border-top: 6px solid var(--public-menu-accent);
+}
+
+.public-menu[data-public-menu-theme="bakery"] .public-menu__product-image {
+  margin: 8px 8px 0;
+  border-radius: 48% 48% 6px 6px;
+}
+
+.public-menu[data-public-menu-theme="bakery"] .public-menu__product-copy {
+  border-top: 0;
+}
+
+/* Evergreen Planner — index cards with a colored binder edge. */
+.public-menu[data-public-menu-theme="planner"] .public-menu__product {
+  border-radius: 2px 12px 12px 12px;
+  border: 1px dashed var(--public-menu-border-strong);
+  border-left: 5px solid var(--public-menu-accent);
+  box-shadow: 3px 3px 0 rgba(40, 81, 56, 0.12);
+}
+
+.public-menu[data-public-menu-theme="planner"] .public-menu__product-copy {
+  border-top: 1px dotted var(--public-menu-border-strong);
+}
+
+.public-menu[data-public-menu-theme="planner"] .public-menu__basket {
+  border-radius: 2px 12px 12px 12px;
+  border-left: 5px solid var(--public-menu-accent);
+}
+
+/* Golden Crunch Chicken — keep the bold takeaway-box silhouette. */
+.public-menu[data-public-menu-theme="chicken"] .public-menu__product {
+  border-radius: 6px 18px 6px 18px;
+  border: 2px solid var(--public-menu-border-strong);
+  box-shadow: 4px 4px 0 var(--public-menu-border-strong), var(--public-menu-shadow-card);
+}
+
+.public-menu[data-public-menu-theme="chicken"] .public-menu__product-image {
+  border-bottom: 4px solid var(--public-menu-accent);
+}
+
+/* Neon Noodle Alley — dark ticket edges and a lit accent line. */
+.public-menu[data-public-menu-theme="ramen"] .public-menu__product {
+  border-radius: 3px;
+  border: 2px solid var(--public-menu-accent);
+  box-shadow: inset 0 0 0 1px var(--public-menu-primary), var(--public-menu-shadow-card);
+}
+
+.public-menu[data-public-menu-theme="ramen"] .public-menu__product-image {
+  border-bottom: 2px solid var(--public-menu-accent);
+}
+
+.public-menu[data-public-menu-theme="ramen"] .public-menu__basket {
+  border-radius: 3px;
+  border-top: 4px solid var(--public-menu-accent);
+}
+
+/* Papel Picado Taqueria — cut-paper corners and stitched edges. */
+.public-menu[data-public-menu-theme="taqueria"] .public-menu__product {
+  border-radius: 2px 14px 2px 14px;
+  border: 2px dashed var(--public-menu-border-strong);
+  box-shadow: 3px 3px 0 var(--public-menu-border-strong);
+}
+
+.public-menu[data-public-menu-theme="taqueria"] .public-menu__product-image {
+  margin: 6px 6px 0;
+  border-radius: 0 10px 0 10px;
+}
+
+/* Ink & Nori Sushi — washi mat, thin ink rule, and a calm square edge. */
+.public-menu[data-public-menu-theme="sushi"] .public-menu__product {
+  border-radius: 2px;
+  border: 1px solid var(--public-menu-border-strong);
+  box-shadow: inset 0 0 0 4px rgba(255, 255, 255, 0.35), var(--public-menu-shadow-card);
+}
+
+.public-menu[data-public-menu-theme="sushi"] .public-menu__product-image {
+  margin: 8px;
+  border-radius: 2px;
+  border-bottom: 2px solid var(--public-menu-accent);
+}
+
+.public-menu[data-public-menu-theme="sushi"] .public-menu__product-copy {
+  border-top: 0;
+}
+
+/* Deco Supper Club — geometric mounts with a hard rectangular frame. */
+.public-menu[data-public-menu-theme="deco"] .public-menu__product,
+.public-menu[data-public-menu-theme="deco"] .public-menu__basket {
+  border-radius: 0;
+  border: 2px solid var(--public-menu-border-strong);
+  box-shadow: inset 0 0 0 3px var(--public-menu-border), var(--public-menu-shadow-card);
+}
+
+.public-menu[data-public-menu-theme="deco"] .public-menu__product {
+  padding: 6px;
+}
+
+.public-menu[data-public-menu-theme="deco"] .public-menu__product-image {
+  border-radius: 0;
+}
+
+/* Paper & Press — editorial blocks with a perforated red edge. */
+.public-menu[data-public-menu-theme="paper"] .public-menu__product {
+  border-radius: 4px 12px 12px 4px;
+  border-left: 5px solid var(--public-menu-accent);
+  box-shadow: 0 4px 10px rgba(79, 63, 45, 0.10);
+}
+
+.public-menu[data-public-menu-theme="paper"] .public-menu__product-image {
+  border-bottom: 1px solid var(--public-menu-border);
+}
+
+.public-menu[data-public-menu-theme="paper"] .public-menu__product-name {
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+/* Scoops & Sprinkles — retain the scoop arch and playful soft silhouette. */
+.public-menu[data-public-menu-theme="icecream"] .public-menu__product {
+  border-radius: 28px 28px 12px 12px;
+  border-top: 8px solid var(--public-menu-accent);
+}
+
+.public-menu[data-public-menu-theme="icecream"] .public-menu__product-image {
+  margin: 8px 8px 0;
+  border-radius: 48% 48% 10px 10px;
+}
+
+.public-menu[data-public-menu-theme="icecream"] .public-menu__product-copy {
+  border-top: 0;
+}
+
+.public-menu[data-public-menu-theme="icecream"] .public-menu__basket {
+  border-radius: 12px 12px 24px 24px;
+  border-top: 8px solid var(--public-menu-accent);
+}
+
+/* Candy Counter — wrapper stripes and lozenge cards. */
+.public-menu[data-public-menu-theme="candy"] .public-menu__product {
+  border-radius: 14px;
+  border: 2px solid var(--public-menu-border-strong);
+  border-top: 8px solid var(--public-menu-accent);
+  box-shadow: 3px 3px 0 var(--public-menu-border-strong);
+}
+
+.public-menu[data-public-menu-theme="candy"] .public-menu__product-image {
+  border-bottom: 2px solid var(--public-menu-accent);
+}
+
+/* Noel Market — gift-tag corners and ribbon rules. */
+.public-menu[data-public-menu-theme="christmas"] .public-menu__product {
+  border-radius: 8px 8px 18px 18px;
+  border: 2px solid var(--public-menu-border-strong);
+  border-top: 6px solid var(--public-menu-accent);
+}
+
+.public-menu[data-public-menu-theme="christmas"] .public-menu__product-image {
+  border-bottom: 3px double var(--public-menu-accent);
+}
+
+.public-menu[data-public-menu-theme="christmas"] .public-menu__basket {
+  border-radius: 8px 8px 18px 18px;
+  border-top: 6px solid var(--public-menu-accent);
+}
