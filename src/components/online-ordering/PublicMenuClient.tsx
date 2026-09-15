@@ -40,6 +40,12 @@ type TrackState = {
   queuePosition: number | null;
 };
 
+type SavedCustomerDetails = {
+  customerName: string;
+  customerPhone: string;
+  deliveryAddress: string;
+};
+
 type LiveAvailability = {
   isAvailable: boolean;
   availabilityReason: PublicMenuProduct["availabilityReason"];
@@ -52,6 +58,7 @@ const INITIAL_ORDER_STATE: PublicOnlineOrderResult = { ok: false, message: "" };
 const PICKUP_SLOTS = ["asap"];
 const TRACKED_STATUSES: OnlineOrderStatus[] = ["new", "confirmed", "preparing", "ready", "picked_up", "cancelled"];
 const INITIAL_TRACK_STATE: TrackState = { status: "idle", message: "", orderNo: "", orderStatus: null, fulfillmentMethod: null, etaAt: null, queuePosition: null };
+const SAVED_CUSTOMER_DETAILS_STORAGE_PREFIX = "dumala:online-ordering:customer-details:";
 const ORDER_PROGRESS_LABELS = ["Received", "Preparing", "Ready"] as const;
 const ORDER_TIMING_GRACE_MS = 60_000;
 
@@ -63,6 +70,47 @@ type OrderTimingCopy = {
   detail: string;
   countdown: string;
 };
+
+function savedCustomerDetailsStorageKey(storeId: string) {
+  return `${SAVED_CUSTOMER_DETAILS_STORAGE_PREFIX}${storeId}`;
+}
+
+function readSavedCustomerDetails(storeId: string): SavedCustomerDetails | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(savedCustomerDetailsStorageKey(storeId));
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    const record = parsed as Record<string, unknown>;
+    const customerName = typeof record.customerName === "string" ? record.customerName.trim() : "";
+    const customerPhone = typeof record.customerPhone === "string" ? record.customerPhone.trim() : "";
+    const deliveryAddress = typeof record.deliveryAddress === "string" ? record.deliveryAddress.trim() : "";
+    const phoneDigits = customerPhone.replace(/\D/g, "");
+    if (customerName.length < 2 || customerName.length > 80 || phoneDigits.length < 7 || phoneDigits.length > 15) return null;
+    return { customerName, customerPhone, deliveryAddress: deliveryAddress.slice(0, 240) };
+  } catch {
+    return null;
+  }
+}
+
+function writeSavedCustomerDetails(storeId: string, details: SavedCustomerDetails) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(savedCustomerDetailsStorageKey(storeId), JSON.stringify(details));
+  } catch {
+    // Local storage can be unavailable in private browsing or restricted embeds.
+  }
+}
+
+function removeSavedCustomerDetails(storeId: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(savedCustomerDetailsStorageKey(storeId));
+  } catch {
+    // Local storage can be unavailable in private browsing or restricted embeds.
+  }
+}
 
 function orderProgressForStatus(status: OnlineOrderStatus) {
   if (status === "cancelled") return 0;
@@ -176,6 +224,7 @@ export function PublicMenuClient({ menu }: { menu: PublicMenuStore }) {
   const [search, setSearch] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [checkoutRequestId, setCheckoutRequestId] = useState("");
+  const [checkoutSavedDetails, setCheckoutSavedDetails] = useState<SavedCustomerDetails | null>(null);
   const [fulfillmentMethod, setFulfillmentMethod] = useState<OnlineOrderingFulfillmentMethod>("pickup");
   const [orderState, formAction, pending] = useActionState(placeOnlineOrder, INITIAL_ORDER_STATE);
   const [trackedStatus, setTrackedStatus] = useState<OnlineOrderStatus>("new");
@@ -282,6 +331,7 @@ export function PublicMenuClient({ menu }: { menu: PublicMenuStore }) {
 
   function openCheckout() {
     setCheckoutRequestId((current) => current || crypto.randomUUID());
+    setCheckoutSavedDetails(readSavedCustomerDetails(menu.id));
     setDrawerOpen(true);
   }
 
@@ -412,7 +462,7 @@ export function PublicMenuClient({ menu }: { menu: PublicMenuStore }) {
               {!readyForHandoff && <div><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[var(--public-menu-accent-ink)]">{checkoutEyebrow}</p><h2 id="checkout-heading" className="mt-1 text-[1.4rem] font-black leading-tight tracking-[-0.045em] text-[var(--public-menu-heading)] sm:text-2xl">{checkoutHeading}</h2></div>}
               <button type="button" onClick={() => setDrawerOpen(false)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-[var(--public-menu-muted)] transition hover:bg-[var(--public-menu-sidebar)] hover:text-[var(--public-menu-heading)]" aria-label="Close checkout"><AdminIcon name="close" size={18} /></button>
             </div>
-            {orderState.ok ? <OrderConfirmation orderState={orderState} status={trackedStatus} etaAt={trackedEta ?? orderState.etaAt ?? null} queuePosition={trackedQueuePosition ?? orderState.queuePosition ?? null} copied={copied} onCopy={copyOrderNumber} menu={menu} /> : <SmarterCheckoutForm menu={menu} cart={cart} cartTotal={cartTotal} fulfillmentMethod={fulfillmentMethod} onFulfillmentMethodChange={setFulfillmentMethod} requestId={checkoutRequestId} action={formAction} pending={pending} orderState={orderState} />}
+            {orderState.ok ? <OrderConfirmation orderState={orderState} status={trackedStatus} etaAt={trackedEta ?? orderState.etaAt ?? null} queuePosition={trackedQueuePosition ?? orderState.queuePosition ?? null} copied={copied} onCopy={copyOrderNumber} menu={menu} /> : <SmarterCheckoutForm menu={menu} cart={cart} cartTotal={cartTotal} fulfillmentMethod={fulfillmentMethod} onFulfillmentMethodChange={setFulfillmentMethod} requestId={checkoutRequestId} action={formAction} pending={pending} orderState={orderState} initialSavedDetails={checkoutSavedDetails} />}
           </div>
         </div>
       )}
@@ -623,32 +673,61 @@ function LegacyCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfil
   );
 }
 
-function SmarterCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfillmentMethodChange, requestId, action, pending, orderState }: { menu: PublicMenuStore; cart: CartLine[]; cartTotal: number; fulfillmentMethod: OnlineOrderingFulfillmentMethod; onFulfillmentMethodChange: (value: OnlineOrderingFulfillmentMethod) => void; requestId: string; action: (payload: FormData) => void; pending: boolean; orderState: PublicOnlineOrderResult }) {
+function SmarterCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfillmentMethodChange, requestId, action, pending, orderState, initialSavedDetails }: { menu: PublicMenuStore; cart: CartLine[]; cartTotal: number; fulfillmentMethod: OnlineOrderingFulfillmentMethod; onFulfillmentMethodChange: (value: OnlineOrderingFulfillmentMethod) => void; requestId: string; action: (payload: FormData) => void; pending: boolean; orderState: PublicOnlineOrderResult; initialSavedDetails: SavedCustomerDetails | null }) {
   const isDelivery = fulfillmentMethod === "delivery";
   const paymentLabel = isDelivery ? "Pay on delivery" : "Pay at pickup";
   const dateOptions = useMemo(() => generateOnlineOrderingDateOptions(menu.settings).filter((option) => generateOnlineOrderingSlots(menu.settings, option.value).length > 0), [menu.settings]);
   const [pickupDate, setPickupDate] = useState(dateOptions[0]?.value ?? singaporeDateKey());
   const [pickupSlot, setPickupSlot] = useState("asap");
-  const [customerName, setCustomerName] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
-  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [customerName, setCustomerName] = useState(initialSavedDetails?.customerName ?? "");
+  const [customerPhone, setCustomerPhone] = useState(initialSavedDetails?.customerPhone ?? "");
+  const [deliveryAddress, setDeliveryAddress] = useState(initialSavedDetails?.deliveryAddress ?? "");
   const [deliveryNote, setDeliveryNote] = useState("");
   const [note, setNote] = useState("");
   const [legalAcknowledged, setLegalAcknowledged] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [submittedReview, setSubmittedReview] = useState(false);
   const [formError, setFormError] = useState("");
+  const [savedDetails, setSavedDetails] = useState<SavedCustomerDetails | null>(initialSavedDetails);
+  const [rememberDetails, setRememberDetails] = useState(Boolean(initialSavedDetails));
   const selectedPickupDate = dateOptions.some((option) => option.value === pickupDate) ? pickupDate : dateOptions[0]?.value ?? "";
   const slots = useMemo(() => selectedPickupDate ? generateOnlineOrderingSlots(menu.settings, selectedPickupDate) : [], [menu.settings, selectedPickupDate]);
   const selectedPickupSlot = slots.includes(pickupSlot) ? pickupSlot : slots[0] ?? "";
   const totals = calculateOnlineOrderTotals(cartTotal, fulfillmentMethod, menu.settings, menu.vatRegistered, menu.vatRate);
   const prepMinutes = menu.settings.averagePrepMinutes + (isDelivery ? menu.settings.delivery.etaMinutes : 0);
+  const savedDetailsFields = menu.settings.delivery.enabled ? "your name, mobile number, and delivery address" : "your name and mobile number";
 
   const reviewFailed = submittedReview && !pending && !orderState.ok;
   const showReview = reviewing && !reviewFailed;
 
+  function persistSavedDetails() {
+    if (!rememberDetails) return;
+    const details = {
+      customerName: customerName.trim(),
+      customerPhone: customerPhone.trim(),
+      deliveryAddress: deliveryAddress.trim(),
+    };
+    writeSavedCustomerDetails(menu.id, details);
+    setSavedDetails(details);
+  }
+
+  function handleRememberDetailsChange(checked: boolean) {
+    setRememberDetails(checked);
+    if (!checked) {
+      removeSavedCustomerDetails(menu.id);
+      setSavedDetails(null);
+    }
+  }
+
+  function forgetSavedDetails() {
+    removeSavedCustomerDetails(menu.id);
+    setSavedDetails(null);
+    setRememberDetails(false);
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     if (showReview) {
+      persistSavedDetails();
       setSubmittedReview(true);
       return;
     }
@@ -715,8 +794,17 @@ function SmarterCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfi
        {showReview ? <ReviewPanel cart={cart} totals={totals} isDelivery={isDelivery} customerName={customerName} customerPhone={customerPhone} deliveryAddress={deliveryAddress} deliveryNote={deliveryNote} note={note} whenLabel={whenLabel} cancellationPolicy={menu.settings.cancellationPolicy} onBack={editDetails} /> : <>
         <fieldset className="mt-5"><legend className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]">How would you like to receive it?</legend><div className="mt-2 grid gap-2 sm:grid-cols-2"><label className={`cursor-pointer rounded-2xl border p-3 transition ${!isDelivery ? "border-[var(--public-menu-primary)] bg-[var(--public-menu-primary-soft)]" : "border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] hover:border-[var(--public-menu-border-strong)]"}`}><input type="radio" name="fulfillment_method" value="pickup" checked={!isDelivery} onChange={() => onFulfillmentMethodChange("pickup")} className="sr-only" /><span className="flex items-start gap-2.5"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--public-menu-primary)] text-[var(--public-menu-primary-text)]"><AdminIcon name="bag" size={15} /></span><span><strong className="block text-sm font-extrabold text-[var(--public-menu-heading)]">Pick up</strong><small className="mt-0.5 block text-[11px] leading-4 text-[var(--public-menu-muted)]">Ready at the counter · pay when you arrive</small></span></span></label>{menu.settings.delivery.enabled && <label className={`cursor-pointer rounded-2xl border p-3 transition ${isDelivery ? "border-[var(--public-menu-primary)] bg-[var(--public-menu-primary-soft)]" : "border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] hover:border-[var(--public-menu-border-strong)]"}`}><input type="radio" name="fulfillment_method" value="delivery" checked={isDelivery} onChange={() => onFulfillmentMethodChange("delivery")} className="sr-only" /><span className="flex items-start gap-2.5"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--public-menu-accent)] text-[var(--public-menu-accent-text)]"><AdminIcon name="arrow" size={15} /></span><span><strong className="block text-sm font-extrabold text-[var(--public-menu-heading)]">Deliver to me</strong><small className="mt-0.5 block text-[11px] leading-4 text-[var(--public-menu-muted)]">{formatPeso(menu.settings.delivery.feeCentavos)} fee · about {menu.settings.delivery.etaMinutes} min</small></span></span></label>}</div></fieldset>
          <div className="mt-5 grid gap-4 sm:grid-cols-2"><CheckoutField label="Your name" name="customer_name" placeholder="e.g. Mara Santos" autoComplete="name" required minLength={2} value={customerName} onChange={setCustomerName} /><CheckoutField label="Mobile number" name="customer_phone" placeholder="09XX XXX XXXX" type="tel" autoComplete="tel" required minLength={7} maxLength={40} value={customerPhone} onChange={setCustomerPhone} /></div>
-        {isDelivery && <div className="mt-4 grid gap-4 sm:grid-cols-2"><CheckoutField label="Delivery address" name="delivery_address" placeholder="Street, building, barangay" autoComplete="street-address" maxLength={240} required value={deliveryAddress} onChange={setDeliveryAddress} /><CheckoutField label="Landmark or rider note" name="delivery_note" placeholder="Gate color, floor, nearby landmark" maxLength={160} value={deliveryNote} onChange={setDeliveryNote} /></div>}
-         <div className="mt-4 grid gap-4 sm:grid-cols-2"><label className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]" htmlFor="pickup-date">{isDelivery ? "Delivery date" : "Pickup date"}<select id="pickup-date" value={selectedPickupDate} onChange={(event) => setPickupDate(event.target.value)} className="mt-1.5 block h-11 w-full rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 text-sm font-bold normal-case tracking-normal text-[var(--public-menu-raised-text)] outline-none focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10">{dateOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]" htmlFor="pickup-slot">{isDelivery ? "Delivery time" : "Pickup time"}<select id="pickup-slot" value={selectedPickupSlot} onChange={(event) => setPickupSlot(event.target.value)} className="mt-1.5 block h-11 w-full rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 text-sm font-bold normal-case tracking-normal text-[var(--public-menu-raised-text)] outline-none focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10">{slots.map((slot) => <option key={slot} value={slot}>{pickupSlotLabel(slot)}{slot === "asap" ? ` · about ${prepMinutes} min` : ""}</option>)}</select></label></div>
+         {isDelivery && <div className="mt-4 grid gap-4 sm:grid-cols-2"><CheckoutField label="Delivery address" name="delivery_address" placeholder="Street, building, barangay" autoComplete="street-address" maxLength={240} required value={deliveryAddress} onChange={setDeliveryAddress} /><CheckoutField label="Landmark or rider note" name="delivery_note" placeholder="Gate color, floor, nearby landmark" maxLength={160} value={deliveryNote} onChange={setDeliveryNote} /></div>}
+         <div className="mt-4 rounded-2xl border border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] p-3.5">
+           <div className="flex items-start justify-between gap-3">
+             <label className="flex min-w-0 items-start gap-3" htmlFor="remember-customer-details">
+               <input id="remember-customer-details" type="checkbox" checked={rememberDetails} onChange={(event) => handleRememberDetailsChange(event.target.checked)} aria-describedby="remember-customer-details-help" className="mt-1 h-4 w-4 shrink-0 accent-[var(--public-menu-primary)]" />
+               <span className="min-w-0"><strong className="block text-xs font-extrabold text-[var(--public-menu-heading)]">{savedDetails ? "Saved details are ready" : "Remember my details on this device"}</strong><span id="remember-customer-details-help" className="mt-1 block text-[11px] leading-5 text-[var(--public-menu-muted)]">{savedDetails ? `We found ${savedDetailsFields} saved locally. You can edit them above.` : `Save ${savedDetailsFields} for faster checkout next time. Use this only on your personal device.`}</span></span>
+             </label>
+             {savedDetails && <button type="button" onClick={forgetSavedDetails} className="min-h-10 shrink-0 rounded-lg px-2 text-[10px] font-extrabold text-[var(--public-menu-muted)] underline underline-offset-4 transition hover:text-[var(--public-menu-heading)]">Forget</button>}
+           </div>
+         </div>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2"><label className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]" htmlFor="pickup-date">{isDelivery ? "Delivery date" : "Pickup date"}<select id="pickup-date" value={selectedPickupDate} onChange={(event) => setPickupDate(event.target.value)} className="mt-1.5 block h-11 w-full rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 text-sm font-bold normal-case tracking-normal text-[var(--public-menu-raised-text)] outline-none focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10">{dateOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]" htmlFor="pickup-slot">{isDelivery ? "Delivery time" : "Pickup time"}<select id="pickup-slot" value={selectedPickupSlot} onChange={(event) => setPickupSlot(event.target.value)} className="mt-1.5 block h-11 w-full rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 text-sm font-bold normal-case tracking-normal text-[var(--public-menu-raised-text)] outline-none focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10">{slots.map((slot) => <option key={slot} value={slot}>{pickupSlotLabel(slot)}{slot === "asap" ? ` · about ${prepMinutes} min` : ""}</option>)}</select></label></div>
         <label className="mt-4 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]" htmlFor="order-note">Note for the store <span className="font-medium normal-case tracking-normal text-[var(--public-menu-subtle)]">optional</span><textarea id="order-note" name="note" rows={2} maxLength={240} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Less ice, extra sauce, etc." className="mt-1.5 block w-full resize-y rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-[var(--public-menu-raised-text)] outline-none placeholder:text-[var(--public-menu-subtle)] focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10" /></label>
         {isDelivery && <p className="mt-3 rounded-xl bg-[var(--public-menu-primary-soft)] px-3 py-2.5 text-[11px] leading-5 text-[var(--public-menu-primary-soft-text)]">{menu.settings.delivery.note}{menu.settings.delivery.serviceArea && ` Service area: ${menu.settings.delivery.serviceArea}.`}</p>}
       </>}
