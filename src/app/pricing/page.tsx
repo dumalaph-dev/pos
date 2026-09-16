@@ -19,12 +19,12 @@ import {
 } from "@/lib/platform-operations";
 import { readCachedPlatformBillingCatalog } from "@/lib/platform-operations-server";
 import { readBillingSummary, type BillingSummary } from "@/lib/pricing-billing-summary";
-import { PRICING_DETAIL, PRICING_EXCLUSIONS, PRICING_INCLUDES } from "@/lib/pricing-content";
+import { buildBranchPricingCopy, PRICING_DETAIL, PRICING_EXCLUSIONS, PRICING_INCLUDES } from "@/lib/pricing-content";
 import { absoluteUrl, siteUrl } from "@/lib/site-url";
 
 const TITLE = "POS System Pricing in the Philippines";
 const DESCRIPTION =
-  "One price for the complete Dumala POS workspace — no per-terminal, per-branch, or per-staff fees. Free for 14 days, then monthly or annual billing in pesos.";
+  "Transparent branch-aware pricing for an offline-first POS, online menu, and owner workspace for Philippine food businesses. Free for 14 days, then monthly or annual billing in pesos.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -38,6 +38,7 @@ export const dynamic = "force-dynamic";
 
 function buildPricingFaqs(catalog: BillingCatalog, billing: BillingSummary) {
   const monthly = formatPeso(catalog.monthlyPriceCentavos);
+  const branchPricing = buildBranchPricingCopy(catalog);
   const annual = catalog.variants
     .filter((variant) => variant.isActive && variant.intervalUnit === "year")
     .sort((left, right) => left.sortOrder - right.sortOrder);
@@ -55,7 +56,7 @@ function buildPricingFaqs(catalog: BillingCatalog, billing: BillingSummary) {
   return [
     {
       question: "How much does Dumala POS cost?",
-      answer: `${monthly} per month for the complete workspace after a 14-day free trial. There are no feature tiers, and no per-terminal, per-branch, or per-staff charges.`,
+      answer: `${monthly} per month for the complete workspace after a 14-day free trial. There are no feature tiers, per-terminal fees, or per-staff fees. ${branchPricing.summary} ${branchPricing.example}`,
     },
     {
       question: "Is there a free trial, and do I need a card?",
@@ -76,7 +77,7 @@ function buildPricingFaqs(catalog: BillingCatalog, billing: BillingSummary) {
     {
       question: "Does the price change if I open another branch?",
       answer:
-        "No. Branches, terminals, staff accounts, and products are unlimited on the same price. Each branch keeps its own catalog, settings, printer, and staff, and the owner sees them together.",
+        `${branchPricing.summary} ${branchPricing.example} Each branch keeps its own catalog, settings, printer, and staff, and the owner sees them together.`,
     },
     {
       question: "What happens when the trial ends?",
@@ -86,12 +87,12 @@ function buildPricingFaqs(catalog: BillingCatalog, billing: BillingSummary) {
     {
       question: "Do I have to buy hardware from you?",
       answer:
-        "No. If your receipt printer speaks ESC/POS it should work over Bluetooth, Wi-Fi, or USB in 52mm, 58mm, or 80mm. Dumala runs in a browser on the tablet or desktop you already have.",
+        "No. Compatible ESC/POS printers work in 52mm, 58mm, or 80mm widths. Network printers need Dumala's local bridge on the same LAN; Bluetooth requires a BLE printer and Chrome on Android; USB uses WebUSB in Chrome or Edge. Dumala runs in a browser on the tablet or desktop you already have.",
     },
     {
       question: "Will the price on this page stay current?",
       answer:
-        "Yes. This page reads the same pricing catalog the checkout uses, so it updates when the price does. Catalog and base-price changes apply to new checkouts; active subscriptions update when their branch count changes.",
+        "Yes. This page reads the same pricing catalog the checkout uses, so it updates when the base price, included branch capacity, branch add-on, or annual terms change. Catalog and base-price changes apply to new checkouts; active subscriptions update when their branch count changes.",
     },
   ];
 }
@@ -111,6 +112,7 @@ export default async function PricingPage() {
   const faqs = buildPricingFaqs(billingCatalog, billing);
   const hasAnnualOptions = billingCatalog.variants.some((variant) => variant.isActive && variant.intervalUnit === "year");
   const monthlyPrice = formatPeso(billingCatalog.monthlyPriceCentavos);
+  const branchPricing = buildBranchPricingCopy(billingCatalog);
 
   const structuredData = {
     "@context": "https://schema.org",
@@ -160,12 +162,12 @@ export default async function PricingPage() {
         <div className="mx-auto max-w-[820px] text-center">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">Pricing</p>
           <h1 className="mt-3 text-[clamp(2.3rem,5vw,3.6rem)] font-black leading-[1.02] tracking-[-0.05em] text-[#102d21]">
-            One price for the whole workspace.
+            Clear, branch-aware pricing for the whole workspace.
           </h1>
           <p className="mx-auto mt-5 max-w-[620px] text-base leading-7 text-[#526157] sm:text-lg sm:leading-8">
-            Dumala POS costs {monthlyPrice} per month for Philippine cafes, restaurants, coffee shops, and bakeshops — the
-            complete counter POS and owner workspace, with no per-terminal, per-branch, or per-staff fees. Free for 14 days
-            first, and no card is required to start.
+            Dumala POS starts at {monthlyPrice} per month for Philippine cafes, restaurants, coffee shops, and bakeshops — the
+            complete counter POS and owner workspace. {branchPricing.summary} Free for 14 days first, and no card is required
+            to start.
           </p>
         </div>
       </section>
@@ -187,7 +189,8 @@ export default async function PricingPage() {
               Everything is in the one price.
             </h2>
             <p className="mt-4 text-sm leading-6 text-[#657168] sm:text-base">
-              There is one product and one price. Nothing below is an upgrade you buy later.
+              There is one product with transparent branch-aware pricing. Nothing below is an upgrade you buy later; the
+              included branch capacity and any additional-branch add-on are shown before checkout.
             </p>
           </div>
 
@@ -211,8 +214,8 @@ export default async function PricingPage() {
               What you never pay extra for.
             </h2>
             <p className="mt-4 text-sm leading-6 text-[#657168] sm:text-base">
-              Most POS pricing in this market is per terminal, per branch, or per seat. If you are comparing quotes, these are
-              the lines that usually move the total.
+              You do not pay per terminal or per staff account. Branch capacity and any additional-branch add-on are shown
+              clearly before checkout, so you can compare the total before committing.
             </p>
           </div>
 

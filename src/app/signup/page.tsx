@@ -3,7 +3,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { formatPeso } from "@/lib/money";
 import { socialMetadata } from "@/lib/page-metadata";
-import { DEFAULT_BILLING_VARIANTS, DEFAULT_MONTHLY_PRICE_CENTAVOS } from "@/lib/platform-operations";
+import { buildBranchPricingCopy } from "@/lib/pricing-content";
+import {
+  DEFAULT_ADDITIONAL_BRANCH_PRICE_CENTAVOS,
+  DEFAULT_BILLING_VARIANTS,
+  DEFAULT_INCLUDED_BRANCH_COUNT,
+  DEFAULT_MONTHLY_PRICE_CENTAVOS,
+  type BillingCatalog,
+} from "@/lib/platform-operations";
 import { readCachedPlatformBillingCatalog } from "@/lib/platform-operations-server";
 import { normalizeReferralCode } from "@/lib/referrals";
 import SignupForm from "./SignupForm";
@@ -26,8 +33,17 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
   const referralParam = Array.isArray(params.ref) ? params.ref[0] : params.ref;
   const referralCode = normalizeReferralCode(referralParam);
   const catalog = await readCachedPlatformBillingCatalog();
-  const monthlyPriceLabel = formatPeso(catalog?.monthlyPriceCentavos ?? DEFAULT_MONTHLY_PRICE_CENTAVOS);
-  const annualOptionsAvailable = (catalog?.variants ?? DEFAULT_BILLING_VARIANTS).some((variant) => variant.isActive && variant.intervalUnit === "year");
+  const billingCatalog: BillingCatalog = catalog ?? {
+    currency: "PHP",
+    monthlyPriceCentavos: DEFAULT_MONTHLY_PRICE_CENTAVOS,
+    additionalBranchPriceCentavos: DEFAULT_ADDITIONAL_BRANCH_PRICE_CENTAVOS,
+    includedBranchCount: DEFAULT_INCLUDED_BRANCH_COUNT,
+    variants: DEFAULT_BILLING_VARIANTS,
+    schemaAvailable: false,
+  };
+  const monthlyPriceLabel = formatPeso(billingCatalog.monthlyPriceCentavos);
+  const annualOptionsAvailable = billingCatalog.variants.some((variant) => variant.isActive && variant.intervalUnit === "year");
+  const branchPricing = buildBranchPricingCopy(billingCatalog);
 
   return (
     <main className="min-h-screen bg-bg px-6 py-10 text-ink sm:py-16">
@@ -60,11 +76,17 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
             <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-primary-fg/65">Premium workspace</p>
             <p className="mt-2 text-2xl font-extrabold">14 days free</p>
             <p className="mt-1 text-sm leading-6 text-primary-fg/75">Then {monthlyPriceLabel}/month, or choose an available annual term after the trial. No card required to start.</p>
+            <p className="mt-3 text-sm leading-6 text-primary-fg/75">{branchPricing.summary} {branchPricing.example}</p>
           </div>
         </section>
 
         <section className="rounded-card border border-line bg-surface p-6 shadow-[var(--shadow-card)] sm:p-9" aria-labelledby="signup-heading">
-          <SignupForm monthlyPriceLabel={monthlyPriceLabel} annualOptionsAvailable={annualOptionsAvailable} referralCode={referralCode} />
+          <SignupForm
+            monthlyPriceLabel={monthlyPriceLabel}
+            annualOptionsAvailable={annualOptionsAvailable}
+            branchPricingSummary={`${branchPricing.summary} ${branchPricing.example}`}
+            referralCode={referralCode}
+          />
         </section>
       </div>
     </main>

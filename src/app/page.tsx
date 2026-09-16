@@ -15,11 +15,11 @@ import { DEFAULT_ADDITIONAL_BRANCH_PRICE_CENTAVOS, DEFAULT_BILLING_VARIANTS, DEF
 import { readCachedPlatformBillingCatalog } from "@/lib/platform-operations-server";
 import { absoluteUrl, siteUrl } from "@/lib/site-url";
 import { POS_THEME_OPTIONS } from "@/lib/pos-theme";
-import { PRICING_INCLUDES } from "@/lib/pricing-content";
+import { buildBranchPricingCopy, PRICING_INCLUDES } from "@/lib/pricing-content";
 
 const LANDING_TITLE = "POS for Cafes, Restaurants & Food Businesses | Dumala POS";
 const LANDING_DESCRIPTION =
-  "A practical POS, online menu, and owner workspace for Philippine cafes, restaurants, coffee shops, bakeshops, and other counter-service businesses.";
+  "An offline-first POS, online menu, and owner workspace for Philippine cafes, restaurants, coffee shops, bakeshops, and other counter-service businesses.";
 
 export const metadata: Metadata = {
   // `absolute` opts out of the root layout's "%s | Dumala POS" template, which
@@ -45,7 +45,7 @@ const featureCards: Array<{
     icon: "bag",
     title: "Fast checkout at the counter",
     description: "Give cashiers one focused place for products, payments, discounts, and order slips.",
-    points: ["Fixed-price and by-weight items", "Discounts without the clutter", "Cash, GCash, Maya, and card"],
+    points: ["Fixed-price and by-weight items", "Discounts without the clutter", "Record cash, GCash, Maya, and card payments"],
   },
   {
     icon: "spark",
@@ -105,7 +105,7 @@ const detailPanels: Array<{
     specs: [
       "Fixed-price and by-weight items on one ticket",
       "Senior and PWD discounts with ID capture",
-      "Cash with change due, GCash, Maya, or card",
+      "Record cash, GCash, Maya, or card payments",
       "Hold orders and come back to them",
     ],
   },
@@ -125,9 +125,11 @@ const detailPanels: Array<{
     mark: "03",
     title: "Use the printer you already have",
     description:
-      "If your printer speaks ESC/POS, Dumala can usually work with it over Bluetooth, Wi-Fi, or USB, so modernizing the workflow does not have to mean replacing the counter hardware.",
+      "Use a compatible ESC/POS printer over Wi-Fi/LAN, Bluetooth Low Energy, or USB. Network printers need Dumala's local bridge on the same LAN; Bluetooth uses Chrome on Android, and USB uses Chrome or Edge.",
     specs: [
-      "Bluetooth, Wi-Fi, or USB behind one adapter",
+      "Network printers use a local bridge on the same LAN",
+      "Bluetooth requires BLE and Chrome on Android",
+      "USB uses WebUSB in Chrome or Edge",
       "52mm, 58mm, and 80mm ESC/POS layouts",
       "Reconnects between sales on its own",
       "A failed print never loses the sale",
@@ -195,7 +197,7 @@ const syncSteps: Array<{ step: string; title: string; text: string }> = [
   {
     step: "Keep selling",
     title: "The counter stays usable",
-    text: "Signal drops, but orders, order slips, and shift records keep working. A status pill shows how many records are still waiting to sync.",
+    text: "Signal drops, but sales and order slips keep working. Shift controls and cloud reports resume when the connection returns. A status pill shows how many records are waiting to sync.",
   },
   {
     step: "Sync later",
@@ -204,7 +206,27 @@ const syncSteps: Array<{ step: string; title: string; text: string }> = [
   },
 ];
 
-function buildFaqs(premiumPrice: string, annualVariants: BillingVariant[]): Array<{ question: string; answer: string }> {
+const offlineBoundaries: Array<{ title: string; points: string[] }> = [
+  {
+    title: "Works offline on this device",
+    points: [
+      "Complete sales from the branch catalog already cached on the device",
+      "Order slips from a configured local printer when its local connection is available",
+      "Queued sales with branch and device order-number prefixes",
+    ],
+  },
+  {
+    title: "Needs a connection",
+    points: [
+      "Open or close shifts and read live shift totals",
+      "Cloud reports, owner workspace updates, and background synchronization",
+      "New catalog changes, online menu orders, and customer tracking",
+    ],
+  },
+];
+
+function buildFaqs(premiumPrice: string, annualVariants: BillingVariant[], billingCatalog: BillingCatalog): Array<{ question: string; answer: string }> {
+  const branchPricing = buildBranchPricingCopy(billingCatalog);
   const annualOptions = annualVariants.length > 0
     ? `You can also prepay ${annualVariants.map((variant) => `${variant.intervalCount} ${variant.intervalCount === 1 ? "year" : "years"} and save ${formatDiscount(variant.discountPercent)}`).join(", ")}; the current totals are shown above.`
     : "Monthly billing is the current public option. Annual choices will appear here when they are enabled in Plans & Pricing.";
@@ -223,22 +245,22 @@ function buildFaqs(premiumPrice: string, annualVariants: BillingVariant[]): Arra
   {
     question: "What does it cost after the trial?",
     answer:
-      `${premiumPrice} per month for the complete workspace. There are no feature tiers or per-branch add-ons. ${annualOptions}`,
+      `${premiumPrice} per month for the complete workspace. There are no feature tiers, per-terminal fees, or per-staff fees. ${branchPricing.summary} ${branchPricing.example} ${annualOptions}`,
   },
   {
     question: "Will the prices on this page stay current?",
     answer:
-      "Yes. This page reads the same pricing catalog as the Plans & Pricing control center. When the platform owner changes the monthly base price, an annual duration, or its discount, the public options update with it. Catalog and base-price changes apply to new checkouts; active subscriptions update when their branch count changes.",
+      "Yes. This page reads the same pricing catalog as the Plans & Pricing control center. When the platform owner changes the monthly base price, branch add-on, annual duration, or discount, the public options update with it. Catalog and base-price changes apply to new checkouts; active subscriptions update when their branch count changes.",
   },
   {
     question: "Does it keep working when the internet drops?",
     answer:
-      "Yes. Orders are written to the device first and queued for sync, so a cashier can keep selling and printing through an outage. When the connection returns, the queue clears on its own and nothing is entered twice.",
+      "Yes, within clear limits. Cached products and sales stay usable on the device, and queued sales sync when the connection returns. Shift controls, cloud reports, catalog refreshes, online menu orders, and live customer tracking need a connection.",
   },
   {
     question: "Can I run more than one branch?",
     answer:
-      "Yes. Each branch keeps its own catalog, settings, printer, and staff, and orders stay scoped to the branch they were rung up in. Owners get a consolidated view across all of them.",
+      `Yes. ${branchPricing.summary} ${branchPricing.example} Each branch keeps its own catalog, settings, printer, and staff, and owners get a consolidated view across all of them.`,
   },
   {
     question: "Can customers order from the menu online?",
@@ -248,7 +270,7 @@ function buildFaqs(premiumPrice: string, annualVariants: BillingVariant[]): Arra
   {
     question: "Which receipt printers are supported?",
     answer:
-      "ESC/POS printers over Bluetooth, Wi-Fi, or USB, in 52mm, 58mm, and 80mm widths. The printer is configured per device, so each tablet can pair with the printer sitting next to it.",
+      "Compatible ESC/POS printers work in 52mm, 58mm, or 80mm widths. Network printers need Dumala's local bridge on the same LAN; Bluetooth requires a BLE printer and Chrome on Android; USB uses WebUSB in Chrome or Edge. The printer is configured per device.",
   },
   {
     question: "Are these BIR-accredited official receipts?",
@@ -258,7 +280,7 @@ function buildFaqs(premiumPrice: string, annualVariants: BillingVariant[]): Arra
   {
     question: "What do I need to get started?",
     answer:
-      "An owner account and your first branch. Most businesses can create the account, add their first location, and start setting up the menu in about 3-5 minutes. Your team gets their own logins through a branch access link later.",
+      "An owner account and your first branch. Most businesses can create the account, add their first location, and start setting up the menu in a few minutes. Your team gets their own logins through a branch access link later.",
   },
   {
     question: "Do I have to install anything?",
@@ -349,7 +371,7 @@ const marqueeItems = [
   "Regular updates & support",
   "Offline-first by default",
   "Cloud sync when online",
-  "3-5 minute setup",
+  "Setup in a few minutes",
   "Easy tablet install",
   "14-day free trial",
   "Multi-branch ready",
@@ -660,7 +682,7 @@ export default async function LandingPage() {
   };
   const premiumPrice = formatPeso(billingCatalog.monthlyPriceCentavos);
   const annualVariants = billingCatalog.variants.filter((variant) => variant.isActive && variant.intervalUnit === "year");
-  const faqs = buildFaqs(premiumPrice, annualVariants);
+  const faqs = buildFaqs(premiumPrice, annualVariants, billingCatalog);
 
   return (
     <main className="lp min-h-screen bg-[#f8f3eb] text-[#102d21]">
@@ -687,25 +709,17 @@ export default async function LandingPage() {
               style={{ "--lp-delay": "60ms" } as React.CSSProperties}
             >
               <span className="lp-dot-pulse h-1.5 w-1.5 rounded-full bg-[#d1a05b]" />
-              POS for busy Philippine food businesses
+              Offline-first POS for Philippine food businesses
             </p>
 
             <h1
               className="lp-in mt-7 max-w-[560px] text-[clamp(3.1rem,6vw,5.9rem)] font-black leading-[0.94] tracking-[-0.065em] text-[#102d21]"
               style={{ "--lp-delay": "160ms" } as React.CSSProperties}
             >
-              {/* Left as "business" deliberately. Adding a category noun here
-                  ("Modernize your food business.") reads well and would put the
-                  keyword in the strongest on-page slot, but it wraps to a third
-                  line in the 1024-1440 band where this grid column is ~453px,
-                  and at 1280x720 that pushed the trial CTA from 665px to 737px
-                  — below the fold. Measured: no change at 375 or 1920, +81px at
-                  1440. The category keyword lives in the deck below instead,
-                  which costs no vertical space. */}
-              Modernize your business.
+              Offline-first POS
               <br />
               <span className="relative inline-block text-[#b18448]">
-                Make it yours.
+                for Philippine food businesses.
                 <svg
                   aria-hidden="true"
                   viewBox="0 0 300 14"
@@ -723,8 +737,8 @@ export default async function LandingPage() {
               className="lp-in mt-7 max-w-[490px] text-base leading-7 text-[#526157] sm:text-lg sm:leading-8"
               style={{ "--lp-delay": "260ms" } as React.CSSProperties}
             >
-              Fast checkout for your team. Clear records for you. Dumala is a point-of-sale system for Philippine cafes and
-              restaurants that brings the counter POS and owner workspace together in one practical system.
+              Fast checkout for your team. Clear records for you. Dumala brings the counter POS, owner workspace, and online
+              menu together in one practical system for Philippine cafes, restaurants, and other food businesses.
             </p>
 
             <div className="lp-in mt-8 flex flex-wrap items-center gap-5" style={{ "--lp-delay": "340ms" } as React.CSSProperties}>
@@ -1030,7 +1044,7 @@ export default async function LandingPage() {
                 </div>
                 <h3 className="mt-5 text-xl font-black tracking-[-0.03em] text-[#173a2b]">The owner workspace</h3>
                 <p className="mt-3 text-sm leading-6 text-[#68736a]">
-                  Whether you run one location or several cafe, restaurant, or bakeshop branches, watch the day across every location,
+                  Whether you run one location or several café, restaurant, or bakeshop branches, watch the day across every location,
                   manage the catalog and stock, and review the numbers without standing at the till.
                 </p>
                 <div className="mt-6">
@@ -1166,6 +1180,33 @@ export default async function LandingPage() {
               </div>
             ))}
           </div>
+
+          <section className="mt-8" aria-labelledby="offline-boundaries-heading">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <h3 id="offline-boundaries-heading" className="text-sm font-black uppercase tracking-[0.16em] text-[#d1a05b]">Offline boundaries</h3>
+              <p className="max-w-md text-xs leading-5 text-[#aebfaf]">The counter can keep selling from cached data, while shared and live controls wait for a connection.</p>
+            </div>
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              {offlineBoundaries.map((boundary, index) => (
+                <article
+                  key={boundary.title}
+                  data-lp-reveal
+                  style={{ "--lp-delay": `${(syncSteps.length + index) * 110}ms` } as React.CSSProperties}
+                  className="rounded-2xl border border-[#3f5f4c] bg-[#123324] p-5 sm:p-6"
+                >
+                  <h4 className="text-base font-black leading-5 text-[#fffaf1]">{boundary.title}</h4>
+                  <ul className="mt-4 grid gap-2.5 border-t border-[#3f5f4c] pt-4 text-sm leading-6 text-[#c8d4c9]">
+                    {boundary.points.map((point) => (
+                      <li key={point} className="flex gap-2.5">
+                        <BulletIcon />
+                        {point}
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              ))}
+            </div>
+          </section>
         </div>
       </section>
 
@@ -1249,7 +1290,7 @@ export default async function LandingPage() {
           <div data-lp-reveal="left">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#d1a05b]">Easy to install - easy to set up</p>
             <h2 className="mt-4 max-w-lg text-4xl font-black leading-[1.02] tracking-[-0.05em] sm:text-5xl">
-              From sign-up to first sale in 3-5 minutes.
+              From sign-up to first sale in a few minutes.
             </h2>
             <p className="mt-5 max-w-md text-sm leading-7 text-[#cad6ca] sm:text-base">
               Create the business account, add your first branch, and make the POS yours without a disruptive rollout. Start in a
@@ -1265,7 +1306,7 @@ export default async function LandingPage() {
 
           <div className="grid gap-3 sm:grid-cols-3">
               {[
-                { number: "01", title: "Create the account", text: "Set up your business and first branch in about 3-5 minutes." },
+                { number: "01", title: "Create the account", text: "Set up your business and first branch in a few minutes." },
               { number: "02", title: "Personalize the counter", text: "Choose a theme, set your accent, and configure the workflow your team needs." },
               { number: "03", title: "Invite the team and sell", text: "Install the app-like experience, share access, and start ringing up orders." },
             ].map((step, index) => (
@@ -1393,7 +1434,7 @@ export default async function LandingPage() {
                   Give your food business a POS that fits.
                 </h2>
                 <p className="mt-3 max-w-xl text-sm leading-6 text-[#657168] sm:text-base">
-                  Start free for 14 days, set up your business in about 3-5 minutes, and personalize the POS before your first rush. After that, {annualVariants.length > 0 ? "choose monthly or an available annual term" : "continue with monthly billing"} for the same complete counter POS and owner workspace.
+                  Start free for 14 days, set up your business in a few minutes, and personalize the POS before your first rush. After that, {annualVariants.length > 0 ? "choose monthly or an available annual term" : "continue with monthly billing"} for the same complete counter POS and owner workspace.
                 </p>
               </div>
               <div className="shrink-0">

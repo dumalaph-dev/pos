@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { formatPeso } from "@/lib/money";
 import { billingVariantMonthlyEquivalent, calculateBillingVariantPrice, type BillingCatalog, type BillingVariant } from "@/lib/platform-operations";
+import { buildBranchPricingCopy } from "@/lib/pricing-content";
 
 type LandingPricingProps = {
   catalog: BillingCatalog;
@@ -32,6 +33,7 @@ export default function LandingPricing({ catalog, pricingIncludes }: LandingPric
   const savings = Math.max(0, monthlyCostForTerm - price);
   const durationLabel = billingDurationLabel(selected);
   const displayLabel = selected.label || durationLabel;
+  const branchPricing = buildBranchPricingCopy(catalog);
 
   return (
     <div className="mt-11 grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
@@ -103,7 +105,7 @@ export default function LandingPricing({ catalog, pricingIncludes }: LandingPric
             <p className="mt-3 text-sm leading-6 text-[#cad6ca]">
               {isAnnual
                 ? `Billed upfront for ${durationLabel.toLowerCase()}. That works out to about ${formatPeso(monthlyEquivalent)} per month.`
-                : "Billed monthly after the trial. The complete workspace is included."}
+                : "Billed monthly after the trial. The complete workspace and included branch capacity are included."}
             </p>
             {isAnnual && selected.discountPercent > 0 && (
               <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#58765f] bg-[#1d4834] px-3 py-2.5 text-xs font-black text-[#e5eee3]">
@@ -111,6 +113,11 @@ export default function LandingPricing({ catalog, pricingIncludes }: LandingPric
                 <span className="text-[#b7cfb9]">{formatPeso(savings)} less than monthly billing</span>
               </div>
             )}
+          </div>
+
+          <div className="relative mt-4 rounded-xl border border-[#58765f] bg-[#1d4834] px-4 py-3 text-xs leading-5 text-[#dbe4da]">
+            <p className="font-black uppercase tracking-[0.12em] text-[#d2a15c]">Branch pricing</p>
+            <p className="mt-1">{branchPricing.summary} {branchPricing.example}</p>
           </div>
 
           <ul className="relative mt-6 grid gap-2.5 border-t border-[#2c5341] pt-6 text-[13px] leading-5 text-[#dbe4da] sm:grid-cols-2">
