@@ -6,14 +6,16 @@ import { useActionState, useEffect, useMemo, useState, type CSSProperties, type 
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import {
   formatOnlineEta,
+  formatOnlineOrderingAvailabilityMessage,
   formatOrderStatusLabel,
   calculateOnlineOrderTotals,
   formatOnlineOrderingDate,
-  generateOnlineOrderingDateOptions,
+  generateOnlineOrderingAvailableDateOptions,
   generateOnlineOrderingSlots,
+  getOnlineOrderingAvailability,
   pickupSlotLabel,
   validateOnlineDeliveryAddress,
-  singaporeDateKey,
+  philippineDateKey,
   type OnlineOrderingFulfillmentMethod,
   type OnlineOrderStatus,
   type PublicMenuProduct,
@@ -676,8 +678,21 @@ function LegacyCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfil
 function SmarterCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfillmentMethodChange, requestId, action, pending, orderState, initialSavedDetails }: { menu: PublicMenuStore; cart: CartLine[]; cartTotal: number; fulfillmentMethod: OnlineOrderingFulfillmentMethod; onFulfillmentMethodChange: (value: OnlineOrderingFulfillmentMethod) => void; requestId: string; action: (payload: FormData) => void; pending: boolean; orderState: PublicOnlineOrderResult; initialSavedDetails: SavedCustomerDetails | null }) {
   const isDelivery = fulfillmentMethod === "delivery";
   const paymentLabel = isDelivery ? "Pay on delivery" : "Pay at pickup";
-  const dateOptions = useMemo(() => generateOnlineOrderingDateOptions(menu.settings).filter((option) => generateOnlineOrderingSlots(menu.settings, option.value).length > 0), [menu.settings]);
-  const [pickupDate, setPickupDate] = useState(dateOptions[0]?.value ?? singaporeDateKey());
+  const [orderingClock, setOrderingClock] = useState(() => Date.now());
+  useEffect(() => {
+    const refreshOrderingClock = () => setOrderingClock(Date.now());
+    const interval = window.setInterval(refreshOrderingClock, 30_000);
+    window.addEventListener("focus", refreshOrderingClock);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshOrderingClock);
+    };
+  }, []);
+
+  const availability = useMemo(() => getOnlineOrderingAvailability(menu.settings, new Date(orderingClock)), [menu.settings, orderingClock]);
+  const availabilityMessage = formatOnlineOrderingAvailabilityMessage(availability, menu.settings);
+  const dateOptions = useMemo(() => generateOnlineOrderingAvailableDateOptions(menu.settings, new Date(orderingClock)), [menu.settings, orderingClock]);
+  const [pickupDate, setPickupDate] = useState(dateOptions[0]?.value ?? philippineDateKey(new Date(orderingClock)));
   const [pickupSlot, setPickupSlot] = useState("asap");
   const [customerName, setCustomerName] = useState(initialSavedDetails?.customerName ?? "");
   const [customerPhone, setCustomerPhone] = useState(initialSavedDetails?.customerPhone ?? "");
@@ -691,8 +706,9 @@ function SmarterCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfi
   const [savedDetails, setSavedDetails] = useState<SavedCustomerDetails | null>(initialSavedDetails);
   const [rememberDetails, setRememberDetails] = useState(Boolean(initialSavedDetails));
   const selectedPickupDate = dateOptions.some((option) => option.value === pickupDate) ? pickupDate : dateOptions[0]?.value ?? "";
-  const slots = useMemo(() => selectedPickupDate ? generateOnlineOrderingSlots(menu.settings, selectedPickupDate) : [], [menu.settings, selectedPickupDate]);
+  const slots = useMemo(() => selectedPickupDate ? generateOnlineOrderingSlots(menu.settings, selectedPickupDate, new Date(orderingClock)) : [], [menu.settings, selectedPickupDate, orderingClock]);
   const selectedPickupSlot = slots.includes(pickupSlot) ? pickupSlot : slots[0] ?? "";
+  const hasValidPickupSlot = Boolean(selectedPickupDate && selectedPickupSlot && slots.includes(selectedPickupSlot));
   const totals = calculateOnlineOrderTotals(cartTotal, fulfillmentMethod, menu.settings, menu.vatRegistered, menu.vatRate);
   const prepMinutes = menu.settings.averagePrepMinutes + (isDelivery ? menu.settings.delivery.etaMinutes : 0);
   const savedDetailsFields = menu.settings.delivery.enabled ? "your name, mobile number, and delivery address" : "your name and mobile number";
@@ -726,6 +742,13 @@ function SmarterCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfi
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    if (!menu.settings.enabled || !hasValidPickupSlot) {
+      event.preventDefault();
+      setFormError(!menu.settings.enabled
+        ? "Online ordering is paused right now. Please try again later."
+        : availabilityMessage ?? "Choose an available ordering date and time to continue.");
+      return;
+    }
     if (showReview) {
       persistSavedDetails();
       setSubmittedReview(true);
@@ -763,7 +786,11 @@ function SmarterCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfi
     setSubmittedReview(false);
   }
 
-  const whenLabel = selectedPickupSlot === "asap" ? `ASAP · about ${prepMinutes} min` : `${formatOnlineOrderingDate(selectedPickupDate)} · ${pickupSlotLabel(selectedPickupSlot)}`;
+  const whenLabel = !hasValidPickupSlot
+    ? "No ordering slot selected"
+    : selectedPickupSlot === "asap"
+      ? `ASAP · about ${prepMinutes} min`
+      : `${formatOnlineOrderingDate(selectedPickupDate)} · ${pickupSlotLabel(selectedPickupSlot)}`;
 
   return (
     <form action={action} onSubmit={handleSubmit} className="mt-6">
@@ -790,7 +817,7 @@ function SmarterCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfi
         <div className="mt-3 rounded-xl border border-[var(--public-menu-success-soft)] bg-[var(--public-menu-success-soft)] px-3 py-2.5 text-[11px] leading-5 text-[var(--public-menu-success-ink)]"><strong className="font-extrabold">{paymentLabel}.</strong> {isDelivery ? "We’ll collect payment when your order arrives." : "We’ll collect payment at the store counter when your order is ready."}</div>
       </div>
 
-       {dateOptions.length === 0 && <p role="alert" className="mt-4 rounded-xl border border-[var(--public-menu-danger-soft)] bg-[var(--public-menu-danger-soft)] px-3 py-2.5 text-xs font-semibold leading-5 text-[var(--public-menu-danger-text)]">No pickup or delivery slots remain in the current scheduling window. Please try again later.</p>}
+       {availabilityMessage && <div id="online-ordering-availability" role="status" aria-live="polite" className={`mt-4 flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-[11px] leading-5 ${dateOptions.length > 0 ? "border-[var(--public-menu-primary-soft)] bg-[var(--public-menu-primary-soft)] text-[var(--public-menu-primary-soft-text)]" : "border-[var(--public-menu-danger-soft)] bg-[var(--public-menu-danger-soft)] text-[var(--public-menu-danger-text)]"}`}><AdminIcon name="clock" size={15} /><p><strong className="font-extrabold">{availability.status === "closed_day" ? "Closed day." : "Ordering is unavailable right now."}</strong> {availabilityMessage}{dateOptions.length > 0 && " Choose a date and time below to continue."}</p></div>}
        {showReview ? <ReviewPanel cart={cart} totals={totals} isDelivery={isDelivery} customerName={customerName} customerPhone={customerPhone} deliveryAddress={deliveryAddress} deliveryNote={deliveryNote} note={note} whenLabel={whenLabel} cancellationPolicy={menu.settings.cancellationPolicy} onBack={editDetails} /> : <>
         <fieldset className="mt-5"><legend className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]">How would you like to receive it?</legend><div className="mt-2 grid gap-2 sm:grid-cols-2"><label className={`cursor-pointer rounded-2xl border p-3 transition ${!isDelivery ? "border-[var(--public-menu-primary)] bg-[var(--public-menu-primary-soft)]" : "border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] hover:border-[var(--public-menu-border-strong)]"}`}><input type="radio" name="fulfillment_method" value="pickup" checked={!isDelivery} onChange={() => onFulfillmentMethodChange("pickup")} className="sr-only" /><span className="flex items-start gap-2.5"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--public-menu-primary)] text-[var(--public-menu-primary-text)]"><AdminIcon name="bag" size={15} /></span><span><strong className="block text-sm font-extrabold text-[var(--public-menu-heading)]">Pick up</strong><small className="mt-0.5 block text-[11px] leading-4 text-[var(--public-menu-muted)]">Ready at the counter · pay when you arrive</small></span></span></label>{menu.settings.delivery.enabled && <label className={`cursor-pointer rounded-2xl border p-3 transition ${isDelivery ? "border-[var(--public-menu-primary)] bg-[var(--public-menu-primary-soft)]" : "border-[var(--public-menu-border)] bg-[var(--public-menu-surface)] hover:border-[var(--public-menu-border-strong)]"}`}><input type="radio" name="fulfillment_method" value="delivery" checked={isDelivery} onChange={() => onFulfillmentMethodChange("delivery")} className="sr-only" /><span className="flex items-start gap-2.5"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--public-menu-accent)] text-[var(--public-menu-accent-text)]"><AdminIcon name="arrow" size={15} /></span><span><strong className="block text-sm font-extrabold text-[var(--public-menu-heading)]">Deliver to me</strong><small className="mt-0.5 block text-[11px] leading-4 text-[var(--public-menu-muted)]">{formatPeso(menu.settings.delivery.feeCentavos)} fee · about {menu.settings.delivery.etaMinutes} min</small></span></span></label>}</div></fieldset>
          <div className="mt-5 grid gap-4 sm:grid-cols-2"><CheckoutField label="Your name" name="customer_name" placeholder="e.g. Mara Santos" autoComplete="name" required minLength={2} value={customerName} onChange={setCustomerName} /><CheckoutField label="Mobile number" name="customer_phone" placeholder="09XX XXX XXXX" type="tel" autoComplete="tel" required minLength={7} maxLength={40} value={customerPhone} onChange={setCustomerPhone} /></div>
@@ -804,7 +831,7 @@ function SmarterCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfi
              {savedDetails && <button type="button" onClick={forgetSavedDetails} className="min-h-10 shrink-0 rounded-lg px-2 text-[10px] font-extrabold text-[var(--public-menu-muted)] underline underline-offset-4 transition hover:text-[var(--public-menu-heading)]">Forget</button>}
            </div>
          </div>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2"><label className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]" htmlFor="pickup-date">{isDelivery ? "Delivery date" : "Pickup date"}<select id="pickup-date" value={selectedPickupDate} onChange={(event) => setPickupDate(event.target.value)} className="mt-1.5 block h-11 w-full rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 text-sm font-bold normal-case tracking-normal text-[var(--public-menu-raised-text)] outline-none focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10">{dateOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]" htmlFor="pickup-slot">{isDelivery ? "Delivery time" : "Pickup time"}<select id="pickup-slot" value={selectedPickupSlot} onChange={(event) => setPickupSlot(event.target.value)} className="mt-1.5 block h-11 w-full rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 text-sm font-bold normal-case tracking-normal text-[var(--public-menu-raised-text)] outline-none focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10">{slots.map((slot) => <option key={slot} value={slot}>{pickupSlotLabel(slot)}{slot === "asap" ? ` · about ${prepMinutes} min` : ""}</option>)}</select></label></div>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2"><label className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]" htmlFor="pickup-date">{isDelivery ? "Delivery date" : "Pickup date"}<select id="pickup-date" value={selectedPickupDate} onChange={(event) => setPickupDate(event.target.value)} disabled={dateOptions.length === 0} aria-describedby={availabilityMessage ? "online-ordering-availability" : undefined} className="mt-1.5 block h-11 w-full rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 text-sm font-bold normal-case tracking-normal text-[var(--public-menu-raised-text)] outline-none focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10 disabled:cursor-not-allowed disabled:opacity-60">{dateOptions.length === 0 && <option value="">No dates available</option>}{dateOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]" htmlFor="pickup-slot">{isDelivery ? "Delivery time" : "Pickup time"}<select id="pickup-slot" value={selectedPickupSlot} onChange={(event) => setPickupSlot(event.target.value)} disabled={slots.length === 0} aria-describedby={availabilityMessage ? "online-ordering-availability" : undefined} className="mt-1.5 block h-11 w-full rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 text-sm font-bold normal-case tracking-normal text-[var(--public-menu-raised-text)] outline-none focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10 disabled:cursor-not-allowed disabled:opacity-60">{slots.length === 0 && <option value="">No times available</option>}{slots.map((slot) => <option key={slot} value={slot}>{pickupSlotLabel(slot)}{slot === "asap" ? ` · about ${prepMinutes} min` : ""}</option>)}</select></label></div>
         <label className="mt-4 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--public-menu-muted)]" htmlFor="order-note">Note for the store <span className="font-medium normal-case tracking-normal text-[var(--public-menu-subtle)]">optional</span><textarea id="order-note" name="note" rows={2} maxLength={240} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Less ice, extra sauce, etc." className="mt-1.5 block w-full resize-y rounded-xl border border-[var(--public-menu-border-strong)] bg-[var(--public-menu-raised)] px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-[var(--public-menu-raised-text)] outline-none placeholder:text-[var(--public-menu-subtle)] focus:border-[var(--public-menu-primary)] focus:ring-2 focus:ring-[var(--public-menu-primary)]/10" /></label>
         {isDelivery && <p className="mt-3 rounded-xl bg-[var(--public-menu-primary-soft)] px-3 py-2.5 text-[11px] leading-5 text-[var(--public-menu-primary-soft-text)]">{menu.settings.delivery.note}{menu.settings.delivery.serviceArea && ` Service area: ${menu.settings.delivery.serviceArea}.`}</p>}
       </>}
@@ -815,7 +842,7 @@ function SmarterCheckoutForm({ menu, cart, cartTotal, fulfillmentMethod, onFulfi
          <input id="order-legal-acknowledged" name="legal_acknowledged" type="checkbox" value="yes" required checked={legalAcknowledged} onChange={(event) => setLegalAcknowledged(event.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-[var(--public-menu-primary)]" />
          <span>I agree to the <Link href="/legal/online-ordering" target="_blank" rel="noreferrer" className="font-extrabold text-[var(--public-menu-heading)] underline underline-offset-4">Online Ordering Terms</Link> and acknowledge the <Link href="/legal/privacy" target="_blank" rel="noreferrer" className="font-extrabold text-[var(--public-menu-heading)] underline underline-offset-4">Privacy Notice</Link>.</span>
        </label>
-       <button type="submit" disabled={pending || cart.length === 0 || !requestId || dateOptions.length === 0 || !selectedPickupDate || !selectedPickupSlot} className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--public-menu-primary)] px-4 py-3 text-xs font-extrabold uppercase tracking-wide text-[var(--public-menu-primary-text)] transition hover:bg-[var(--public-menu-primary-hover)] disabled:cursor-not-allowed disabled:opacity-55">{pending ? "Placing your order…" : showReview ? "Confirm and place order" : "Review order"}<AdminIcon name="arrow" size={14} /></button>
+        <button type="submit" aria-describedby={availabilityMessage ? "online-ordering-availability" : undefined} disabled={pending || !menu.settings.enabled || cart.length === 0 || !requestId || dateOptions.length === 0 || !hasValidPickupSlot} className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--public-menu-primary)] px-4 py-3 text-xs font-extrabold uppercase tracking-wide text-[var(--public-menu-primary-text)] transition hover:bg-[var(--public-menu-primary-hover)] disabled:cursor-not-allowed disabled:opacity-55">{pending ? "Placing your order…" : showReview ? "Confirm and place order" : "Review order"}<AdminIcon name="arrow" size={14} /></button>
       <p className="mt-3 text-center text-[10px] leading-4 text-[var(--public-menu-subtle)]">By placing this order, you agree to be contacted about {isDelivery ? "delivery" : "pickup"}. {menu.settings.cancellationPolicy}</p>
     </form>
   );

@@ -1,5 +1,5 @@
-import { isProductImageUrl, resolveProductImage } from "@/lib/product-images";
-import { isPosThemeId, type PosThemeId } from "@/lib/pos-theme";
+import { isProductImageUrl, resolveProductImage } from "./product-images.ts";
+import { isPosThemeId, type PosThemeId } from "./pos-theme.ts";
 
 export const ONLINE_ORDER_STATUSES = ["new", "confirmed", "preparing", "ready", "picked_up", "cancelled"] as const;
 
@@ -25,6 +25,10 @@ export type OnlineOrderingBrandDefaults = {
 
 export type OnlineOrderingFulfillmentMethod = "pickup" | "delivery";
 
+/** Online ordering schedules are entered and displayed in Philippine time. */
+export const ONLINE_ORDERING_TIME_ZONE = "Asia/Manila";
+export const ONLINE_ORDERING_TIME_ZONE_LABEL = "PHT";
+
 export const ONLINE_ORDERING_WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 
 export type OnlineOrderingWeekday = (typeof ONLINE_ORDERING_WEEKDAYS)[number];
@@ -36,6 +40,20 @@ export type OnlineOrderingBusinessDay = {
 };
 
 export type OnlineOrderingBusinessHours = Record<OnlineOrderingWeekday, OnlineOrderingBusinessDay>;
+
+export type OnlineOrderingAvailabilityStatus = "open" | "before_open" | "after_close" | "closed_day" | "no_slots";
+
+export type OnlineOrderingNextSlot = {
+  dateKey: string;
+  slot: string;
+};
+
+export type OnlineOrderingAvailability = {
+  status: OnlineOrderingAvailabilityStatus;
+  todayDateKey: string;
+  todayHours: OnlineOrderingBusinessDay;
+  nextSlot: OnlineOrderingNextSlot | null;
+};
 
 export const ONLINE_ORDERING_WEEKDAY_LABELS: Record<OnlineOrderingWeekday, string> = {
   mon: "Monday",
@@ -511,15 +529,20 @@ export function calculateOnlineOrderTotals(
   };
 }
 
-export function singaporeDateKey(date = new Date()) {
+export function philippineDateKey(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     day: "2-digit",
     month: "2-digit",
-    timeZone: "Asia/Singapore",
+    timeZone: ONLINE_ORDERING_TIME_ZONE,
     year: "numeric",
   }).formatToParts(date);
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
+}
+
+/** Kept for the existing branch-business-day callers; PHT and SGT are UTC+8. */
+export function singaporeDateKey(date = new Date()) {
+  return philippineDateKey(date);
 }
 
 function addCalendarDays(dateKey: string, days: number) {
@@ -531,7 +554,7 @@ function addCalendarDays(dateKey: string, days: number) {
 export function formatOnlineOrderingDate(dateKey: string) {
   const date = new Date(`${dateKey}T12:00:00Z`);
   if (Number.isNaN(date.getTime())) return dateKey;
-  return new Intl.DateTimeFormat("en-PH", { weekday: "short", month: "short", day: "numeric", timeZone: "Asia/Singapore" }).format(date);
+  return new Intl.DateTimeFormat("en-PH", { weekday: "short", month: "short", day: "numeric", timeZone: ONLINE_ORDERING_TIME_ZONE }).format(date);
 }
 
 export function onlineOrderingWeekdayForDate(dateKey: string): OnlineOrderingWeekday {
@@ -546,16 +569,22 @@ export function onlineOrderingBusinessHoursForDate(settings: OnlineOrderingSetti
 }
 
 export function generateOnlineOrderingDateOptions(settings: OnlineOrderingSettings, now = new Date()) {
-  const today = singaporeDateKey(now);
+  const today = philippineDateKey(now);
   return Array.from({ length: settings.schedule.maxDaysAhead + 1 }, (_, index) => {
     const value = addCalendarDays(today, index);
     return { value, label: index === 0 ? `Today · ${formatOnlineOrderingDate(value)}` : formatOnlineOrderingDate(value) };
   }).filter((option) => onlineOrderingBusinessHoursForDate(settings, option.value).enabled);
 }
 
+function onlineOrderingLocalDateTime(dateKey: string, time: string) {
+  // Asia/Manila is UTC+8 year-round. Keeping the offset explicit avoids the
+  // browser's local timezone changing the meaning of a store time.
+  return new Date(`${dateKey}T${time}:00+08:00`);
+}
+
 export function generateOnlineOrderingSlots(settings: OnlineOrderingSettings, dateKey: string, now = new Date()) {
   const slots: string[] = [];
-  const today = singaporeDateKey(now);
+  const today = philippineDateKey(now);
   const businessHours = onlineOrderingBusinessHoursForDate(settings, dateKey);
   if (!businessHours.enabled) return slots;
   const [openHour, openMinute] = businessHours.openingTime.split(":").map(Number);
@@ -565,8 +594,8 @@ export function generateOnlineOrderingSlots(settings: OnlineOrderingSettings, da
   const [scheduleOpenHour, scheduleOpenMinute] = settings.schedule.openingTime.split(":").map(Number);
   const scheduleStart = scheduleOpenHour * 60 + scheduleOpenMinute;
   const minimumTime = dateKey === today ? now.getTime() + settings.orderLeadMinutes * 60_000 : 0;
-  const openingDate = dateKey === today ? new Date(`${dateKey}T${businessHours.openingTime}:00+08:00`) : null;
-  const closingDate = dateKey === today ? new Date(`${dateKey}T${businessHours.closingTime}:00+08:00`) : null;
+  const openingDate = dateKey === today ? onlineOrderingLocalDateTime(dateKey, businessHours.openingTime) : null;
+  const closingDate = dateKey === today ? onlineOrderingLocalDateTime(dateKey, businessHours.closingTime) : null;
   if (dateKey === today && openingDate && closingDate && minimumTime >= openingDate.getTime() && minimumTime < closingDate.getTime()) slots.push("asap");
   // The placement RPC validates the slot interval from the branch-wide
   // schedule opening. Keep that grid as the source of truth, then trim it to
@@ -576,10 +605,76 @@ export function generateOnlineOrderingSlots(settings: OnlineOrderingSettings, da
     const hours = Math.floor(minutes / 60);
     const minute = minutes % 60;
     const value = `${String(hours).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-    const slotDate = new Date(`${dateKey}T${value}:00+08:00`);
+    const slotDate = onlineOrderingLocalDateTime(dateKey, value);
     if (slotDate.getTime() > minimumTime) slots.push(value);
   }
   return slots;
+}
+
+/** Dates with at least one slot that can still be placed right now. */
+export function generateOnlineOrderingAvailableDateOptions(settings: OnlineOrderingSettings, now = new Date()) {
+  return generateOnlineOrderingDateOptions(settings, now)
+    .filter((option) => generateOnlineOrderingSlots(settings, option.value, now).length > 0);
+}
+
+export function getOnlineOrderingAvailability(settings: OnlineOrderingSettings, now = new Date()): OnlineOrderingAvailability {
+  const todayDateKey = philippineDateKey(now);
+  const todayHours = onlineOrderingBusinessHoursForDate(settings, todayDateKey);
+  const todaySlots = todayHours.enabled ? generateOnlineOrderingSlots(settings, todayDateKey, now) : [];
+  let nextSlot: OnlineOrderingNextSlot | null = null;
+  for (const option of generateOnlineOrderingDateOptions(settings, now)) {
+    const firstSlot = generateOnlineOrderingSlots(settings, option.value, now)[0];
+    if (firstSlot) {
+      nextSlot = { dateKey: option.value, slot: firstSlot };
+      break;
+    }
+  }
+
+  let status: OnlineOrderingAvailabilityStatus;
+  if (!todayHours.enabled) {
+    status = "closed_day";
+  } else if (todaySlots.includes("asap")) {
+    status = "open";
+  } else {
+    const openingDate = onlineOrderingLocalDateTime(todayDateKey, todayHours.openingTime);
+    const closingDate = onlineOrderingLocalDateTime(todayDateKey, todayHours.closingTime);
+    status = now.getTime() < openingDate.getTime()
+      ? "before_open"
+      : now.getTime() >= closingDate.getTime()
+        ? "after_close"
+        : "no_slots";
+  }
+
+  return { status, todayDateKey, todayHours, nextSlot };
+}
+
+export function formatOnlineOrderingBusinessHours(hours: OnlineOrderingBusinessDay) {
+  if (!hours.enabled) return "Closed";
+  return `${pickupSlotLabel(hours.openingTime)}–${pickupSlotLabel(hours.closingTime)} ${ONLINE_ORDERING_TIME_ZONE_LABEL}`;
+}
+
+export function formatOnlineOrderingDateTime(dateKey: string, slot: string) {
+  const time = slot === "asap" ? `now ${ONLINE_ORDERING_TIME_ZONE_LABEL}` : `${pickupSlotLabel(slot)} ${ONLINE_ORDERING_TIME_ZONE_LABEL}`;
+  return `${formatOnlineOrderingDate(dateKey)} at ${time}`;
+}
+
+export function formatOnlineOrderingAvailabilityMessage(availability: OnlineOrderingAvailability, settings: OnlineOrderingSettings) {
+  if (availability.status === "open") return null;
+
+  const weekday = onlineOrderingWeekdayForDate(availability.todayDateKey);
+  const reason = availability.status === "closed_day"
+    ? `Online ordering is closed today because the store does not accept orders on ${ONLINE_ORDERING_WEEKDAY_LABELS[weekday]}.`
+    : availability.status === "before_open"
+      ? `Online ordering is closed right now. Today’s ordering hours are ${formatOnlineOrderingBusinessHours(availability.todayHours)}.`
+      : availability.status === "after_close"
+        ? `Online ordering is closed right now. Today’s ordering hours were ${formatOnlineOrderingBusinessHours(availability.todayHours)}.`
+        : "No more ordering slots are available today.";
+
+  const windowLabel = settings.schedule.maxDaysAhead === 0 ? "current scheduling window" : `next ${settings.schedule.maxDaysAhead} days`;
+  const next = availability.nextSlot
+    ? ` Next available ordering date and time (Philippine time): ${formatOnlineOrderingDateTime(availability.nextSlot.dateKey, availability.nextSlot.slot)}.`
+    : ` There are no upcoming ordering slots in the ${windowLabel}.`;
+  return reason + next;
 }
 
 export function validateOnlineDeliveryAddress(address: string, serviceArea = "") {
@@ -640,7 +735,6 @@ export function pickupSlotLabel(value: string) {
   if (value === "asap") return "As soon as possible";
   const [hours, minutes] = value.split(":").map(Number);
   if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return value;
-  const date = new Date();
-  date.setHours(hours, minutes, 0, 0);
-  return new Intl.DateTimeFormat("en-PH", { hour: "numeric", minute: "2-digit" }).format(date);
+  const date = new Date(`2020-01-01T${value}:00+08:00`);
+  return new Intl.DateTimeFormat("en-PH", { hour: "numeric", minute: "2-digit", timeZone: ONLINE_ORDERING_TIME_ZONE }).format(date);
 }

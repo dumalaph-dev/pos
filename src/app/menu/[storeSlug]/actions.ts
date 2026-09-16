@@ -7,10 +7,12 @@ import { formatPeso } from "@/lib/money";
 import { LEGAL_DOCUMENT_VERSION } from "@/lib/legal-config";
 import {
   calculateOnlineOrderTotals,
-  generateOnlineOrderingDateOptions,
+  formatOnlineOrderingAvailabilityMessage,
+  generateOnlineOrderingAvailableDateOptions,
   generateOnlineOrderingSlots,
   getDemoOnlineOrderNo,
-  singaporeDateKey,
+  getOnlineOrderingAvailability,
+  philippineDateKey,
   type OnlineOrderingFulfillmentMethod,
   type PublicOnlineOrderResult,
 } from "@/lib/online-ordering";
@@ -158,12 +160,13 @@ function cleanResult(order: RpcOrder, verificationSent = false): PublicOnlineOrd
 
 export async function placeOnlineOrder(_previousState: PublicOnlineOrderResult, formData: FormData): Promise<PublicOnlineOrderResult> {
   const requestHeaders = await headers();
+  const orderingNow = new Date();
   const storeSlug = readText(formData, "store_slug");
   const customerName = readText(formData, "customer_name");
   const customerPhone = readText(formData, "customer_phone");
   const customerPhoneDigits = customerPhone.replace(/\D/g, "");
   const fulfillmentMethod = (readText(formData, "fulfillment_method") || "pickup") as OnlineOrderingFulfillmentMethod;
-  const pickupDate = readText(formData, "pickup_date") || singaporeDateKey();
+  const pickupDate = readText(formData, "pickup_date") || philippineDateKey(orderingNow);
   const pickupSlot = readText(formData, "pickup_slot") || "asap";
   const deliveryAddress = readText(formData, "delivery_address");
   const deliveryNote = readText(formData, "delivery_note");
@@ -190,9 +193,11 @@ export async function placeOnlineOrder(_previousState: PublicOnlineOrderResult, 
   if (!menu) return fail("This menu is no longer available. Refresh and try again.");
   if (!menu.settings.enabled) return fail("This store is not accepting online orders right now.");
   if (fulfillmentMethod === "delivery" && !menu.settings.delivery.enabled) return fail("Delivery is not available right now. Choose pickup instead.");
-  const dateOptions = generateOnlineOrderingDateOptions(menu.settings);
-  if (!dateOptions.some((option) => option.value === pickupDate)) return fail("That day is closed or outside the store’s scheduling window. Choose another date.");
-  if (!generateOnlineOrderingSlots(menu.settings, pickupDate).includes(pickupSlot)) return fail("That time is no longer available. Choose another slot and try again.");
+  const orderingAvailability = getOnlineOrderingAvailability(menu.settings, orderingNow);
+  const orderingAvailabilityMessage = formatOnlineOrderingAvailabilityMessage(orderingAvailability, menu.settings);
+  const dateOptions = generateOnlineOrderingAvailableDateOptions(menu.settings, orderingNow);
+  if (!dateOptions.some((option) => option.value === pickupDate)) return fail(orderingAvailabilityMessage ?? "That day is closed or outside the store’s scheduling window. Choose another date.");
+  if (!generateOnlineOrderingSlots(menu.settings, pickupDate, orderingNow).includes(pickupSlot)) return fail(orderingAvailabilityMessage ?? "That time is no longer available. Choose another slot and try again.");
 
   const productById = new Map(menu.products.map((product) => [product.id, product]));
   const items = drafts.map((draft) => {
