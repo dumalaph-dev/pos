@@ -33,6 +33,8 @@ const RPC_CONTRACTS = new Map<string, RpcContract>([
   ["platform_transition_support_case", [["p_case_id", "p_expected_version", "p_to_status", "p_resolution_reason", "p_policy_version", "p_actor_id", "p_actor_email", "p_request_id"]]],
   ["platform_assign_support_case", [["p_case_id", "p_expected_version", "p_assignee_id", "p_policy_version", "p_actor_id", "p_actor_email", "p_request_id"]]],
   ["platform_append_support_case_note", [["p_case_id", "p_expected_version", "p_body", "p_note_type", "p_policy_version", "p_actor_id", "p_actor_email", "p_request_id"]]],
+  ["platform_reconcile_attention", [["p_signals", "p_resolve_sources", "p_observed_at"]]],
+  ["platform_update_attention_occurrence", [["p_occurrence_id", "p_expected_version", "p_action", "p_assignee_id", "p_snooze_until", "p_reason", "p_actor_id", "p_actor_email", "p_request_id"]]],
   ["platform_promotion_performance", [[]]],
   ["platform_schema_migrations", [[]]],
   ["qualify_referral_for_paid_conversion", [["p_referred_org_id"]]],
@@ -149,6 +151,10 @@ const PLATFORM_ACTION_CONTRACTS = new Map<string, Map<string, string>>([
     ["revokeComplimentaryPremium", "entitlement_manage"],
     ["extendOrganizationTrial", "entitlement_manage"],
     ["updateTrialFeedback", "support_manage"],
+  ])],
+  ["src/app/platform/attention-actions.ts", new Map([
+    ["refreshPlatformAttention", "attention_manage"],
+    ["updatePlatformAttention", "attention_manage"],
   ])],
   ["src/app/platform/operators-actions.ts", new Map([
     ["invitePlatformOperator", "operator_manage"],

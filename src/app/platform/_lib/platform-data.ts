@@ -44,6 +44,15 @@ import {
 import { PLATFORM_SCHEMA_MANIFEST } from "@/lib/platform-schema-manifest";
 import { summarizePlatformDevices, type PlatformRegisteredDevice } from "@/lib/platform-devices";
 import { normalizePlatformSearchQuery } from "@/lib/platform-search";
+import {
+  PLATFORM_ATTENTION_CATEGORIES,
+  PLATFORM_ATTENTION_SEVERITIES,
+  PLATFORM_ATTENTION_STATES,
+  type PlatformAttentionCategory,
+  type PlatformAttentionOccurrence,
+  type PlatformAttentionSeverity,
+  type PlatformAttentionState,
+} from "@/lib/platform-attention";
 
 export type PlatformAdminClient = NonNullable<ReturnType<typeof createAdminClient>>;
 
@@ -327,6 +336,24 @@ export type PlatformSupportQueueResult = {
   hasMore: boolean;
   schemaAvailable: boolean;
   organizationsAvailable: boolean;
+  asOf: string;
+};
+
+export type PlatformAttentionStateFilter = "active" | "all" | PlatformAttentionState;
+export type PlatformAttentionPage = {
+  records: PlatformAttentionOccurrence[];
+  query: string;
+  category: "all" | PlatformAttentionCategory;
+  severity: "all" | PlatformAttentionSeverity;
+  state: PlatformAttentionStateFilter;
+  page: number;
+  pageSize: number;
+  total: number | null;
+  hasMore: boolean;
+  schemaAvailable: boolean;
+  organizationsAvailable: boolean;
+  storesAvailable: boolean;
+  operatorsAvailable: boolean;
   asOf: string;
 };
 
@@ -1039,6 +1066,120 @@ export async function readPlatformSupportQueuePage(
     hasMore: total === null ? records.length === pageSize : to + 1 < total,
     schemaAvailable: true,
     organizationsAvailable: !organizationsResult?.error,
+    asOf,
+  };
+}
+
+export async function readPlatformAttentionPage(
+  admin: PlatformAdminClient,
+  rawQuery: string | null | undefined,
+  rawCategory: string | null | undefined,
+  rawSeverity: string | null | undefined,
+  rawState: string | null | undefined,
+  rawPage: string | number | null | undefined,
+): Promise<PlatformAttentionPage> {
+  const asOf = new Date().toISOString();
+  const query = normalizePlatformSearchQuery(rawQuery);
+  const category = PLATFORM_ATTENTION_CATEGORIES.includes(rawCategory as PlatformAttentionCategory) ? rawCategory as PlatformAttentionCategory : "all";
+  const severity = PLATFORM_ATTENTION_SEVERITIES.includes(rawSeverity as PlatformAttentionSeverity) ? rawSeverity as PlatformAttentionSeverity : "all";
+  const stateValues: PlatformAttentionStateFilter[] = ["active", "all", ...PLATFORM_ATTENTION_STATES];
+  const state = stateValues.includes(rawState as PlatformAttentionStateFilter) ? rawState as PlatformAttentionStateFilter : "active";
+  const parsedPage = typeof rawPage === "number" ? rawPage : Number.parseInt(typeof rawPage === "string" ? rawPage : "1", 10);
+  const page = Number.isFinite(parsedPage) ? Math.min(Math.max(Math.trunc(parsedPage), 1), 10_000) : 1;
+  const pageSize = 50;
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+  const fields = "id, logical_key, condition_fingerprint, source, category, severity, title, detail, organization_id, branch_id, href, action_label, source_created_at, first_seen_at, last_seen_at, state, acknowledged_at, acknowledged_by, assigned_to, assigned_at, snoozed_until, snooze_reason, resolved_at, resolution_reason, recurrence_count, version, created_at, updated_at";
+  let request = admin
+    .from("platform_attention_occurrences")
+    .select(fields, { count: "exact" })
+    .order("updated_at", { ascending: false })
+    .order("id", { ascending: false })
+    .range(from, to);
+  if (category !== "all") request = request.eq("category", category);
+  if (severity !== "all") request = request.eq("severity", severity);
+  if (state === "active") request = request.in("state", ["open", "acknowledged", "snoozed"]);
+  else if (state !== "all") request = request.eq("state", state);
+  if (query) {
+    const searchPattern = `%${escapePostgrestLikePattern(query)}%`;
+    request = request.or(`logical_key.ilike.${searchPattern},title.ilike.${searchPattern},detail.ilike.${searchPattern}`);
+  }
+  const result = await request;
+  if (result.error) {
+    return {
+      records: [], query, category, severity, state, page, pageSize, total: null, hasMore: false,
+      schemaAvailable: false, organizationsAvailable: true, storesAvailable: true, operatorsAvailable: true, asOf,
+    };
+  }
+
+  const rows = Array.isArray(result.data) ? result.data : [];
+  const organizationIds = [...new Set(rows.flatMap((row) => isRecord(row) && typeof row.organization_id === "string" ? [row.organization_id] : []))];
+  const storeIds = [...new Set(rows.flatMap((row) => isRecord(row) && typeof row.branch_id === "string" ? [row.branch_id] : []))];
+  const operatorIds = [...new Set(rows.flatMap((row) => isRecord(row) && typeof row.assigned_to === "string" ? [row.assigned_to] : []))];
+  const [organizationsResult, storesResult, operatorsResult] = await Promise.all([
+    organizationIds.length > 0 ? admin.from("organizations").select("id, name").in("id", organizationIds) : Promise.resolve({ data: [], error: null }),
+    storeIds.length > 0 ? admin.from("stores").select("id, name").in("id", storeIds) : Promise.resolve({ data: [], error: null }),
+    operatorIds.length > 0 ? admin.from("platform_operators").select("id, email").in("id", operatorIds) : Promise.resolve({ data: [], error: null }),
+  ]);
+  const organizationNames = new Map<string, string>();
+  for (const row of organizationsResult.data ?? []) if (isRecord(row) && typeof row.id === "string") organizationNames.set(row.id, readPlatformSearchName(typeof row.name === "string" ? row.name : null));
+  const storeNames = new Map<string, string>();
+  for (const row of storesResult.data ?? []) if (isRecord(row) && typeof row.id === "string") storeNames.set(row.id, readPlatformSearchName(typeof row.name === "string" ? row.name : null));
+  const operatorEmails = new Map<string, string>();
+  for (const row of operatorsResult.data ?? []) if (isRecord(row) && typeof row.id === "string" && typeof row.email === "string") operatorEmails.set(row.id, row.email);
+
+  const records = rows.flatMap((row): PlatformAttentionOccurrence[] => {
+    if (!isRecord(row) || typeof row.id !== "string" || typeof row.logical_key !== "string" || typeof row.condition_fingerprint !== "string" || typeof row.source !== "string" || typeof row.category !== "string" || typeof row.severity !== "string" || typeof row.title !== "string" || typeof row.detail !== "string" || typeof row.href !== "string" || typeof row.action_label !== "string" || typeof row.first_seen_at !== "string" || typeof row.last_seen_at !== "string" || typeof row.state !== "string" || typeof row.created_at !== "string" || typeof row.updated_at !== "string") return [];
+    if (!PLATFORM_ATTENTION_CATEGORIES.includes(row.source as PlatformAttentionCategory) || !PLATFORM_ATTENTION_CATEGORIES.includes(row.category as PlatformAttentionCategory) || !PLATFORM_ATTENTION_SEVERITIES.includes(row.severity as PlatformAttentionSeverity) || !PLATFORM_ATTENTION_STATES.includes(row.state as PlatformAttentionState)) return [];
+    return [{
+      id: row.id,
+      logicalKey: row.logical_key,
+      conditionFingerprint: row.condition_fingerprint,
+      source: row.source as PlatformAttentionCategory,
+      category: row.category as PlatformAttentionCategory,
+      severity: row.severity as PlatformAttentionSeverity,
+      title: row.title,
+      detail: row.detail,
+      organizationId: typeof row.organization_id === "string" ? row.organization_id : null,
+      organizationName: typeof row.organization_id === "string" ? organizationNames.get(row.organization_id) ?? null : null,
+      branchId: typeof row.branch_id === "string" ? row.branch_id : null,
+      branchName: typeof row.branch_id === "string" ? storeNames.get(row.branch_id) ?? null : null,
+      href: row.href,
+      actionLabel: row.action_label,
+      sourceCreatedAt: typeof row.source_created_at === "string" ? row.source_created_at : null,
+      firstSeenAt: row.first_seen_at,
+      lastSeenAt: row.last_seen_at,
+      state: row.state as PlatformAttentionState,
+      acknowledgedAt: typeof row.acknowledged_at === "string" ? row.acknowledged_at : null,
+      acknowledgedBy: typeof row.acknowledged_by === "string" ? row.acknowledged_by : null,
+      assignedTo: typeof row.assigned_to === "string" ? row.assigned_to : null,
+      assignedEmail: typeof row.assigned_to === "string" ? operatorEmails.get(row.assigned_to) ?? null : null,
+      assignedAt: typeof row.assigned_at === "string" ? row.assigned_at : null,
+      snoozedUntil: typeof row.snoozed_until === "string" ? row.snoozed_until : null,
+      snoozeReason: typeof row.snooze_reason === "string" ? row.snooze_reason : null,
+      resolvedAt: typeof row.resolved_at === "string" ? row.resolved_at : null,
+      resolutionReason: typeof row.resolution_reason === "string" ? row.resolution_reason : null,
+      recurrenceCount: typeof row.recurrence_count === "number" ? row.recurrence_count : 1,
+      version: typeof row.version === "number" ? row.version : 1,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }];
+  });
+
+  return {
+    records,
+    query,
+    category,
+    severity,
+    state,
+    page,
+    pageSize,
+    total: typeof result.count === "number" ? result.count : null,
+    hasMore: typeof result.count === "number" ? to + 1 < result.count : rows.length === pageSize,
+    schemaAvailable: true,
+    organizationsAvailable: !organizationsResult.error,
+    storesAvailable: !storesResult.error,
+    operatorsAvailable: !operatorsResult.error,
     asOf,
   };
 }

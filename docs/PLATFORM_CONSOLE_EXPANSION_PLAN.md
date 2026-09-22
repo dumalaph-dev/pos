@@ -2,7 +2,7 @@
 
 **Project:** Dumala POS
 **Created / source review:** 2026-09-22
-**Status:** Wave 1 local engineering is complete. Hosted/off-machine recovery evidence and owner sign-off remain external C4 gates; no hosted migration, deployment, or provider operation has been performed.
+**Status:** Wave 1 is merged to `main` and hosted migration `0088` is applied and verified. D2 Attention occurrences is implemented on `codex/platform-d2-attention` with migration `0089`; PR #37 is open for review and hosted D2 deployment remains a separate release gate. Off-machine recovery evidence and owner sign-off remain external C4 gates.
 **Owner:** Product and engineering
 **Companion to:** [Owner powers](PLATFORM_OWNER_POWERS_PLAN.md), [Attention and announcements](PLATFORM_ATTENTION_AND_ANNOUNCEMENTS_PLAN.md), [tasks.md](tasks.md), [SCHEMA.md](SCHEMA.md), [Backup and restore](PRODUCTION_BACKUP_AND_RESTORE.md)
 
@@ -575,7 +575,7 @@ These releases group outcomes for planning, not fixed dates or a requirement to 
 
 ### Live implementation tracker
 
-**Updated:** 2026-09-22 · **Wave 1a headline:** 9 of 9 tracked slices complete (**100%**) · **Wave 1 local engineering:** 13 of 13 tracked slices complete (**100%**) · **Overall named-slice view:** 13 of 34 fully complete (**38%**). These are deliverable counts, not lines of code or elapsed time. A slice counts as complete only when its bounded behavior, permission boundary, focused tests, production build, and rollback-scoped evidence are verified locally. Hosted/off-machine recovery remains explicitly separate.
+**Updated:** 2026-09-23 · **Wave 1a headline:** 9 of 9 tracked slices complete (**100%**) · **Wave 1 local engineering:** 13 of 13 tracked slices complete (**100%**) · **Overall named-slice view:** 14 of 34 fully complete (**41%**). These are deliverable counts, not lines of code or elapsed time. A slice counts as complete only when its bounded behavior, permission boundary, focused tests, production build, and rollback-scoped evidence are verified locally. PR #36 is merged to `main`; hosted migration `0088` is applied and verified. D2 is complete at the local engineering gate and PR #37 is open; hosted D2 deployment and C4 recovery policy remain separate.
 
 | Slice | Status | Evidence / remaining gate |
 |---|:---:|---|
@@ -591,9 +591,10 @@ These releases group outcomes for planning, not fixed dates or a requirement to 
 | G1 Atomic account safety | ✅ Complete | Suspension/restoration lock and version the organization row, write the audit in the same transaction, preserve actor/reason/policy/request evidence, and reject stale writes. Rollback-scoped SQL smoke covers the conflict path. |
 | D1 Support lifecycle and SLA evidence | ✅ Complete | Case creation, assignment, status transitions, append-only notes, first actual operator response, resolution reason, version conflicts, event history, and audit writes are transaction-backed. The queue remains bounded and metadata-first. |
 | I1 Organization workspace foundation | ✅ Wave 1 foundation | Organization detail joins access, billing, people, branches, support, referrals, audit, assignment, notes, and lifecycle history in one workspace without adding an unrestricted CRM store. Adoption milestones, account tasks, and communications remain later I1/I2 increments. |
-| C4 Backup coverage and restore evidence | ✅ Local engineering gate | The allowlist covers all 57 current application tables, records SHA-256 digests, declares the best-effort API boundary, passes coverage/integrity tests, and completed a Docker checkpoint plus throwaway-database restore drill. Hosted/off-machine copy, Auth/Storage verification, RPO/RTO and owner sign-off remain required before production reliance. |
+| C4 Backup coverage and restore evidence | ✅ Migration gate / ⚠ owner gate | The allowlist covers all 57 current application tables, records SHA-256 digests, declares the best-effort API boundary, passes coverage/integrity tests, and completed a Docker checkpoint plus throwaway-database restore drill. Hosted migration `0088` is applied and the remote ledger, three durable tables, and five lifecycle RPCs were verified. Off-machine copy, Auth/Storage verification, RPO/RTO and owner sign-off remain required before production recovery reliance. |
+| D2 Attention occurrences | ✅ PR #37 open | Migration `0089` adds durable source-keyed occurrences, condition fingerprints, source-owned resolution, acknowledgement, assignment, bounded snooze, version conflicts, recurrence, audit history, and service-role RPCs. `/platform/attention` provides bounded filters, evidence-backed drilldowns, and operator actions; local PostgreSQL smoke, focused contracts, typecheck, lint, and build pass. Hosted migration and authenticated operator QA remain pending review. |
 
-**Next active slice:** move to Wave 2 planning after owner review of the C4 recovery decisions. No production push is implied by this tracker.
+**Next active slice:** D3 Merchant announcement delivery. Keep C4 owner decisions and hosted D2 deployment as separate release gates.
 
 ### Definition of an informative, feature-rich release
 
@@ -604,7 +605,7 @@ These releases group outcomes for planning, not fixed dates or a requirement to 
 - Establish baselines for time to triage, unresolved-case age, follow-up completion, report adoption and stale/unknown data rates. Choose improvement targets after observing actual use. More widgets or more operator clicks are not success metrics.
 - Each slice has a named product owner and engineering owner, a supported runbook, estimated size after data discovery, and documented reasons for any deferral.
 
-Local highest migration is `0088` at review. Allocate numbers only when implementation is ready, accounting for parallel work. Use additive schema, compatible readers, bounded resumable backfills, separate enablement, and backup coverage for every new durable table.
+Hosted highest migration is `0088`; the D2 follow-up branch adds local migration `0089` pending review. Allocate numbers only when implementation is ready, accounting for parallel work. Use additive schema, compatible readers, bounded resumable backfills, separate enablement, and backup coverage for every new durable table.
 
 ## 15. Verification and rollback
 
@@ -680,3 +681,5 @@ Decisions gate only dependent implementation. No implementation is implied by th
 | 2026-09-22 | Wave 1a H1/G2 Home foundation | Added exact head/count aggregate reads for Home summary cards, role-preset and `asOf` context, unknown/unavailable aggregate states, and explicit coverage for the bounded recent-account sample. The Home still uses existing attention/detail readers; watchlists, assigned work, saved preferences, and historical trend reports remain separate H1/H2 slices. Local typecheck, lint, build, and diff checks passed. |
 | 2026-09-22 | Wave 1b G1/D1 atomic lifecycle | Added migration 0088 with versioned organization safety, idempotent request keys, atomic support case creation, assignment, transitions, append-only notes/events, first-response evidence, and audit snapshots. Added support workspace controls, a rollback-scoped lifecycle smoke, RPC payload/permission contracts, and backup coverage for the new durable tables. |
 | 2026-09-22 | Wave 1c C4 local recovery gate | Expanded backup coverage to all 57 current application tables, added SHA-256 manifest verification and explicit best-effort snapshot labeling, granted the service-role recovery reader access to the application schema, and completed a Docker checkpoint plus throwaway-database restore drill. Hosted/off-machine storage, Auth/Storage verification and RPO/RTO remain owner gates. |
+| 2026-09-23 | Wave 1 merge and hosted migration | Merged PR #36 into `main` as `14ea251`, applied hosted migration `0088_platform_support_lifecycle.sql`, and verified the remote migration ledger, `platform_mutation_requests`, `support_case_events`, `support_case_notes`, and all five lifecycle RPCs. Off-machine backup policy, Auth/Storage recovery verification, RPO/RTO and authenticated operator QA remain open C4 gates. D2 Attention occurrences is the next active implementation slice. |
+| 2026-09-23 | D2 Attention occurrences local implementation and PR | Added migration `0089_platform_attention_occurrences.sql`, source reconciliation with deterministic unknown-source handling, durable acknowledgement/assignment/snooze state, version conflicts, recurrence and append-only audit history, the `/platform/attention` workbench, an `attention_manage` permission, focused migration/RPC tests, and a rollback-scoped PostgreSQL smoke. Local typecheck, lint, production build, and D2 smoke pass; PR #37 is open; hosted `0089` deployment remains a review gate. |

@@ -24,6 +24,7 @@ const PLATFORM_NAV_GROUPS: PlatformNavGroup[] = [
     label: "Command center",
     items: [
       { label: "Overview", href: "/platform", icon: "dashboard", detail: "Attention inbox and readiness" },
+      { label: "Attention", href: "/platform/attention", icon: "alert", detail: "Acknowledge and assign recurring issues" },
       { label: "Search", href: "/platform/search", icon: "search", detail: "Find an organization, user, or case" },
     ],
   },

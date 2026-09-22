@@ -4,6 +4,7 @@ export type PlatformOperatorRole = (typeof PLATFORM_OPERATOR_ROLES)[number];
 
 export type PlatformOperatorPermission =
   | "console_read"
+  | "attention_manage"
   | "billing_manage"
   | "policy_manage"
   | "support_manage"
@@ -27,14 +28,15 @@ export const PLATFORM_OPERATOR_ROLE_DESCRIPTIONS: Record<PlatformOperatorRole, s
 const ROLE_PERMISSIONS: Record<PlatformOperatorRole, readonly PlatformOperatorPermission[]> = {
   owner: [
     "console_read",
+    "attention_manage",
     "billing_manage",
     "policy_manage",
     "support_manage",
     "entitlement_manage",
     "operator_manage",
   ],
-  billing: ["console_read", "billing_manage", "entitlement_manage"],
-  support: ["console_read", "support_manage"],
+  billing: ["console_read", "attention_manage", "billing_manage", "entitlement_manage"],
+  support: ["console_read", "attention_manage", "support_manage"],
   read_only: ["console_read"],
 };
 
