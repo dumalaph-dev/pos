@@ -6,7 +6,7 @@
 
 ## Latest logical checkpoint
 
-`node scripts/backup-production.mjs --out <restricted-output>` completed successfully on 2026-09-23 at `2026-09-23 01:18:20` Singapore time (`2026-09-22T17:18:20Z`), exporting **59/59 application tables**, **1,485 rows**, and **778,132 bytes**. `node scripts/verify-backup.mjs` rechecked every NDJSON row count, byte count, and SHA-256 digest. The verified checkpoint was copied to the separate `BACKUPSSD` volume at `Dumala/backups/2026-09-22T17-18-20Z`; the destination contains 60 files and **790,665 bytes** and was independently re-verified with the same 59-table, 1,485-row, 778,132-byte manifest totals.
+`node scripts/backup-production.mjs --out <restricted-output>` completed successfully on 2026-09-23 at `2026-09-23 01:18:20` Singapore time (`2026-09-22T17:18:20Z`), exporting **59/59 application tables**, **1,485 rows**, and **778,132 bytes**. `node scripts/verify-backup.mjs` rechecked every NDJSON row count, byte count, and SHA-256 digest. The verified checkpoint was copied to the separate `BACKUPSSD` volume at `Dumala/backups/2026-09-22T17-18-20Z`; the destination contains 60 files and **790,665 bytes** and was independently re-verified with the same 59-table, 1,485-row, 778,132-byte manifest totals. This checkpoint predates hosted migration `0093`, so it does not contain the two I3 follow-up tables. The current allowlist covers **61 application tables**; run a fresh export and copy after `0093` before relying on follow-up task state for recovery.
 
 `BACKUPSSD` is a workstation-attached recovery copy, not a separate account or region. The volume's encryption state could not be verified from this environment, so this copy is an interim recovery control. An encrypted, versioned object-store copy and a hosted scratch restore remain required before treating C4 as production-ready.
 
@@ -18,7 +18,7 @@ This is local engineering evidence, not hosted recovery evidence. The fixture ha
 
 ## Current D2 coverage snapshot (2026-09-23)
 
-After hosted migrations `0089` and `0091`, the production API export covered all **59/59** application tables, including `platform_attention_occurrences` and `platform_attention_audit_logs`. The backup allowlist and coverage test now fail closed when a new durable table is omitted. The snapshot is integrity-verified but remains a best-effort, non-transactional API export until the owner selects off-machine storage and a stronger managed or `pg_dump` recovery point.
+After hosted migrations `0089` and `0091`, the production API export covered all **59/59** application tables, including `platform_attention_occurrences` and `platform_attention_audit_logs`. Hosted `0093` is now applied and the backup allowlist covers **61/61** current application tables, including `platform_follow_up_tasks` and `platform_follow_up_task_audit_logs`; the next export must refresh the checkpoint to include them. The backup allowlist and coverage test fail closed when a new durable table is omitted. The existing snapshot is integrity-verified but remains a best-effort, non-transactional API export until the owner selects off-machine storage and a stronger managed or `pg_dump` recovery point.
 
 ## Local Auth and Storage interface rehearsal (2026-09-23)
 
@@ -79,7 +79,7 @@ It reads `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from `.env.l
 
 It reads through the API rather than `pg_dump` on purpose: the script is usable from the operator workstation without a native PostgreSQL client. Each exported file receives a SHA-256 digest in `manifest.json`, and the manifest records that the export is a bounded best-effort API snapshot. It is suitable for logical recovery, but it is not a single database transaction; use a managed PITR point or a transactionally consistent `pg_dump` when that stronger snapshot guarantee is required.
 
-**Covered:** every row of all 59 application tables in the current migration set, including the D2 attention occurrence and audit tables. Run `npm run test:backup-coverage` after adding a durable table so the allowlist and recovery evidence cannot silently drift.
+**Covered by the current script:** every row of all 61 application tables in the current migration set, including the D2 attention occurrence/audit tables and I3 follow-up task/audit tables. The latest recorded checkpoint above remains 59 tables because it predates `0093`; run `npm run backup:production` and `node scripts/verify-backup.mjs` after adding a durable table so the stored recovery evidence catches up with the allowlist.
 
 **Not covered, and why that is acceptable:**
 
