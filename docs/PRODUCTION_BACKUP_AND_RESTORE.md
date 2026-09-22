@@ -20,6 +20,10 @@ This is local engineering evidence, not hosted recovery evidence. The fixture ha
 
 After hosted migrations `0089` and `0091`, the production API export covered all **59/59** application tables, including `platform_attention_occurrences` and `platform_attention_audit_logs`. The backup allowlist and coverage test now fail closed when a new durable table is omitted. The snapshot is integrity-verified but remains a best-effort, non-transactional API export until the owner selects off-machine storage and a stronger managed or `pg_dump` recovery point.
 
+## Local Auth and Storage interface rehearsal (2026-09-23)
+
+The local Docker Supabase stack passed a disposable round-trip: a temporary Auth identity was provisioned, a private Storage bucket and object were created, the object bytes were downloaded and compared, and the identity, object, and bucket were deleted. Post-cleanup catalog checks returned zero residual fixtures. This proves the local provisioning and object paths used by a restore; it does not prove a hosted scratch-project restore or preserve passwords/provider configuration, which remain part of the owner gate.
+
 ## Verified posture
 
 The linked Supabase CLI identifies the production project as `ACTIVE_HEALTHY` in `ap-southeast-2`, running Postgres `17.6.1.155`.
