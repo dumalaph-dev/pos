@@ -99,6 +99,15 @@ const nextConfig: NextConfig = {
         headers: securityHeaders,
       },
       {
+        // The generated deployment host serves the same pages as dumala.store
+        // with a 200. The canonical tag already points at the brand domain
+        // (lib/site-url.ts), but a canonical is a hint; this makes the
+        // duplicate ineligible for the index outright.
+        source: "/:path*",
+        has: [{ type: "host", value: "(?<deploymentHost>.+)\\.vercel\\.app" }],
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
+      {
         source: "/sw.js",
         headers: [
           { key: "Content-Type", value: "application/javascript; charset=utf-8" },
