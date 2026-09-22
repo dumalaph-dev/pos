@@ -18,6 +18,8 @@ import PosSettingsScreen, {
   type AdminPosDevice,
   type AdminPosProduct,
   type PosConfig,
+  type PosSettingsSection,
+  type PosTabId,
 } from "@/components/admin/PosSettingsScreen";
 
 type JsonRecord = Record<string, unknown>;
@@ -75,8 +77,20 @@ function readEnum<T extends readonly string[]>(value: unknown, values: T, fallba
   return typeof value === "string" && values.includes(value) ? value as T[number] : fallback;
 }
 
-function readTab(value: unknown) {
-  return value === "receipts" || value === "hardware" || value === "settings" || value === "payments" || value === "display" ? value : "preview";
+/**
+ * `payments` and `receipts` were their own tabs before the three configuration
+ * tabs were merged into one. Existing links and bookmarks still carry them, so
+ * they resolve to the settings tab scrolled to the matching section rather than
+ * silently dropping the reader on the preview.
+ */
+function readTab(value: unknown): PosTabId {
+  if (value === "payments" || value === "receipts") return "settings";
+  return value === "hardware" || value === "settings" || value === "display" ? value : "preview";
+}
+
+function readSettingsSection(value: unknown): PosSettingsSection | undefined {
+  if (value === "payments" || value === "receipts") return value;
+  return value === "settings" ? "flow" : undefined;
 }
 
 function readPosConfig(store: StoreRecord): PosConfig {
@@ -130,7 +144,9 @@ export default async function AdminPosPage({ searchParams }: { searchParams: Pro
   if (!profile) return <PosProfileMissing />;
   const params = await searchParams;
   const requestedStoreId = readParam(params.store);
-  const initialTab = readTab(readParam(params.tab));
+  const tabParam = readParam(params.tab);
+  const initialTab = readTab(tabParam);
+  const initialSection = readSettingsSection(tabParam);
   const errorMessage = readParam(params.error);
   const saved = readParam(params.saved);
 
@@ -215,6 +231,7 @@ export default async function AdminPosPage({ searchParams }: { searchParams: Pro
       deviceBranchOptions={deviceBranchOptions}
       queryWarning={queryWarning}
       initialTab={initialTab}
+      initialSection={initialSection}
       savedMessage={savedMessage}
       errorMessage={errorMessage}
       initialNow={new Date().toISOString()}

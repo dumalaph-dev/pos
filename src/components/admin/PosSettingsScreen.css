@@ -8227,3 +8227,384 @@
   color: var(--pos-theme-topbar-text);
   background: linear-gradient(180deg, #4d7bc0 0%, #293866 100%);
 }
+
+/* ===========================================================================
+   Merged POS Settings
+   Sale flow, payment methods and receipt output were three sibling tabs; they
+   are one scrollable page with a sticky section rail. The rail is navigation
+   only — every control stays mounted, so Save Changes still writes the whole
+   branch configuration in one action.
+   =========================================================================== */
+.pos-config-panel--merged {
+  padding-bottom: 26px;
+}
+
+/* The shared heading caps at 650px so its rule stops mid-panel; here the rule
+   is the divider between the page title and the sections, so it spans them. */
+.pos-config-panel--merged > .pos-config-heading {
+  max-width: none;
+}
+
+.pos-config-panel--merged > .pos-config-heading span {
+  max-width: 620px;
+}
+
+.pos-settings-split {
+  display: grid;
+  grid-template-columns: 234px minmax(0, 1fr);
+  align-items: start;
+  gap: 26px;
+  margin-top: 24px;
+}
+
+.pos-section-rail {
+  position: sticky;
+  top: 14px;
+  display: grid;
+  align-content: start;
+  gap: 5px;
+}
+
+.pos-section-rail__item {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 11px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  text-align: left;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.pos-section-rail__item:hover {
+  border-color: #eee9e5;
+  background: #fdfaf7;
+}
+
+.pos-section-rail__item.is-active {
+  border-color: color-mix(in srgb, var(--primary) 26%, #eee9e5);
+  background: #fbf6f1;
+}
+
+.pos-section-rail__icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 8px;
+  color: #8b827c;
+  background: #f5f0eb;
+  transition: color 150ms ease, background 150ms ease;
+}
+
+.pos-section-rail__item.is-active .pos-section-rail__icon {
+  color: #fff;
+  background: var(--primary);
+}
+
+.pos-section-rail__copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pos-section-rail__copy strong {
+  color: #332923;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.pos-section-rail__item.is-active .pos-section-rail__copy strong {
+  color: var(--primary);
+}
+
+.pos-section-rail__copy small {
+  color: #8b827c;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.pos-section-rail__summary {
+  margin-top: 9px;
+  padding: 12px;
+  border: 1px solid #f0ece9;
+  border-radius: 9px;
+  background: #fdfaf7;
+}
+
+.pos-section-rail__summary > p {
+  color: var(--primary);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.pos-section-rail__summary dl {
+  display: grid;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.pos-section-rail__summary dl > div {
+  display: grid;
+  gap: 2px;
+}
+
+.pos-section-rail__summary dt {
+  color: #8b827c;
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.pos-section-rail__summary dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #332923;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.pos-settings-sections {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+}
+
+.pos-settings-section {
+  min-width: 0;
+  padding: 20px 21px 22px;
+  border: 1px solid #f0ece9;
+  border-radius: 12px;
+  background: #fff;
+  /* Clears the sticky rail's offset when a section is scrolled to. */
+  scroll-margin-top: 18px;
+}
+
+.pos-settings-section__heading {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: start;
+  gap: 11px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #f5f1ee;
+}
+
+.pos-settings-section__icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--primary);
+  background: #fbf4ed;
+}
+
+.pos-settings-section__heading h3 {
+  color: #171514;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.pos-settings-section__heading p {
+  margin-top: 4px;
+  color: #746d68;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.pos-settings-section .pos-config-grid {
+  margin-top: 16px;
+}
+
+.pos-settings-section .pos-config-list {
+  margin-top: 18px;
+}
+
+.pos-settings-section .pos-config-field > small {
+  display: block;
+  margin-top: 4px;
+  color: #8b827c;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.pos-subsection-label {
+  margin-top: 20px;
+  padding-top: 15px;
+  border-top: 1px solid #f5f1ee;
+  color: #8b827c;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.pos-subsection-label + .pos-config-grid {
+  margin-top: 13px;
+}
+
+.pos-choice-grid {
+  margin-top: 20px;
+  padding: 0;
+  border: 0;
+}
+
+.pos-choice-grid legend {
+  padding: 0;
+  color: #332923;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.pos-choice-grid legend span {
+  display: block;
+  max-width: 460px;
+  margin-top: 4px;
+  color: #857a73;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.pos-choice-grid > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 11px;
+}
+
+.pos-choice-chip {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 13px 0 11px;
+  border: 1px solid #eee9e5;
+  border-radius: 9px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.pos-choice-chip:hover {
+  border-color: #ddd5cf;
+  background: #fdfaf7;
+}
+
+.pos-choice-chip.is-checked {
+  border-color: color-mix(in srgb, var(--primary) 42%, #eee9e5);
+  background: #fbf6f1;
+}
+
+/* The native control stays in the layout for keyboard and screen-reader use;
+   the visible box is the styled span beside it. */
+.pos-choice-chip input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.pos-choice-chip__box {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  place-items: center;
+  border: 1px solid #d7d0cb;
+  border-radius: 5px;
+  color: transparent;
+  background: #fff;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+
+.pos-choice-chip.is-checked .pos-choice-chip__box {
+  border-color: var(--primary);
+  color: #fff;
+  background: var(--primary);
+}
+
+.pos-choice-chip input:focus-visible + .pos-choice-chip__box {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.pos-choice-chip__label {
+  color: #332923;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.pos-choice-chip__tag {
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, #fff);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pos-settings-inline-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 15px;
+  padding: 10px 12px;
+  border: 1px solid #f0d9b1;
+  border-radius: 8px;
+  color: #82551e;
+  background: #fff9ed;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.pos-settings-inline-warning svg {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1100px) {
+  .pos-settings-split {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .pos-section-rail {
+    position: static;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(184px, 1fr);
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+  }
+
+  .pos-section-rail__item {
+    border-color: #eee9e5;
+  }
+
+  .pos-section-rail__summary {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .pos-settings-section {
+    padding: 16px 15px 18px;
+  }
+
+  .pos-section-rail {
+    grid-auto-columns: minmax(160px, 1fr);
+  }
+}
+
+.admin-shell[data-admin-theme="dark"] .pos-settings-section {
+  border-color: #f0ece9;
+  background: #fff;
+}

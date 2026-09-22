@@ -193,7 +193,7 @@ export default async function SettingsPage({
               <strong className="mt-2 block text-sm font-extrabold text-ink">Access details and password</strong>
               <span className="mt-1 block text-xs leading-5 text-ink-muted">Review your sign-in method and update your private password.</span>
             </Link>
-            <Link href="/admin/pos?tab=receipts" className="rounded-card border border-line bg-surface-raised p-4 transition hover:border-primary/40 hover:bg-primary-soft">
+            <Link href="/admin/pos?tab=receipts" className="rounded-card border border-line bg-surface-raised p-4 transition hover:border-primary/40 hover:bg-primary-soft" aria-label="Open POS settings at the receipt and tax section">
               <span className="text-xs font-extrabold uppercase tracking-[0.12em] text-accent">Branch</span>
               <strong className="mt-2 block text-sm font-extrabold text-ink">Receipt identity and tax details</strong>
               <span className="mt-1 block text-xs leading-5 text-ink-muted">Branch name, address, TIN, VAT, paper width, and receipt output.</span>

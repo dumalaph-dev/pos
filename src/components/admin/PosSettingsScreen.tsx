@@ -81,8 +81,15 @@ export type PosConfig = {
   paperWidth: PaperWidthValue;
 };
 
-export type PosTabId = "preview" | "settings" | "payments" | "receipts" | "hardware" | "display";
+export type PosTabId = "preview" | "settings" | "hardware" | "display";
 type TabId = PosTabId;
+
+/**
+ * Sale flow, tender, and receipt output used to be three sibling tabs. They are
+ * one page now, so the old `?tab=payments` / `?tab=receipts` links resolve to
+ * the settings tab plus the section to scroll to.
+ */
+export type PosSettingsSection = "flow" | "payments" | "receipts";
 type PreviewDevice = "desktop" | "tablet";
 type UtilityPanel = "notifications" | "help" | "profile" | "";
 type CartLine = { product: AdminPosProduct; qty: number };
@@ -112,10 +119,14 @@ const PREVIEW_PRODUCTS: AdminPosProduct[] = [
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: "preview", label: "POS Preview" },
   { id: "settings", label: "POS Settings" },
-  { id: "payments", label: "Payment Methods" },
-  { id: "receipts", label: "Receipt Settings" },
   { id: "hardware", label: "Hardware" },
   { id: "display", label: "Customer Display" },
+];
+
+const SETTINGS_SECTIONS: Array<{ id: PosSettingsSection; label: string; summary: string; icon: string }> = [
+  { id: "flow", label: "Sale flow", summary: "Order types and what cashiers see", icon: "bag" },
+  { id: "payments", label: "Payment methods", summary: "Tender options at checkout", icon: "cash" },
+  { id: "receipts", label: "Receipt & tax", summary: "Branch identity, VAT, and printed output", icon: "printer" },
 ];
 
 const ORDER_TYPE_OPTIONS = ["Dine In", "Takeout", "Delivery"] as const;
@@ -347,6 +358,7 @@ export default function PosSettingsScreen({
   initialDisplaySettings,
   initialSettings,
   initialBusinessPresetId,
+  initialSection,
 }: {
   organizationName: string;
   logoUrl: string | null;
@@ -360,6 +372,7 @@ export default function PosSettingsScreen({
   deviceBranchOptions: Array<{ id: string; name: string }>;
   queryWarning: boolean;
   initialTab: PosTabId;
+  initialSection?: PosSettingsSection;
   savedMessage: string;
   errorMessage: string;
   initialNow: string;
@@ -733,9 +746,7 @@ export default function PosSettingsScreen({
               </>
             ) : null}
 
-            {activeTab === "settings" ? <PosSettingsPanel config={config} updateConfig={updateConfig} orderType={orderType} setDefaultOrderType={chooseDefaultOrderType} toggleOrderType={toggleOrderType} /> : null}
-            {activeTab === "payments" ? <PaymentMethodsPanel config={config} updateConfig={updateConfig} /> : null}
-            {activeTab === "receipts" ? <ReceiptSettingsPanel config={config} updateConfig={updateConfig} branchDetails={branchDetails} updateBranchDetails={updateBranchDetails} /> : null}
+            {activeTab === "settings" ? <PosSettingsPanel config={config} updateConfig={updateConfig} orderType={orderType} setDefaultOrderType={chooseDefaultOrderType} toggleOrderType={toggleOrderType} branchDetails={branchDetails} updateBranchDetails={updateBranchDetails} initialSection={initialSection} /> : null}
             {activeTab === "hardware" ? <HardwarePanel devices={devices} deviceBranches={deviceBranchOptions} currentStoreId={storeId} canWrite={canWrite} deviceTest={deviceTest} onTestDevice={testDevice} /> : null}
             {activeTab === "display" ? <DisplayPromotionsPanel storeId={storeId} branchName={currentBranchName} themeLabel={getPosTheme(config.uiStyle).label} displayPairingToken={displayPairingToken} canWrite={canWrite} initialPromotions={displayPromotions} initialGalleryItems={displayGalleryItems} initialMenuItems={displayMenuItems} settings={displaySettings} onSettingsChange={(nextSettings) => { setDisplaySettings(nextSettings); setDisplaySettingsDirty(true); }} promotionsUnavailable={displayPromotionsUnavailable} galleryUnavailable={displayGalleryUnavailable} /> : null}
           </section>
@@ -754,7 +765,9 @@ export default function PosSettingsScreen({
           </div> : null}
         </div>
 
-        {activeTab !== "display" ? <div className="pos-settings-appearance">
+        {/* Appearance only rides along with the preview it changes; on the
+            settings, hardware and display tabs it is noise. */}
+        {activeTab === "preview" ? <div className="pos-settings-appearance">
             <AppearancePanel
               config={config}
               choosePalette={choosePalette}
@@ -1120,42 +1133,255 @@ function PanelHeading({ eyebrow, title, description }: { eyebrow: string; title:
   return <div className="pos-config-heading"><p>{eyebrow}</p><h2>{title}</h2><span>{description}</span></div>;
 }
 
-function PosSettingsPanel({ config, updateConfig, orderType, setDefaultOrderType, toggleOrderType }: { config: PosConfig; updateConfig: (patch: Partial<PosConfig>) => void; orderType: string; setDefaultOrderType: (value: string) => void; toggleOrderType: (value: string) => void }) {
+type BranchDetails = { name: string; address: string; tin: string };
+
+const PAYMENT_METHODS: Array<{ id: PaymentMethodId; label: string; description: string; icon: string }> = [
+  { id: "cash", label: "Cash", description: "Accept cash payments and calculate change.", icon: "cash" },
+  { id: "card", label: "Card", description: "Show card as an available tender option.", icon: "card" },
+  { id: "gcash", label: "GCash", description: "Accept GCash payments at the counter.", icon: "gcash" },
+  { id: "maya", label: "Maya", description: "Accept Maya payments at the counter.", icon: "gcash" },
+  { id: "more", label: "More", description: "Keep a catch-all tender option available.", icon: "more" },
+];
+
+/**
+ * Sale flow, tender, and receipt output on one page.
+ *
+ * They were three tabs, which meant three saves' worth of context-switching to
+ * set up one branch — and the three were never independent anyway: the VAT
+ * toggle, the tender list, and the order types all land on the same receipt.
+ * The section rail keeps each group reachable in one click without hiding the
+ * others, and doubles as the landing target for the old `?tab=` links.
+ */
+function PosSettingsPanel({
+  config,
+  updateConfig,
+  orderType,
+  setDefaultOrderType,
+  toggleOrderType,
+  branchDetails,
+  updateBranchDetails,
+  initialSection,
+}: {
+  config: PosConfig;
+  updateConfig: (patch: Partial<PosConfig>) => void;
+  orderType: string;
+  setDefaultOrderType: (value: string) => void;
+  toggleOrderType: (value: string) => void;
+  branchDetails: BranchDetails;
+  updateBranchDetails: (patch: Partial<BranchDetails>) => void;
+  initialSection?: PosSettingsSection;
+}) {
+  const [activeSection, setActiveSection] = useState<PosSettingsSection>(initialSection ?? "flow");
+  const sectionRefs = useRef<Record<PosSettingsSection, HTMLElement | null>>({ flow: null, payments: null, receipts: null });
+  const enabledMethods = PAYMENT_METHODS.filter((method) => config.paymentMethods[method.id]);
+  const enabledOrderTypes = ORDER_TYPE_OPTIONS.filter((type) => config.orderTypes.includes(type));
+
+  // Scroll-spy: the rail follows the reader rather than only the last click, so
+  // it never claims a section that scrolled off two screens ago.
+  useEffect(() => {
+    const sections = SETTINGS_SECTIONS
+      .map((section) => sectionRefs.current[section.id])
+      .filter((node): node is HTMLElement => Boolean(node));
+    if (sections.length === 0) return;
+
+    // The callback only receives entries whose intersection *changed*, so the
+    // running set is kept here. Reading just the callback's entries would
+    // highlight whichever section happened to cross the line last, even when a
+    // higher one is still on screen — which is what a tall viewport does, since
+    // every section is visible at once.
+    const visible = new Set<string>();
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        const id = entry.target.getAttribute("data-pos-section");
+        if (!id) return;
+        if (entry.isIntersecting) visible.add(id);
+        else visible.delete(id);
+      });
+
+      const topmost = SETTINGS_SECTIONS.find((section) => visible.has(section.id));
+      if (topmost) setActiveSection(topmost.id);
+    }, { rootMargin: "-96px 0px -45% 0px", threshold: 0 });
+
+    sections.forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
+  }, []);
+
+  // Landing from `?tab=receipts`. A single frame after mount is too early: the
+  // router restores scroll to the top after hydration, which silently undid the
+  // jump. So it is re-asserted briefly, and abandoned the moment the reader
+  // scrolls themselves — a deep link should never fight the person using it.
+  useEffect(() => {
+    if (!initialSection) return;
+    const target = sectionRefs.current[initialSection];
+    if (!target) return;
+
+    let cancelled = false;
+    const onUserScroll = () => { cancelled = true; };
+    window.addEventListener("wheel", onUserScroll, { passive: true, once: true });
+    window.addEventListener("touchmove", onUserScroll, { passive: true, once: true });
+    window.addEventListener("keydown", onUserScroll, { once: true });
+
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const timers = [0, 120, 360].map((delay) => window.setTimeout(() => {
+      if (cancelled) return;
+      // Already in place (within a section heading's worth of slack): leave it.
+      if (Math.abs(target.getBoundingClientRect().top) < 40) return;
+      target.scrollIntoView({ block: "start", behavior: reduceMotion || delay === 0 ? "auto" : "smooth" });
+    }, delay));
+
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+      window.removeEventListener("wheel", onUserScroll);
+      window.removeEventListener("touchmove", onUserScroll);
+      window.removeEventListener("keydown", onUserScroll);
+    };
+  }, [initialSection]);
+
+  function jumpTo(section: PosSettingsSection) {
+    setActiveSection(section);
+    const target = sectionRefs.current[section];
+    if (!target) return;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    target.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
+  }
+
   return (
-    <div className="pos-config-panel"><PanelHeading eyebrow="Cashier experience" title="POS Settings" description="Control how staff move through the sale flow at this branch." /><div className="pos-config-grid"><label className="pos-config-field"><span>Default order type</span><select value={config.defaultOrderType} onChange={(event) => setDefaultOrderType(event.target.value)}>{ORDER_TYPE_OPTIONS.map((value) => <option key={value}>{value}</option>)}</select></label></div><div className="pos-config-list"><ToggleRow title="Show stock status" description="Show on-hand status on product tiles when inventory is tracked." checked={config.showStockStatus} onChange={(checked) => updateConfig({ showStockStatus: checked })} /><ToggleRow title="Enable order notes" description="Let cashiers add preparation instructions to an order." checked={config.enableOrderNotes} onChange={(checked) => updateConfig({ enableOrderNotes: checked })} /></div><div className="pos-order-type-settings"><div><h3>Order types</h3><p>Choose which order types cashiers can use.</p></div>{ORDER_TYPE_OPTIONS.map((type) => <label key={type}><input type="checkbox" checked={config.orderTypes.includes(type)} onChange={() => toggleOrderType(type)} /><span>{type}</span>{orderType === type ? <small>Default</small> : null}</label>)}</div></div>
+    <div className="pos-config-panel pos-config-panel--merged">
+      <PanelHeading eyebrow="Branch configuration" title="POS Settings" description={`Sale flow, tender options, and receipt output for ${branchDetails.name || "this branch"}. Save Changes applies all three at once.`} />
+
+      <div className="pos-settings-split">
+        <nav className="pos-section-rail" aria-label="POS settings sections">
+          {SETTINGS_SECTIONS.map((section) => (
+            <button
+              key={section.id}
+              type="button"
+              className={`pos-section-rail__item${activeSection === section.id ? " is-active" : ""}`}
+              aria-current={activeSection === section.id ? "true" : undefined}
+              onClick={() => jumpTo(section.id)}
+            >
+              <span className="pos-section-rail__icon"><MiniIcon name={section.icon} size={16} /></span>
+              <span className="pos-section-rail__copy"><strong>{section.label}</strong><small>{section.summary}</small></span>
+            </button>
+          ))}
+
+          <div className="pos-section-rail__summary">
+            <p>At a glance</p>
+            <dl>
+              <div><dt>Default order</dt><dd>{orderType || "Not set"}</dd></div>
+              <div><dt>Order types</dt><dd>{enabledOrderTypes.length ? `${enabledOrderTypes.length} enabled` : "None enabled"}</dd></div>
+              <div><dt>Tender options</dt><dd>{enabledMethods.length ? enabledMethods.map((method) => method.label).join(", ") : "None enabled"}</dd></div>
+              <div><dt>VAT on receipt</dt><dd>{config.showVat ? `${(config.vatRate * 100).toFixed(2)}%` : "Hidden"}</dd></div>
+            </dl>
+          </div>
+        </nav>
+
+        <div className="pos-settings-sections">
+          <section
+            ref={(node) => { sectionRefs.current.flow = node; }}
+            data-pos-section="flow"
+            id="pos-section-flow"
+            className="pos-settings-section"
+            aria-labelledby="pos-section-flow-heading"
+          >
+            <SectionHeading id="pos-section-flow-heading" icon="bag" title="Sale flow" description="How cashiers move through an order at this branch." />
+
+            <div className="pos-config-grid">
+              <label className="pos-config-field"><span>Default order type</span><small>Pre-selected when a cashier starts a new order.</small><select value={config.defaultOrderType} onChange={(event) => setDefaultOrderType(event.target.value)}>{ORDER_TYPE_OPTIONS.map((value) => <option key={value}>{value}</option>)}</select></label>
+            </div>
+
+            <fieldset className="pos-choice-grid">
+              <legend>Available order types<span>Uncheck anything this branch never sells. The default stays selected.</span></legend>
+              <div>
+                {ORDER_TYPE_OPTIONS.map((type) => {
+                  const checked = config.orderTypes.includes(type);
+                  const isDefault = orderType === type;
+                  return (
+                    <label key={type} className={`pos-choice-chip${checked ? " is-checked" : ""}`}>
+                      <input type="checkbox" checked={checked} onChange={() => toggleOrderType(type)} />
+                      <span className="pos-choice-chip__box" aria-hidden="true"><MiniIcon name="check" size={11} /></span>
+                      <span className="pos-choice-chip__label">{type}</span>
+                      {isDefault ? <span className="pos-choice-chip__tag">Default</span> : null}
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+
+            <div className="pos-config-list">
+              <ToggleRow title="Show stock status" description="Show on-hand status on product tiles when inventory is tracked." checked={config.showStockStatus} onChange={(checked) => updateConfig({ showStockStatus: checked })} />
+              <ToggleRow title="Enable order notes" description="Let cashiers add preparation instructions to an order." checked={config.enableOrderNotes} onChange={(checked) => updateConfig({ enableOrderNotes: checked })} />
+            </div>
+          </section>
+
+          <section
+            ref={(node) => { sectionRefs.current.payments = node; }}
+            data-pos-section="payments"
+            id="pos-section-payments"
+            className="pos-settings-section"
+            aria-labelledby="pos-section-payments-heading"
+          >
+            <SectionHeading id="pos-section-payments-heading" icon="cash" title="Payment methods" description="Which tender options appear on the charge screen." />
+
+            {enabledMethods.length === 0 ? (
+              <p className="pos-settings-inline-warning" role="status"><MiniIcon name="info" size={14} /> No tender is enabled, so cashiers cannot complete a sale. Turn on at least one.</p>
+            ) : null}
+
+            <div className="pos-payment-settings-list">
+              {PAYMENT_METHODS.map((method) => (
+                <div className={`pos-payment-settings-row ${config.paymentMethods[method.id] ? "is-enabled" : ""}`} key={method.id}>
+                  <span className="pos-payment-settings-icon"><MiniIcon name={method.icon} size={18} /></span>
+                  <span><strong>{method.label}</strong><small>{method.description}</small></span>
+                  <Toggle label={`${method.label} payment method`} checked={config.paymentMethods[method.id]} onChange={(checked) => updateConfig({ paymentMethods: { ...config.paymentMethods, [method.id]: checked } })} />
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section
+            ref={(node) => { sectionRefs.current.receipts = node; }}
+            data-pos-section="receipts"
+            id="pos-section-receipts"
+            className="pos-settings-section"
+            aria-labelledby="pos-section-receipts-heading"
+          >
+            <SectionHeading id="pos-section-receipts-heading" icon="printer" title="Receipt & tax" description="Branch identity, VAT, and what gets printed on the slip." />
+
+            <div className="pos-subsection-label">Branch identity</div>
+            <div className="pos-config-grid">
+              <label className="pos-config-field"><span>Branch name</span><input maxLength={120} value={branchDetails.name} onChange={(event) => updateBranchDetails({ name: event.target.value })} /></label>
+              <label className="pos-config-field"><span>TIN</span><input maxLength={80} value={branchDetails.tin} onChange={(event) => updateBranchDetails({ tin: event.target.value })} placeholder="Optional tax ID" /></label>
+              <label className="pos-config-field pos-config-field--full"><span>Branch address</span><input maxLength={240} value={branchDetails.address} onChange={(event) => updateBranchDetails({ address: event.target.value })} placeholder="Address printed on receipts" /></label>
+            </div>
+
+            <div className="pos-subsection-label">Tax &amp; paper</div>
+            <div className="pos-config-grid">
+              <label className="pos-config-field"><span>VAT rate (%)</span><small>Applied when the VAT summary is shown.</small><input type="number" min="0" max="100" step="0.01" value={(config.vatRate * 100).toFixed(2)} onChange={(event) => updateConfig({ vatRate: Math.max(0, Math.min(1, Number(event.target.value) / 100 || 0)) })} /></label>
+              <label className="pos-config-field"><span>Paper roll width</span><small>Match the roll loaded in this printer.</small><select value={config.paperWidth} onChange={(event) => updateConfig({ paperWidth: toPaperWidthValue(normalizePaperWidth(event.target.value)) })}>{PAPER_WIDTH_OPTIONS.map(({ value, label, description }) => <option key={value} value={value}>{label} · {description}</option>)}</select></label>
+            </div>
+
+            <div className="pos-subsection-label">Printed output</div>
+            <div className="pos-config-grid">
+              <label className="pos-config-field pos-config-field--full"><span>Receipt header</span><textarea maxLength={200} value={config.receiptHeader} onChange={(event) => updateConfig({ receiptHeader: event.target.value })} placeholder="Optional line below the branch name" /></label>
+              <label className="pos-config-field pos-config-field--full"><span>Receipt footer</span><textarea maxLength={200} value={config.receiptFooter} onChange={(event) => updateConfig({ receiptFooter: event.target.value })} placeholder="Thank you message or return policy" /></label>
+            </div>
+
+            <div className="pos-config-list">
+              <ToggleRow title="Include VAT summary" description="Show the configured VAT rate and amount in checkout and printed receipts." checked={config.showVat} onChange={(checked) => updateConfig({ showVat: checked })} />
+              <ToggleRow title="Show cashier name" description="Print the active cashier on the order slip." checked={config.showCashier} onChange={(checked) => updateConfig({ showCashier: checked })} />
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
   );
 }
 
-function PaymentMethodsPanel({ config, updateConfig }: { config: PosConfig; updateConfig: (patch: Partial<PosConfig>) => void }) {
-  const methods: Array<{ id: PaymentMethodId; label: string; description: string; icon: string }> = [
-    { id: "cash", label: "Cash", description: "Accept cash payments and calculate change.", icon: "cash" },
-    { id: "card", label: "Card", description: "Show card as an available tender option.", icon: "card" },
-    { id: "gcash", label: "GCash", description: "Accept GCash payments at the counter.", icon: "gcash" },
-    { id: "maya", label: "Maya", description: "Accept Maya payments at the counter.", icon: "gcash" },
-    { id: "more", label: "More", description: "Keep a catch-all tender option available.", icon: "more" },
-  ];
-  return <div className="pos-config-panel"><PanelHeading eyebrow="Tender configuration" title="Payment Methods" description="Choose which payment methods are available to cashiers at checkout." /><div className="pos-payment-settings-list">{methods.map((method) => <div className={`pos-payment-settings-row ${config.paymentMethods[method.id] ? "is-enabled" : ""}`} key={method.id}><span className="pos-payment-settings-icon"><MiniIcon name={method.icon} size={18} /></span><span><strong>{method.label}</strong><small>{method.description}</small></span><Toggle label={`${method.label} payment method`} checked={config.paymentMethods[method.id]} onChange={(checked) => updateConfig({ paymentMethods: { ...config.paymentMethods, [method.id]: checked } })} /></div>)}</div></div>;
-}
-
-type BranchDetails = { name: string; address: string; tin: string };
-
-function ReceiptSettingsPanel({ config, updateConfig, branchDetails, updateBranchDetails }: { config: PosConfig; updateConfig: (patch: Partial<PosConfig>) => void; branchDetails: BranchDetails; updateBranchDetails: (patch: Partial<BranchDetails>) => void }) {
+function SectionHeading({ id, icon, title, description }: { id: string; icon: string; title: string; description: string }) {
   return (
-    <div className="pos-config-panel">
-      <PanelHeading eyebrow="Branch receipt profile" title="Receipt and tax details" description={`Configure the branch identity and receipt output for ${branchDetails.name || "this branch"}. Save Changes applies the complete POS configuration.`} />
-      <div className="pos-config-grid">
-        <label className="pos-config-field"><span>Branch name</span><input maxLength={120} value={branchDetails.name} onChange={(event) => updateBranchDetails({ name: event.target.value })} /></label>
-        <label className="pos-config-field"><span>TIN</span><input maxLength={80} value={branchDetails.tin} onChange={(event) => updateBranchDetails({ tin: event.target.value })} placeholder="Optional tax ID" /></label>
-        <label className="pos-config-field pos-config-field--full"><span>Branch address</span><input maxLength={240} value={branchDetails.address} onChange={(event) => updateBranchDetails({ address: event.target.value })} placeholder="Address printed on receipts" /></label>
-        <label className="pos-config-field"><span>VAT rate (%)</span><input type="number" min="0" max="100" step="0.01" value={(config.vatRate * 100).toFixed(2)} onChange={(event) => updateConfig({ vatRate: Math.max(0, Math.min(1, Number(event.target.value) / 100 || 0)) })} /></label>
-        <label className="pos-config-field"><span>Paper roll width</span><small>Match the roll loaded in this printer.</small><select value={config.paperWidth} onChange={(event) => updateConfig({ paperWidth: toPaperWidthValue(normalizePaperWidth(event.target.value)) })}>{PAPER_WIDTH_OPTIONS.map(({ value, label, description }) => <option key={value} value={value}>{label} · {description}</option>)}</select></label>
-        <label className="pos-config-field pos-config-field--full"><span>Receipt header</span><textarea maxLength={200} value={config.receiptHeader} onChange={(event) => updateConfig({ receiptHeader: event.target.value })} placeholder="Optional line below the branch name" /></label>
-        <label className="pos-config-field pos-config-field--full"><span>Receipt footer</span><textarea maxLength={200} value={config.receiptFooter} onChange={(event) => updateConfig({ receiptFooter: event.target.value })} placeholder="Thank you message or return policy" /></label>
-      </div>
-      <div className="pos-config-list">
-        <ToggleRow title="Include VAT summary" description="Show the configured VAT rate and amount in checkout and printed receipts." checked={config.showVat} onChange={(checked) => updateConfig({ showVat: checked })} />
-        <ToggleRow title="Show cashier name" description="Print the active cashier on the order slip." checked={config.showCashier} onChange={(checked) => updateConfig({ showCashier: checked })} />
-      </div>
+    <div className="pos-settings-section__heading">
+      <span className="pos-settings-section__icon"><MiniIcon name={icon} size={18} /></span>
+      <div><h3 id={id}>{title}</h3><p>{description}</p></div>
     </div>
   );
 }
