@@ -860,3 +860,188 @@
     transform: none;
   }
 }
+
+/* Role playbook: the first-day checklist, permission boundaries, and the one
+   mistake that costs the most time to undo. */
+.playbookGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 11px;
+  margin-top: 12px;
+}
+
+.playbookCard {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.playbookCardWarn {
+  border-color: color-mix(in srgb, var(--warning) 32%, var(--border));
+  background: color-mix(in srgb, var(--warning) 7%, var(--surface));
+}
+
+.playbookCard h3 {
+  margin: 2px 0 6px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+.playbookChecklist {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  counter-reset: playbook;
+  list-style: none;
+}
+
+.playbookChecklist li {
+  position: relative;
+  padding-left: 22px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  counter-increment: playbook;
+}
+
+.playbookChecklist li::before {
+  position: absolute;
+  top: 1px;
+  left: 0;
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--primary-fg);
+  background: var(--primary);
+  content: counter(playbook);
+  font-size: 8px;
+  font-weight: 850;
+}
+
+.permissionBlock + .permissionBlock {
+  margin-top: 11px;
+}
+
+.permissionLabel {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  color: var(--success);
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.permissionLabelLocked {
+  color: var(--text-subtle);
+}
+
+.permissionBlock ul {
+  display: grid;
+  gap: 5px;
+  margin: 6px 0 0;
+  padding-left: 15px;
+}
+
+.permissionBlock li {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.permissionBlock li::marker {
+  color: var(--accent);
+}
+
+.playbookWatch {
+  margin: 0;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.playbookMeta {
+  margin: 10px 0 0;
+  padding-top: 9px;
+  border-top: 1px solid color-mix(in srgb, var(--warning) 22%, var(--border));
+  color: var(--text-subtle);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+/* Cashier device section */
+.deviceSection,
+.glossarySection {
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface-panel, var(--surface));
+}
+
+.deviceSection > :last-child {
+  margin-top: 13px;
+}
+
+.glossaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(238px, 1fr));
+  gap: 9px;
+  margin: 13px 0 0;
+}
+
+.glossaryItem {
+  padding: 12px 13px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+}
+
+.glossaryItem dt {
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+
+.glossaryItem dd {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+@media (max-width: 900px) {
+  .playbookGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .playbookCardWarn {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 640px) {
+  .playbookGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .playbookCardWarn {
+    grid-column: auto;
+  }
+
+  .deviceSection,
+  .glossarySection {
+    padding: 16px;
+    border-radius: 14px;
+  }
+}

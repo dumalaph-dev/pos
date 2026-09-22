@@ -1,10 +1,16 @@
 "use client";
 
 import NextLink from "next/link";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { OWNER_GUIDANCE, OWNER_MONITORING_GUIDE, OWNER_ONBOARDING_PHASES, type OwnerGuidanceTopic, type OwnerOnboardingState } from "@/lib/admin/onboarding";
+import { OWNER_GUIDANCE, OWNER_LAUNCH_CHECKLIST, OWNER_MONITORING_GUIDE, OWNER_ONBOARDING_PHASES, type OwnerGuidanceTopic, type OwnerOnboardingState } from "@/lib/admin/onboarding";
 import { PWAInstallButton, resetPwaInstallPrompt } from "@/components/PWAInstallPrompt";
+import type { StaffLoginLink } from "@/lib/admin/staff-links";
 import { AdminIcon } from "./AdminIcon";
+
+// The card pulls in the QR generator, and it only ever renders inside the
+// setup dialog — keep it out of the dashboard's first load.
+const CashierTabletCard = dynamic(() => import("./CashierTabletCard").then((module) => module.CashierTabletCard));
 
 const ONBOARDING_DISMISSED_KEY = "pos.owner-onboarding.dismissed";
 const GUIDANCE_DISMISSED_PREFIX = "pos.owner-guidance.dismissed.";
@@ -64,7 +70,7 @@ const STEP_ICONS = {
   dashboard: "chart",
 } as const;
 
-function OwnerSetupDialog({ state, nextStep, onClose, isLechonHouseBusiness }: { state: OwnerOnboardingState; nextStep: OwnerOnboardingState["steps"][number] | undefined; onClose: () => void; isLechonHouseBusiness: boolean }) {
+function OwnerSetupDialog({ state, nextStep, onClose, isLechonHouseBusiness, staffLinks, staffLinksLegacyOnly }: { state: OwnerOnboardingState; nextStep: OwnerOnboardingState["steps"][number] | undefined; onClose: () => void; isLechonHouseBusiness: boolean; staffLinks: StaffLoginLink[]; staffLinksLegacyOnly: boolean }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
@@ -165,6 +171,27 @@ function OwnerSetupDialog({ state, nextStep, onClose, isLechonHouseBusiness }: {
             </div>
           </section>
 
+          <section className="owner-onboarding-dialog__section" aria-labelledby="owner-onboarding-tablet-heading">
+            <div className="owner-onboarding-dialog__section-heading"><div><p className="owner-onboarding__eyebrow">Open the counter</p><h3 id="owner-onboarding-tablet-heading">Get your cashiers onto a tablet</h3></div></div>
+            <p className="owner-onboarding-dialog__section-description">Each branch has its own sign-in link. Send it to the counter device once — the cashier still signs in with their own Employee ID.</p>
+            <CashierTabletCard links={staffLinks} legacyOnly={staffLinksLegacyOnly} compact />
+          </section>
+
+          <section className="owner-onboarding-dialog__section" aria-labelledby="owner-onboarding-habits-heading">
+            <div className="owner-onboarding-dialog__section-heading"><div><p className="owner-onboarding__eyebrow">Habits, not steps</p><h3 id="owner-onboarding-habits-heading">What makes the numbers trustworthy</h3></div></div>
+            <p className="owner-onboarding-dialog__section-description">Nothing here ticks itself off. These are the four habits that decide whether week two&apos;s reports are worth reading.</p>
+            <div className="owner-onboarding__habits">
+              {OWNER_LAUNCH_CHECKLIST.map((habit) => (
+                <article key={habit.title} className="owner-onboarding__habit">
+                  <span className="owner-onboarding__habit-cadence">{habit.cadence}</span>
+                  <h4>{habit.title}</h4>
+                  <p>{habit.body}</p>
+                  <NextLink href={habit.href}>{habit.actionLabel}<AdminIcon name="arrow" size={12} /></NextLink>
+                </article>
+              ))}
+            </div>
+          </section>
+
           <section className="owner-onboarding-dialog__section owner-onboarding-dialog__monitoring" aria-labelledby="owner-onboarding-monitoring-heading">
             <div className="owner-onboarding-dialog__section-heading"><div><p className="owner-onboarding__eyebrow">After setup</p><h3 id="owner-onboarding-monitoring-heading">How to monitor the business</h3></div></div>
             <p className="owner-onboarding-dialog__section-description">Once the basics are ready, use this simple rhythm to keep the operation accurate.</p>
@@ -179,22 +206,25 @@ function OwnerSetupDialog({ state, nextStep, onClose, isLechonHouseBusiness }: {
           </section>
         </div>
 
-        <div className="owner-onboarding-dialog__footer"><span>Need this later? You can restore the guide from Settings.</span><button type="button" className="owner-onboarding-dialog__done" onClick={onClose}>Done for now</button></div>
+        <div className="owner-onboarding-dialog__footer"><span>Need more detail? Help &amp; Guide has the full answers, and Settings can restore this checklist later.</span><div className="owner-onboarding-dialog__footer-actions"><NextLink href="/admin/guide" className="owner-onboarding__step-link">Open Help &amp; Guide<AdminIcon name="arrow" size={12} /></NextLink><button type="button" className="owner-onboarding-dialog__done" onClick={onClose}>Done for now</button></div></div>
       </div>
     </div>
   );
 }
 
-export function OwnerOnboardingPanel({ state, isLechonHouseBusiness }: { state: OwnerOnboardingState; isLechonHouseBusiness: boolean }) {
+export function OwnerOnboardingPanel({ state, isLechonHouseBusiness, staffLinks = [], staffLinksLegacyOnly = false }: { state: OwnerOnboardingState; isLechonHouseBusiness: boolean; staffLinks?: StaffLoginLink[]; staffLinksLegacyOnly?: boolean }) {
   const dismissed = useDismissedGuidance(ONBOARDING_DISMISSED_KEY);
   const [isOpen, setIsOpen] = useState(false);
   const nextStep = state.steps.find((step) => !step.complete);
   const closeDialog = useCallback(() => setIsOpen(false), []);
 
   if (dismissed) {
+    // The install control lives here too: hiding the checklist used to hide the
+    // only Install Dumala button on the dashboard along with it.
     return (
       <div className="owner-onboarding-reopen">
         <span><AdminIcon name="help" size={15} /> Setup guide is hidden for now.</span>
+        <PWAInstallButton className="owner-onboarding__install">Install Dumala App</PWAInstallButton>
         <button type="button" onClick={() => { writeDismissed(ONBOARDING_DISMISSED_KEY, false); notifyGuidanceChange(); }}>Show setup guide</button>
       </div>
     );
@@ -212,6 +242,7 @@ export function OwnerOnboardingPanel({ state, isLechonHouseBusiness }: { state: 
           </div>
         </div>
         <div className="owner-onboarding__actions">
+          <NextLink href="/admin/guide" className="owner-onboarding__install"><AdminIcon name="help" size={13} /> Help &amp; Guide</NextLink>
           <PWAInstallButton className="owner-onboarding__install">Install Dumala App</PWAInstallButton>
           <button type="button" className="owner-onboarding__open" onClick={() => setIsOpen(true)}>{state.isComplete ? "Review setup" : "View setup steps"}<AdminIcon name="arrow" size={13} /></button>
           <button type="button" className="owner-onboarding__dismiss" onClick={() => { writeDismissed(ONBOARDING_DISMISSED_KEY, true); notifyGuidanceChange(); }}>Hide for now</button>
@@ -226,7 +257,7 @@ export function OwnerOnboardingPanel({ state, isLechonHouseBusiness }: { state: 
         <div className="owner-onboarding__next">{nextStep ? <><strong>Next: {nextStep.title}</strong><span>{nextStep.suggestion}</span></> : <><strong>Next: keep monitoring</strong><span>{isLechonHouseBusiness ? "Use the dashboard, inventory yield, supplier, and closing-count guides as your routine grows." : "Use the dashboard, supplier, and closing-count guides as your routine grows."}</span></>}</div>
       </div>
 
-      {isOpen && <OwnerSetupDialog state={state} nextStep={nextStep} onClose={closeDialog} isLechonHouseBusiness={isLechonHouseBusiness} />}
+      {isOpen && <OwnerSetupDialog state={state} nextStep={nextStep} onClose={closeDialog} isLechonHouseBusiness={isLechonHouseBusiness} staffLinks={staffLinks} staffLinksLegacyOnly={staffLinksLegacyOnly} />}
     </section>
   );
 }

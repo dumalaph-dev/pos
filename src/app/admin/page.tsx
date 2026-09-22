@@ -12,6 +12,7 @@ import { formatStockQuantity, salesQuantity, stockStatus } from "@/lib/inventory
 import { isProductImageUrl } from "@/lib/product-images";
 import { getSelectedAdminBranchId } from "@/lib/admin/branch-context";
 import { getAdminBranches } from "@/lib/admin/branches";
+import { getStaffLoginLinks } from "@/lib/admin/staff-links";
 import { isLechonHouseBusiness } from "@/lib/admin/business";
 import { getAdminProfile } from "@/lib/admin/profile";
 import type { OrderReceiptData } from "@/lib/admin/order-receipts";
@@ -398,6 +399,9 @@ export default async function AdminPage({
       hasDashboardSettings: hasConfiguredOwnerDashboardSettings(profile.organizations?.settings),
     })
     : null;
+  // Only read the branch entry links when the setup guide will actually render
+  // them; the dialog is the only consumer on this page.
+  const staffLoginLinks = onboardingState ? await getStaffLoginLinks(profile.org_id) : null;
 
   // A void or refund leaves the original sale at `completed` and adds a linked
   // reversal row (0020), so counting `status === "completed"` would report a
@@ -708,7 +712,7 @@ export default async function AdminPage({
 
           {queryWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink">Some data could not refresh. The dashboard is showing the data that was available; the POS remains available.</div>}
 
-          {onboardingState && <div className="mt-5"><OwnerOnboardingPanel state={onboardingState} isLechonHouseBusiness={isLechonHouseBusinessSelected} /></div>}
+          {onboardingState && <div className="mt-5"><OwnerOnboardingPanel state={onboardingState} isLechonHouseBusiness={isLechonHouseBusinessSelected} staffLinks={staffLoginLinks?.links ?? []} staffLinksLegacyOnly={staffLoginLinks?.legacyOnly ?? false} /></div>}
           {profile.role === "admin" && <div className="mt-5"><OwnerGuidance topic="dashboard" /></div>}
 
           <section aria-label="Key performance indicators" className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">

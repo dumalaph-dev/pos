@@ -2588,3 +2588,391 @@
   background: var(--surface-panel);
 }
 
+
+/* ---------------------------------------------------------------------------
+   Cashier tablet card
+   Shared by the Help & Guide device section and the owner setup dialog, so the
+   branch entry link reads the same wherever an owner goes looking for it.
+   --------------------------------------------------------------------------- */
+.cashier-tablet {
+  display: grid;
+  gap: 13px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--border));
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.cashier-tablet--compact {
+  padding: 13px;
+  border-radius: 11px;
+}
+
+.cashier-tablet__head,
+.cashier-tablet--empty {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: start;
+  gap: 11px;
+}
+
+.cashier-tablet__mark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--primary-fg);
+  background: var(--primary);
+}
+
+.cashier-tablet__eyebrow {
+  margin: 0;
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.cashier-tablet h3 {
+  margin: 3px 0 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+.cashier-tablet__head p,
+.cashier-tablet--empty p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.cashier-tablet__branches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cashier-tablet__branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--surface-raised);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.cashier-tablet__branch:hover {
+  border-color: var(--border-strong);
+  color: var(--primary);
+}
+
+.cashier-tablet__branch.is-active {
+  border-color: var(--primary);
+  color: var(--primary-fg);
+  background: var(--primary);
+}
+
+.cashier-tablet__branch small {
+  color: inherit;
+  font-size: 8px;
+  font-weight: 700;
+  opacity: 0.75;
+  text-transform: uppercase;
+}
+
+.cashier-tablet__link-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-raised);
+}
+
+.cashier-tablet__link {
+  min-width: 0;
+  flex: 1 1 260px;
+}
+
+.cashier-tablet__link-label {
+  display: block;
+  color: var(--text-subtle);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cashier-tablet__link code {
+  display: block;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.cashier-tablet__link-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 7px;
+}
+
+.cashier-tablet__button {
+  display: inline-flex;
+  min-height: 31px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--primary);
+  background: var(--surface);
+  font-size: 10px;
+  font-weight: 900;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.cashier-tablet__button:hover:not(:disabled) {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.cashier-tablet__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.cashier-tablet__button--primary {
+  border-color: var(--primary);
+  color: var(--primary-fg);
+  background: var(--primary);
+}
+
+.cashier-tablet__button--primary:hover:not(:disabled) {
+  color: var(--primary-fg);
+  background: var(--primary);
+  filter: brightness(0.94);
+}
+
+.cashier-tablet__button--install {
+  margin-top: 7px;
+}
+
+.cashier-tablet__warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--warning) 34%, var(--border));
+  border-radius: 9px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--warning) 10%, var(--surface));
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.cashier-tablet__warning svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--warning);
+}
+
+.cashier-tablet__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 168px;
+  gap: 14px;
+  align-items: start;
+}
+
+.cashier-tablet__steps {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cashier-tablet__steps li {
+  display: grid;
+  grid-template-columns: 21px minmax(0, 1fr);
+  gap: 9px;
+  align-items: start;
+}
+
+.cashier-tablet__steps li > span {
+  display: grid;
+  width: 21px;
+  height: 21px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--primary-fg);
+  background: var(--primary);
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.cashier-tablet__steps strong {
+  display: block;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.cashier-tablet__steps p {
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.cashier-tablet__qr {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-raised);
+}
+
+.cashier-tablet__qr img,
+.cashier-tablet__qr-placeholder {
+  width: 128px;
+  height: 128px;
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.cashier-tablet__qr p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.cashier-tablet__note {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  color: var(--text-subtle);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.cashier-tablet__note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+@media (max-width: 720px) {
+  .cashier-tablet__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cashier-tablet__qr {
+    justify-self: start;
+  }
+
+  .cashier-tablet__link-actions {
+    width: 100%;
+  }
+}
+
+/* Owner setup: launch habits and the secondary actions beside the checklist. */
+.owner-onboarding-reopen .owner-onboarding__install {
+  margin-left: auto;
+  text-decoration: none;
+}
+
+.owner-onboarding__actions .owner-onboarding__install {
+  text-decoration: none;
+}
+
+.owner-onboarding__habits {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.owner-onboarding__habit {
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-raised);
+}
+
+.owner-onboarding__habit-cadence {
+  display: inline-flex;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--primary);
+  background: var(--primary-soft);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.owner-onboarding__habit h4 {
+  margin-top: 6px;
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.owner-onboarding__habit p {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.owner-onboarding__habit a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  color: var(--primary);
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.owner-onboarding-dialog__footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .owner-onboarding__habits,
+  .owner-onboarding__monitoring-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .owner-onboarding-reopen {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .owner-onboarding-reopen .owner-onboarding__install {
+    margin-left: 0;
+  }
+}

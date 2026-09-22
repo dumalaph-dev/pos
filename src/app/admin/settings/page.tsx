@@ -172,7 +172,7 @@ export default async function SettingsPage({
           <div>
             <p className="admin-panel__eyebrow">Dumala app</p>
             <h2 id="pwa-install-settings-heading" className="admin-panel__title">Install Dumala on this device</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">Closed the install pill? Restore it here, or use the same Install Dumala App action in the store owner setup guide. This only changes the install prompt for this browser and device.</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">Closed the install pill, or removed the app and want it back? Restore it here. The Install Dumala App action in the setup guide and in Help &amp; Guide always works too — when your browser cannot offer a one-tap install, it shows the exact steps for that browser instead. This only changes the install prompt for this browser and device.</p>
           </div>
           <RestorePWAInstallButton />
         </section>

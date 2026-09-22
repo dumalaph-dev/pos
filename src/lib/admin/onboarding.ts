@@ -66,6 +66,54 @@ export type OwnerMonitoringGuide = {
   actionLabel: string;
 };
 
+/**
+ * The habits that decide whether the numbers are trustworthy in week two.
+ *
+ * Deliberately separate from {@link OWNER_ONBOARDING_PHASES}: those steps are
+ * checked against the database and tick themselves off, while these are
+ * judgement calls nothing can detect. Showing them as a checklist the owner
+ * ticks in their head — not in the app — is why they carry a cadence instead
+ * of a completion state.
+ */
+export type OwnerLaunchHabit = {
+  cadence: string;
+  title: string;
+  body: string;
+  href: string;
+  actionLabel: string;
+};
+
+export const OWNER_LAUNCH_CHECKLIST: OwnerLaunchHabit[] = [
+  {
+    cadence: "Before the first sale",
+    title: "Run one test sale, then void it",
+    body: "A single sale exercises the shift, price, stock, receipt, and report path at once. Voiding it afterwards leaves the real day clean.",
+    href: "/pos",
+    actionLabel: "Open POS",
+  },
+  {
+    cadence: "Every shift",
+    title: "Open and close the shift on purpose",
+    body: "A shift that is never closed has no counted cash to compare against, so the first real cash question has no answer.",
+    href: "/admin/shifts",
+    actionLabel: "Review shifts",
+  },
+  {
+    cadence: "Every delivery",
+    title: "Record stock the day it arrives",
+    body: "Sales reduce stock on their own; deliveries, prep, and waste do not. A ledger updated from memory a week later is a guess.",
+    href: "/admin/inventory?movement=receive#stock-movement",
+    actionLabel: "Record a movement",
+  },
+  {
+    cadence: "Every week",
+    title: "Read the week, not just the day",
+    body: "Compare this week with last week and check the discount rate and reversal count. Single days are noise; the direction is the signal.",
+    href: "/admin/reports",
+    actionLabel: "Open reports",
+  },
+];
+
 export const OWNER_MONITORING_GUIDE: OwnerMonitoringGuide[] = [
   {
     title: "Open the dashboard first",
@@ -214,8 +262,8 @@ export function buildOwnerOnboardingState(input: OwnerOnboardingInput): OwnerOnb
       "pos",
       input.hasPosDevice,
       "Connect a POS counter",
-      "Bind a tablet and choose the printer settings for a branch.",
-      "A connected counter lets cashiers sign in and keeps the sales workflow tied to the right branch.",
+      "Bind a tablet to this branch and choose its printer settings.",
+      "Then send the cashier the branch sign-in link, install the app on the tablet, and have them sign in with their own Employee ID.",
       "/setup",
       "Set up a counter",
     ),

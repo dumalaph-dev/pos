@@ -9,6 +9,7 @@ import { AdminLink as Link } from "@/components/admin/AdminLink";
 import { SignOutButton } from "@/components/SignOutButton";
 import { readAdminBranding } from "@/lib/admin/branding";
 import { getAdminProfile } from "@/lib/admin/profile";
+import { getStaffLoginLinks } from "@/lib/admin/staff-links";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -61,6 +62,11 @@ export default async function AdminGuidePage({
   const userInitial = firstName.charAt(0).toUpperCase();
   const role = guideRole(profile.role);
   const organizationName = profile.organizations?.name ?? branding.brandName;
+  // Branch entry links follow the same owner-only scope as the Store login
+  // links panel in Employees, so the guide does not widen who can hand a
+  // counter link out.
+  const canSeeStaffLinks = profile.role === "admin";
+  const staffLinks = canSeeStaffLinks ? await getStaffLoginLinks(profile.org_id) : null;
 
   return (
     <main data-admin-theme={branding.theme} className="admin-page text-ink">
@@ -90,7 +96,14 @@ export default async function AdminGuidePage({
           <SignOutButton className="px-2 py-2.5 text-[10px]" />
         </header>
 
-        <AdminGuide currentRole={role} organizationName={organizationName} initialTopic={guideTopic(params.topic)} />
+        <AdminGuide
+          currentRole={role}
+          organizationName={organizationName}
+          initialTopic={guideTopic(params.topic)}
+          staffLinks={staffLinks?.links ?? []}
+          staffLinksLegacyOnly={staffLinks?.legacyOnly ?? false}
+          canSeeStaffLinks={canSeeStaffLinks}
+        />
       </div>
     </main>
   );
