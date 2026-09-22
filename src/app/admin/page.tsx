@@ -25,6 +25,8 @@ import { parseShiftReading } from "@/lib/shifts";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { formatTrialRemaining, readTrialLifecycle } from "@/lib/trial";
 import { OwnerGuidance, OwnerOnboardingPanel } from "@/components/admin/OwnerOnboardingPanel";
+import { PlatformAnnouncementNotice } from "@/components/admin/PlatformAnnouncementNotice";
+import { readTenantPlatformAnnouncements } from "@/lib/platform-announcements-server";
 
 type AdminRole = "admin" | "manager" | "cashier";
 type OrderStatus = "completed" | "voided" | "refunded";
@@ -304,6 +306,9 @@ export default async function AdminPage({
     .select("created_at, subscription_status, subscription_trial_ends_at, subscription_current_period_end")
     .eq("id", profile.org_id)
     .maybeSingle();
+  const platformAnnouncementsQuery = profile.role === "admin"
+    ? readTenantPlatformAnnouncements(supabase)
+    : Promise.resolve({ announcements: [], schemaAvailable: true });
 
   const onboardingStaffQuery = profile.role === "admin"
     ? supabase.from("employee_records").select("id, role").eq("org_id", profile.org_id).eq("is_active", true).limit(100)
@@ -339,7 +344,7 @@ export default async function AdminPage({
     .order("created_at", { ascending: false })
     .limit(2000);
 
-  const [productsResult, categoriesResult, ordersResult, stockResult, itemsResult, devicesResult, cashiersResult, shiftReportsResult, subscriptionResult, onboardingStaffResult, onboardingInventoryResult, onboardingDevicesResult, onboardingCategoriesResult, onboardingProductsResult] = await Promise.all([
+  const [productsResult, categoriesResult, ordersResult, stockResult, itemsResult, devicesResult, cashiersResult, shiftReportsResult, subscriptionResult, platformAnnouncementsResult, onboardingStaffResult, onboardingInventoryResult, onboardingDevicesResult, onboardingCategoriesResult, onboardingProductsResult] = await Promise.all([
     productsQuery,
     categoriesQuery,
     ordersQuery,
@@ -354,6 +359,7 @@ export default async function AdminPage({
     cashiersQuery.order("full_name").limit(200),
     shiftReportsQuery,
     subscriptionQuery,
+    platformAnnouncementsQuery,
     onboardingStaffQuery ?? Promise.resolve({ data: [], error: null }),
     onboardingInventoryQuery ?? Promise.resolve({ data: [], error: null }),
     onboardingDevicesQuery ?? Promise.resolve({ data: [], error: null }),
@@ -712,6 +718,7 @@ export default async function AdminPage({
 
           {queryWarning && <div role="status" className="mt-5 rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink">Some data could not refresh. The dashboard is showing the data that was available; the POS remains available.</div>}
 
+          <PlatformAnnouncementNotice announcements={platformAnnouncementsResult.announcements} />
           {onboardingState && <div className="mt-5"><OwnerOnboardingPanel state={onboardingState} isLechonHouseBusiness={isLechonHouseBusinessSelected} staffLinks={staffLoginLinks?.links ?? []} staffLinksLegacyOnly={staffLoginLinks?.legacyOnly ?? false} /></div>}
           {profile.role === "admin" && <div className="mt-5"><OwnerGuidance topic="dashboard" /></div>}
 

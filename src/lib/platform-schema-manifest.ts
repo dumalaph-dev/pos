@@ -97,4 +97,5 @@ export const PLATFORM_SCHEMA_MANIFEST: readonly PlatformSchemaMigration[] = [
   { version: "0087", name: "online_ordering_status_control" },
   { version: "0088", name: "platform_support_lifecycle" },
   { version: "0089", name: "platform_attention_occurrences" },
+  { version: "0090", name: "platform_announcement_delivery" },
 ];

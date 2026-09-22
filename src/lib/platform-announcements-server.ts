@@ -1,7 +1,14 @@
 import { createAdminClient } from "@/lib/employee-auth";
-import { PLATFORM_ANNOUNCEMENT_AUDIENCES, PLATFORM_ANNOUNCEMENT_SEVERITIES, PLATFORM_ANNOUNCEMENT_STATUSES, type PlatformAnnouncement } from "@/lib/platform-announcements";
+import { PLATFORM_ANNOUNCEMENT_AUDIENCES, PLATFORM_ANNOUNCEMENT_SEVERITIES, PLATFORM_ANNOUNCEMENT_STATUSES, type PlatformAnnouncement, type TenantPlatformAnnouncement } from "@/lib/platform-announcements";
+import { createClient } from "@/lib/supabase/server";
 
 type PlatformAdminClient = NonNullable<ReturnType<typeof createAdminClient>>;
+type TenantSupabaseClient = Awaited<ReturnType<typeof createClient>>;
+
+export type TenantPlatformAnnouncementsRead = {
+  announcements: TenantPlatformAnnouncement[];
+  schemaAvailable: boolean;
+};
 
 export async function readPlatformAnnouncements(admin: PlatformAdminClient): Promise<{ announcements: PlatformAnnouncement[]; schemaAvailable: boolean }> {
   const result = await admin
@@ -32,6 +39,32 @@ export async function readPlatformAnnouncements(admin: PlatformAdminClient): Pro
       updatedAt: row.updated_at,
     }];
   });
+  return { announcements, schemaAvailable: true };
+}
+
+/**
+ * Read the current owner's delivery set through the authenticated RPC. The
+ * RPC derives auth.uid(), organization, plan, and account status in Postgres;
+ * this function deliberately accepts no audience or organization filters.
+ */
+export async function readTenantPlatformAnnouncements(supabase: TenantSupabaseClient): Promise<TenantPlatformAnnouncementsRead> {
+  const result = await supabase.rpc("platform_announcements_for_current_tenant");
+  if (result.error) return { announcements: [], schemaAvailable: false };
+
+  const announcements = (result.data ?? []).flatMap((row: unknown): TenantPlatformAnnouncement[] => {
+    if (!isRecord(row) || typeof row.id !== "string" || typeof row.title !== "string" || typeof row.body !== "string") return [];
+    return [{
+      id: row.id,
+      title: row.title,
+      body: row.body,
+      severity: normalizeEnum(row.severity, PLATFORM_ANNOUNCEMENT_SEVERITIES, "info"),
+      actionLabel: readNullableText(row.action_label),
+      actionUrl: readNullableText(row.action_url),
+      publishedAt: readNullableText(row.published_at),
+      expiresAt: readNullableText(row.expires_at),
+    }];
+  });
+
   return { announcements, schemaAvailable: true };
 }
 

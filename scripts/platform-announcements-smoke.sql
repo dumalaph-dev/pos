@@ -1,5 +1,6 @@
--- Read-only boundary check for the platform announcement storage.
--- Content is service-role-only until tenant audience delivery is introduced.
+-- Read-only boundary check for the platform announcement storage and its
+-- authenticated tenant delivery function. The base tables stay service-role
+-- only; tenant callers receive only the function's targeted projection.
 
 select jsonb_build_object(
   'announcements_table', to_regclass('public.platform_announcements') is not null,
@@ -17,6 +18,9 @@ select jsonb_build_object(
   'service_role_select', has_table_privilege('service_role', 'public.platform_announcements', 'SELECT'),
   'authenticated_select', has_table_privilege('authenticated', 'public.platform_announcements', 'SELECT'),
   'authenticated_insert', has_table_privilege('authenticated', 'public.platform_announcements', 'INSERT'),
+  'tenant_delivery_function', to_regprocedure('public.platform_announcements_for_current_tenant()') is not null,
+  'authenticated_delivery_execute', coalesce(has_function_privilege('authenticated', to_regprocedure('public.platform_announcements_for_current_tenant()'), 'EXECUTE'), false),
+  'anon_delivery_execute', coalesce(has_function_privilege('anon', to_regprocedure('public.platform_announcements_for_current_tenant()'), 'EXECUTE'), false),
   'status_constraint', exists (
     select 1
     from pg_constraint
