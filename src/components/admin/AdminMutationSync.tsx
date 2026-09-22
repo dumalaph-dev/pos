@@ -33,7 +33,7 @@ export function AdminMutationSync({ scope }: { scope: AdminCacheScope }) {
     if (!scope.storeId) return;
     try {
       const health = await getAdminMutationHealth(scope);
-      reportSyncHealthSnapshot({
+      await reportSyncHealthSnapshot({
         storeId: scope.storeId,
         online: typeof navigator !== "undefined" && navigator.onLine,
         queues: [health],

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  isPlatformSyncHealthDeviceKey,
   PLATFORM_SYNC_HEALTH_MAX_QUEUE_COUNT,
   PLATFORM_SYNC_HEALTH_QUEUES,
   type PlatformSyncHealthQueue,
@@ -8,7 +9,6 @@ import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 
 const MAX_BODY_LENGTH = 12_288;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const DEVICE_KEY_PATTERN = /^[A-Za-z0-9._:-]{8,80}$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
 
   if (!isRecord(parsed)) return new NextResponse(null, { status: 400 });
   const storeId = typeof parsed.store_id === "string" && UUID_PATTERN.test(parsed.store_id) ? parsed.store_id : null;
-  const deviceKey = typeof parsed.device_key === "string" && DEVICE_KEY_PATTERN.test(parsed.device_key) ? parsed.device_key : null;
+  const deviceKey = isPlatformSyncHealthDeviceKey(parsed.device_key) ? parsed.device_key : null;
   const online = typeof parsed.online === "boolean" ? parsed.online : null;
   const queues = Array.isArray(parsed.queues) && parsed.queues.length > 0 && parsed.queues.length <= PLATFORM_SYNC_HEALTH_QUEUES.length
     ? parsed.queues.map(readQueueSnapshot)

@@ -57,13 +57,13 @@ export function usePosSync({
     try {
       const queues = await getOfflineQueueHealth(scope);
       const queuesWithSuccess = [...pendingSuccessfulQueues.current];
-      reportSyncHealthSnapshot({
+      const persisted = await reportSyncHealthSnapshot({
         storeId: scope.storeId,
         online: typeof navigator !== "undefined" && navigator.onLine,
         queues,
         successfulQueues: queuesWithSuccess,
       });
-      queuesWithSuccess.forEach((queue) => pendingSuccessfulQueues.current.delete(queue));
+      if (persisted) queuesWithSuccess.forEach((queue) => pendingSuccessfulQueues.current.delete(queue));
     } catch {
       // Health reporting must not turn a local storage problem into a POS error.
     } finally {

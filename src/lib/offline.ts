@@ -11,7 +11,7 @@ import Dexie, { liveQuery, type Table } from "dexie";
 
 import { isDisplayGalleryItem, isDisplayPromotion, isDisplaySettings, type DisplayGalleryItem, type DisplayPromotion, type DisplaySettings } from "@/lib/display";
 import { reportError, reportSyncFailure } from "@/lib/monitoring";
-import { PLATFORM_SYNC_HEALTH_STUCK_AFTER_MS, type PlatformSyncHealthQueueSnapshot } from "@/lib/platform-sync-health";
+import { isPlatformSyncHealthDeviceKey, PLATFORM_SYNC_HEALTH_STUCK_AFTER_MS, type PlatformSyncHealthQueueSnapshot } from "@/lib/platform-sync-health";
 
 export type PendingOrder = {
   id?: number;
@@ -263,6 +263,8 @@ function getDb(): PosDB {
 /* ── Device identity + order numbers ─────────────────────────────────── */
 
 let volatileDeviceId: string | null = null;
+let volatileTelemetryDeviceId: string | null = null;
+const TELEMETRY_DEVICE_ID_STORAGE_KEY = "pos.sync.device.id";
 
 function createDeviceId(): string {
   const randomUuid = globalThis.crypto?.randomUUID?.();
@@ -287,6 +289,31 @@ function readDeviceId(): { id: string; persistent: boolean } {
 
 export function getDeviceId(): string {
   return readDeviceId().id;
+}
+
+/**
+ * Return the identity used by the authenticated sync-health reporter.
+ *
+ * The order/offline identity above must remain stable for legacy terminals:
+ * changing it would invalidate local PIN credentials and alter order numbers.
+ * Historical seven-character IDs satisfy the compatibility telemetry contract;
+ * use a second persistent key only when a stored value is malformed.
+ */
+export function getTelemetryDeviceId(): string {
+  const device = readDeviceId();
+  if (isPlatformSyncHealthDeviceKey(device.id)) return device.id;
+
+  try {
+    let id = localStorage.getItem(TELEMETRY_DEVICE_ID_STORAGE_KEY);
+    if (!isPlatformSyncHealthDeviceKey(id)) {
+      id = createDeviceId();
+      localStorage.setItem(TELEMETRY_DEVICE_ID_STORAGE_KEY, id);
+    }
+    return id;
+  } catch {
+    volatileTelemetryDeviceId ??= createDeviceId();
+    return volatileTelemetryDeviceId;
+  }
 }
 
 function yymmdd(d: Date): string {
