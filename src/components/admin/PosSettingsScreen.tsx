@@ -1286,31 +1286,32 @@ function PosSettingsPanel({
           >
             <SectionHeading id="pos-section-flow-heading" icon="bag" title="Sale flow" description="How cashiers move through an order at this branch." />
 
-            <div className="pos-config-grid">
-              <label className="pos-config-field"><span>Default order type</span><small>Pre-selected when a cashier starts a new order.</small><select value={config.defaultOrderType} onChange={(event) => setDefaultOrderType(event.target.value)}>{ORDER_TYPE_OPTIONS.map((value) => <option key={value}>{value}</option>)}</select></label>
+            <div className="pos-duo">
+              <label className="pos-field"><span>Default order type</span><small>Pre-selected when a cashier starts a new order.</small><select value={config.defaultOrderType} onChange={(event) => setDefaultOrderType(event.target.value)}>{ORDER_TYPE_OPTIONS.map((value) => <option key={value}>{value}</option>)}</select></label>
+
+              <fieldset className="pos-field pos-field--choices">
+                <legend>Available order types</legend>
+                <small>Uncheck anything this branch never sells.</small>
+                <div>
+                  {ORDER_TYPE_OPTIONS.map((type) => {
+                    const checked = config.orderTypes.includes(type);
+                    const isDefault = orderType === type;
+                    return (
+                      <label key={type} className={`pos-choice-chip${checked ? " is-checked" : ""}`} title={isDefault ? `${type} — default order type` : type}>
+                        <input type="checkbox" checked={checked} onChange={() => toggleOrderType(type)} />
+                        <span className="pos-choice-chip__box" aria-hidden="true"><MiniIcon name="check" size={10} /></span>
+                        <span className="pos-choice-chip__label">{type}</span>
+                        {isDefault ? <span className="pos-choice-chip__tag">Default</span> : null}
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
             </div>
 
-            <fieldset className="pos-choice-grid">
-              <legend>Available order types<span>Uncheck anything this branch never sells. The default stays selected.</span></legend>
-              <div>
-                {ORDER_TYPE_OPTIONS.map((type) => {
-                  const checked = config.orderTypes.includes(type);
-                  const isDefault = orderType === type;
-                  return (
-                    <label key={type} className={`pos-choice-chip${checked ? " is-checked" : ""}`}>
-                      <input type="checkbox" checked={checked} onChange={() => toggleOrderType(type)} />
-                      <span className="pos-choice-chip__box" aria-hidden="true"><MiniIcon name="check" size={11} /></span>
-                      <span className="pos-choice-chip__label">{type}</span>
-                      {isDefault ? <span className="pos-choice-chip__tag">Default</span> : null}
-                    </label>
-                  );
-                })}
-              </div>
-            </fieldset>
-
-            <div className="pos-config-list">
-              <ToggleRow title="Show stock status" description="Show on-hand status on product tiles when inventory is tracked." checked={config.showStockStatus} onChange={(checked) => updateConfig({ showStockStatus: checked })} />
-              <ToggleRow title="Enable order notes" description="Let cashiers add preparation instructions to an order." checked={config.enableOrderNotes} onChange={(checked) => updateConfig({ enableOrderNotes: checked })} />
+            <div className="pos-duo pos-duo--toggles">
+              <ToggleCard title="Show stock status" description="On-hand status on product tiles when inventory is tracked." checked={config.showStockStatus} onChange={(checked) => updateConfig({ showStockStatus: checked })} />
+              <ToggleCard title="Enable order notes" description="Cashiers can add preparation instructions to an order." checked={config.enableOrderNotes} onChange={(checked) => updateConfig({ enableOrderNotes: checked })} />
             </div>
           </section>
 
@@ -1327,11 +1328,11 @@ function PosSettingsPanel({
               <p className="pos-settings-inline-warning" role="status"><MiniIcon name="info" size={14} /> No tender is enabled, so cashiers cannot complete a sale. Turn on at least one.</p>
             ) : null}
 
-            <div className="pos-payment-settings-list">
+            <div className="pos-duo pos-duo--tenders">
               {PAYMENT_METHODS.map((method) => (
-                <div className={`pos-payment-settings-row ${config.paymentMethods[method.id] ? "is-enabled" : ""}`} key={method.id}>
-                  <span className="pos-payment-settings-icon"><MiniIcon name={method.icon} size={18} /></span>
-                  <span><strong>{method.label}</strong><small>{method.description}</small></span>
+                <div className={`pos-tender-card${config.paymentMethods[method.id] ? " is-enabled" : ""}`} key={method.id}>
+                  <span className="pos-tender-card__icon"><MiniIcon name={method.icon} size={15} /></span>
+                  <span className="pos-tender-card__copy"><strong>{method.label}</strong><small>{method.description}</small></span>
                   <Toggle label={`${method.label} payment method`} checked={config.paymentMethods[method.id]} onChange={(checked) => updateConfig({ paymentMethods: { ...config.paymentMethods, [method.id]: checked } })} />
                 </div>
               ))}
@@ -1348,27 +1349,29 @@ function PosSettingsPanel({
             <SectionHeading id="pos-section-receipts-heading" icon="printer" title="Receipt & tax" description="Branch identity, VAT, and what gets printed on the slip." />
 
             <div className="pos-subsection-label">Branch identity</div>
-            <div className="pos-config-grid">
-              <label className="pos-config-field"><span>Branch name</span><input maxLength={120} value={branchDetails.name} onChange={(event) => updateBranchDetails({ name: event.target.value })} /></label>
-              <label className="pos-config-field"><span>TIN</span><input maxLength={80} value={branchDetails.tin} onChange={(event) => updateBranchDetails({ tin: event.target.value })} placeholder="Optional tax ID" /></label>
-              <label className="pos-config-field pos-config-field--full"><span>Branch address</span><input maxLength={240} value={branchDetails.address} onChange={(event) => updateBranchDetails({ address: event.target.value })} placeholder="Address printed on receipts" /></label>
+            <div className="pos-duo">
+              <label className="pos-field"><span>Branch name</span><input maxLength={120} value={branchDetails.name} onChange={(event) => updateBranchDetails({ name: event.target.value })} /></label>
+              <label className="pos-field"><span>TIN</span><input maxLength={80} value={branchDetails.tin} onChange={(event) => updateBranchDetails({ tin: event.target.value })} placeholder="Optional tax ID" /></label>
+              {/* The address is the one field that genuinely needs the width —
+                  it is a full street line printed on every receipt. */}
+              <label className="pos-field pos-field--wide"><span>Branch address</span><input maxLength={240} value={branchDetails.address} onChange={(event) => updateBranchDetails({ address: event.target.value })} placeholder="Address printed on receipts" /></label>
             </div>
 
             <div className="pos-subsection-label">Tax &amp; paper</div>
-            <div className="pos-config-grid">
-              <label className="pos-config-field"><span>VAT rate (%)</span><small>Applied when the VAT summary is shown.</small><input type="number" min="0" max="100" step="0.01" value={(config.vatRate * 100).toFixed(2)} onChange={(event) => updateConfig({ vatRate: Math.max(0, Math.min(1, Number(event.target.value) / 100 || 0)) })} /></label>
-              <label className="pos-config-field"><span>Paper roll width</span><small>Match the roll loaded in this printer.</small><select value={config.paperWidth} onChange={(event) => updateConfig({ paperWidth: toPaperWidthValue(normalizePaperWidth(event.target.value)) })}>{PAPER_WIDTH_OPTIONS.map(({ value, label, description }) => <option key={value} value={value}>{label} · {description}</option>)}</select></label>
+            <div className="pos-duo">
+              <label className="pos-field"><span>VAT rate (%)</span><small>Applied when the VAT summary is shown.</small><input className="pos-field__input--short" type="number" min="0" max="100" step="0.01" value={(config.vatRate * 100).toFixed(2)} onChange={(event) => updateConfig({ vatRate: Math.max(0, Math.min(1, Number(event.target.value) / 100 || 0)) })} /></label>
+              <label className="pos-field"><span>Paper roll width</span><small>Match the roll loaded in this printer.</small><select value={config.paperWidth} onChange={(event) => updateConfig({ paperWidth: toPaperWidthValue(normalizePaperWidth(event.target.value)) })}>{PAPER_WIDTH_OPTIONS.map(({ value, label, description }) => <option key={value} value={value}>{label} · {description}</option>)}</select></label>
             </div>
 
             <div className="pos-subsection-label">Printed output</div>
-            <div className="pos-config-grid">
-              <label className="pos-config-field pos-config-field--full"><span>Receipt header</span><textarea maxLength={200} value={config.receiptHeader} onChange={(event) => updateConfig({ receiptHeader: event.target.value })} placeholder="Optional line below the branch name" /></label>
-              <label className="pos-config-field pos-config-field--full"><span>Receipt footer</span><textarea maxLength={200} value={config.receiptFooter} onChange={(event) => updateConfig({ receiptFooter: event.target.value })} placeholder="Thank you message or return policy" /></label>
+            <div className="pos-duo">
+              <label className="pos-field"><span>Receipt header</span><small>Printed below the branch name.</small><textarea maxLength={200} value={config.receiptHeader} onChange={(event) => updateConfig({ receiptHeader: event.target.value })} placeholder="Optional line below the branch name" /></label>
+              <label className="pos-field"><span>Receipt footer</span><small>Printed at the bottom of the slip.</small><textarea maxLength={200} value={config.receiptFooter} onChange={(event) => updateConfig({ receiptFooter: event.target.value })} placeholder="Thank you message or return policy" /></label>
             </div>
 
-            <div className="pos-config-list">
-              <ToggleRow title="Include VAT summary" description="Show the configured VAT rate and amount in checkout and printed receipts." checked={config.showVat} onChange={(checked) => updateConfig({ showVat: checked })} />
-              <ToggleRow title="Show cashier name" description="Print the active cashier on the order slip." checked={config.showCashier} onChange={(checked) => updateConfig({ showCashier: checked })} />
+            <div className="pos-duo pos-duo--toggles">
+              <ToggleCard title="Include VAT summary" description="Show the VAT rate and amount in checkout and printed receipts." checked={config.showVat} onChange={(checked) => updateConfig({ showVat: checked })} />
+              <ToggleCard title="Show cashier name" description="Print the active cashier on the order slip." checked={config.showCashier} onChange={(checked) => updateConfig({ showCashier: checked })} />
             </div>
           </section>
         </div>
@@ -1386,8 +1389,18 @@ function SectionHeading({ id, icon, title, description }: { id: string; icon: st
   );
 }
 
-function ToggleRow({ title, description, checked, onChange }: { title: string; description: string; checked: boolean; onChange: (checked: boolean) => void }) {
-  return <div className="pos-toggle-row"><span><strong>{title}</strong><small>{description}</small></span><Toggle label={title} checked={checked} onChange={onChange} /></div>;
+/**
+ * A labelled switch sized to sit two-up in a column. A full-width row put the
+ * switch an inch of empty space away from the label it belongs to; keeping the
+ * pair inside one narrow card puts them back together.
+ */
+function ToggleCard({ title, description, checked, onChange }: { title: string; description: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <div className={`pos-toggle-card${checked ? " is-on" : ""}`}>
+      <span className="pos-toggle-card__copy"><strong>{title}</strong><small>{description}</small></span>
+      <Toggle label={title} checked={checked} onChange={onChange} />
+    </div>
+  );
 }
 
 function HardwarePanel({ devices, deviceBranches, currentStoreId, canWrite, deviceTest, onTestDevice }: { devices: AdminPosDevice[]; deviceBranches: Array<{ id: string; name: string }>; currentStoreId: string; canWrite: boolean; deviceTest: string | null; onTestDevice: (device: AdminPosDevice) => void }) {
