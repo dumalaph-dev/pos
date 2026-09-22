@@ -70,3 +70,12 @@ test("tenant delivery keeps the platform tables private and exposes an audience-
   const reader = fs.readFileSync(path.resolve(process.cwd(), "src", "lib", "platform-announcements-server.ts"), "utf8");
   assert.match(reader, /readTenantPlatformAnnouncements[\s\S]*?supabase\.rpc\("platform_announcements_for_current_tenant"\)/i);
 });
+
+test("future delivery is window-gated without claiming a background scheduler", () => {
+  const actions = fs.readFileSync(path.resolve(process.cwd(), "src", "app", "platform", "announcement-actions.ts"), "utf8");
+  const editor = fs.readFileSync(path.resolve(process.cwd(), "src", "app", "platform", "PlatformAnnouncementEditor.tsx"), "utf8");
+  assert.match(actions, /const status = intent === "draft" \? "draft" : "published"/i);
+  assert.match(actions, /will appear at its start time/i);
+  assert.match(editor, /No automatic scheduler is promised/i);
+  assert.match(editor, /delivery stays hidden until the selected time/i);
+});

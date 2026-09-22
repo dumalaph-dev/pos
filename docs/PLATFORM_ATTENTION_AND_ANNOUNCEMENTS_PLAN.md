@@ -1,7 +1,7 @@
 # Platform Owner Attention Inbox and Announcement Center
 
 **Project:** Dumala POS  
-**Status:** Phase 1, the announcement console slice, and owner-dashboard tenant delivery are implemented; migrations 0083–0085 are applied and verified in both the local Docker Supabase stack and the linked project, with delivery migration 0090 shipped for the next schema pass.
+**Status:** Phase 1, the announcement console slice, and owner-dashboard tenant delivery are implemented; migrations 0083–0085 are applied and verified in both the local Docker Supabase stack and the linked project, with delivery migration 0090 tracked and applied.
 **Created:** 2026-09-15
 
 ## Purpose
@@ -58,7 +58,7 @@ Add a dedicated `/platform/announcements` workspace for drafting, scheduling, pu
 
 ### Data model
 
-Use a `platform_announcements` table with service-role access only. Store the audience as a validated type plus value so the targeting rules can grow without changing the announcement editor contract. Owner-dashboard delivery uses the authenticated `platform_announcements_for_current_tenant()` RPC, which derives the owner organization from `auth.uid()` and returns only published, currently active, audience-matched display fields; it never trusts client-supplied audience filters. The platform audit table and existing audit reader remain unchanged.
+Use a `platform_announcements` table with service-role access only. Store the audience as a validated type plus value so the targeting rules can grow without changing the announcement editor contract. Owner-dashboard delivery uses the authenticated `platform_announcements_for_current_tenant()` RPC, which derives the owner organization from `auth.uid()` and returns only published, currently active, audience-matched display fields; it never trusts client-supplied audience filters. A future start is authorized when an operator publishes the row; the delivery RPC hides it until the start time, so D3 does not claim a background scheduler that does not exist. The platform audit table and existing audit reader remain unchanged.
 
 ### Delivery surfaces
 
@@ -80,7 +80,7 @@ Use a `platform_announcements` table with service-role access only. Store the au
 2. Validate signal quality with real organization and branch telemetry.
 3. Add the announcement schema and audited operator actions.
 4. Build the announcement editor and publish workflow.
-5. Add tenant delivery only after audience enforcement is covered by tests. **Complete:** migration `0090_platform_announcement_delivery.sql`, the authenticated reader, and the owner-dashboard notice card are implemented; unread/read state remains deferred.
+5. Add tenant delivery only after audience enforcement is covered by tests. **Complete:** migration `0090_platform_announcement_delivery.sql`, the authenticated reader, the owner-dashboard notice card, and explicit future-window/manual-publication semantics are implemented; unread/read state remains deferred.
 
 ## Verification record
 
@@ -89,3 +89,4 @@ Use a `platform_announcements` table with service-role access only. Store the au
 - Linked schema smoke reports 85 applied migrations with latest version `0085`; the announcement boundary check passes with authenticated reads/inserts denied and service-role access enabled.
 - The local announcement transaction smoke test verified draft insertion, audit insertion, audience fields, and rollback; no smoke rows remain persisted.
 - `npm run test:platform-announcements` covers all-merchant, plan, and account-status isolation, strict publication/expiry boundaries, and the service-role table plus authenticated-RPC contract. The existing platform audit reader and announcement audit tables remain unchanged.
+- Future-start notices are published with a server-side delivery window. The owner dashboard RPC enforces `starts_at` and `expires_at`; no automatic scheduler is promised until a durable worker and retry evidence exist.
