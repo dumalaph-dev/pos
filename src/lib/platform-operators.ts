@@ -8,6 +8,7 @@ export type PlatformOperatorPermission =
   | "billing_manage"
   | "policy_manage"
   | "support_manage"
+  | "account_success_manage"
   | "entitlement_manage"
   | "operator_manage";
 
@@ -32,11 +33,12 @@ const ROLE_PERMISSIONS: Record<PlatformOperatorRole, readonly PlatformOperatorPe
     "billing_manage",
     "policy_manage",
     "support_manage",
+    "account_success_manage",
     "entitlement_manage",
     "operator_manage",
   ],
   billing: ["console_read", "attention_manage", "billing_manage", "entitlement_manage"],
-  support: ["console_read", "attention_manage", "support_manage"],
+  support: ["console_read", "attention_manage", "support_manage", "account_success_manage"],
   read_only: ["console_read"],
 };
 
