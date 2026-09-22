@@ -12,6 +12,8 @@ import { sortPlatformAttentionItems, type PlatformAttentionItem } from "@/lib/pl
 import { syncHealthFreshnessLabel, syncHealthStatusLabel } from "@/lib/platform-sync-health";
 import { PlatformAccessDenied, PlatformMetric, PlatformMigrationNotice, PlatformPageHeader, PlatformSectionHeading } from "../PlatformUI";
 import { PlatformAttentionInbox } from "../PlatformAttentionInbox";
+import { PlatformMyWork } from "../PlatformMyWork";
+import { readPlatformMyWork } from "@/lib/platform-my-work-server";
 import { countByOrg, formatDate, readPlatformDirectory, readPlatformEntitlementRecords, readPlatformHomeSummary, readPlatformSupportCases, readPlatformSyncHealth, type OrganizationRecord, type PlatformSupportCaseResult, type PlatformSyncHealthResult } from "../_lib/platform-data";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +27,7 @@ export default async function PlatformOverviewPage() {
   const admin = actor.admin;
 
   const canViewSupport = actor.role !== "billing";
-  const [directory, operations, supportCasesReady, paymongoSubscriptionReadiness, syncHealth, supportCases, homeSummary] = await Promise.all([
+  const [directory, operations, supportCasesReady, paymongoSubscriptionReadiness, syncHealth, supportCases, homeSummary, myWork] = await Promise.all([
     readPlatformDirectory(admin),
     readPlatformOperations(admin),
     supportCasesSchemaAvailable(admin),
@@ -33,6 +35,7 @@ export default async function PlatformOverviewPage() {
     readPlatformSyncHealth(admin),
     canViewSupport ? readPlatformSupportCases(admin) : Promise.resolve({ records: [], schemaAvailable: false, organizationsAvailable: true, hasMore: false, total: null, asOf: new Date().toISOString() }),
     readPlatformHomeSummary(admin),
+    readPlatformMyWork(admin, actor.email, canViewSupport),
   ]);
 
   const { organizations, profiles, stores, authEmailById, organizationsResult } = directory;
@@ -149,6 +152,7 @@ export default async function PlatformOverviewPage() {
         </section>
 
         <PlatformAttentionInbox items={attentionItems} />
+        <PlatformMyWork work={myWork} />
 
         <section className="mt-8 overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)]" aria-labelledby="recent-businesses-heading">
           <div className="px-5 py-5 sm:px-6">

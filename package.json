@@ -17,6 +17,7 @@
     "test:platform-audit": "node --experimental-strip-types --test scripts/platform-audit.test.ts",
     "test:platform-announcements": "node --experimental-strip-types --test scripts/platform-announcements.test.ts",
     "test:platform-follow-ups": "node --experimental-strip-types --test scripts/platform-follow-ups.test.ts",
+    "test:platform-my-work": "node --experimental-strip-types --test scripts/platform-my-work.test.ts",
     "test:platform-fleet": "node --experimental-strip-types --test scripts/platform-fleet-health.test.ts",
     "test:platform-sync": "node --experimental-strip-types --test scripts/platform-sync-health.test.ts",
     "test:platform-devices": "node --experimental-strip-types --test scripts/platform-devices.test.ts",
