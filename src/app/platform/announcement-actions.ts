@@ -47,7 +47,11 @@ export async function savePlatformAnnouncement(_previousState: AnnouncementActio
   if (id && !existing.data) return { ok: false, message: "That announcement no longer exists. Refresh the page and try again." };
 
   const now = new Date();
-  const status = intent === "draft" ? "draft" : startsAt && Date.parse(startsAt) > now.getTime() ? "scheduled" : "published";
+  // A future start is an authorized publication with a delivery window, not a
+  // promise that a background worker will promote a row later. The tenant RPC
+  // independently enforces starts_at/expires_at, so a published future notice
+  // stays hidden until its window opens.
+  const status = intent === "draft" ? "draft" : "published";
   const announcementId = id || crypto.randomUUID();
   const row = {
     id: announcementId,
@@ -80,7 +84,10 @@ export async function savePlatformAnnouncement(_previousState: AnnouncementActio
   if (!audit.ok) return audit;
 
   revalidateAnnouncementPages();
-  return { ok: true, message: status === "scheduled" ? "Announcement scheduled." : status === "published" ? "Announcement published." : "Announcement saved as a draft." };
+  const futureStart = startsAt && Date.parse(startsAt) > now.getTime();
+  return { ok: true, message: status === "published"
+    ? futureStart ? "Announcement published and will appear at its start time." : "Announcement published."
+    : "Announcement saved as a draft." };
 }
 
 export async function setPlatformAnnouncementStatus(_previousState: AnnouncementActionState, formData: FormData): Promise<AnnouncementActionState> {
