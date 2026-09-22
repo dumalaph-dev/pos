@@ -17,6 +17,7 @@ const PERMISSIONS: PlatformOperatorPermission[] = [
   "billing_manage",
   "policy_manage",
   "support_manage",
+  "account_success_manage",
   "entitlement_manage",
   "operator_manage",
 ];
@@ -25,7 +26,7 @@ test("platform operator roles expose the documented permission matrix", () => {
   const expected: Record<PlatformOperatorRole, PlatformOperatorPermission[]> = {
     owner: PERMISSIONS,
     billing: ["console_read", "attention_manage", "billing_manage", "entitlement_manage"],
-    support: ["console_read", "attention_manage", "support_manage"],
+    support: ["console_read", "attention_manage", "support_manage", "account_success_manage"],
     read_only: ["console_read"],
   };
 

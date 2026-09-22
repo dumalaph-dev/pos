@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { OrganizationOperations } from "@/app/platform/OrganizationOperations";
 import { PlatformSupportCaseOperations } from "@/app/platform/PlatformSupportCaseOperations";
+import { PlatformFollowUpOperations } from "@/app/platform/PlatformFollowUpOperations";
 import { ComplimentaryGrantPanel } from "@/app/platform/ComplimentaryGrantPanel";
 import { PlatformEntitlementTimeline } from "@/app/platform/PlatformEntitlementTimeline";
 import { TrialExtensionPanel } from "@/app/platform/TrialExtensionPanel";
@@ -14,6 +15,7 @@ import { readPlatformOperations } from "@/lib/platform-operations-server";
 import { hasPlatformOperatorPermission } from "@/lib/platform-operators";
 import { requirePlatformOperator } from "@/lib/platform-operators-server";
 import { readPlatformOperators } from "@/lib/platform-operators-server";
+import { readPlatformFollowUpTasks } from "@/lib/platform-follow-ups-server";
 import { derivePlatformEntitlementSummary } from "@/lib/platform-entitlements";
 import { absoluteUrl } from "@/lib/site-url";
 import { referralStatusLabel } from "@/lib/referrals";
@@ -35,10 +37,11 @@ export default async function PlatformOrganizationPage({ params }: { params: Pro
 
   const admin = actor.admin;
 
-  const [detail, operations, operatorDirectory] = await Promise.all([
+  const [detail, operations, operatorDirectory, followUpRead] = await Promise.all([
     readPlatformOrganizationDetail(admin, orgId),
     readPlatformOperations(admin),
     readPlatformOperators(admin),
+    readPlatformFollowUpTasks(admin, orgId),
   ]);
   if (!detail) notFound();
 
@@ -82,9 +85,13 @@ export default async function PlatformOrganizationPage({ params }: { params: Pro
   const policyGateOpen = isPolicyGateOpen(operations.policies);
   const accountOperationsReady = organization.account_status !== undefined && detail.supportCasesSchemaAvailable;
   const canManageSupport = hasPlatformOperatorPermission(actor.role, "support_manage");
+  const canManageFollowUps = hasPlatformOperatorPermission(actor.role, "account_success_manage");
   const canManageEntitlements = hasPlatformOperatorPermission(actor.role, "entitlement_manage");
   const canViewSupport = actor.role !== "billing";
   const eligibleSupportOperators = operatorDirectory.records.filter((operator) => operator.is_active && (operator.role === "owner" || operator.role === "support"));
+  const eligibleFollowUpOperators = operatorDirectory.records
+    .filter((operator) => operator.is_active && !operator.is_bootstrap && isUuid(operator.id) && (operator.role === "owner" || operator.role === "support"))
+    .map((operator) => ({ id: operator.id, email: operator.email, role: operator.role as "owner" | "support" }));
   const entitlementSummary = derivePlatformEntitlementSummary({
     organization,
     grants: accessGrants,
@@ -190,6 +197,8 @@ export default async function PlatformOrganizationPage({ params }: { params: Pro
             </>}
           </article>
         </section>
+
+        <PlatformFollowUpOperations organizationId={organization.id} tasks={followUpRead.tasks} operators={eligibleFollowUpOperators} schemaAvailable={followUpRead.schemaAvailable} canManage={canManageFollowUps} />
 
         <section className="mt-8 rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="operator-controls-heading">
           <PlatformSectionHeading eyebrow="Operator controls" title="Lifecycle and support actions" description={canViewSupport ? "These existing controls remain policy-gated and use the same audit boundary as grants." : "Support controls are not available to Billing operators."} />
