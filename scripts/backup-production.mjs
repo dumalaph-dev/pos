@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
 /**
@@ -64,39 +65,54 @@ const TABLES = [
   "customers",
   "employee_roles",
   "employee_records",
+  "employee_login_attempts",
+  "platform_operators",
+  "platform_operator_audit_logs",
+  "platform_billing_settings",
+  "platform_billing_variants",
+  "platform_policies",
+  "platform_promotions",
+  "platform_promotion_redemptions",
+  "platform_referral_codes",
+  "platform_referrals",
+  "platform_referral_reward_ledger",
+  "platform_access_grants",
+  "platform_trial_extensions",
+  "platform_announcements",
+  "platform_announcement_audit_logs",
+  "platform_mutation_requests",
   "shifts",
   "orders",
   "order_items",
+  "order_item_consumptions",
   "stock_movements",
   "discount_approvals",
   "order_action_approvals",
   "z_readings",
   "inventory_counts",
+  "inventory_items",
   "expenses",
   "attendance_logs",
   "payroll_records",
   "leave_requests",
   "display_promotions",
   "display_gallery_items",
+  "product_recipes",
+  "product_recipe_items",
   "audit_logs",
   "admin_mutation_receipts",
   "admin_performance_samples",
+  "admin_sync_health_snapshots",
   "billing_provider_events",
-  "platform_billing_settings",
-  "platform_billing_variants",
-  "platform_policies",
-  "platform_promotions",
-  "platform_promotion_redemptions",
+  "online_order_attempts",
+  "online_orders",
+  "online_order_items",
+  "online_order_phone_verifications",
   "support_cases",
+  "support_case_events",
+  "support_case_notes",
   "trial_feedback",
 ];
-
-/**
- * Losing any of these means losing money, stock truth, or the audit trail. An
- * export that silently skipped one of them would still look successful, so a
- * failure here fails the whole run.
- */
-const CRITICAL = new Set(["organizations", "stores", "products", "orders", "order_items", "stock_movements", "audit_logs", "shifts", "z_readings"]);
 
 console.log("Dumala production data backup");
 console.log("Safe mode: the service role key is never printed.");
@@ -130,12 +146,16 @@ for (const table of TABLES) {
   results.push({ table, ...outcome });
 
   if (outcome.status === "ok") {
-    console.log(`${String(outcome.rows).padStart(7)} rows  ${size(outcome.bytes)}`);
+    console.log(`${String(outcome.rows).padStart(7)} rows  ${size(outcome.bytes)}  sha256 ${outcome.sha256.slice(0, 12)}…`);
   } else if (outcome.status === "missing") {
     console.log("      - not in this project");
   } else {
     console.log(`      FAILED  ${outcome.error}`);
-    if (CRITICAL.has(table)) failed = true;
+    // A logical backup is only a recovery point when every table it knows
+    // about was readable. Missing tables are allowed for an older deployment;
+    // permission or transport failures always fail the run, even for tables
+    // that are not in the money/audit subset.
+    failed = true;
   }
 }
 
@@ -195,7 +215,7 @@ async function exportTable(table) {
     }
 
     await closeStream(stream);
-    return { status: "ok", rows, bytes: fs.existsSync(file) ? fs.statSync(file).size : 0 };
+    return { status: "ok", rows, bytes: fs.existsSync(file) ? fs.statSync(file).size : 0, sha256: hashFile(file) };
   } catch (error) {
     await closeStream(stream);
     return { status: "failed", rows: 0, bytes: 0, error: String(error.message || error).slice(0, 90) };
@@ -207,6 +227,10 @@ function closeStream(stream) {
   return new Promise((resolve) => stream.end(resolve));
 }
 
+function hashFile(file) {
+  return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+}
+
 function writeManifest() {
   const manifest = {
     project: new URL(supabaseUrl).hostname,
@@ -214,6 +238,9 @@ function writeManifest() {
     startedAtSingapore: startedAt.toLocaleString("en-CA", { timeZone: "Asia/Singapore", hour12: false }),
     complete: !failed,
     format: "One NDJSON file per table; one JSON object per line. Restore in the listed order.",
+    consistency: "best_effort_api_snapshot",
+    consistencyNote: "Each table is read in bounded primary-key pages. The API export is not one database transaction; use pg_dump/PITR when a transactionally consistent point-in-time image is required.",
+    integrity: "Every successfully exported file includes a SHA-256 digest in tables[].sha256. Verify it before restore.",
     schemaSource: "supabase/migrations (replay into a fresh project before reloading these rows)",
     totals: { tables: results.filter((r) => r.status === "ok").length, rows: totalRows, bytes: totalBytes },
     tables: results,

@@ -8,6 +8,14 @@
 
 `npm run backup:production` completed successfully on 2026-08-25 at `2026-08-25T08-19-50Z`, exporting 35/35 application tables, 621 rows, and 290 KB to `backups/2026-08-25T08-19-50Z`. The manifest and every NDJSON row were re-parsed and count-checked successfully. The checkpoint is gitignored and contains production data; copy it to restricted off-machine storage before treating it as operationally useful. A restore rehearsal has not yet been completed.
 
+That checkpoint predates the current 57-table allowlist and the Wave 1 lifecycle tables. A new checkpoint is required after migration 0088 is deployed; do not treat the historical 35-table export as complete coverage for the current schema.
+
+## Wave 1 local recovery drill (2026-09-22)
+
+Against the Docker Supabase instance, the current 0088 schema exported **57/57 tables**, **57 rows**, and **24,629 bytes**. `node scripts/verify-backup.mjs` verified every NDJSON row count, byte count, and SHA-256 digest. The checkpoint was restored into a throwaway `platform_restore_wave1` database with user triggers held during load, then checked for organization/store/product counts (`2/4/24`), the 155 foreign-key constraints, the 0088 lifecycle function, and the append-only support-event trigger before the database was dropped.
+
+This is local engineering evidence, not hosted recovery evidence. The fixture has no Auth users or support cases, so identity re-provisioning and a non-empty support-ledger restore still require the owner’s isolated rehearsal. The API export also declares its best-effort snapshot boundary; it does not replace a transactionally consistent PITR or `pg_dump` image.
+
 ## Verified posture
 
 The linked Supabase CLI identifies the production project as `ACTIVE_HEALTHY` in `ap-southeast-2`, running Postgres `17.6.1.155`.
@@ -36,7 +44,7 @@ Enabling PITR, upgrading the plan, changing retention, or initiating a restore i
 
 ## No-cost logical backup (`npm run backup:production`)
 
-`scripts/backup-production.mjs` exports every application table to NDJSON — one file per table, one JSON object per line — into a timestamped folder under `backups/` (gitignored; the rows are the store's entire ledger and must never be committed).
+`scripts/backup-production.mjs` exports every application table to NDJSON — one file per table, one JSON object per line — into a timestamped folder under `backups/` (gitignored; the rows are the store's entire ledger and must never be committed). The allowlist is checked by `npm run test:backup-coverage`; the Wave 1 support events, support notes, mutation request keys, operator records, entitlement records, online-order records, and recipe tables are included.
 
 ```bash
 npm run backup:production
@@ -50,9 +58,9 @@ node scripts/backup-production.mjs --out D:/dumala-backups
 
 It reads `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from `.env.local`, never prints the key, and exits non-zero if any of `organizations`, `stores`, `products`, `orders`, `order_items`, `stock_movements`, `audit_logs`, `shifts`, or `z_readings` fails — a partial export is never reported as a recovery point. Each run writes a `manifest.json` with per-table row counts.
 
-It reads through the API rather than `pg_dump` on purpose: `supabase db dump` runs pg_dump inside Docker, and neither Docker nor a native pg_dump is installed on the operator workstation. A backup that only runs when Docker cooperates is not a backup.
+It reads through the API rather than `pg_dump` on purpose: the script is usable from the operator workstation without a native PostgreSQL client. Each exported file receives a SHA-256 digest in `manifest.json`, and the manifest records that the export is a bounded best-effort API snapshot. It is suitable for logical recovery, but it is not a single database transaction; use a managed PITR point or a transactionally consistent `pg_dump` when that stronger snapshot guarantee is required.
 
-**Covered:** every row of all 35 application tables.
+**Covered:** every row of all 57 application tables in the current migration set. Run `npm run test:backup-coverage` after adding a durable table so the allowlist and Wave 1 integrity evidence cannot silently drift.
 
 **Not covered, and why that is acceptable:**
 
@@ -67,9 +75,9 @@ It reads through the API rather than `pg_dump` on purpose: `supabase db dump` ru
 
 1. Create the target Supabase project and record its ref.
 2. Apply the schema: `npx --yes supabase@2.114.0 db push --linked`. Confirm the ledger matches the migration set the backup was taken against (`manifest.json` records the run timestamp; match it to the migration state in Git at that commit).
-3. Load each `*.ndjson` **in the order listed in `manifest.json`** — it is ordered parents-first so foreign keys resolve. Insert with the service role key so RLS does not reject the load.
+3. Verify every exported file's SHA-256 digest against `manifest.json` before loading anything. Load each `*.ndjson` **in the order listed in `manifest.json`** — it is ordered parents-first so foreign keys resolve. Insert with the service role key so RLS does not reject the load.
 4. Append-only tables (`orders`, `order_items`, `stock_movements`, `audit_logs`, `z_readings`) are protected by triggers that block UPDATE and DELETE. Load them into an empty project; do not attempt to merge into a project that already holds rows.
-5. Re-provision employee Auth users, then re-upload Storage objects.
+5. Re-provision employee Auth users, then re-upload Storage objects. Platform operator identities are re-invited and their append-only operator audit history remains in the logical export.
 6. Run the verification checklist in "Production restore steps" below before reopening the till.
 
 ### Backup cadence for the pilot

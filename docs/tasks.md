@@ -7,7 +7,7 @@
 
 ## Current project status
 
-**Last updated:** 2026-09-14
+**Last updated:** 2026-09-22
 
 This section is the current source of truth for delivered work and the next gate. Keep it updated in the same change as every feature, migration, QA pass, commit, or deployment.
 
@@ -27,9 +27,11 @@ This section is the current source of truth for delivered work and the next gate
 | Store-owner onboarding and guidance | Implemented | Verify first-run and mobile behavior on the deployed app |
 | Admin workspace themes | Live main deployment previews verified 2026-08-09 | Maintain regression coverage |
 | Production pilot | In progress; `dumala.store` is live, production identity/deployment preflight passed 2026-08-25, the paid-branch entitlement drift was repaired in hosted migration `0072`, and the logical restore rehearsal passed 2026-09-14 | Complete the physical-device pilot gates, off-machine backup copy/plan decision, Vercel log/alert setup, real data intake, pilot week, and branch #2 |
-| Platform owner powers | Phase 4 audit, fleet, sync/outbox, and schema-drift surfaces deployed through migration `0084`; device/terminal inventory deployed to production on 2026-09-14 | Run authenticated operator QA on `/platform/devices` and collect the first real terminal heartbeats |
+| Platform owner powers | Wave 1 local engineering complete through migration `0088`: bounded readers, Home/search/navigation, billing metadata, atomic account safety, support lifecycle, and 57-table recovery coverage are implemented and verified locally; no hosted push | Owner review of C4 RPO/RTO/off-machine/Auth/Storage gates, then authenticated operator QA and the next wave |
 
 ### Recent delivery log
+
+- **2026-09-22 - Platform console Wave 1 local gate:** Closed the Wave 1a reader contract across Directory, Operations, Support, Audit, Billing, Search, Home, Fleet, Sync, Devices, and Schema surfaces with bounded scope, freshness, availability, and unknown states. Added migration `0088_platform_support_lifecycle.sql`: versioned/idempotent organization suspension and restoration, atomic support case creation, eligible assignment, status transitions, append-only notes/events, first actual response evidence, resolution reasons, and audit snapshots. Added organization detail controls, rollback-scoped `scripts/platform-support-lifecycle-smoke.sql`, RPC/permission contracts, and a 57-table SHA-256 backup manifest plus `scripts/verify-backup.mjs`. Local Docker backup exported 57/57 tables and restored into a throwaway database; `npm run typecheck`, `npm run lint`, `npm run build`, focused platform suites, `npm run test:rpc-contracts`, `npm run test:backup-coverage`, `npm run test:platform-schema`, and the lifecycle SQL smoke passed. No hosted migration, deployment, provider operation, or commit/push was performed. Hosted/off-machine recovery and owner identity/storage decisions remain open.
 
 - **2026-09-14 - Production deployment unblocked:** Every Vercel build from
   `2c5e77f` through `1727b8e` failed because the production legal assertion in

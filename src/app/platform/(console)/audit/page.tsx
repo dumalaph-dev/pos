@@ -4,11 +4,21 @@ import { AdminIcon } from "@/components/admin/AdminIcon";
 import { requirePlatformOperator } from "@/lib/platform-operators-server";
 import { PlatformAuditViewer } from "@/app/platform/PlatformAuditViewer";
 import { PlatformAccessDenied, PlatformMetric, PlatformPageHeader, PlatformSectionHeading, PlatformUnavailable } from "../../PlatformUI";
-import { readPlatformAudit } from "../../_lib/platform-data";
+import { readPlatformAuditPage } from "../../_lib/platform-data";
 
 export const dynamic = "force-dynamic";
 
-export default async function PlatformAuditPage() {
+type PlatformAuditSearchParams = Promise<{
+  search?: string | string[] | undefined;
+  source?: string | string[] | undefined;
+  action?: string | string[] | undefined;
+  organization?: string | string[] | undefined;
+  date?: string | string[] | undefined;
+  cursor?: string | string[] | undefined;
+  asOf?: string | string[] | undefined;
+}>;
+
+export default async function PlatformAuditPage({ searchParams }: { searchParams: PlatformAuditSearchParams }) {
   const actor = await requirePlatformOperator("console_read");
   if (!actor.ok) {
     if (actor.code === "unauthenticated") redirect("/platform/login");
@@ -16,8 +26,18 @@ export default async function PlatformAuditPage() {
   }
   if (!actor.admin) return <PlatformUnavailable detail="Add SUPABASE_SERVICE_ROLE_KEY before opening the platform audit viewer." />;
 
-  const asOf = new Date().toISOString();
-  const result = await readPlatformAudit(actor.admin);
+  const params = await searchParams;
+  const first = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
+  const result = await readPlatformAuditPage(actor.admin, {
+    search: first(params.search),
+    source: first(params.source) as "all" | "organization" | "operator" | "announcement" | undefined,
+    action: first(params.action),
+    organizationId: first(params.organization),
+    dateRange: first(params.date) as "all" | "24h" | "7d" | "30d" | undefined,
+    cursor: first(params.cursor),
+    asOf: first(params.asOf),
+  });
+  const asOf = result.asOf;
   const organizationCount = new Set(result.events.map((event) => event.organizationId).filter((id): id is string => Boolean(id))).size;
   const actorCount = new Set(result.events.map((event) => event.actorId ?? event.actorEmail).filter((actorKey): actorKey is string => Boolean(actorKey))).size;
   const recentEventCount = result.events.filter((event) => {
@@ -39,17 +59,20 @@ export default async function PlatformAuditPage() {
         />
 
         <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Platform audit summary">
-          <PlatformMetric label="Events loaded" value={result.events.length} detail={result.hasMore ? "Newest 500 shown" : "Complete available history"} icon="history" />
-          <PlatformMetric label="Organizations" value={organizationCount} detail="With platform actions in view" icon="branches" />
-          <PlatformMetric label="Actors" value={actorCount} detail="Distinct platform identities" icon="employees" />
-          <PlatformMetric label="Last 24 hours" value={recentEventCount} detail="Recent platform events" icon="clock" />
+          <PlatformMetric label="Events on page" value={result.events.length} detail={result.hasMore ? "Use Next for more matching events" : "End of current result set"} icon="history" />
+          <PlatformMetric label="Organizations" value={organizationCount} detail="With platform actions on page" icon="branches" />
+          <PlatformMetric label="Actors" value={actorCount} detail="Distinct identities on page" icon="employees" />
+          <PlatformMetric label="Last 24 hours" value={recentEventCount} detail="Recent events on page" icon="clock" />
         </section>
 
         <PlatformAuditViewer
           events={result.events}
           schemaAvailable={result.schemaAvailable}
           operatorAuditSchemaAvailable={result.operatorAuditSchemaAvailable}
+          announcementAuditSchemaAvailable={result.announcementAuditSchemaAvailable}
           hasMore={result.hasMore}
+          nextCursor={result.nextCursor}
+          filters={result.filters}
           asOf={asOf}
         />
 

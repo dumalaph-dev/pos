@@ -1,4 +1,4 @@
-export const PLATFORM_AUDIT_SOURCE_FILTERS = ["all", "organization", "operator"] as const;
+export const PLATFORM_AUDIT_SOURCE_FILTERS = ["all", "organization", "operator", "announcement"] as const;
 export type PlatformAuditSourceFilter = (typeof PLATFORM_AUDIT_SOURCE_FILTERS)[number];
 
 export const PLATFORM_AUDIT_DATE_FILTERS = ["all", "24h", "7d", "30d"] as const;
@@ -6,7 +6,7 @@ export type PlatformAuditDateFilter = (typeof PLATFORM_AUDIT_DATE_FILTERS)[numbe
 
 export type PlatformAuditEvent = {
   id: string;
-  source: "organization" | "operator";
+  source: "organization" | "operator" | "announcement";
   organizationId: string | null;
   organizationName: string | null;
   action: string;
@@ -97,7 +97,7 @@ export function platformAuditActionLabel(action: string) {
 }
 
 export function platformAuditSourceLabel(source: PlatformAuditEvent["source"]) {
-  return source === "operator" ? "Operator membership" : "Organization action";
+  return source === "operator" ? "Operator membership" : source === "announcement" ? "Announcement audit" : "Organization action";
 }
 
 export function platformAuditDateFilterLabel(filter: PlatformAuditDateFilter) {
@@ -115,6 +115,8 @@ export function platformAuditSourceFilterLabel(filter: PlatformAuditSourceFilter
     ? "Organization actions"
     : filter === "operator"
       ? "Operator membership"
+      : filter === "announcement"
+        ? "Announcement audit"
       : "All platform events";
 }
 
