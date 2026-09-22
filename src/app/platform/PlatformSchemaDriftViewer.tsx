@@ -23,7 +23,8 @@ function stateLabel(state: StateFilter) {
   }
 }
 
-export function PlatformSchemaDriftViewer({ summary, backfill, ledgerReadable, backfillAvailable }: {
+export function PlatformSchemaDriftViewer({ asOf, summary, backfill, ledgerReadable, backfillAvailable }: {
+  asOf: string;
   summary: PlatformSchemaDriftSummary;
   backfill: PlatformSchemaBackfillRow[];
   ledgerReadable: boolean;
@@ -48,6 +49,7 @@ export function PlatformSchemaDriftViewer({ summary, backfill, ledgerReadable, b
           <div>
             <h2 className="text-lg font-extrabold tracking-[-0.03em]">Migration ledger</h2>
             <p className="mt-1 text-xs leading-5 text-ink-muted">{schemaDriftStatusDetail(summary)}</p>
+            <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.08em] text-ink-muted">Snapshot as of {formatTimestamp(asOf)}</p>
           </div>
           <StatusPill tone={tone} label={schemaDriftStatusLabel(summary.status)} />
         </div>
@@ -147,4 +149,9 @@ function Metric({ icon, label, value, detail, tone = "default" }: { icon: "chart
 function Note({ tone, children }: { tone: "warning" | "danger"; children: React.ReactNode }) {
   const classes = tone === "danger" ? "border-danger/25 bg-danger-soft text-danger" : "border-warning/25 bg-warning/10 text-ink";
   return <p role="status" className={`mt-3 rounded-xl border px-3.5 py-3 text-xs font-semibold leading-5 ${classes}`}>{children}</p>;
+}
+
+function formatTimestamp(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "unknown" : date.toLocaleString();
 }

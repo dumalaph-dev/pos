@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { randomUUID } from "node:crypto";
 import { isPolicyGateOpen, readPolicyNumber } from "@/lib/platform-operations";
 import { readPlatformPolicies } from "@/lib/platform-operations-server";
 import { requirePlatformOperator, type PlatformOperatorActor } from "@/lib/platform-operators-server";
@@ -24,6 +25,7 @@ type OrganizationLifecycle = {
   account_status: "active" | "suspended" | null;
   suspension_reason: string | null;
   suspended_at: string | null;
+  platform_account_version: number | null;
 };
 
 export async function suspendOrganization(_previousState: OperationsActionState, formData: FormData): Promise<OperationsActionState> {
@@ -41,44 +43,18 @@ export async function suspendOrganization(_previousState: OperationsActionState,
   const organization = await readOrganization(actor.admin, organizationId);
   if (!organization.ok) return organization;
   if (organization.record.account_status === "suspended") return { ok: false, message: `${organization.record.name} is already suspended.` };
-
-  const suspendedAt = new Date().toISOString();
-  const update = await actor.admin
-    .from("organizations")
-    .update({
-      account_status: "suspended",
-      suspension_reason: reason,
-      suspended_at: suspendedAt,
-      suspended_by: actor.userId,
-    })
-    .eq("id", organizationId)
-    .eq("account_status", "active")
-    .select("id")
-    .maybeSingle();
-
-  if (update.error) return platformMigrationError(update.error.message, "0027_platform_operations.sql");
-  if (!update.data) return { ok: false, message: "This business account changed while you were reviewing it. Refresh the directory and try again." };
-
-  const auditError = await writePlatformAudit(actor.admin, {
-    orgId: organizationId,
-    actorId: actor.userId,
-    action: "platform.organization.suspended",
-    entity: "organizations",
-    entityId: organizationId,
-    before: {
-      account_status: organization.record.account_status ?? "active",
-      suspension_reason: organization.record.suspension_reason,
-      suspended_at: organization.record.suspended_at,
-    },
-    after: {
-      account_status: "suspended",
-      suspension_reason: reason,
-      suspended_at: suspendedAt,
-    },
+  const result = await actor.admin.rpc("platform_set_organization_status", {
+    p_org_id: organizationId,
+    p_expected_version: organization.record.platform_account_version ?? 1,
+    p_target_status: "suspended",
+    p_reason: reason,
+    p_actor_id: actor.userId,
+    p_actor_email: actor.email,
+    p_policy_version: gate.policies.support.version,
+    p_request_id: readRequestId(formData),
   });
-
+  if (result.error) return platformOrganizationMutationError(result.error.message);
   revalidatePlatformPages();
-  if (auditError) return { ok: false, message: "The account was suspended, but its audit record could not be written. Review the audit log before retrying." };
   return { ok: true, message: `${organization.record.name} is suspended. New checkout attempts are blocked.` };
 }
 
@@ -95,43 +71,18 @@ export async function restoreOrganization(_previousState: OperationsActionState,
   const organization = await readOrganization(actor.admin, organizationId);
   if (!organization.ok) return organization;
   if (organization.record.account_status !== "suspended") return { ok: false, message: `${organization.record.name} is already active.` };
-
-  const restoredAt = new Date().toISOString();
-  const update = await actor.admin
-    .from("organizations")
-    .update({
-      account_status: "active",
-      suspension_reason: null,
-      suspended_at: null,
-      suspended_by: null,
-    })
-    .eq("id", organizationId)
-    .eq("account_status", "suspended")
-    .select("id")
-    .maybeSingle();
-
-  if (update.error) return platformMigrationError(update.error.message, "0027_platform_operations.sql");
-  if (!update.data) return { ok: false, message: "This business account changed while you were reviewing it. Refresh the directory and try again." };
-
-  const auditError = await writePlatformAudit(actor.admin, {
-    orgId: organizationId,
-    actorId: actor.userId,
-    action: "platform.organization.restored",
-    entity: "organizations",
-    entityId: organizationId,
-    before: {
-      account_status: "suspended",
-      suspension_reason: organization.record.suspension_reason,
-      suspended_at: organization.record.suspended_at,
-    },
-    after: {
-      account_status: "active",
-      restored_at: restoredAt,
-    },
+  const result = await actor.admin.rpc("platform_set_organization_status", {
+    p_org_id: organizationId,
+    p_expected_version: organization.record.platform_account_version ?? 1,
+    p_target_status: "active",
+    p_reason: readText(formData, "reason"),
+    p_actor_id: actor.userId,
+    p_actor_email: actor.email,
+    p_policy_version: gate.policies.support.version,
+    p_request_id: readRequestId(formData),
   });
-
+  if (result.error) return platformOrganizationMutationError(result.error.message);
   revalidatePlatformPages();
-  if (auditError) return { ok: false, message: "The account was restored, but its audit record could not be written. Review the audit log before retrying." };
   return { ok: true, message: `${organization.record.name} is active again.` };
 }
 
@@ -156,40 +107,19 @@ export async function openSupportCase(_previousState: OperationsActionState, for
 
   const responseHours = readPolicyNumber(gate.policies.support, "firstResponseHours", 24);
   const firstResponseDueAt = new Date(Date.now() + responseHours * 60 * 60 * 1000).toISOString();
-  const result = await actor.admin
-    .from("support_cases")
-    .insert({
-      org_id: organizationId,
-      created_by: actor.userId,
-      subject,
-      description,
-      priority,
-      status: "open",
-      first_response_due_at: firstResponseDueAt,
-    })
-    .select("id")
-    .single();
-
-  if (result.error || !result.data) return platformMigrationError(result.error?.message ?? "The support case could not be created.", "0028_support_cases.sql");
-
-  const auditError = await writePlatformAudit(actor.admin, {
-    orgId: organizationId,
-    actorId: actor.userId,
-    action: "platform.support_case.opened",
-    entity: "support_cases",
-    entityId: result.data.id as string,
-    before: null,
-    after: {
-      support_case_id: result.data.id,
-      subject,
-      priority,
-      status: "open",
-      first_response_due_at: firstResponseDueAt,
-    },
+  const result = await actor.admin.rpc("platform_open_support_case", {
+    p_org_id: organizationId,
+    p_subject: subject,
+    p_description: description,
+    p_priority: priority,
+    p_first_response_due_at: firstResponseDueAt,
+    p_policy_version: gate.policies.support.version,
+    p_actor_id: actor.userId,
+    p_actor_email: actor.email,
+    p_request_id: readRequestId(formData),
   });
-
+  if (result.error) return platformSupportMutationError(result.error.message);
   revalidatePlatformPages();
-  if (auditError) return { ok: false, message: "The support case was created, but its audit record could not be written. Review the audit log before retrying." };
   return { ok: true, message: `Support case opened for ${organization.record.name}. First response target: ${formatHours(responseHours)}.` };
 }
 
@@ -463,13 +393,90 @@ async function requirePublishedPolicies(admin: PlatformOperatorActor["admin"]): 
 async function readOrganization(admin: PlatformOperatorActor["admin"], organizationId: string): Promise<{ ok: true; record: OrganizationLifecycle } | OperationsActionFailure> {
   const result = await admin
     .from("organizations")
-    .select("id, name, account_status, suspension_reason, suspended_at")
+    .select("id, name, account_status, suspension_reason, suspended_at, platform_account_version")
     .eq("id", organizationId)
     .maybeSingle();
 
-  if (result.error) return platformMigrationError(result.error.message, "0027_platform_operations.sql");
+  if (result.error) return platformMigrationError(result.error.message, result.error.message.toLowerCase().includes("platform_account_version") ? "0088_platform_support_lifecycle.sql" : "0027_platform_operations.sql");
   if (!result.data) return { ok: false, message: "That business account could not be found." };
   return { ok: true, record: result.data as OrganizationLifecycle };
+}
+
+export async function transitionSupportCase(_previousState: OperationsActionState, formData: FormData): Promise<OperationsActionState> {
+  const actor = await requirePlatformOperator("support_manage");
+  if (!actor.ok) return actor;
+  const gate = await requirePublishedPolicies(actor.admin);
+  if (!gate.ok) return gate;
+  const caseId = readText(formData, "case_id");
+  const expectedVersion = readInteger(formData, "version");
+  const status = readText(formData, "status");
+  const resolutionReason = readText(formData, "resolution_reason");
+  if (!isUuid(caseId) || !Number.isInteger(expectedVersion) || expectedVersion < 1) return { ok: false, message: "Refresh this support case before changing its status." };
+  if (["resolved", "closed"].includes(status) && (resolutionReason.length < 1 || resolutionReason.length > 1000)) return { ok: false, message: "Add a resolution reason of 1–1,000 characters." };
+  const result = await actor.admin.rpc("platform_transition_support_case", {
+    p_case_id: caseId,
+    p_expected_version: expectedVersion,
+    p_to_status: status,
+    p_resolution_reason: resolutionReason,
+    p_policy_version: gate.policies.support.version,
+    p_actor_id: actor.userId,
+    p_actor_email: actor.email,
+    p_request_id: readRequestId(formData),
+  });
+  if (result.error) return platformSupportMutationError(result.error.message);
+  revalidatePlatformPages();
+  return { ok: true, message: `Support case moved to ${status.replaceAll("_", " ")}.` };
+}
+
+export async function assignSupportCase(_previousState: OperationsActionState, formData: FormData): Promise<OperationsActionState> {
+  const actor = await requirePlatformOperator("support_manage");
+  if (!actor.ok) return actor;
+  const gate = await requirePublishedPolicies(actor.admin);
+  if (!gate.ok) return gate;
+  const caseId = readText(formData, "case_id");
+  const expectedVersion = readInteger(formData, "version");
+  const assigneeId = readText(formData, "assignee_id");
+  if (!isUuid(caseId) || !Number.isInteger(expectedVersion) || expectedVersion < 1) return { ok: false, message: "Refresh this support case before assigning it." };
+  if (assigneeId && !isUuid(assigneeId)) return { ok: false, message: "Choose an eligible support operator." };
+  const result = await actor.admin.rpc("platform_assign_support_case", {
+    p_case_id: caseId,
+    p_expected_version: expectedVersion,
+    p_assignee_id: assigneeId || null,
+    p_policy_version: gate.policies.support.version,
+    p_actor_id: actor.userId,
+    p_actor_email: actor.email,
+    p_request_id: readRequestId(formData),
+  });
+  if (result.error) return platformSupportMutationError(result.error.message);
+  revalidatePlatformPages();
+  return { ok: true, message: assigneeId ? "Support case assigned." : "Support case returned to the unassigned queue." };
+}
+
+export async function appendSupportCaseNote(_previousState: OperationsActionState, formData: FormData): Promise<OperationsActionState> {
+  const actor = await requirePlatformOperator("support_manage");
+  if (!actor.ok) return actor;
+  const gate = await requirePublishedPolicies(actor.admin);
+  if (!gate.ok) return gate;
+  const caseId = readText(formData, "case_id");
+  const expectedVersion = readInteger(formData, "version");
+  const body = readText(formData, "body");
+  const noteType = readText(formData, "note_type") || "internal";
+  if (!isUuid(caseId) || !Number.isInteger(expectedVersion) || expectedVersion < 1) return { ok: false, message: "Refresh this support case before adding a note." };
+  if (body.length < 1 || body.length > 5000) return { ok: false, message: "Add a note of 1–5,000 characters." };
+  if (noteType !== "internal" && noteType !== "operator_response") return { ok: false, message: "Choose an internal note or operator response." };
+  const result = await actor.admin.rpc("platform_append_support_case_note", {
+    p_case_id: caseId,
+    p_expected_version: expectedVersion,
+    p_body: body,
+    p_note_type: noteType,
+    p_policy_version: gate.policies.support.version,
+    p_actor_id: actor.userId,
+    p_actor_email: actor.email,
+    p_request_id: readRequestId(formData),
+  });
+  if (result.error) return platformSupportMutationError(result.error.message);
+  revalidatePlatformPages();
+  return { ok: true, message: noteType === "operator_response" ? "First-response evidence recorded." : "Internal note added." };
 }
 
 async function updateFeedbackInOrganizationSettings(admin: PlatformOperatorActor["admin"], organizationId: string, input: {
@@ -557,6 +564,32 @@ function platformAccessGrantError(detail: string): OperationsActionFailure {
   return { ok: false, message: detail || "The complimentary grant could not be created." };
 }
 
+function platformOrganizationMutationError(detail: string): OperationsActionFailure {
+  const normalized = detail.toLowerCase();
+  if (normalized.includes("function") || normalized.includes("schema cache") || normalized.includes("does not exist") || normalized.includes("platform_account_version")) {
+    return { ok: false, message: "Apply Supabase migration 0088_platform_support_lifecycle.sql before using atomic account safety." };
+  }
+  if (normalized.includes("platform_organization_conflict")) return { ok: false, message: "This account changed in another operator session. Refresh the organization before retrying." };
+  if (normalized.includes("platform_request_id_conflict")) return { ok: false, message: "This mutation request key was already used for another operation. Refresh the page and retry." };
+  if (normalized.includes("already_in_state")) return { ok: false, message: "This account already has that lifecycle state. Refresh the organization record." };
+  if (normalized.includes("invalid_reason")) return { ok: false, message: "Add a suspension reason of 10–500 characters." };
+  return { ok: false, message: detail || "The account lifecycle change could not be completed." };
+}
+
+function platformSupportMutationError(detail: string): OperationsActionFailure {
+  const normalized = detail.toLowerCase();
+  if (normalized.includes("function") || normalized.includes("schema cache") || normalized.includes("does not exist") || normalized.includes("support_case_events") || normalized.includes("support_case_notes")) {
+    return { ok: false, message: "Apply Supabase migration 0088_platform_support_lifecycle.sql before using support lifecycle controls." };
+  }
+  if (normalized.includes("conflict")) return { ok: false, message: "This support case changed in another operator session. Refresh it before retrying." };
+  if (normalized.includes("platform_request_id_conflict")) return { ok: false, message: "This mutation request key was already used for another operation. Refresh the case and retry." };
+  if (normalized.includes("resolution_reason_required")) return { ok: false, message: "Add a resolution reason before closing this case." };
+  if (normalized.includes("reopen_reason_required")) return { ok: false, message: "Add a reason before reopening a closed case." };
+  if (normalized.includes("invalid_assignee")) return { ok: false, message: "Choose an active Support or Owner operator." };
+  if (normalized.includes("already_in_state") || normalized.includes("already_assigned")) return { ok: false, message: "That support case already has this state or assignment. Refresh it." };
+  return { ok: false, message: detail || "The support case change could not be completed." };
+}
+
 function platformAccessGrantAdjustmentError(detail: string): OperationsActionFailure {
   const normalized = detail.toLowerCase();
   if (normalized.includes("schema cache") || normalized.includes("function") || normalized.includes("does not exist") || normalized.includes("relation") || normalized.includes("column")) {
@@ -597,6 +630,11 @@ function formatOperationsDate(value: string) {
 function readText(formData: FormData, name: string) {
   const value = formData.get(name);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function readRequestId(formData: FormData) {
+  const value = readText(formData, "request_id");
+  return isUuid(value) ? value : randomUUID();
 }
 
 function readRecordString(record: Record<string, unknown> | null, key: string) {

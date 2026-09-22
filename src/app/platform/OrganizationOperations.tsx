@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import {
   openSupportCase,
@@ -17,6 +17,7 @@ type OrganizationOperationsProps = {
   orgName: string;
   accountStatus: "active" | "suspended" | null;
   suspensionReason: string | null;
+  platformAccountVersion: number | null;
   policyGateOpen: boolean;
   schemaAvailable: boolean;
   canManage: boolean;
@@ -28,6 +29,7 @@ export function OrganizationOperations({
   orgName,
   accountStatus,
   suspensionReason,
+  platformAccountVersion,
   policyGateOpen,
   schemaAvailable,
   canManage,
@@ -36,6 +38,9 @@ export function OrganizationOperations({
   const [suspendState, suspendAction, suspendPending] = useActionState(suspendOrganization, INITIAL_STATE);
   const [restoreState, restoreAction, restorePending] = useActionState(restoreOrganization, INITIAL_STATE);
   const [supportState, supportAction, supportPending] = useActionState(openSupportCase, INITIAL_STATE);
+  const [suspendRequestId] = useState(() => crypto.randomUUID());
+  const [restoreRequestId] = useState(() => crypto.randomUUID());
+  const [supportRequestId] = useState(() => crypto.randomUUID());
   const suspended = accountStatus === "suspended";
   const locked = !canManage || !policyGateOpen || !schemaAvailable;
   const lockMessage = !canManage
@@ -64,6 +69,7 @@ export function OrganizationOperations({
       {suspended ? (
         <form action={restoreAction}>
           <input type="hidden" name="organization_id" value={orgId} />
+          <input type="hidden" name="request_id" value={restoreRequestId} />
           <button type="submit" disabled={locked || restorePending} className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-btn bg-secondary px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-primary transition hover:bg-secondary-hover disabled:cursor-not-allowed disabled:opacity-50">
             <AdminIcon name="refresh" size={14} />
             {restorePending ? "Restoring…" : "Restore account"}
@@ -77,6 +83,7 @@ export function OrganizationOperations({
           </summary>
           <form action={suspendAction} className="space-y-3 border-t border-line px-3 pb-3 pt-3">
             <input type="hidden" name="organization_id" value={orgId} />
+            <input type="hidden" name="request_id" value={suspendRequestId} />
             <fieldset disabled={locked || suspendPending} className="space-y-3">
               <label className="block text-[11px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor={`suspension-reason-${orgId}`}>Reason
                 <textarea id={`suspension-reason-${orgId}`} name="reason" rows={3} minLength={10} maxLength={500} required placeholder={`Why should ${orgName} be suspended?`} className={`${CONTROL_CLASS} resize-y`} />
@@ -97,6 +104,7 @@ export function OrganizationOperations({
         </summary>
         <form action={supportAction} className="space-y-3 border-t border-line px-3 pb-3 pt-3">
           <input type="hidden" name="organization_id" value={orgId} />
+          <input type="hidden" name="request_id" value={supportRequestId} />
           <fieldset disabled={locked || supportPending} className="space-y-3">
             <label className="block text-[11px] font-extrabold uppercase tracking-wide text-ink-muted" htmlFor={`support-subject-${orgId}`}>Subject
               <input id={`support-subject-${orgId}`} name="subject" type="text" required maxLength={160} placeholder="What needs attention?" className={CONTROL_CLASS} />
@@ -119,6 +127,7 @@ export function OrganizationOperations({
       </details>
 
       {locked && <p role="status" className="flex items-start gap-1.5 text-[11px] font-semibold leading-4 text-ink-muted"><AdminIcon name="lock" size={13} />{lockMessage}</p>}
+      {!platformAccountVersion && !locked && <p role="status" className="flex items-start gap-1.5 text-[11px] font-semibold leading-4 text-ink-muted"><AdminIcon name="alert" size={13} />Refresh this organization after migration 0088 so concurrency protection is active.</p>}
     </div>
   );
 }

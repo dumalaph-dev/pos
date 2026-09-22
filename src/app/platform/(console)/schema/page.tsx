@@ -33,7 +33,7 @@ export default async function PlatformSchemaDriftPage() {
           </div>
         </header>
 
-        <PlatformSchemaDriftViewer summary={result.summary} backfill={result.backfill} ledgerReadable={result.ledgerReadable} backfillAvailable={result.backfillAvailable} />
+        <PlatformSchemaDriftViewer asOf={result.asOf} summary={result.summary} backfill={result.backfill} ledgerReadable={result.ledgerReadable} backfillAvailable={result.backfillAvailable} />
 
         <section className="mt-6 rounded-[22px] border border-primary/15 bg-primary-soft/45 p-5 sm:p-6" aria-labelledby="platform-schema-boundary-heading">
           <PlatformSectionHeading eyebrow="Read boundary" title="Versions and names only" description="The ledger read returns each migration's version and name. The statements column holds the full SQL text of every migration and is never selected, and the page has no apply, retry, or rollback control." />

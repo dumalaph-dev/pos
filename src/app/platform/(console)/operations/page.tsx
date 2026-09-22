@@ -14,20 +14,24 @@ import { requirePlatformOperator } from "@/lib/platform-operators-server";
 import { formatTrialRemaining, readTrialLifecycle, TRIAL_FEEDBACK_STATUS_LABELS } from "@/lib/trial";
 import { derivePlatformEntitlementSummary } from "@/lib/platform-entitlements";
 import { PlatformAccessDenied, PlatformMetric, PlatformMigrationNotice, PlatformPageHeader, PlatformSectionHeading, PlatformStatusBadge } from "../../PlatformUI";
-import { countByOrg, formatDate, readPlatformDirectory, readPlatformEntitlementRecords } from "../../_lib/platform-data";
+import { countByOrg, formatDate, readPlatformDirectoryPage, readPlatformEntitlementRecords } from "../../_lib/platform-data";
 
 export const dynamic = "force-dynamic";
 
-export default async function PlatformOperationsPage() {
+type PlatformOperationsSearchParams = Promise<{ q?: string | string[] | undefined; page?: string | string[] | undefined }>;
+
+export default async function PlatformOperationsPage({ searchParams }: { searchParams: PlatformOperationsSearchParams }) {
   const actor = await requirePlatformOperator("console_read");
   if (!actor.ok) {
     if (actor.code === "unauthenticated") redirect("/platform/login");
     return <PlatformAccessDenied detail={actor.message} />;
   }
   const admin = actor.admin;
+  const params = await searchParams;
+  const first = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
 
   const [directory, operations, supportCasesReady, paymongoSubscriptionReadiness] = await Promise.all([
-    readPlatformDirectory(admin),
+    readPlatformDirectoryPage(admin, first(params.q), first(params.page), { includeTrialFeedback: true }),
     readPlatformOperations(admin),
     supportCasesSchemaAvailable(admin),
     readPayMongoSubscriptionReadiness(),
@@ -43,6 +47,10 @@ export default async function PlatformOperationsPage() {
     trialFeedbackByOrg,
     trialFeedbackStorage,
     trialFeedbackWorkflowAvailable,
+    trialFeedbackAvailable,
+    trialFeedbackComplete,
+    relatedRecordsAvailable,
+    relatedRecordsComplete,
   } = directory;
   const { catalog, policies } = operations;
   const policyGateOpen = isPolicyGateOpen(policies);
@@ -68,7 +76,10 @@ export default async function PlatformOperationsPage() {
   const activeSubscriptions = organizations.filter((organization) => organization.subscription_status && normalizeSubscriptionStatus(organization.subscription_status) === "active").length;
   const trialSubscriptions = organizations.filter((organization) => organization.subscription_status && normalizeSubscriptionStatus(organization.subscription_status) === "trialing").length;
   const trialDays = readPolicyNumber(policies.billing, "trialDays", 14);
-  const entitlementRecords = await readPlatformEntitlementRecords(admin);
+  const entitlementRecords = await readPlatformEntitlementRecords(admin, organizations.map((organization) => organization.id));
+  const query = organizationsResult.query;
+  const pageStart = organizations.length === 0 ? 0 : (organizationsResult.page - 1) * organizationsResult.pageSize + 1;
+  const pageEnd = organizations.length === 0 ? 0 : pageStart + organizations.length - 1;
   const priorityTrialLeads = organizations.filter((organization) => {
     const trial = readTrialLifecycle({
       status: organization.subscription_status,
@@ -130,10 +141,30 @@ export default async function PlatformOperationsPage() {
 
         {(!organizationsResult.subscriptionFieldsAvailable || !organizationsResult.accountFieldsAvailable || !catalog.schemaAvailable || !policies.schemaAvailable || !supportCasesReady || !entitlementRecords.accessGrantsSchemaAvailable || !entitlementRecords.trialExtensionsSchemaAvailable) && <PlatformMigrationNotice migrations={["0027_platform_operations.sql", "0028_support_cases.sql", "0052_platform_access_grants.sql", "0054_atomic_platform_access_grant.sql", "0068_branch_billing_pricing.sql", "0075_extend_organization_trial.sql"]} />}
 
+        <section className="mt-6 rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="operations-directory-search-heading">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-primary">Bounded account operations</p>
+              <h2 id="operations-directory-search-heading" className="mt-1 text-xl font-extrabold">Find workspaces to review</h2>
+              <p className="mt-1 max-w-2xl text-sm leading-5 text-ink-muted">Search workspace names or exact organization IDs. Controls, entitlement summaries, and retention leads apply to the visible page only.</p>
+            </div>
+            <form method="get" className="flex w-full flex-col gap-2 sm:flex-row lg:max-w-xl" role="search">
+              <label htmlFor="operations-directory-search" className="sr-only">Search operations workspaces</label>
+              <input id="operations-directory-search" name="q" type="search" defaultValue={query} placeholder="Search workspace name or exact organization ID" className="min-h-11 min-w-0 flex-1 rounded-xl border border-line-strong bg-raised px-3.5 text-sm font-semibold text-ink outline-none transition placeholder:text-ink-subtle focus:border-primary focus:ring-2 focus:ring-primary/10" />
+              <button type="submit" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold text-primary-fg transition hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"><AdminIcon name="search" size={14} /> Search</button>
+              {query && <Link href="/platform/operations" className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-xs font-extrabold text-primary transition hover:border-primary hover:bg-primary-soft">Clear</Link>}
+            </form>
+          </div>
+          <p className="mt-4 text-xs font-semibold text-ink-muted" role="status">{organizations.length === 0 ? "Showing 0" : `Showing ${pageStart}–${pageEnd}`} {organizationsResult.total === null ? "visible workspaces" : `of ${organizationsResult.total} matching workspaces`}</p>
+        </section>
+
+        {!relatedRecordsAvailable ? <div className="mt-4 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm leading-6 text-ink-muted" role="status">One or more profile, branch, or employee reads were unavailable for this operations page. Counts and controls may be incomplete; open the organization record for the complete view.</div> : !relatedRecordsComplete && <div className="mt-4 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm leading-6 text-ink-muted" role="status">Related profile, branch, or employee rows reached the page safety limit. Counts and controls are partial for this operations page.</div>}
+        {!trialFeedbackAvailable ? <div className="mt-4 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm leading-6 text-ink-muted" role="status">Trial feedback was unavailable for this operations page. Retention leads may be incomplete; review the organization record when the feedback source recovers.</div> : !trialFeedbackComplete && <div className="mt-4 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm leading-6 text-ink-muted" role="status">Trial feedback reached the page safety limit. Retention leads are partial for this operations page; review organization records for the complete timeline.</div>}
+
         <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Operations summary">
-          <PlatformMetric label="Active subscriptions" value={activeSubscriptions} detail={`${trialSubscriptions} businesses in trial`} icon="wallet" />
-          <PlatformMetric label="Priority trial leads" value={canViewSupport ? priorityTrialLeads : "Restricted"} detail={canViewSupport ? `${discountRequests} tailored offer request${discountRequests === 1 ? "" : "s"}` : "Support workspace access is restricted"} icon="customers" />
-          <PlatformMetric label="Suspended accounts" value={suspendedAccounts} detail={suspendedAccounts ? "Review before restoring access" : "No accounts suspended"} icon="lock" />
+          <PlatformMetric label="Active subscriptions" value={activeSubscriptions} detail={`${trialSubscriptions} businesses in trial · visible page`} icon="wallet" />
+          <PlatformMetric label="Priority trial leads" value={canViewSupport ? priorityTrialLeads : "Restricted"} detail={canViewSupport ? `${discountRequests} tailored offer request${discountRequests === 1 ? "" : "s"} · visible page` : "Support workspace access is restricted"} icon="customers" />
+          <PlatformMetric label="Suspended accounts" value={suspendedAccounts} detail={suspendedAccounts ? "Review before restoring access" : "No accounts suspended · visible page"} icon="lock" />
           <PlatformMetric label="Policy gate" value={policyGateOpen ? "Open" : "Locked"} detail={policyGateOpen ? "Account actions enabled" : "Publish both policies"} icon="refresh" />
           <PlatformMetric label="Checkout" value={checkoutReady ? "Ready" : "Locked"} detail={checkoutReady ? "Provider and policy checks pass" : "Finish provider setup"} icon="dashboard" />
         </section>
@@ -159,13 +190,15 @@ export default async function PlatformOperationsPage() {
           grantSchemaAvailable={entitlementRecords.accessGrantsSchemaAvailable}
           adjustmentSchemaAvailable={entitlementRecords.accessGrantAdjustmentSchemaAvailable}
           trialSchemaAvailable={entitlementRecords.trialExtensionsSchemaAvailable}
+          hasMore={entitlementRecords.hasMore}
           policyGateOpen={policyGateOpen}
           canManage={canManageEntitlements}
+          scopeLabel="visible workspaces"
         />
 
         <section className="mt-8 overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)]" aria-labelledby="directory-heading">
           <div className="px-5 py-5 sm:px-6">
-            <PlatformSectionHeading eyebrow="Account operations" title="Business directory" description="Review subscription and team context before opening a lifecycle or support control." action={<div className="text-right text-xs font-semibold text-ink-muted"><span className="block">{activeSubscriptions} active - {trialSubscriptions} in trial</span><span className="mt-1 block">Showing up to 100 recent organizations</span></div>} />
+            <PlatformSectionHeading eyebrow="Account operations" title="Business directory" description="Review subscription and team context before opening a lifecycle or support control. The controls below are scoped to the visible page." action={<div className="text-right text-xs font-semibold text-ink-muted"><span className="block">{activeSubscriptions} active - {trialSubscriptions} in trial</span><span className="mt-1 block">{pageStart === 0 ? 0 : `${pageStart}–${pageEnd}`} {organizationsResult.total === null ? "visible" : `of ${organizationsResult.total}`}</span></div>} />
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-[1080px] w-full text-left text-sm">
@@ -180,6 +213,7 @@ export default async function PlatformOperationsPage() {
               </tbody>
             </table>
           </div>
+          <OperationsPagination page={organizationsResult.page} pageSize={organizationsResult.pageSize} total={organizationsResult.total} hasMore={organizationsResult.hasMore} query={query} rowCount={organizations.length} />
         </section>
 
         {canViewSupport ? <section className="mt-8 rounded-[22px] border border-warning/30 bg-warning/10 p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="priority-trial-leads-heading">
@@ -205,13 +239,28 @@ export default async function PlatformOperationsPage() {
 
         <section id="business-controls-heading" className="mt-8 rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="business-controls-title">
           <PlatformSectionHeading eyebrow="Lifecycle and support" title="Business controls" description={canViewSupport ? "Each action is recorded in the organization audit trail. Controls remain disabled until both policies are published and the required schemas are available." : "Support controls are hidden for Billing operators. Open an organization record for subscription and entitlement context."} />
-          {organizations.length === 0 ? <p className="py-8 text-center text-sm text-ink-muted">No business accounts to manage.</p> : <div className="grid gap-4 pt-5 xl:grid-cols-2">{organizations.map((organization) => <article id={`business-controls-${organization.id}`} key={organization.id} className="rounded-[18px] border border-line bg-raised p-4"><div className="mb-4 flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-extrabold">{organization.name}</h3><p className="mt-1 text-xs font-semibold text-ink-muted">Account operations for {organization.id.slice(0, 8)}</p></div><PlatformStatusBadge status={organization.account_status === "suspended" ? "suspended" : "active"} /></div>{organization.account_status === "suspended" && organization.suspension_reason && <p className="mb-4 rounded-xl bg-danger-soft px-3 py-2 text-xs font-semibold leading-5 text-danger">Reason: {organization.suspension_reason}</p>}<OrganizationOperations orgId={organization.id} orgName={organization.name} accountStatus={organization.account_status ?? "active"} suspensionReason={organization.suspension_reason ?? null} policyGateOpen={policyGateOpen} schemaAvailable={accountOperationsSchemaReady} canManage={canManageSupport} visible={canViewSupport} /></article>)}</div>}
+          {organizations.length === 0 ? <p className="py-8 text-center text-sm text-ink-muted">No business accounts to manage.</p> : <div className="grid gap-4 pt-5 xl:grid-cols-2">{organizations.map((organization) => <article id={`business-controls-${organization.id}`} key={organization.id} className="rounded-[18px] border border-line bg-raised p-4"><div className="mb-4 flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-extrabold">{organization.name}</h3><p className="mt-1 text-xs font-semibold text-ink-muted">Account operations for {organization.id.slice(0, 8)}</p></div><PlatformStatusBadge status={organization.account_status === "suspended" ? "suspended" : "active"} /></div>{organization.account_status === "suspended" && organization.suspension_reason && <p className="mb-4 rounded-xl bg-danger-soft px-3 py-2 text-xs font-semibold leading-5 text-danger">Reason: {organization.suspension_reason}</p>}<OrganizationOperations orgId={organization.id} orgName={organization.name} accountStatus={organization.account_status ?? "active"} suspensionReason={organization.suspension_reason ?? null} platformAccountVersion={organization.platform_account_version ?? null} policyGateOpen={policyGateOpen} schemaAvailable={accountOperationsSchemaReady} canManage={canManageSupport} visible={canViewSupport} /></article>)}</div>}
         </section>
 
         <p className="mt-5 text-xs leading-5 text-ink-muted">Operations owns provider readiness, account lifecycle, support setup, and trial-retention follow-up. Plans, users, policies, and operator access each have their own workspace in the platform navigation.</p>
       </div>
     </main>
   );
+}
+
+function OperationsPagination({ page, pageSize, total, hasMore, query, rowCount }: { page: number; pageSize: number; total: number | null; hasMore: boolean; query: string; rowCount: number }) {
+  const start = rowCount === 0 ? 0 : (page - 1) * pageSize + 1;
+  const end = rowCount === 0 ? 0 : start + rowCount - 1;
+  const label = total === null ? `${start === 0 ? 0 : `${start}–${end}`} visible` : `${start === 0 ? 0 : `${start}–${end}`} of ${total}`;
+  return <nav className="flex flex-col gap-3 border-t border-line bg-raised/40 px-5 py-4 text-xs font-semibold text-ink-muted sm:flex-row sm:items-center sm:justify-between sm:px-6" aria-label="Operations workspace pages"><span>{label}</span><div className="flex items-center gap-2">{page > 1 ? <Link href={operationsPageHref(page - 1, query)} className="inline-flex min-h-9 items-center rounded-lg border border-line-strong bg-surface px-3 text-primary transition hover:border-primary hover:bg-primary-soft">Previous</Link> : <span className="inline-flex min-h-9 items-center rounded-lg border border-line bg-raised px-3 text-ink-subtle" aria-disabled="true">Previous</span>}{hasMore ? <Link href={operationsPageHref(page + 1, query)} className="inline-flex min-h-9 items-center rounded-lg border border-line-strong bg-surface px-3 text-primary transition hover:border-primary hover:bg-primary-soft">Next</Link> : <span className="inline-flex min-h-9 items-center rounded-lg border border-line bg-raised px-3 text-ink-subtle" aria-disabled="true">Next</span>}</div></nav>;
+}
+
+function operationsPageHref(page: number, query: string) {
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (page > 1) params.set("page", String(page));
+  const search = params.toString();
+  return search ? `/platform/operations?${search}` : "/platform/operations";
 }
 
 function LockedAction({ icon, label, detail, href, hrefLabel }: { icon: "wallet" | "alert" | "help"; label: string; detail: string; href?: string; hrefLabel?: string }) {

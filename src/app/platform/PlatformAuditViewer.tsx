@@ -1,51 +1,27 @@
-"use client";
-
 import Link from "next/link";
-import { useMemo, useState } from "react";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import {
-  filterPlatformAuditEvents,
   platformAuditActionLabel,
   platformAuditDateFilterLabel,
   platformAuditSourceFilterLabel,
   platformAuditSourceLabel,
   PLATFORM_AUDIT_DATE_FILTERS,
   PLATFORM_AUDIT_SOURCE_FILTERS,
-  type PlatformAuditDateFilter,
   type PlatformAuditEvent,
-  type PlatformAuditSourceFilter,
 } from "@/lib/platform-audit";
+import type { PlatformAuditPageFilters } from "./_lib/platform-data";
 
-export function PlatformAuditViewer({ events, schemaAvailable, operatorAuditSchemaAvailable, hasMore, asOf }: {
+export function PlatformAuditViewer({ events, schemaAvailable, operatorAuditSchemaAvailable, announcementAuditSchemaAvailable, hasMore, nextCursor, filters, asOf }: {
   events: PlatformAuditEvent[];
   schemaAvailable: boolean;
   operatorAuditSchemaAvailable: boolean;
+  announcementAuditSchemaAvailable: boolean;
   hasMore: boolean;
+  nextCursor: string | null;
+  filters: PlatformAuditPageFilters;
   asOf: string;
 }) {
-  const [search, setSearch] = useState("");
-  const [source, setSource] = useState<PlatformAuditSourceFilter>("all");
-  const [action, setAction] = useState("all");
-  const [organizationId, setOrganizationId] = useState("all");
-  const [dateRange, setDateRange] = useState<PlatformAuditDateFilter>("all");
-  const actionOptions = useMemo(() => [...new Set(events.map((event) => event.action))].sort((left, right) => platformAuditActionLabel(left).localeCompare(platformAuditActionLabel(right))), [events]);
-  const organizationOptions = useMemo(() => {
-    const organizations = new Map<string, string>();
-    for (const event of events) {
-      if (event.organizationId) organizations.set(event.organizationId, event.organizationName ?? "Unnamed organization");
-    }
-    return [...organizations.entries()].sort((left, right) => left[1].localeCompare(right[1]));
-  }, [events]);
-  const filteredEvents = useMemo(() => filterPlatformAuditEvents(events, { search, source, action, organizationId, dateRange, asOf }), [events, search, source, action, organizationId, dateRange, asOf]);
-  const filtersActive = Boolean(search.trim()) || source !== "all" || action !== "all" || organizationId !== "all" || dateRange !== "all";
-
-  function clearFilters() {
-    setSearch("");
-    setSource("all");
-    setAction("all");
-    setOrganizationId("all");
-    setDateRange("all");
-  }
+  const filtersActive = Boolean(filters.search) || filters.source !== "all" || filters.action !== "all" || filters.organizationId !== "all" || filters.dateRange !== "all";
 
   return (
     <section className="mt-6 overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)]" aria-labelledby="platform-audit-viewer-heading">
@@ -54,59 +30,70 @@ export function PlatformAuditViewer({ events, schemaAvailable, operatorAuditSche
           <div>
             <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-primary">Cross-org read surface</p>
             <h2 id="platform-audit-viewer-heading" className="mt-1 text-xl font-extrabold">Platform audit trail</h2>
-            <p className="mt-1 max-w-3xl text-sm leading-5 text-ink-muted">Review platform-actor changes across organizations. Tenant order, customer, and staff activity is intentionally excluded from this view.</p>
+            <p className="mt-1 max-w-3xl text-sm leading-5 text-ink-muted">Review platform-actor changes across organizations. Filters run against audit metadata before the three audit sources are merged; tenant order, customer, and staff activity is intentionally excluded.</p>
           </div>
-          <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary"><AdminIcon name="history" size={13} /> {filteredEvents.length} visible</span>
+          <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-primary-soft px-3 py-1.5 text-xs font-extrabold text-primary"><AdminIcon name="history" size={13} /> {events.length} visible</span>
         </div>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(240px,1.4fr)_minmax(180px,0.8fr)_minmax(180px,0.9fr)_minmax(160px,0.7fr)_minmax(180px,0.9fr)]" aria-label="Audit filters">
+        <form method="get" className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(240px,1.4fr)_minmax(180px,0.8fr)_minmax(180px,0.9fr)_minmax(160px,0.7fr)_minmax(180px,0.9fr)]" aria-label="Audit filters">
           <label className="relative block">
             <span className="sr-only">Search audit events</span>
             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted"><AdminIcon name="search" size={14} /></span>
-            <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search action, organization, actor" className="w-full rounded-xl border border-line-strong bg-raised py-2.5 pl-9 pr-3 text-sm font-semibold text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10" />
+            <input type="search" name="search" defaultValue={filters.search} placeholder="Search action or audit actor" className="w-full rounded-xl border border-line-strong bg-raised py-2.5 pl-9 pr-3 text-sm font-semibold text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10" />
           </label>
           <label className="block">
             <span className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted">Event source</span>
-            <select value={source} onChange={(event) => setSource(event.target.value as PlatformAuditSourceFilter)} className="mt-1 w-full rounded-xl border border-line-strong bg-raised px-3 py-2.5 text-sm font-semibold text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10">
+            <select name="source" defaultValue={filters.source} className="mt-1 w-full rounded-xl border border-line-strong bg-raised px-3 py-2.5 text-sm font-semibold text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10">
               {PLATFORM_AUDIT_SOURCE_FILTERS.map((option) => <option key={option} value={option}>{platformAuditSourceFilterLabel(option)}</option>)}
             </select>
           </label>
           <label className="block">
             <span className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted">Action</span>
-            <select value={action} onChange={(event) => setAction(event.target.value)} className="mt-1 w-full rounded-xl border border-line-strong bg-raised px-3 py-2.5 text-sm font-semibold text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10">
-              <option value="all">All actions</option>
-              {actionOptions.map((option) => <option key={option} value={option}>{platformAuditActionLabel(option)}</option>)}
-            </select>
+            <input name="action" type="search" defaultValue={filters.action === "all" ? "" : filters.action} placeholder="Any exact action" className="mt-1 w-full rounded-xl border border-line-strong bg-raised px-3 py-2.5 text-sm font-semibold text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10" />
           </label>
           <label className="block">
             <span className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted">Time window</span>
-            <select value={dateRange} onChange={(event) => setDateRange(event.target.value as PlatformAuditDateFilter)} className="mt-1 w-full rounded-xl border border-line-strong bg-raised px-3 py-2.5 text-sm font-semibold text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10">
+            <select name="date" defaultValue={filters.dateRange} className="mt-1 w-full rounded-xl border border-line-strong bg-raised px-3 py-2.5 text-sm font-semibold text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10">
               {PLATFORM_AUDIT_DATE_FILTERS.map((option) => <option key={option} value={option}>{platformAuditDateFilterLabel(option)}</option>)}
             </select>
           </label>
           <label className="block md:col-span-2 xl:col-span-1">
-            <span className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted">Organization</span>
-            <select value={organizationId} onChange={(event) => setOrganizationId(event.target.value)} className="mt-1 w-full rounded-xl border border-line-strong bg-raised px-3 py-2.5 text-sm font-semibold text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10">
-              <option value="all">All organizations</option>
-              {organizationOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-            </select>
+            <span className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-muted">Organization ID</span>
+            <input name="organization" type="search" defaultValue={filters.organizationId === "all" ? "" : filters.organizationId} placeholder="Any organization UUID" className="mt-1 w-full rounded-xl border border-line-strong bg-raised px-3 py-2.5 text-sm font-semibold text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10" />
           </label>
-        </div>
+          <div className="flex items-end gap-2 md:col-span-2 xl:col-span-5">
+            <button type="submit" className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold text-primary-fg transition hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"><AdminIcon name="filter" size={14} /> Apply filters</button>
+            {filtersActive && <Link href="/platform/audit" className="inline-flex min-h-10 items-center rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-xs font-extrabold text-primary transition hover:border-primary hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">Clear</Link>}
+          </div>
+        </form>
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-ink-muted">
-          <span>Showing {filteredEvents.length} of {events.length}{hasMore ? " loaded events" : " events"} · as of {formatDateTime(asOf)}</span>
-          {filtersActive && <button type="button" onClick={clearFilters} className="font-extrabold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">Clear filters</button>}
+          <span>Showing {events.length} event{events.length === 1 ? "" : "s"}{hasMore ? " on this page" : " matching the current filters"} · as of {formatDateTime(asOf)}</span>
         </div>
-        {hasMore && <p role="status" className="mt-3 rounded-xl border border-warning/25 bg-warning/10 px-3.5 py-3 text-xs font-semibold leading-5 text-ink">Showing the newest 500 platform events. Narrow the time window as the audit history grows.</p>}
-        {!schemaAvailable && <p role="status" className="mt-3 rounded-xl border border-danger/25 bg-danger-soft px-3.5 py-3 text-xs font-semibold leading-5 text-danger">Organization platform audit rows could not be loaded. Refresh the page or review the platform database connection.</p>}
-        {!operatorAuditSchemaAvailable && <p role="status" className="mt-3 rounded-xl border border-warning/25 bg-warning/10 px-3.5 py-3 text-xs font-semibold leading-5 text-ink">Operator membership events are unavailable until migration <code className="rounded bg-surface px-1">0077_platform_operators.sql</code> is applied.</p>}
+        {hasMore && nextCursor && <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning/25 bg-warning/10 px-3.5 py-3 text-xs font-semibold leading-5 text-ink"><span>More matching events are available. Continue with the cursor tied to these filters.</span><Link href={platformAuditPageHref(filters, nextCursor)} className="inline-flex min-h-8 items-center rounded-lg bg-surface px-3 font-extrabold text-primary transition hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">Next page</Link></div>}
+        {!schemaAvailable && (filters.source === "all" || filters.source === "organization") && <p role="status" className="mt-3 rounded-xl border border-danger/25 bg-danger-soft px-3.5 py-3 text-xs font-semibold leading-5 text-danger">Organization platform audit rows could not be loaded. Refresh the page or review the platform database connection.</p>}
+        {!operatorAuditSchemaAvailable && (filters.source === "all" || filters.source === "operator") && <p role="status" className="mt-3 rounded-xl border border-warning/25 bg-warning/10 px-3.5 py-3 text-xs font-semibold leading-5 text-ink">Operator membership events are unavailable until migration <code className="rounded bg-surface px-1">0077_platform_operators.sql</code> is applied.</p>}
+        {!announcementAuditSchemaAvailable && (filters.source === "all" || filters.source === "announcement") && <p role="status" className="mt-3 rounded-xl border border-warning/25 bg-warning/10 px-3.5 py-3 text-xs font-semibold leading-5 text-ink">Announcement audit events are unavailable until the announcement audit table is present.</p>}
       </div>
 
-      {filteredEvents.length === 0
-        ? <div className="px-6 py-14 text-center"><span className="mx-auto grid h-11 w-11 place-items-center rounded-2xl bg-raised text-ink-muted"><AdminIcon name="history" size={20} /></span><h3 className="mt-4 text-base font-extrabold">{filtersActive ? "No audit events match" : "No platform audit events yet"}</h3><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink-muted">{filtersActive ? "Clear one or more filters to review the newest platform actions." : "Audited platform actions will appear here as operators manage the platform."}</p></div>
-        : <div className="divide-y divide-line">{filteredEvents.map((event) => <PlatformAuditEventCard key={`${event.source}-${event.id}`} event={event} />)}</div>}
+      {events.length === 0
+        ? <div className="px-6 py-14 text-center"><span className="mx-auto grid h-11 w-11 place-items-center rounded-2xl bg-raised text-ink-muted"><AdminIcon name="history" size={20} /></span><h3 className="mt-4 text-base font-extrabold">{filtersActive ? "No audit events match" : "No platform audit events yet"}</h3><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink-muted">{filtersActive ? "Clear one or more filters to review the available platform actions." : "Audited platform actions will appear here as operators manage the platform."}</p></div>
+        : <div className="divide-y divide-line">{events.map((event) => <PlatformAuditEventCard key={`${event.source}-${event.id}-${event.createdAt}`} event={event} />)}</div>}
     </section>
   );
+}
+
+function platformAuditPageHref(filters: PlatformAuditPageFilters, cursor?: string | null) {
+  const params = new URLSearchParams();
+  if (filters.search) params.set("search", filters.search);
+  if (filters.source !== "all") params.set("source", filters.source);
+  if (filters.action !== "all") params.set("action", filters.action);
+  if (filters.organizationId !== "all") params.set("organization", filters.organizationId);
+  if (filters.dateRange !== "all") params.set("date", filters.dateRange);
+  if (cursor) params.set("asOf", filters.asOf);
+  if (cursor) params.set("cursor", cursor);
+  const query = params.toString();
+  return query ? `/platform/audit?${query}` : "/platform/audit";
 }
 
 function PlatformAuditEventCard({ event }: { event: PlatformAuditEvent }) {

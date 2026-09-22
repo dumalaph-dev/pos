@@ -5,13 +5,14 @@ import { getBillingPlan, normalizeSubscriptionStatus, subscriptionStatusLabel, s
 import { formatPeso } from "@/lib/money";
 import { getCheckoutReadiness, isPolicyGateOpen, readPolicyNumber } from "@/lib/platform-operations";
 import { readPayMongoSubscriptionReadiness, readPlatformOperations, payMongoConfiguration, supportCasesSchemaAvailable } from "@/lib/platform-operations-server";
+import { platformOperatorRoleLabel } from "@/lib/platform-operators";
 import { requirePlatformOperator } from "@/lib/platform-operators-server";
 import { derivePlatformEntitlementSummary } from "@/lib/platform-entitlements";
 import { sortPlatformAttentionItems, type PlatformAttentionItem } from "@/lib/platform-attention";
 import { syncHealthFreshnessLabel, syncHealthStatusLabel } from "@/lib/platform-sync-health";
 import { PlatformAccessDenied, PlatformMetric, PlatformMigrationNotice, PlatformPageHeader, PlatformSectionHeading } from "../PlatformUI";
 import { PlatformAttentionInbox } from "../PlatformAttentionInbox";
-import { countByOrg, formatDate, readPlatformDirectory, readPlatformEntitlementRecords, readPlatformSupportCases, readPlatformSyncHealth, type OrganizationRecord, type PlatformSupportCaseResult, type PlatformSyncHealthResult } from "../_lib/platform-data";
+import { countByOrg, formatDate, readPlatformDirectory, readPlatformEntitlementRecords, readPlatformHomeSummary, readPlatformSupportCases, readPlatformSyncHealth, type OrganizationRecord, type PlatformSupportCaseResult, type PlatformSyncHealthResult } from "../_lib/platform-data";
 
 export const dynamic = "force-dynamic";
 
@@ -24,26 +25,23 @@ export default async function PlatformOverviewPage() {
   const admin = actor.admin;
 
   const canViewSupport = actor.role !== "billing";
-  const [directory, operations, supportCasesReady, paymongoSubscriptionReadiness, syncHealth, supportCases] = await Promise.all([
+  const [directory, operations, supportCasesReady, paymongoSubscriptionReadiness, syncHealth, supportCases, homeSummary] = await Promise.all([
     readPlatformDirectory(admin),
     readPlatformOperations(admin),
     supportCasesSchemaAvailable(admin),
     readPayMongoSubscriptionReadiness(),
     readPlatformSyncHealth(admin),
-    canViewSupport ? readPlatformSupportCases(admin) : Promise.resolve({ records: [], schemaAvailable: false, organizationsAvailable: true }),
+    canViewSupport ? readPlatformSupportCases(admin) : Promise.resolve({ records: [], schemaAvailable: false, organizationsAvailable: true, hasMore: false, total: null, asOf: new Date().toISOString() }),
+    readPlatformHomeSummary(admin),
   ]);
 
-  const { organizations, profiles, stores, employees, authEmailById, organizationsResult } = directory;
+  const { organizations, profiles, stores, authEmailById, organizationsResult } = directory;
   const { catalog, policies } = operations;
   const policyGateOpen = isPolicyGateOpen(policies);
   const paymongo = payMongoConfiguration();
   const publishedPolicies = Number(policies.billing.status === "published") + Number(policies.support.status === "published");
-  const activeSubscriptions = organizations.filter((organization) => organization.subscription_status && normalizeSubscriptionStatus(organization.subscription_status) === "active").length;
-  const trialSubscriptions = organizations.filter((organization) => organization.subscription_status && normalizeSubscriptionStatus(organization.subscription_status) === "trialing").length;
   const storesByOrg = countByOrg(stores);
   const activeStoresByOrg = countByOrg(stores.filter((store) => store.is_active));
-  const activeStores = stores.filter((store) => store.is_active).length;
-  const activeStaff = employees.filter((employee) => employee.is_active).length;
   const entitlementRecords = await readPlatformEntitlementRecords(admin);
   const trialDays = readPolicyNumber(policies.billing, "trialDays", 14);
   const entitlementSummaries = organizations.map((organization) => derivePlatformEntitlementSummary({
@@ -97,11 +95,19 @@ export default async function PlatformOverviewPage() {
         />
 
         {(!organizationsResult.subscriptionFieldsAvailable || !organizationsResult.accountFieldsAvailable || !catalog.schemaAvailable || !policies.schemaAvailable || !supportCasesReady) && <PlatformMigrationNotice migrations={["0027_platform_operations.sql", "0028_support_cases.sql", "0068_branch_billing_pricing.sql"]} />}
+        <section className="mt-6 flex flex-col gap-2 rounded-2xl border border-line bg-surface px-4 py-3 text-xs font-semibold text-ink-muted shadow-[var(--shadow-card)] sm:flex-row sm:flex-wrap sm:items-center sm:justify-between" aria-label="Home data context">
+          <span><strong className="text-ink">Home preset:</strong> {platformOperatorRoleLabel(actor.role)} · {canViewSupport ? "Support and lifecycle signals visible" : "Support detail restricted"}</span>
+          <span><strong className="text-ink">Summary as of:</strong> {formatPlatformTimestamp(homeSummary.asOf)}</span>
+          <span><strong className="text-ink">Recent account coverage:</strong> {organizationsResult.hasMore ? `${organizations.length} shown of ${homeSummary.totalBusinesses ?? "an unknown total"}` : `${organizations.length} shown`}</span>
+        </section>
+        {(!homeSummary.organizationsAvailable || !homeSummary.subscriptionFieldsAvailable || !homeSummary.accountFieldsAvailable || !homeSummary.profilesAvailable || !homeSummary.storesAvailable || !homeSummary.employeesAvailable) && <div className="mt-4 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm leading-6 text-ink-muted" role="status">Some Home summary counts are unavailable because one or more aggregate sources did not respond. Unknown values remain labeled; recent account detail is still available where its bounded reader succeeded.</div>}
+        {canViewSupport && supportCases.hasMore && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm leading-6 text-ink-muted" role="status"><span>Attention includes the first 250 active support cases{supportCases.total === null ? "" : ` of ${supportCases.total}`}. Older matching cases are outside this overview sample.</span><Link href="/platform/operations#business-controls-heading" className="inline-flex min-h-9 items-center rounded-lg bg-surface px-3 text-xs font-extrabold text-primary transition hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">Open operations</Link></div>}
+        {canViewSupport && !supportCases.organizationsAvailable && <div className="mt-4 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm leading-6 text-ink-muted" role="status">Support cases loaded without organization names. The case records remain visible, but organization links may be unavailable until the organization read recovers.</div>}
 
         <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Platform summary">
-          <PlatformMetric label="Businesses" value={organizations.length} detail={`${activeSubscriptions} active subscriptions · ${trialSubscriptions} in trial`} icon="dashboard" />
-          <PlatformMetric label="Active stores" value={activeStores} detail={`${stores.length} total branches`} icon="customers" />
-          <PlatformMetric label="Active staff" value={activeStaff} detail={`${employees.length} employee records`} icon="employees" />
+          <PlatformMetric label="Businesses" value={homeSummary.totalBusinesses ?? "Unknown"} detail={`${homeSummary.activeSubscriptions ?? "Unknown"} active subscriptions · ${homeSummary.trialSubscriptions ?? "Unknown"} in trial`} icon="dashboard" />
+          <PlatformMetric label="Active stores" value={homeSummary.activeStores ?? "Unknown"} detail={`${homeSummary.totalStores ?? "Unknown"} total branches`} icon="customers" />
+          <PlatformMetric label="Active staff" value={homeSummary.activeEmployees ?? "Unknown"} detail={`${homeSummary.totalEmployees ?? "Unknown"} employee records`} icon="employees" />
           <PlatformMetric label="Policy gate" value={`${publishedPolicies}/2`} detail={policyGateOpen ? "Ready for gated actions" : "Checkout and actions locked"} icon="lock" />
         </section>
 
@@ -111,7 +117,7 @@ export default async function PlatformOverviewPage() {
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <FeatureLink href="/platform/plans" icon="wallet" label="Plans & Pricing" detail={`${catalog.variants.filter((variant) => variant.isActive).length} live offers · ${formatPeso(catalog.monthlyPriceCentavos)} base · ${formatPeso(catalog.additionalBranchPriceCentavos)} per extra branch`} />
               <FeatureLink href="/platform/promotions" icon="tag" label="Promo & Marketing" detail="Create checkout codes and measure paid conversion" />
-              <FeatureLink href="/platform/users" icon="customers" label="Users" detail={`${profiles.length} user profiles across ${organizations.length} businesses`} />
+              <FeatureLink href="/platform/users" icon="customers" label="Users" detail={`${homeSummary.totalProfiles ?? "Unknown"} user profiles across ${homeSummary.totalBusinesses ?? "unknown"} businesses`} />
               <FeatureLink href="/platform/audit" icon="history" label="Audit log" detail="Review platform actions across organizations" />
               <FeatureLink href="/platform/fleet" icon="chart" label="Fleet health" detail="Review performance signals by organization" />
               <FeatureLink href="/platform/sync" icon="refresh" label="Sync & outbox" detail="Find stuck queues by branch" />
@@ -146,7 +152,7 @@ export default async function PlatformOverviewPage() {
 
         <section className="mt-8 overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)]" aria-labelledby="recent-businesses-heading">
           <div className="px-5 py-5 sm:px-6">
-            <PlatformSectionHeading eyebrow="Recent workspaces" title="Business directory" description="A quick view of the latest accounts. Open Users for access records or Operations for lifecycle controls." action={<Link href="/platform/users" className="inline-flex items-center gap-1.5 text-xs font-extrabold text-primary hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">View all users <AdminIcon name="arrow" size={13} /></Link>} />
+            <PlatformSectionHeading eyebrow="Recent workspaces" title="Business directory" description="A bounded view of the latest accounts. Open Users for access records or Operations for lifecycle controls." action={<div className="flex flex-wrap items-center gap-3"><span className="text-xs font-semibold text-ink-muted">{organizationsResult.hasMore ? `${organizations.length} recent of ${homeSummary.totalBusinesses ?? "an unknown total"}` : `${organizations.length} recent`}</span><Link href="/platform/users" className="inline-flex items-center gap-1.5 text-xs font-extrabold text-primary hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">View all users <AdminIcon name="arrow" size={13} /></Link></div>} />
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-[780px] w-full text-left text-sm">
@@ -230,6 +236,13 @@ function syncHealthAge(value: string | null, asOf: string) {
   if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"}`;
   const hours = Math.round(minutes / 60);
   return `${hours} hour${hours === 1 ? "" : "s"}`;
+}
+
+function formatPlatformTimestamp(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "Unknown"
+    : new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Singapore" }).format(date);
 }
 
 function FeatureLink({ href, icon, label, detail }: { href: string; icon: "wallet" | "customers" | "history" | "chart" | "lock" | "refresh" | "tag" | "bell"; label: string; detail: string }) {

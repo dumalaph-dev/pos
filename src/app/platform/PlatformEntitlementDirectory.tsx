@@ -11,13 +11,15 @@ import {
 } from "@/lib/platform-entitlements";
 import { PlatformEntitlementCard } from "./PlatformEntitlementCard";
 
-export function PlatformEntitlementDirectory({ summaries, grantSchemaAvailable, adjustmentSchemaAvailable, trialSchemaAvailable, policyGateOpen, canManage }: {
+export function PlatformEntitlementDirectory({ summaries, grantSchemaAvailable, adjustmentSchemaAvailable, trialSchemaAvailable, hasMore = false, policyGateOpen, canManage, scopeLabel = "organizations" }: {
   summaries: PlatformEntitlementSummary[];
   grantSchemaAvailable: boolean;
   adjustmentSchemaAvailable: boolean;
   trialSchemaAvailable: boolean;
+  hasMore?: boolean;
   policyGateOpen: boolean;
   canManage: boolean;
+  scopeLabel?: string;
 }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<PlatformEntitlementFilter>("all");
@@ -31,7 +33,8 @@ export function PlatformEntitlementDirectory({ summaries, grantSchemaAvailable, 
         <label className="block min-w-[220px]" htmlFor="platform-entitlement-filter"><span className="sr-only">Filter entitlement state</span><select id="platform-entitlement-filter" value={filter} onChange={(event) => setFilter(event.target.value as PlatformEntitlementFilter)} className="w-full rounded-xl border border-line-strong bg-raised px-3 py-2.5 text-sm font-semibold text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10">{PLATFORM_ENTITLEMENT_FILTERS.map((option) => <option key={option} value={option}>{platformEntitlementFilterLabel(option)}</option>)}</select></label>
       </div>
     </div>
-    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-ink-muted"><span>Showing <strong className="text-ink">{filtered.length}</strong> of <strong className="text-ink">{summaries.length}</strong> organizations</span>{(search || filter !== "all") && <button type="button" onClick={() => { setSearch(""); setFilter("all"); }} className="text-primary hover:underline">Clear search and filter</button>}</div>
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-ink-muted"><span>Showing <strong className="text-ink">{filtered.length}</strong> of <strong className="text-ink">{summaries.length}</strong> {scopeLabel}</span>{(search || filter !== "all") && <button type="button" onClick={() => { setSearch(""); setFilter("all"); }} className="text-primary hover:underline">Clear search and filter</button>}</div>
+    {hasMore && <p role="status" className="mt-4 rounded-xl border border-warning/25 bg-warning/10 px-3.5 py-3 text-xs font-semibold leading-5 text-ink">Entitlement history reached the page safety limit for these {scopeLabel}. Current summaries remain available; open an organization record for the complete timeline.</p>}
     {(!grantSchemaAvailable || !trialSchemaAvailable) && <p role="status" className="mt-4 rounded-xl border border-warning/25 bg-warning/10 px-3.5 py-3 text-xs font-semibold leading-5 text-ink">Some entitlement controls are read-only until migrations <code className="rounded bg-surface px-1">0052/0054</code> and <code className="rounded bg-surface px-1">0075</code> are applied. Existing subscription state remains visible.</p>}
     {filtered.length === 0 ? <div className="mt-5 rounded-xl border border-dashed border-line-strong bg-raised px-4 py-10 text-center text-sm leading-6 text-ink-muted">No organizations match this entitlement search.</div> : <div className="mt-5 grid gap-4 xl:grid-cols-2">{filtered.map((summary) => <PlatformEntitlementCard key={summary.organizationId} summary={summary} grantSchemaAvailable={grantSchemaAvailable} adjustmentSchemaAvailable={adjustmentSchemaAvailable} trialSchemaAvailable={trialSchemaAvailable} policyGateOpen={policyGateOpen} canManage={canManage} />)}</div>}
   </section>;

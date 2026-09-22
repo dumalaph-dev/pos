@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { OrganizationOperations } from "@/app/platform/OrganizationOperations";
+import { PlatformSupportCaseOperations } from "@/app/platform/PlatformSupportCaseOperations";
 import { ComplimentaryGrantPanel } from "@/app/platform/ComplimentaryGrantPanel";
 import { PlatformEntitlementTimeline } from "@/app/platform/PlatformEntitlementTimeline";
 import { TrialExtensionPanel } from "@/app/platform/TrialExtensionPanel";
@@ -12,6 +13,7 @@ import { isPolicyGateOpen, readPolicyNumber } from "@/lib/platform-operations";
 import { readPlatformOperations } from "@/lib/platform-operations-server";
 import { hasPlatformOperatorPermission } from "@/lib/platform-operators";
 import { requirePlatformOperator } from "@/lib/platform-operators-server";
+import { readPlatformOperators } from "@/lib/platform-operators-server";
 import { derivePlatformEntitlementSummary } from "@/lib/platform-entitlements";
 import { absoluteUrl } from "@/lib/site-url";
 import { referralStatusLabel } from "@/lib/referrals";
@@ -33,9 +35,10 @@ export default async function PlatformOrganizationPage({ params }: { params: Pro
 
   const admin = actor.admin;
 
-  const [detail, operations] = await Promise.all([
+  const [detail, operations, operatorDirectory] = await Promise.all([
     readPlatformOrganizationDetail(admin, orgId),
     readPlatformOperations(admin),
+    readPlatformOperators(admin),
   ]);
   if (!detail) notFound();
 
@@ -81,6 +84,7 @@ export default async function PlatformOrganizationPage({ params }: { params: Pro
   const canManageSupport = hasPlatformOperatorPermission(actor.role, "support_manage");
   const canManageEntitlements = hasPlatformOperatorPermission(actor.role, "entitlement_manage");
   const canViewSupport = actor.role !== "billing";
+  const eligibleSupportOperators = operatorDirectory.records.filter((operator) => operator.is_active && (operator.role === "owner" || operator.role === "support"));
   const entitlementSummary = derivePlatformEntitlementSummary({
     organization,
     grants: accessGrants,
@@ -175,7 +179,7 @@ export default async function PlatformOrganizationPage({ params }: { params: Pro
         <section className="mt-8 grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]" aria-label="Support and referrals">
           {canViewSupport ? <article className="overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)]">
             <div className="px-5 py-5 sm:px-6"><PlatformSectionHeading eyebrow="Support history" title="Cases and trial feedback" description="The operator history attached to this organization, including retention conversations." /></div>
-            <div className="border-t border-line">{supportCases.length === 0 ? <p className="px-6 py-8 text-center text-sm text-ink-muted">No support cases recorded for this organization.</p> : <div className="divide-y divide-line">{supportCases.map((supportCase) => <div key={supportCase.id} className="px-6 py-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><strong className="block text-sm">{supportCase.subject}</strong><span className="mt-1 block text-xs text-ink-muted">Opened {formatDate(supportCase.created_at)} · {supportCase.priority === "urgent" ? "Urgent" : "Normal"}</span></div><span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-extrabold text-primary">{supportCase.status.replaceAll("_", " ")}</span></div><p className="mt-2 text-sm leading-5 text-ink-muted">{supportCase.description}</p></div>)}</div>}{detail.trialFeedback && <div className="border-t border-line bg-warning/10 px-6 py-4"><p className="text-xs font-extrabold uppercase tracking-wide text-accent">Trial feedback</p><p className="mt-2 text-sm leading-5 text-ink">Reason: <strong>{detail.trialFeedback.reason.replaceAll("_", " ")}</strong>{detail.trialFeedback.wants_discount ? " · Discount requested" : ""}</p>{detail.trialFeedback.details && <p className="mt-1 text-sm leading-5 text-ink-muted">{detail.trialFeedback.details}</p>}<p className="mt-2 text-xs font-semibold text-ink-muted">Updated {formatDate(detail.trialFeedback.updated_at)} · {detail.trialFeedback.status}</p></div>}</div>
+            <div className="border-t border-line">{supportCases.length === 0 ? <p className="px-6 py-8 text-center text-sm text-ink-muted">No support cases recorded for this organization.</p> : <div className="divide-y divide-line">{supportCases.map((supportCase) => <div key={supportCase.id} className="px-6 py-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><strong className="block text-sm">{supportCase.subject}</strong><span className="mt-1 block text-xs text-ink-muted">Opened {formatDate(supportCase.created_at)} · {supportCase.priority === "urgent" ? "Urgent" : "Normal"}</span></div><span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-extrabold text-primary">{supportCase.status.replaceAll("_", " ")}</span></div><p className="mt-2 text-sm leading-5 text-ink-muted">{supportCase.description}</p><PlatformSupportCaseOperations supportCase={supportCase} operators={eligibleSupportOperators} policyGateOpen={policyGateOpen} canManage={canManageSupport} schemaAvailable={accountOperationsReady} /></div>)}</div>}{detail.trialFeedback && <div className="border-t border-line bg-warning/10 px-6 py-4"><p className="text-xs font-extrabold uppercase tracking-wide text-accent">Trial feedback</p><p className="mt-2 text-sm leading-5 text-ink">Reason: <strong>{detail.trialFeedback.reason.replaceAll("_", " ")}</strong>{detail.trialFeedback.wants_discount ? " · Discount requested" : ""}</p>{detail.trialFeedback.details && <p className="mt-1 text-sm leading-5 text-ink-muted">{detail.trialFeedback.details}</p>}<p className="mt-2 text-xs font-semibold text-ink-muted">Updated {formatDate(detail.trialFeedback.updated_at)} · {detail.trialFeedback.status}</p></div>}</div>
           </article> : <article className="rounded-[22px] border border-line bg-raised/60 p-5 shadow-[var(--shadow-card)] sm:p-6"><PlatformSectionHeading eyebrow="Support history" title="Support workspace restricted" description="Billing operators can manage subscription configuration and entitlements, but support cases and retention notes are reserved for Support and Owner operators." /></article>}
 
           <article className="overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)]">
@@ -189,7 +193,7 @@ export default async function PlatformOrganizationPage({ params }: { params: Pro
 
         <section className="mt-8 rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6" aria-labelledby="operator-controls-heading">
           <PlatformSectionHeading eyebrow="Operator controls" title="Lifecycle and support actions" description={canViewSupport ? "These existing controls remain policy-gated and use the same audit boundary as grants." : "Support controls are not available to Billing operators."} />
-          <div className="mt-5"><OrganizationOperations orgId={organization.id} orgName={organization.name} accountStatus={organization.account_status ?? null} suspensionReason={organization.suspension_reason ?? null} policyGateOpen={policyGateOpen} schemaAvailable={accountOperationsReady} canManage={canManageSupport} visible={canViewSupport} /></div>
+          <div className="mt-5"><OrganizationOperations orgId={organization.id} orgName={organization.name} accountStatus={organization.account_status ?? null} suspensionReason={organization.suspension_reason ?? null} platformAccountVersion={organization.platform_account_version ?? null} policyGateOpen={policyGateOpen} schemaAvailable={accountOperationsReady} canManage={canManageSupport} visible={canViewSupport} /></div>
         </section>
 
         <section className="mt-8 overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)]" aria-labelledby="audit-history-heading">
