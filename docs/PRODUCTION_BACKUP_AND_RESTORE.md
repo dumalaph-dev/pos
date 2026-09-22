@@ -6,9 +6,9 @@
 
 ## Latest logical checkpoint
 
-`node scripts/backup-production.mjs --out <restricted-output>` completed successfully on 2026-09-23 at `2026-09-23 01:18:20` Singapore time (`2026-09-22T17:18:20Z`), exporting **59/59 application tables**, **1,485 rows**, and **778,132 bytes**. `node scripts/verify-backup.mjs` rechecked every NDJSON row count, byte count, and SHA-256 digest. The checkpoint was written to a local temporary directory for verification and has **not** yet been copied to approved off-machine storage; do not treat it as an operational recovery point until that copy and an isolated restore rehearsal are complete.
+`node scripts/backup-production.mjs --out <restricted-output>` completed successfully on 2026-09-23 at `2026-09-23 01:18:20` Singapore time (`2026-09-22T17:18:20Z`), exporting **59/59 application tables**, **1,485 rows**, and **778,132 bytes**. `node scripts/verify-backup.mjs` rechecked every NDJSON row count, byte count, and SHA-256 digest. The verified checkpoint was copied to the separate `BACKUPSSD` volume at `Dumala/backups/2026-09-22T17-18-20Z`; the destination contains 60 files and **790,665 bytes** and was independently re-verified with the same 59-table, 1,485-row, 778,132-byte manifest totals.
 
-That checkpoint predates the current 57-table allowlist and the Wave 1 lifecycle tables. A new checkpoint is required after migration 0088 is deployed; do not treat the historical 35-table export as complete coverage for the current schema.
+`BACKUPSSD` is a workstation-attached recovery copy, not a separate account or region. The volume's encryption state could not be verified from this environment, so this copy is an interim recovery control. An encrypted, versioned object-store copy and a hosted scratch restore remain required before treating C4 as production-ready.
 
 ## Wave 1 local recovery drill (2026-09-22)
 
@@ -23,6 +23,17 @@ After hosted migrations `0089` and `0091`, the production API export covered all
 ## Local Auth and Storage interface rehearsal (2026-09-23)
 
 The local Docker Supabase stack passed a disposable round-trip: a temporary Auth identity was provisioned, a private Storage bucket and object were created, the object bytes were downloaded and compared, and the identity, object, and bucket were deleted. Post-cleanup catalog checks returned zero residual fixtures. This proves the local provisioning and object paths used by a restore; it does not prove a hosted scratch-project restore or preserve passwords/provider configuration, which remain part of the owner gate.
+
+## Interim off-machine copy and recovery policy (2026-09-23)
+
+The interim pilot policy is now recorded so implementation can proceed without implying that the Free-plan project has managed backups:
+
+- **Recovery copy:** keep the verified after-close export on `BACKUPSSD` under `Dumala/backups`, with a 30-day retention rule and a new timestamped directory per run. The 2026-09-22T17:18:20Z copy was counted and re-verified from the destination.
+- **RPO:** **no more than 24 hours**, and no more than one shift when the after-close job runs.
+- **RTO:** **no more than 8 hours** for the interim pilot.
+- **Preferred production target:** move to an encrypted, versioned object store in a separate account or region, then evaluate Pro/PITR for **RPO ≤ 15 minutes** and **RTO ≤ 4 hours**.
+
+The local Auth/Storage rehearsal and the destination copy are complete. Hosted scratch-project Auth/Storage restoration, confirmation of the destination's encryption/retention controls, and authenticated `/platform/attention` operator QA remain explicit release gates.
 
 ## Verified posture
 
@@ -104,12 +115,12 @@ The repository now proves schema coverage, file integrity, and a local 57-table 
 
 | Decision | Recommended default | Acceptance evidence required |
 |---|---|---|
-| Off-machine backup | Copy the after-close logical export to an owner-controlled, encrypted, versioned object store in a separate account or region. Retain at least 30 days; restrict writes to the backup job and reads to the recovery operator. | Named destination/owner, first successful copy, manifest digest check from the destination, and a documented retention rule. |
-| Auth recovery | Treat `auth.users` passwords and provider configuration as a separate recovery domain. Preserve the profile/employee UUID mapping in the logical export, then re-provision logins through the Employees workflow and test login plus password reset in an isolated project. | Scratch-project identity rehearsal with one disposable employee and one platform operator; record the mapping and cleanup result. |
-| Storage recovery | Inventory product-image and display-gallery buckets separately from the database export. Copy irreplaceable objects to the same protected off-machine boundary, restore into an isolated bucket, and verify MIME type, path, access policy, and representative UI rendering. | Bucket/object inventory, checksum or object-count evidence, and one isolated restore check. |
-| RPO / RTO | Interim pilot target: **RPO ≤ 24 hours (≤ one shift when the after-close job runs) and RTO ≤ 8 hours**. Preferred production target after Pro/PITR approval: **RPO ≤ 15 minutes and RTO ≤ 4 hours**. | Owner-selected target recorded with plan/billing choice, backup cadence, latest verified point, and last restore duration. |
+| Off-machine backup | **Interim selected:** copy the after-close logical export to the separate `BACKUPSSD` volume under `Dumala/backups`, retain timestamped runs for 30 days, and verify the manifest from the destination. **Production target:** an encrypted, versioned object store in a separate account or region. | The first `BACKUPSSD` copy is complete and re-verified. Encryption state and a genuinely separate account/region are still unverified. |
+| Auth recovery | Treat `auth.users` passwords and provider configuration as a separate recovery domain. Preserve the profile/employee UUID mapping in the logical export, then re-provision logins through the Employees workflow and test login plus password reset in an isolated project. | Local disposable identity provisioning and cleanup passed. Hosted scratch-project identity restoration remains open. |
+| Storage recovery | Inventory product-image and display-gallery buckets separately from the database export. Copy irreplaceable objects to the same protected off-machine boundary, restore into an isolated bucket, and verify MIME type, path, access policy, and representative UI rendering. | Local private-bucket/object round-trip and cleanup passed. Hosted bucket inventory and isolated restore remain open. |
+| RPO / RTO | **Selected interim pilot target:** **RPO ≤ 24 hours (≤ one shift when the after-close job runs) and RTO ≤ 8 hours**. Preferred production target after encrypted storage and Pro/PITR approval: **RPO ≤ 15 minutes and RTO ≤ 4 hours**. | The interim target and 30-day cadence are recorded here; plan upgrade/PITR and the preferred target remain owner billing decisions. |
 
-Until the owner accepts these defaults or records alternatives, C4 remains an owner gate. The application must continue to show recovery evidence as incomplete rather than implying that the Free-plan project has managed backups.
+The interim policy is accepted for continued pilot engineering, but C4 is not production-ready until the encrypted separate-boundary copy, hosted Auth/Storage scratch restore, and authenticated operator QA are evidenced. The application must continue to show recovery evidence as incomplete rather than implying that the Free-plan project has managed backups.
 
 ## Owner action before the pilot
 
