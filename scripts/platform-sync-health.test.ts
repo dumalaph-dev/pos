@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import {
+  isPlatformSyncHealthDeviceKey,
   PLATFORM_SYNC_HEALTH_STALE_AFTER_MS,
   PLATFORM_SYNC_HEALTH_STUCK_AFTER_MS,
   summarizePlatformSyncHealth,
@@ -101,6 +102,13 @@ test("sync health applies strict stuck and stale thresholds", () => {
   assert.equal(summary.branchRows.find((row) => row.storeId === "store-a2")?.freshness, "stale");
 });
 
+test("telemetry identity validation preserves legacy order IDs", () => {
+  assert.equal(isPlatformSyncHealthDeviceKey("D9ND1MW"), true);
+  assert.equal(isPlatformSyncHealthDeviceKey("DC3992CC8"), true);
+  assert.equal(isPlatformSyncHealthDeviceKey("device-a-001"), true);
+  assert.equal(isPlatformSyncHealthDeviceKey("bad id"), false);
+});
+
 test("sync health reader, reporter, migration, and viewer preserve the telemetry boundary", () => {
   const read = (relativePath: string) => fs.readFileSync(path.resolve(process.cwd(), relativePath), "utf8");
   const reader = read("src/app/platform/_lib/platform-data.ts");
@@ -108,6 +116,7 @@ test("sync health reader, reporter, migration, and viewer preserve the telemetry
   const client = read("src/lib/sync-health-client.ts");
   const offline = read("src/lib/offline.ts");
   const adminOutbox = read("src/lib/admin/local-first-store.ts");
+  const compatibilityMigration = read("supabase/migrations/0092_sync_health_legacy_device_keys.sql");
   const viewer = read("src/app/platform/PlatformSyncHealthViewer.tsx");
   const migration = read("supabase/migrations/0080_sync_health_snapshots.sql");
   const enhancedMigration = read("supabase/migrations/0081_sync_health_enhanced_metrics.sql");
@@ -120,9 +129,13 @@ test("sync health reader, reporter, migration, and viewer preserve the telemetry
   assert.match(route, /stuck_count/i);
   assert.match(route, /sync_succeeded/i);
   assert.doesNotMatch(route, /parsed\.(org_id|organization_id)/i);
-  assert.match(client, /getDeviceId\(\)/i);
+  assert.match(client, /getTelemetryDeviceId\(\)/i);
+  assert.doesNotMatch(client, /getDeviceId\(\)/i);
   assert.match(client, /\/api\/admin\/sync-health/i);
+  assert.match(client, /response\.ok/i);
   assert.match(offline, /getOfflineQueueHealth/i);
+  assert.match(offline, /pos\.sync\.device\.id/i);
+  assert.match(compatibilityMigration, /between 7 and 80/i);
   assert.match(adminOutbox, /getAdminMutationHealth/i);
   assert.match(viewer, /Search organizations or branches/i);
   assert.match(viewer, /Freshness/i);

@@ -1,9 +1,9 @@
 "use client";
 
-import { getDeviceId } from "@/lib/offline";
+import { getTelemetryDeviceId } from "@/lib/offline";
 import type { PlatformSyncHealthQueue, PlatformSyncHealthQueueSnapshot } from "@/lib/platform-sync-health";
 
-export function reportSyncHealthSnapshot({
+export async function reportSyncHealthSnapshot({
   storeId,
   online,
   queues,
@@ -13,12 +13,12 @@ export function reportSyncHealthSnapshot({
   online: boolean;
   queues: PlatformSyncHealthQueueSnapshot[];
   successfulQueues?: PlatformSyncHealthQueue[];
-}): void {
-  if (typeof window === "undefined" || queues.length === 0) return;
+}): Promise<boolean> {
+  if (typeof window === "undefined" || queues.length === 0) return false;
 
   const body = JSON.stringify({
     store_id: storeId,
-    device_key: getDeviceId(),
+    device_key: getTelemetryDeviceId(),
     online,
     queues: queues.map((queue) => ({
       queue: queue.queue,
@@ -32,22 +32,36 @@ export function reportSyncHealthSnapshot({
   });
 
   try {
-    if (typeof navigator.sendBeacon === "function") {
+    // While the terminal is open, await the authenticated response so a
+    // rejected first heartbeat is not mistaken for a successful report.
+    // Beacon remains the unload-safe fallback for a hidden page.
+    if (document.visibilityState === "hidden" && typeof navigator.sendBeacon === "function") {
       const accepted = navigator.sendBeacon(
         "/api/admin/sync-health",
         new Blob([body], { type: "application/json" }),
       );
-      if (accepted) return;
+      return accepted;
     }
 
-    void fetch("/api/admin/sync-health", {
+    const response = await fetch("/api/admin/sync-health", {
       method: "POST",
       body,
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       keepalive: true,
-    }).catch(() => undefined);
+    });
+    return response.ok;
   } catch {
-    // Health reporting must never block sales or offline recovery.
+    // Health reporting must never block sales or offline recovery. If the
+    // request failed before a response existed, a beacon can still carry a
+    // best-effort report during a transient fetch/network failure.
+    try {
+      return typeof navigator.sendBeacon === "function" && navigator.sendBeacon(
+        "/api/admin/sync-health",
+        new Blob([body], { type: "application/json" }),
+      );
+    } catch {
+      return false;
+    }
   }
 }

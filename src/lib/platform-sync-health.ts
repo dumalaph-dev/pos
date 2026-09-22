@@ -1,6 +1,17 @@
 export const PLATFORM_SYNC_HEALTH_QUEUES = ["orders", "audit", "admin_mutations"] as const;
 export type PlatformSyncHealthQueue = (typeof PLATFORM_SYNC_HEALTH_QUEUES)[number];
 
+/**
+ * Keep telemetry identity validation explicit and separate from order/offline
+ * bookkeeping. Older POS releases generated seven-character IDs, so the
+ * heartbeat contract preserves those values while still bounding the key.
+ */
+export const PLATFORM_SYNC_HEALTH_DEVICE_KEY_PATTERN = /^[A-Za-z0-9._:-]{7,80}$/;
+
+export function isPlatformSyncHealthDeviceKey(value: unknown): value is string {
+  return typeof value === "string" && PLATFORM_SYNC_HEALTH_DEVICE_KEY_PATTERN.test(value);
+}
+
 export const PLATFORM_SYNC_HEALTH_STALE_AFTER_MS = 30 * 60 * 1000;
 export const PLATFORM_SYNC_HEALTH_STUCK_AFTER_MS = 15 * 60 * 1000;
 export const PLATFORM_SYNC_HEALTH_REPORT_INTERVAL_MS = 5 * 60 * 1000;
