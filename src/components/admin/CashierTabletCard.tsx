@@ -36,10 +36,19 @@ export function CashierTabletCard({
   links,
   legacyOnly = false,
   compact = false,
+  emptyTitle = "Create a branch to get the cashier link",
+  emptyDetail = "Each active branch gets its own sign-in link for counter tablets. Add your first branch and the link appears here.",
 }: {
   links: StaffLoginLink[];
   legacyOnly?: boolean;
   compact?: boolean;
+  /**
+   * The empty state has two very different causes. On the dashboard the owner
+   * genuinely has no branch yet; on the POS page a branch is selected and its
+   * link is missing, which is a different thing to tell them.
+   */
+  emptyTitle?: string;
+  emptyDetail?: string;
 }) {
   const activeLinks = useMemo(() => links.filter((link) => link.isActive), [links]);
   const [selectedId, setSelectedId] = useState(() => activeLinks[0]?.id ?? links[0]?.id ?? "");
@@ -98,8 +107,8 @@ export function CashierTabletCard({
         <span className="cashier-tablet__mark"><AdminIcon name="pos" size={18} /></span>
         <div>
           <p className="cashier-tablet__eyebrow">Cashier tablet</p>
-          <h3 id="cashier-tablet-heading">Create a branch to get the cashier link</h3>
-          <p>Each active branch gets its own sign-in link for counter tablets. Add your first branch and the link appears here.</p>
+          <h3 id="cashier-tablet-heading">{emptyTitle}</h3>
+          <p>{emptyDetail}</p>
         </div>
       </section>
     );

@@ -24,6 +24,8 @@ import { normalizePaperWidth, PAPER_WIDTH_OPTIONS, toPaperWidthValue, type Paper
 import type { DisplaySettings } from "@/lib/display";
 import type { DisplayPromotionRecord } from "@/lib/display-config";
 import type { DisplayGalleryRecord, DisplayMenuItem } from "@/lib/display-gallery";
+import type { StaffLoginLink } from "@/lib/admin/staff-links";
+import { CashierTabletCard } from "./CashierTabletCard";
 
 export type AdminPosProduct = {
   id: string;
@@ -81,7 +83,7 @@ export type PosConfig = {
   paperWidth: PaperWidthValue;
 };
 
-export type PosTabId = "preview" | "settings" | "hardware" | "display";
+export type PosTabId = "preview" | "counter" | "settings" | "hardware" | "display";
 type TabId = PosTabId;
 
 /**
@@ -90,6 +92,9 @@ type TabId = PosTabId;
  * the settings tab plus the section to scroll to.
  */
 export type PosSettingsSection = "flow" | "payments" | "receipts";
+
+/** Someone who can sign in at this branch's counter. */
+export type CounterStaffMember = { id: string; name: string; role: string };
 type PreviewDevice = "desktop" | "tablet";
 type UtilityPanel = "notifications" | "help" | "profile" | "";
 type CartLine = { product: AdminPosProduct; qty: number };
@@ -118,6 +123,7 @@ const PREVIEW_PRODUCTS: AdminPosProduct[] = [
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: "preview", label: "POS Preview" },
+  { id: "counter", label: "Counter Setup" },
   { id: "settings", label: "POS Settings" },
   { id: "hardware", label: "Hardware" },
   { id: "display", label: "Customer Display" },
@@ -359,6 +365,10 @@ export default function PosSettingsScreen({
   initialSettings,
   initialBusinessPresetId,
   initialSection,
+  counterLink,
+  counterLinkLegacyOnly,
+  counterStaff,
+  counterStaffUnavailable,
 }: {
   organizationName: string;
   logoUrl: string | null;
@@ -373,6 +383,12 @@ export default function PosSettingsScreen({
   queryWarning: boolean;
   initialTab: PosTabId;
   initialSection?: PosSettingsSection;
+  /** The selected branch's own staff entry link; null until migration 0033. */
+  counterLink?: StaffLoginLink | null;
+  counterLinkLegacyOnly?: boolean;
+  counterStaff?: CounterStaffMember[];
+  /** True when the staff list could not be read, rather than being empty. */
+  counterStaffUnavailable?: boolean;
   savedMessage: string;
   errorMessage: string;
   initialNow: string;
@@ -746,6 +762,23 @@ export default function PosSettingsScreen({
               </>
             ) : null}
 
+            {/* `products`, not `catalog`: the latter substitutes demo items for
+                an empty branch and caps at 12, so a readiness check built on it
+                would invent a menu and under-count a real one. */}
+            {activeTab === "counter" ? (
+              <CounterSetupPanel
+                branchName={currentBranchName}
+                counterLink={counterLink ?? null}
+                legacyOnly={Boolean(counterLinkLegacyOnly)}
+                staff={counterStaff ?? []}
+                staffUnavailable={Boolean(counterStaffUnavailable)}
+                devices={devices.filter((device) => !storeId || device.store_id === storeId)}
+                productCount={products.length}
+                enabledPaymentMethods={availablePaymentMethods.length}
+                displayPaired={Boolean(displayPairingToken)}
+                onOpenTab={setActiveTab}
+              />
+            ) : null}
             {activeTab === "settings" ? <PosSettingsPanel config={config} updateConfig={updateConfig} orderType={orderType} setDefaultOrderType={chooseDefaultOrderType} toggleOrderType={toggleOrderType} branchDetails={branchDetails} updateBranchDetails={updateBranchDetails} initialSection={initialSection} /> : null}
             {activeTab === "hardware" ? <HardwarePanel devices={devices} deviceBranches={deviceBranchOptions} currentStoreId={storeId} canWrite={canWrite} deviceTest={deviceTest} onTestDevice={testDevice} /> : null}
             {activeTab === "display" ? <DisplayPromotionsPanel storeId={storeId} branchName={currentBranchName} themeLabel={getPosTheme(config.uiStyle).label} displayPairingToken={displayPairingToken} canWrite={canWrite} initialPromotions={displayPromotions} initialGalleryItems={displayGalleryItems} initialMenuItems={displayMenuItems} settings={displaySettings} onSettingsChange={(nextSettings) => { setDisplaySettings(nextSettings); setDisplaySettingsDirty(true); }} promotionsUnavailable={displayPromotionsUnavailable} galleryUnavailable={displayGalleryUnavailable} /> : null}
@@ -1152,6 +1185,227 @@ const PAYMENT_METHODS: Array<{ id: PaymentMethodId; label: string; description: 
  * The section rail keeps each group reachable in one click without hiding the
  * others, and doubles as the landing target for the old `?tab=` links.
  */
+type CounterCheck = {
+  id: string;
+  label: string;
+  done: string;
+  todo: string;
+  ok: boolean;
+  action: { label: string; tab?: TabId; href?: string };
+};
+
+/**
+ * Everything needed to put a working till on a counter, in the order it has to
+ * happen: is the branch ready to sell, what link does the tablet open, which
+ * terminals have checked in, and who can sign in on them.
+ *
+ * The readiness list is derived from data the page already loads rather than
+ * from a stored "setup complete" flag. A flag goes stale the moment someone
+ * retires the last terminal or unassigns the last cashier, and this is exactly
+ * the screen where that needs to be visible.
+ */
+function CounterSetupPanel({
+  branchName,
+  counterLink,
+  legacyOnly,
+  staff,
+  staffUnavailable,
+  devices,
+  productCount,
+  enabledPaymentMethods,
+  displayPaired,
+  onOpenTab,
+}: {
+  branchName: string;
+  counterLink: StaffLoginLink | null;
+  legacyOnly: boolean;
+  staff: CounterStaffMember[];
+  staffUnavailable: boolean;
+  devices: AdminPosDevice[];
+  productCount: number;
+  enabledPaymentMethods: number;
+  displayPaired: boolean;
+  onOpenTab: (tab: TabId) => void;
+}) {
+  const activeDevices = devices.filter((device) => device.is_active);
+  const checks: CounterCheck[] = [
+    {
+      id: "link",
+      label: "Branch sign-in link",
+      done: "Ready to share with the counter tablet.",
+      todo: "This branch has no entry link yet, so no tablet can reach its sign-in screen.",
+      ok: Boolean(counterLink?.isActive),
+      action: { label: "Manage branches", href: "/admin/branches" },
+    },
+    {
+      id: "menu",
+      label: "Products to sell",
+      done: `${productCount} product${productCount === 1 ? "" : "s"} available at this branch.`,
+      todo: "The menu is empty, so a cashier has nothing to ring up.",
+      ok: productCount > 0,
+      action: { label: "Add products", href: "/products" },
+    },
+    {
+      id: "terminal",
+      label: "Registered terminal",
+      done: `${activeDevices.length} active terminal${activeDevices.length === 1 ? "" : "s"} for order numbers and printing.`,
+      todo: "No active terminal, so orders have no counter prefix and nothing can print.",
+      ok: activeDevices.length > 0,
+      action: { label: "Open Hardware", tab: "hardware" },
+    },
+    {
+      id: "tender",
+      label: "Payment method",
+      done: `${enabledPaymentMethods} tender option${enabledPaymentMethods === 1 ? "" : "s"} on the charge screen.`,
+      todo: "Every tender is switched off, so a sale cannot be completed.",
+      ok: enabledPaymentMethods > 0,
+      action: { label: "Open POS Settings", tab: "settings" },
+    },
+    // Omitted rather than failed when the list could not be read: a role that
+    // cannot see staff would otherwise be told nobody works here.
+    ...(staffUnavailable ? [] : [{
+      id: "staff",
+      label: "Someone to sign in",
+      done: `${staff.length} ${staff.length === 1 ? "person" : "people"} assigned to this branch.`,
+      todo: "Nobody is assigned here, so the sign-in screen has no one to accept.",
+      ok: staff.length > 0,
+      action: { label: "Manage employees", href: "/admin/employees" },
+    } satisfies CounterCheck]),
+  ];
+  const outstanding = checks.filter((check) => !check.ok);
+
+  return (
+    <div className="pos-config-panel pos-config-panel--merged">
+      <PanelHeading eyebrow="Set up a counter" title="Counter Setup" description={`Everything a tablet needs before it can take its first sale at ${branchName || "this branch"}.`} />
+
+      <section className="pos-settings-section pos-counter-readiness" aria-labelledby="counter-readiness-heading">
+        <div className="pos-settings-section__heading">
+          <span className="pos-settings-section__icon"><MiniIcon name={outstanding.length ? "info" : "check"} size={18} /></span>
+          <div>
+            <h3 id="counter-readiness-heading">{outstanding.length ? `${outstanding.length} thing${outstanding.length === 1 ? "" : "s"} left before this counter can sell` : "This counter is ready to sell"}</h3>
+            <p>{outstanding.length ? "Each item below blocks a real step in the sale, not a cosmetic one." : "Link, menu, terminal, tender, and staff are all in place for this branch."}</p>
+          </div>
+          <span className={`pos-counter-score${outstanding.length ? "" : " is-complete"}`}>{checks.length - outstanding.length}/{checks.length}</span>
+        </div>
+
+        <ul className="pos-counter-checks">
+          {checks.map((check) => (
+            <li key={check.id} className={check.ok ? "is-ok" : ""}>
+              <span className="pos-counter-checks__mark" aria-hidden="true"><MiniIcon name={check.ok ? "check" : "close"} size={11} /></span>
+              <span className="pos-counter-checks__copy">
+                <strong>{check.label}</strong>
+                <small>{check.ok ? check.done : check.todo}</small>
+              </span>
+              {check.ok ? <span className="pos-counter-checks__state">Ready</span> : check.action.tab
+                ? <button type="button" className="pos-counter-link" onClick={() => onOpenTab(check.action.tab as TabId)}>{check.action.label}<MiniIcon name="chevron" size={12} /></button>
+                : <Link href={check.action.href ?? "#"} className="pos-counter-link">{check.action.label}<MiniIcon name="chevron" size={12} /></Link>}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="pos-settings-section" aria-labelledby="counter-link-heading">
+        <div className="pos-settings-section__heading">
+          <span className="pos-settings-section__icon"><MiniIcon name="tablet" size={18} /></span>
+          <div>
+            <h3 id="counter-link-heading">Get a cashier onto a tablet</h3>
+            <p>Share one link, install the app, sign in. Three steps, once per device.</p>
+          </div>
+        </div>
+        <div className="pos-counter-tablet">
+          <CashierTabletCard
+            links={counterLink ? [counterLink] : []}
+            legacyOnly={legacyOnly}
+            emptyTitle={`No sign-in link for ${branchName || "this branch"} yet`}
+            emptyDetail="A tablet reaches the sign-in screen through the branch's own link. Check that the branch is active, then reopen this tab."
+          />
+        </div>
+      </section>
+
+      <div className="pos-duo pos-duo--counter">
+        <section className="pos-settings-section" aria-labelledby="counter-terminals-heading">
+          <div className="pos-settings-section__heading">
+            <span className="pos-settings-section__icon"><MiniIcon name="desktop" size={18} /></span>
+            <div>
+              <h3 id="counter-terminals-heading">Terminals at this branch</h3>
+              <p>Each counter needs its own prefix so order numbers never collide.</p>
+            </div>
+          </div>
+
+          {devices.length === 0 ? (
+            <div className="pos-counter-empty">
+              <MiniIcon name="printer" size={20} />
+              <strong>No terminal registered</strong>
+              <p>Register the tablet so its sales carry a counter prefix and can print.</p>
+              <button type="button" className="pos-counter-link" onClick={() => onOpenTab("hardware")}>Open Hardware<MiniIcon name="chevron" size={12} /></button>
+            </div>
+          ) : (
+            <>
+              <ul className="pos-counter-devices">
+                {devices.map((device) => (
+                  <li key={device.id}>
+                    <span className={`pos-hardware-status${device.is_active ? " is-active" : ""}`} aria-hidden="true" />
+                    <span className="pos-counter-devices__copy">
+                      <strong>{device.name}<em>{device.device_prefix}</em></strong>
+                      <small>{device.is_active ? "Active" : "Retired"} · {deviceLastSeen(device.last_seen_at)}</small>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <button type="button" className="pos-counter-link pos-counter-link--block" onClick={() => onOpenTab("hardware")}>Manage terminals and printers<MiniIcon name="chevron" size={12} /></button>
+            </>
+          )}
+        </section>
+
+        <section className="pos-settings-section" aria-labelledby="counter-staff-heading">
+          <div className="pos-settings-section__heading">
+            <span className="pos-settings-section__icon"><MiniIcon name="person" size={18} /></span>
+            <div>
+              <h3 id="counter-staff-heading">Who can sign in here</h3>
+              <p>People assigned to this branch. Each signs in with their own Employee ID.</p>
+            </div>
+          </div>
+
+          {staffUnavailable ? (
+            <div className="pos-counter-empty">
+              <MiniIcon name="info" size={20} />
+              <strong>Not visible for your role</strong>
+              <p>Only an organization admin can list who is assigned to this branch. Everything else on this page still applies.</p>
+            </div>
+          ) : staff.length === 0 ? (
+            <div className="pos-counter-empty">
+              <MiniIcon name="person" size={20} />
+              <strong>Nobody assigned yet</strong>
+              <p>Assign a cashier to this branch so the sign-in screen has someone to accept.</p>
+              <Link href="/admin/employees" className="pos-counter-link">Manage employees<MiniIcon name="chevron" size={12} /></Link>
+            </div>
+          ) : (
+            <>
+              <ul className="pos-counter-staff">
+                {staff.map((member) => (
+                  <li key={member.id}>
+                    <span className="pos-counter-staff__avatar" aria-hidden="true">{member.name.slice(0, 1).toUpperCase()}</span>
+                    <span className="pos-counter-staff__copy"><strong>{member.name}</strong><small>{member.role}</small></span>
+                  </li>
+                ))}
+              </ul>
+              <Link href="/admin/employees" className="pos-counter-link pos-counter-link--block">Manage employees and access<MiniIcon name="chevron" size={12} /></Link>
+            </>
+          )}
+        </section>
+      </div>
+
+      <p className="pos-counter-footnote">
+        <MiniIcon name="info" size={13} />
+        <span>
+          Everything here applies to <strong>{branchName || "this branch"}</strong>. Switch the editing branch in the header to set up another counter.
+          {displayPaired ? " A customer display is paired with this branch." : " No customer display is paired yet — pair one from the Customer Display tab if this counter has a second screen."}
+        </span>
+      </p>
+    </div>
+  );
+}
+
 function PosSettingsPanel({
   config,
   updateConfig,

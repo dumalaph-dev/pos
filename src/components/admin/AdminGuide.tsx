@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AdminIcon } from "./AdminIcon";
 import { AdminLink as Link } from "./AdminLink";
-import { CashierTabletCard } from "./CashierTabletCard";
 import {
   CATEGORY_FILTERS,
   GLOSSARY,
@@ -19,7 +18,6 @@ import {
   type GuideRole,
   type GuideTopic,
 } from "./admin-guide-data";
-import type { StaffLoginLink } from "@/lib/admin/staff-links";
 import styles from "./AdminGuide.module.css";
 
 export type { GuideRole };
@@ -40,16 +38,10 @@ export function AdminGuide({
   currentRole,
   organizationName,
   initialTopic,
-  staffLinks = [],
-  staffLinksLegacyOnly = false,
-  canSeeStaffLinks = false,
 }: {
   currentRole?: GuideRole | null;
   organizationName?: string;
   initialTopic?: GuideTopic;
-  staffLinks?: StaffLoginLink[];
-  staffLinksLegacyOnly?: boolean;
-  canSeeStaffLinks?: boolean;
 }) {
   const [activeRole, setActiveRole] = useState<GuideRole>(roleForProfile(currentRole));
   const [activeCategory, setActiveCategory] = useState<"All" | GuideCategory>("All");
@@ -212,19 +204,6 @@ export function AdminGuide({
           </article>
         </div>
       </section>
-
-      {canSeeStaffLinks && (
-        <section id="cashier-device" className={styles.deviceSection} aria-labelledby="cashier-device-title">
-          <div className={styles.sectionHeading}>
-            <div>
-              <p className={styles.sectionEyebrow}>Set up a counter</p>
-              <h2 id="cashier-device-title">Get a cashier onto a tablet</h2>
-            </div>
-            <p>Share one link, install the app, sign in. Three steps, once per device.</p>
-          </div>
-          <CashierTabletCard links={staffLinks} legacyOnly={staffLinksLegacyOnly} />
-        </section>
-      )}
 
       <div className={styles.contentGrid}>
         <section id="guide-faqs" className={styles.faqSection} aria-labelledby="faq-title">

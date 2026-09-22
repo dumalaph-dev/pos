@@ -8,6 +8,7 @@ import { POS_FONT_IDS, readPosFontColor } from "@/lib/pos-font";
 import { readPosRadius } from "@/lib/pos-shape";
 import { getSelectedAdminBranchId, type AdminBranchOption } from "@/lib/admin/branch-context";
 import { readBusinessPresetId } from "@/lib/admin/business";
+import { getStaffLoginLinks } from "@/lib/admin/staff-links";
 import { resolveProductImage } from "@/lib/product-images";
 import { normalizePaperWidth, toPaperWidthValue } from "@/lib/paper-width";
 import { normalizeDisplayPairingToken } from "@/lib/display";
@@ -18,6 +19,7 @@ import PosSettingsScreen, {
   type AdminPosDevice,
   type AdminPosProduct,
   type PosConfig,
+  type CounterStaffMember,
   type PosSettingsSection,
   type PosTabId,
 } from "@/components/admin/PosSettingsScreen";
@@ -85,7 +87,14 @@ function readEnum<T extends readonly string[]>(value: unknown, values: T, fallba
  */
 function readTab(value: unknown): PosTabId {
   if (value === "payments" || value === "receipts") return "settings";
-  return value === "hardware" || value === "settings" || value === "display" ? value : "preview";
+  return value === "hardware" || value === "settings" || value === "display" || value === "counter" ? value : "preview";
+}
+
+function roleLabel(value: string | null) {
+  if (value === "admin") return "Admin";
+  if (value === "manager") return "Manager";
+  if (value === "cashier") return "Cashier";
+  return "Staff";
 }
 
 function readSettingsSection(value: unknown): PosSettingsSection | undefined {
@@ -179,6 +188,20 @@ export default async function AdminPosPage({ searchParams }: { searchParams: Pro
       ])
     : [{ data: [], error: null }, { data: [], error: null }, await devicesQuery, { data: [], error: null }, { data: [], error: null }];
 
+  // Counter Setup shows the entry link and the people for the branch being
+  // edited only — a counter is set up one branch at a time, and showing every
+  // branch's link here is how the wrong one ends up taped to a tablet.
+  const [staffLinks, counterStaffResult] = await Promise.all([
+    getStaffLoginLinks(profile.org_id),
+    storeId
+      ? supabase.from("profiles").select("id, full_name, role").eq("org_id", profile.org_id).eq("store_id", storeId).order("full_name").limit(50)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  const counterLink = staffLinks.links.find((link) => link.id === storeId) ?? null;
+  const counterStaff = ((counterStaffResult.data ?? []) as Array<{ id: string; full_name: string | null; role: string | null }>)
+    .map((member) => ({ id: member.id, name: member.full_name?.trim() || "Unnamed teammate", role: roleLabel(member.role) }))
+    .filter((member): member is CounterStaffMember => Boolean(member.id));
+
   const stockResult = storeId
     ? await supabase.rpc("current_stock", { p_org_id: profile.org_id })
     : { data: [], error: null };
@@ -247,6 +270,10 @@ export default async function AdminPosPage({ searchParams }: { searchParams: Pro
       initialDisplaySettings={normalizeDisplaySettings(store?.settings?.customer_display)}
       initialSettings={store ? readPosConfig(store) : readPosConfig({ id: "", name: DEFAULT_STORE_NAME, address: null, tin: null, vat_registered: true, vat_rate: 0.12, settings: {} })}
       initialBusinessPresetId={readBusinessPresetId(profile.organizations?.settings)}
+      counterLink={counterLink}
+      counterLinkLegacyOnly={staffLinks.legacyOnly}
+      counterStaff={counterStaff}
+      counterStaffUnavailable={Boolean(counterStaffResult.error)}
     />
   );
 }
