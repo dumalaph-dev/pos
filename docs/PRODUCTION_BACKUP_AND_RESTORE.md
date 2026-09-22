@@ -2,11 +2,11 @@
 
 **Owner:** Dumala production operator
 **Project:** Supabase `uzavkjftwcuixidxyopr`
-**Last checked:** 2026-08-25 (Asia/Singapore)
+**Last checked:** 2026-09-23 (Asia/Singapore)
 
 ## Latest logical checkpoint
 
-`npm run backup:production` completed successfully on 2026-08-25 at `2026-08-25T08-19-50Z`, exporting 35/35 application tables, 621 rows, and 290 KB to `backups/2026-08-25T08-19-50Z`. The manifest and every NDJSON row were re-parsed and count-checked successfully. The checkpoint is gitignored and contains production data; copy it to restricted off-machine storage before treating it as operationally useful. A restore rehearsal has not yet been completed.
+`node scripts/backup-production.mjs --out <restricted-output>` completed successfully on 2026-09-23 at `2026-09-23 01:18:20` Singapore time (`2026-09-22T17:18:20Z`), exporting **59/59 application tables**, **1,485 rows**, and **778,132 bytes**. `node scripts/verify-backup.mjs` rechecked every NDJSON row count, byte count, and SHA-256 digest. The checkpoint was written to a local temporary directory for verification and has **not** yet been copied to approved off-machine storage; do not treat it as an operational recovery point until that copy and an isolated restore rehearsal are complete.
 
 That checkpoint predates the current 57-table allowlist and the Wave 1 lifecycle tables. A new checkpoint is required after migration 0088 is deployed; do not treat the historical 35-table export as complete coverage for the current schema.
 
@@ -16,11 +16,15 @@ Against the Docker Supabase instance, the current 0088 schema exported **57/57 t
 
 This is local engineering evidence, not hosted recovery evidence. The fixture has no Auth users or support cases, so identity re-provisioning and a non-empty support-ledger restore still require the owner’s isolated rehearsal. The API export also declares its best-effort snapshot boundary; it does not replace a transactionally consistent PITR or `pg_dump` image.
 
+## Current D2 coverage snapshot (2026-09-23)
+
+After hosted migrations `0089` and `0091`, the production API export covered all **59/59** application tables, including `platform_attention_occurrences` and `platform_attention_audit_logs`. The backup allowlist and coverage test now fail closed when a new durable table is omitted. The snapshot is integrity-verified but remains a best-effort, non-transactional API export until the owner selects off-machine storage and a stronger managed or `pg_dump` recovery point.
+
 ## Verified posture
 
 The linked Supabase CLI identifies the production project as `ACTIVE_HEALTHY` in `ap-southeast-2`, running Postgres `17.6.1.155`.
 
-The read-only backup check returned, unchanged on 2026-08-15:
+The read-only backup check returned on 2026-09-23:
 
 ```json
 {
@@ -60,7 +64,7 @@ It reads `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from `.env.l
 
 It reads through the API rather than `pg_dump` on purpose: the script is usable from the operator workstation without a native PostgreSQL client. Each exported file receives a SHA-256 digest in `manifest.json`, and the manifest records that the export is a bounded best-effort API snapshot. It is suitable for logical recovery, but it is not a single database transaction; use a managed PITR point or a transactionally consistent `pg_dump` when that stronger snapshot guarantee is required.
 
-**Covered:** every row of all 57 application tables in the current migration set. Run `npm run test:backup-coverage` after adding a durable table so the allowlist and Wave 1 integrity evidence cannot silently drift.
+**Covered:** every row of all 59 application tables in the current migration set, including the D2 attention occurrence and audit tables. Run `npm run test:backup-coverage` after adding a durable table so the allowlist and recovery evidence cannot silently drift.
 
 **Not covered, and why that is acceptable:**
 
@@ -89,6 +93,19 @@ It reads through the API rather than `pg_dump` on purpose: the script is usable 
 | Before any migration push | One run, so a bad migration is recoverable |
 
 A backup that has never been restored is a hypothesis, not a backup. Rehearse step 1-5 once into a scratch project before the pilot week.
+
+## C4 owner decision packet — 2026-09-23
+
+The repository now proves schema coverage, file integrity, and a local 57-table restore rehearsal. The remaining decisions are operational ownership choices that cannot be inferred from code or performed safely without the owner’s storage and billing approval.
+
+| Decision | Recommended default | Acceptance evidence required |
+|---|---|---|
+| Off-machine backup | Copy the after-close logical export to an owner-controlled, encrypted, versioned object store in a separate account or region. Retain at least 30 days; restrict writes to the backup job and reads to the recovery operator. | Named destination/owner, first successful copy, manifest digest check from the destination, and a documented retention rule. |
+| Auth recovery | Treat `auth.users` passwords and provider configuration as a separate recovery domain. Preserve the profile/employee UUID mapping in the logical export, then re-provision logins through the Employees workflow and test login plus password reset in an isolated project. | Scratch-project identity rehearsal with one disposable employee and one platform operator; record the mapping and cleanup result. |
+| Storage recovery | Inventory product-image and display-gallery buckets separately from the database export. Copy irreplaceable objects to the same protected off-machine boundary, restore into an isolated bucket, and verify MIME type, path, access policy, and representative UI rendering. | Bucket/object inventory, checksum or object-count evidence, and one isolated restore check. |
+| RPO / RTO | Interim pilot target: **RPO ≤ 24 hours (≤ one shift when the after-close job runs) and RTO ≤ 8 hours**. Preferred production target after Pro/PITR approval: **RPO ≤ 15 minutes and RTO ≤ 4 hours**. | Owner-selected target recorded with plan/billing choice, backup cadence, latest verified point, and last restore duration. |
+
+Until the owner accepts these defaults or records alternatives, C4 remains an owner gate. The application must continue to show recovery evidence as incomplete rather than implying that the Free-plan project has managed backups.
 
 ## Owner action before the pilot
 

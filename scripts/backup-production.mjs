@@ -77,6 +77,8 @@ const TABLES = [
   "platform_referrals",
   "platform_referral_reward_ledger",
   "platform_access_grants",
+  "platform_attention_occurrences",
+  "platform_attention_audit_logs",
   "platform_trial_extensions",
   "platform_announcements",
   "platform_announcement_audit_logs",
