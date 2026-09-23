@@ -29,7 +29,9 @@ const configuredSupabaseImagePatterns = (() => {
 
 const publicMenuRootDomain = (process.env.NEXT_PUBLIC_PUBLIC_MENU_ROOT_DOMAIN || "dumala.store").trim().toLowerCase().replace(/\.$/, "");
 const escapedPublicMenuRootDomain = publicMenuRootDomain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const publicMenuHostPattern = `^(?<publicMenuSubdomain>[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)\\.${escapedPublicMenuRootDomain}$`;
+// `www` is the public marketing host, not a merchant menu. The beforeFiles
+// rewrite must leave it alone so Next can serve `src/app/page.tsx` at `/`.
+const publicMenuHostPattern = `^(?!www\\.${escapedPublicMenuRootDomain}$)(?<publicMenuSubdomain>[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)\\.${escapedPublicMenuRootDomain}$`;
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,

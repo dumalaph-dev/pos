@@ -69,3 +69,6 @@ jobs:
 
       - name: Test legal configuration
         run: npm run test:legal-config
+
+      - name: Test public SEO surface
+        run: npm run test:seo

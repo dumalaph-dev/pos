@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import nextConfig from "../next.config.ts";
 
 /**
  * Source-level guards for the public, indexable surface. They read the route
@@ -39,6 +40,23 @@ test("every sitemap page declares a canonical equal to its own path", () => {
       `${pageFileFor(path)} must set alternates.canonical to "${path}"`,
     );
   }
+});
+
+test("the www marketing host is not rewritten as a merchant menu", async () => {
+  const rewrites = await nextConfig.rewrites?.();
+  assert.ok(rewrites && !Array.isArray(rewrites), "next.config.ts must return named rewrite phases");
+
+  const rootRewrite = rewrites.beforeFiles?.find((rewrite) => rewrite.source === "/");
+  const hostPattern = rootRewrite?.has?.find((condition) => condition.type === "host")?.value;
+  assert.ok(hostPattern, "the customer-menu root rewrite must have a host matcher");
+
+  const matcher = new RegExp(hostPattern);
+  assert.equal(matcher.test("www.dumala.store"), false, "www belongs to the public marketing site");
+  assert.equal(
+    matcher.exec("morning-ritual.dumala.store")?.groups?.publicMenuSubdomain,
+    "morning-ritual",
+    "valid merchant menu hosts must continue to capture their subdomain",
+  );
 });
 
 /**
