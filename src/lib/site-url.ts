@@ -13,7 +13,9 @@
  * on. Getting this wrong is silent — the build succeeds and the pages
  * quietly de-index — so the value is validated here rather than at each call.
  */
-const PRODUCTION_ORIGIN = "https://dumala.store";
+const PRODUCTION_ORIGIN = "https://www.dumala.store";
+
+const PRODUCTION_HOST_ALIASES = new Set(["dumala.store", "www.dumala.store"]);
 
 /**
  * Vercel's generated deployment domains are not a canonical identity.
@@ -30,7 +32,9 @@ const PRODUCTION_ORIGIN = "https://dumala.store";
  *
  * Rejecting the generated host here means the canonical stays correct no matter
  * what the deploy environment sets, rather than depending on a dashboard value
- * that nothing in the build validates.
+ * that nothing in the build validates. The apex domain now permanently
+ * redirects to `www`, so both production aliases resolve to that one canonical
+ * origin even if `NEXT_PUBLIC_SITE_URL` still contains the apex URL.
  */
 function isDeploymentHost(hostname: string): boolean {
   return hostname === "vercel.app" || hostname.endsWith(".vercel.app");
@@ -44,6 +48,7 @@ function normalize(value: string | undefined): string | null {
     const { origin, protocol, hostname } = new URL(value.trim());
     if (protocol !== "https:" && protocol !== "http:") return null;
     if (isDeploymentHost(hostname)) return null;
+    if (PRODUCTION_HOST_ALIASES.has(hostname)) return PRODUCTION_ORIGIN;
     return origin;
   } catch {
     return null;
