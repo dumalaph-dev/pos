@@ -3,7 +3,7 @@ import test from "node:test";
 import { resolveSignupOrigin, signupConfirmationRedirect } from "../src/lib/signup-redirect.ts";
 import { absoluteUrl, resolveSiteUrl } from "../src/lib/site-url.ts";
 
-const PRODUCTION_ORIGIN = "https://dumala.store";
+const PRODUCTION_ORIGIN = "https://www.dumala.store";
 
 test("canonical origin never resolves to a Vercel deployment domain", () => {
   // The regression this guards: production had NEXT_PUBLIC_SITE_URL set to the
@@ -27,16 +27,19 @@ test("signup confirmation links use the production origin for Vercel deployments
   );
 });
 
-test("a real public host is still honoured", () => {
+test("production aliases resolve to the configured www canonical host", () => {
   assert.equal(resolveSiteUrl("https://dumala.store"), PRODUCTION_ORIGIN);
+  assert.equal(resolveSiteUrl("https://www.dumala.store"), PRODUCTION_ORIGIN);
+  assert.equal(resolveSiteUrl("http://dumala.store"), PRODUCTION_ORIGIN);
   assert.equal(resolveSiteUrl("https://staging.dumala.store"), "https://staging.dumala.store");
   // Not every host containing "vercel" is a deployment domain.
   assert.equal(resolveSiteUrl("https://vercelstore.ph"), "https://vercelstore.ph");
 });
 
-test("origins are normalized to scheme and host only", () => {
+test("production aliases are canonicalized and origins are normalized", () => {
   assert.equal(resolveSiteUrl("https://dumala.store/"), PRODUCTION_ORIGIN);
   assert.equal(resolveSiteUrl("https://dumala.store/some/path?a=1#b"), PRODUCTION_ORIGIN);
+  assert.equal(resolveSiteUrl("https://www.dumala.store/some/path?a=1#b"), PRODUCTION_ORIGIN);
   assert.equal(resolveSiteUrl("  https://dumala.store  "), PRODUCTION_ORIGIN);
 });
 
