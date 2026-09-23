@@ -72,3 +72,6 @@ jobs:
 
       - name: Test public SEO surface
         run: npm run test:seo
+
+      - name: Test canonical URL rules
+        run: npm run test:site-url

@@ -56,6 +56,7 @@ test("absoluteUrl joins paths against the resolved origin", () => {
   try {
     // siteUrl() reads the environment at call time, so this needs no re-import.
     process.env.NEXT_PUBLIC_SITE_URL = "https://pos-mu-pearl.vercel.app";
+    assert.equal(absoluteUrl("/"), PRODUCTION_ORIGIN);
     assert.equal(absoluteUrl("/sitemap.xml"), `${PRODUCTION_ORIGIN}/sitemap.xml`);
     assert.equal(absoluteUrl("sitemap.xml"), `${PRODUCTION_ORIGIN}/sitemap.xml`);
   } finally {
