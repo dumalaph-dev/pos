@@ -65,7 +65,7 @@ Checked against local source and live responses from `https://www.dumala.store`.
 | # | Gap | Impact | Fixed in |
 |---|---|---|---|
 | G1 | Only about 3 indexable content pages (home, pricing, signup) plus legal | Can rank only for the brand and "POS for cafes". This is the main cap on traffic. | Phases 2–4 |
-| G2 | The apex now returns a 308 to `www`; canonical tags and sitemap previously still named the apex redirect target | Conflicting host signals can split or weaken indexing | 0.1 |
+| G2 | The apex now returns a 308 to `www`, but `https://www.dumala.store/` currently returns 404 because the merchant-menu rewrite captures `www` | The canonical homepage and its sitemap entry are broken | 0.1 |
 | G3 | `pos-mu-pearl.vercel.app` serves a 200 duplicate of every page | Duplicate-content risk; the canonical tag is only a hint | ✅ 0.2 |
 | G4 | No `/llms.txt` | AI engines must pull facts out of about 300 KB of landing-page HTML | ✅ 0.8 |
 | G5 | No web analytics in the codebase | Cannot measure traffic, referrers, or conversion | 0.5 |
@@ -126,10 +126,10 @@ These are unvalidated starting clusters. Item 0.7 confirms them with Search Cons
 **Why first:** without measurement, no later phase can be judged. The domain and duplicate fixes protect the rankings we already have.
 **Owner:** Engineering + owner (dashboard access) · **Size:** S
 
-- [ ] **0.1 Consolidate the canonical host on `www`.** Vercel is configured with `dumala.store` permanently redirecting to `www.dumala.store`; live checks on 2026-09-23 confirmed a 308 for `/pricing` and a 200 on the `www` destination. The site resolver now maps both production aliases to `https://www.dumala.store` so canonicals, Open Graph URLs, `robots.txt`, and the sitemap agree with that redirect.
-  *Done when:* this resolver change is deployed, each public page's canonical and sitemap URL uses `www`, `robots.txt` names the `www` sitemap, and apex requests preserve their paths through the 308.
+- [ ] **0.1 Consolidate the canonical host on `www`.** Vercel is configured with `dumala.store` permanently redirecting to `www.dumala.store`. Production now emits `www` canonicals and sitemap URLs, and `robots.txt` names the `www` sitemap. A live check found that `/` is still rewritten to `/public-menu/www` and returns 404; `next.config.ts` must exclude the reserved `www` host from the merchant-menu rewrite.
+  *Done when:* the rewrite fix is deployed, `https://www.dumala.store/` returns 200, every sitemap page returns 200 with a self-canonical on `www`, `robots.txt` names the `www` sitemap, and apex requests preserve their paths through the 308.
 - [x] **0.2 De-index the deployment duplicate.** `X-Robots-Tag: noindex, nofollow` on `*.vercel.app` hosts ([next.config.ts](../next.config.ts)). Verified locally 2026-09-23: the header is present for the vercel host and absent for `dumala.store`.
-- [ ] **0.3 Google Search Console.** Verify the domain property (DNS TXT), submit `https://www.dumala.store/sitemap.xml`, and record the baseline indexed pages, clicks, and queries in the KPI scorecard.
+- [ ] **0.3 Google Search Console.** Verify the domain property (DNS TXT), then submit `https://www.dumala.store/sitemap.xml` after 0.1 passes its live route checks. Record the baseline indexed pages, clicks, and queries in the KPI scorecard.
 - [ ] **0.4 Bing Webmaster Tools.** Import from Search Console and submit the sitemap. Bing's index supplies ChatGPT search and Copilot, so this is an AEO prerequisite. Turn on IndexNow if offered.
 - [ ] **0.5 Web analytics.** Choose a provider (decision D1) and install it without breaking the nonce CSP (add the provider's hosts to `connect-src`/`script-src`, and pass the nonce to any inline snippet). Track pageviews, referrers, and a `signup_started` / `signup_completed` event.
   *Done when:* referrers from `chatgpt.com`, `perplexity.ai`, and Google show in reports, and the CSP causes no console errors.
@@ -301,7 +301,8 @@ Each page must pass [Appendix B](#appendix-b--content-quality-checklist) and hav
 |---|---|
 | 2026-09-23 | Plan created. Completed 0.2 (vercel.app `X-Robots-Tag`) and 0.8 (`/llms.txt`). Baseline issues G1–G9 recorded from live checks. |
 | 2026-09-23 | Completed 0.9 and 1.5: added `scripts/seo-surface.test.ts` / `npm run test:seo` (sitemap canonicals, llms.txt price source and links). |
-| 2026-09-23 | Started 0.1: owner configured and live-verified the apex-to-www 308; canonical resolver and Search Console sitemap target are being aligned to `www` before marking the item complete. |
+| 2026-09-23 | 0.1 update: apex-to-www 308, `www` canonicals, sitemap, and robots reference are live. Production verification found the `www` homepage is still captured by the menu rewrite and returns 404; a focused rewrite fix is in progress before marking 0.1 complete. |
+| 2026-09-23 | Started 0.3: created the `dumala.store` Domain property in Search Console; DNS TXT verification and sitemap submission remain pending. |
 
 ---
 
