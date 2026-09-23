@@ -24,7 +24,7 @@ export type EffectiveComplimentaryAccess = {
 };
 
 export function readEffectiveComplimentaryAccess(
-  grants: ComplimentaryAccessGrant[],
+  grants: readonly ComplimentaryAccessGrant[],
   now = Date.now(),
 ): EffectiveComplimentaryAccess | null {
   const current = grants
