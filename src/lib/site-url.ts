@@ -69,5 +69,8 @@ export function siteUrl(): string {
 
 /** `siteUrl()` with a path appended, for sitemap entries and absolute links. */
 export function absoluteUrl(pathname: string): string {
-  return `${siteUrl()}${pathname.startsWith("/") ? pathname : `/${pathname}`}`;
+  const path = pathname.startsWith("/") ? pathname : `/${pathname}`;
+  // Next resolves the homepage's canonical URL to the origin without a slash;
+  // keep the root sitemap and llms.txt URLs byte-for-byte consistent with it.
+  return path === "/" ? siteUrl() : `${siteUrl()}${path}`;
 }
