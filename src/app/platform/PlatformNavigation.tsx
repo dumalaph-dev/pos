@@ -40,6 +40,7 @@ const PLATFORM_NAV_GROUPS: PlatformNavGroup[] = [
   {
     label: "Revenue",
     items: [
+      { label: "Revenue readout", href: "/platform/revenue", icon: "chart", detail: "Contracted MRR, ARR, and account mix" },
       { label: "Plans & Pricing", href: "/platform/plans", icon: "wallet", detail: "Subscription catalog" },
       { label: "Billing events", href: "/platform/billing", icon: "history", detail: "Provider receipt evidence" },
       { label: "Promo & Marketing", href: "/platform/promotions", icon: "tag", detail: "Campaign codes and performance" },

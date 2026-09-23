@@ -8,6 +8,7 @@ import { readPayMongoSubscriptionReadiness, readPlatformOperations, payMongoConf
 import { platformOperatorRoleLabel } from "@/lib/platform-operators";
 import { requirePlatformOperator } from "@/lib/platform-operators-server";
 import { derivePlatformEntitlementSummary } from "@/lib/platform-entitlements";
+import { calculatePlatformRevenueReadout } from "@/lib/platform-revenue";
 import { sortPlatformAttentionItems, type PlatformAttentionItem } from "@/lib/platform-attention";
 import { syncHealthFreshnessLabel, syncHealthStatusLabel } from "@/lib/platform-sync-health";
 import { PlatformAccessDenied, PlatformMetric, PlatformMigrationNotice, PlatformPageHeader, PlatformSectionHeading } from "../PlatformUI";
@@ -46,6 +47,12 @@ export default async function PlatformOverviewPage() {
   const storesByOrg = countByOrg(stores);
   const activeStoresByOrg = countByOrg(stores.filter((store) => store.is_active));
   const entitlementRecords = await readPlatformEntitlementRecords(admin);
+  const revenueReadout = calculatePlatformRevenueReadout({
+    organizations,
+    catalog,
+    grantsByOrg: entitlementRecords.accessGrantsByOrg,
+    asOf: new Date().toISOString(),
+  });
   const trialDays = readPolicyNumber(policies.billing, "trialDays", 14);
   const entitlementSummaries = organizations.map((organization) => derivePlatformEntitlementSummary({
     organization,
@@ -57,6 +64,9 @@ export default async function PlatformOverviewPage() {
   }));
   const trialExpiring = entitlementSummaries.filter((summary) => summary.filterKeys.includes("trial_expiring")).length;
   const grantsExpiring = entitlementSummaries.filter((summary) => summary.filterKeys.includes("grant_expiring")).length;
+  const revenueMetricDetail = organizationsResult.hasMore
+    ? `${revenueReadout.contractedOrganizationCount} mapped commitments in a bounded sample · partial · not collected`
+    : `${revenueReadout.contractedOrganizationCount} recurring commitments · not collected`;
   const accountOperationsReady = organizationsResult.accountFieldsAvailable && policies.schemaAvailable && supportCasesReady;
   const checkoutReadiness = getCheckoutReadiness({
     catalog,
@@ -107,7 +117,8 @@ export default async function PlatformOverviewPage() {
         {canViewSupport && supportCases.hasMore && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm leading-6 text-ink-muted" role="status"><span>Attention includes the first 250 active support cases{supportCases.total === null ? "" : ` of ${supportCases.total}`}. Older matching cases are outside this overview sample.</span><Link href="/platform/operations#business-controls-heading" className="inline-flex min-h-9 items-center rounded-lg bg-surface px-3 text-xs font-extrabold text-primary transition hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">Open operations</Link></div>}
         {canViewSupport && !supportCases.organizationsAvailable && <div className="mt-4 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm leading-6 text-ink-muted" role="status">Support cases loaded without organization names. The case records remain visible, but organization links may be unavailable until the organization read recovers.</div>}
 
-        <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Platform summary">
+        <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Platform summary">
+          <PlatformMetric label="Contracted MRR" value={formatPeso(revenueReadout.contractedMrrCentavos)} detail={revenueMetricDetail} icon="wallet" />
           <PlatformMetric label="Businesses" value={homeSummary.totalBusinesses ?? "Unknown"} detail={`${homeSummary.activeSubscriptions ?? "Unknown"} active subscriptions · ${homeSummary.trialSubscriptions ?? "Unknown"} in trial`} icon="dashboard" />
           <PlatformMetric label="Active stores" value={homeSummary.activeStores ?? "Unknown"} detail={`${homeSummary.totalStores ?? "Unknown"} total branches`} icon="customers" />
           <PlatformMetric label="Active staff" value={homeSummary.activeEmployees ?? "Unknown"} detail={`${homeSummary.totalEmployees ?? "Unknown"} employee records`} icon="employees" />
@@ -118,6 +129,7 @@ export default async function PlatformOverviewPage() {
           <article className="rounded-[22px] border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6">
             <PlatformSectionHeading eyebrow="Workspace map" title="Manage the platform by feature" description="Each area now has one job, so the control you need is never buried in a long page." />
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <FeatureLink href="/platform/revenue" icon="chart" label="Revenue readout" detail={`${formatPeso(revenueReadout.contractedMrrCentavos)} contracted MRR · ${organizationsResult.hasMore ? "bounded sample" : "current catalog"}`} />
               <FeatureLink href="/platform/plans" icon="wallet" label="Plans & Pricing" detail={`${catalog.variants.filter((variant) => variant.isActive).length} live offers · ${formatPeso(catalog.monthlyPriceCentavos)} base · ${formatPeso(catalog.additionalBranchPriceCentavos)} per extra branch`} />
               <FeatureLink href="/platform/promotions" icon="tag" label="Promo & Marketing" detail="Create checkout codes and measure paid conversion" />
               <FeatureLink href="/platform/users" icon="customers" label="Users" detail={`${homeSummary.totalProfiles ?? "Unknown"} user profiles across ${homeSummary.totalBusinesses ?? "unknown"} businesses`} />

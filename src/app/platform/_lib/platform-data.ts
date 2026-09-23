@@ -44,6 +44,8 @@ import {
 import { PLATFORM_SCHEMA_MANIFEST } from "@/lib/platform-schema-manifest";
 import { summarizePlatformDevices, type PlatformRegisteredDevice } from "@/lib/platform-devices";
 import { normalizePlatformSearchQuery } from "@/lib/platform-search";
+import { readPlatformOperations } from "@/lib/platform-operations-server";
+import { calculatePlatformRevenueReadout, type PlatformRevenueReadout } from "@/lib/platform-revenue";
 import {
   PLATFORM_ATTENTION_CATEGORIES,
   PLATFORM_ATTENTION_SEVERITIES,
@@ -305,6 +307,14 @@ export type PlatformHomeSummary = {
   employeesAvailable: boolean;
 };
 
+export type PlatformRevenueResult = {
+  readout: PlatformRevenueReadout;
+  organizationsResult: OrganizationsResult;
+  catalogSchemaAvailable: boolean;
+  accessGrantsSchemaAvailable: boolean;
+  accessGrantsHasMore: boolean;
+};
+
 export type PlatformEntitlementRecords = {
   accessGrantsByOrg: Map<string, ComplimentaryAccessGrant[]>;
   trialExtensionsByOrg: Map<string, TrialExtensionRecord[]>;
@@ -498,6 +508,39 @@ export async function readPlatformHomeSummary(admin: PlatformAdminClient): Promi
     profilesAvailable: !profiles.error,
     storesAvailable: !stores.error && !activeStores.error,
     employeesAvailable: !employees.error && !activeEmployees.error,
+  };
+}
+
+/**
+ * Read the bounded inputs for the first revenue readout. The calculation is
+ * deliberately kept in platform-revenue.ts so the page and tests share the
+ * same contract normalization rules without importing Supabase or Next.js.
+ */
+export async function readPlatformRevenue(admin: PlatformAdminClient): Promise<PlatformRevenueResult> {
+  const [organizationsResult, operations] = await Promise.all([
+    readOrganizations(admin),
+    readPlatformOperations(admin),
+  ]);
+  const organizationIds = organizationsResult.records.map((organization) => organization.id);
+  const grantsResult = await readAllPlatformAccessGrants(admin, organizationIds);
+  const grantsByOrg = new Map<string, ComplimentaryAccessGrant[]>();
+  for (const grant of grantsResult.records) {
+    const records = grantsByOrg.get(grant.org_id) ?? [];
+    records.push(grant);
+    grantsByOrg.set(grant.org_id, records);
+  }
+
+  return {
+    readout: calculatePlatformRevenueReadout({
+      organizations: organizationsResult.records,
+      catalog: operations.catalog,
+      grantsByOrg,
+      asOf: organizationsResult.asOf,
+    }),
+    organizationsResult,
+    catalogSchemaAvailable: operations.catalog.schemaAvailable,
+    accessGrantsSchemaAvailable: grantsResult.schemaAvailable,
+    accessGrantsHasMore: grantsResult.hasMore,
   };
 }
 
