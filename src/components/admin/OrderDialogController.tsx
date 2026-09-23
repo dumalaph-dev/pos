@@ -120,7 +120,7 @@ export function OrderDialogController({
 
   return (
     <UrlLocalDialogController
-      className="order-dialog-controller"
+      className="order-dialog-controller min-w-0"
       records={mergedReceipts}
       initialId={initialOrderId}
       queryKey="order"

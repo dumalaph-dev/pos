@@ -1278,18 +1278,29 @@ function CounterSetupPanel({
     <div className="pos-config-panel pos-config-panel--merged">
       <PanelHeading eyebrow="Set up a counter" title="Counter Setup" description={`Everything a tablet needs before it can take its first sale at ${branchName || "this branch"}.`} />
 
-      <section className="pos-settings-section pos-counter-readiness" aria-labelledby="counter-readiness-heading">
-        <div className="pos-settings-section__heading">
-          <span className="pos-settings-section__icon"><MiniIcon name={outstanding.length ? "info" : "check"} size={18} /></span>
-          <div>
-            <h3 id="counter-readiness-heading">{outstanding.length ? `${outstanding.length} thing${outstanding.length === 1 ? "" : "s"} left before this counter can sell` : "This counter is ready to sell"}</h3>
-            <p>{outstanding.length ? "Each item below blocks a real step in the sale, not a cosmetic one." : "Link, menu, terminal, tender, and staff are all in place for this branch."}</p>
-          </div>
-          <span className={`pos-counter-score${outstanding.length ? "" : " is-complete"}`}>{checks.length - outstanding.length}/{checks.length}</span>
-        </div>
+      <div className="pos-counter-tablet pos-counter-tablet--featured">
+        <CashierTabletCard
+          links={counterLink ? [counterLink] : []}
+          legacyOnly={legacyOnly}
+          compact
+          emptyTitle={`No sign-in link for ${branchName || "this branch"} yet`}
+          emptyDetail="A tablet reaches the sign-in screen through the branch's own link. Check that the branch is active, then reopen this tab."
+        />
+      </div>
 
-        <ul className="pos-counter-checks">
-          {checks.map((check) => (
+      <details className={`pos-settings-section pos-counter-readiness${outstanding.length ? " has-outstanding" : " is-complete"}`} open={outstanding.length > 0}>
+        <summary className="pos-counter-readiness__summary">
+          <span className="pos-counter-readiness__mark" aria-hidden="true"><MiniIcon name={outstanding.length ? "info" : "check"} size={15} /></span>
+          <span className="pos-counter-readiness__copy">
+            <strong>{outstanding.length ? `${outstanding.length} setup item${outstanding.length === 1 ? "" : "s"} need attention` : "Counter ready for sales"}</strong>
+            <small>{outstanding.length ? `${checks.length - outstanding.length} of ${checks.length} requirements ready · Open to see what remains.` : `All ${checks.length} sale requirements are in place · Open to review.`}</small>
+          </span>
+          <span className={`pos-counter-score${outstanding.length ? "" : " is-complete"}`} aria-hidden="true">{checks.length - outstanding.length}/{checks.length}</span>
+          <span className="pos-counter-readiness__chevron" aria-hidden="true"><MiniIcon name="chevron" size={13} /></span>
+        </summary>
+
+        <ul className="pos-counter-checks" aria-label={outstanding.length ? "Setup items that still need attention" : "Counter readiness checks"}>
+          {(outstanding.length ? outstanding : checks).map((check) => (
             <li key={check.id} className={check.ok ? "is-ok" : ""}>
               <span className="pos-counter-checks__mark" aria-hidden="true"><MiniIcon name={check.ok ? "check" : "close"} size={11} /></span>
               <span className="pos-counter-checks__copy">
@@ -1302,25 +1313,7 @@ function CounterSetupPanel({
             </li>
           ))}
         </ul>
-      </section>
-
-      <section className="pos-settings-section" aria-labelledby="counter-link-heading">
-        <div className="pos-settings-section__heading">
-          <span className="pos-settings-section__icon"><MiniIcon name="tablet" size={18} /></span>
-          <div>
-            <h3 id="counter-link-heading">Get a cashier onto a tablet</h3>
-            <p>Share one link, install the app, sign in. Three steps, once per device.</p>
-          </div>
-        </div>
-        <div className="pos-counter-tablet">
-          <CashierTabletCard
-            links={counterLink ? [counterLink] : []}
-            legacyOnly={legacyOnly}
-            emptyTitle={`No sign-in link for ${branchName || "this branch"} yet`}
-            emptyDetail="A tablet reaches the sign-in screen through the branch's own link. Check that the branch is active, then reopen this tab."
-          />
-        </div>
-      </section>
+      </details>
 
       <div className="pos-duo pos-duo--counter">
         <section className="pos-settings-section" aria-labelledby="counter-terminals-heading">

@@ -8703,9 +8703,77 @@
    One branch at a time: what still blocks a sale, the link the tablet opens,
    which terminals have checked in, and who can sign in on them.
    =========================================================================== */
-.pos-counter-readiness .pos-settings-section__heading {
-  grid-template-columns: 34px minmax(0, 1fr) auto;
+.pos-counter-readiness {
+  overflow: hidden;
+  padding: 0;
+}
+
+.pos-counter-readiness__summary {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto 14px;
   align-items: center;
+  gap: 11px;
+  min-height: 66px;
+  padding: 12px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.pos-counter-readiness__summary::-webkit-details-marker {
+  display: none;
+}
+
+.pos-counter-readiness__summary::marker {
+  content: "";
+}
+
+.pos-counter-readiness__summary:focus-visible {
+  border-radius: 10px;
+  outline: 2px solid var(--primary);
+  outline-offset: -3px;
+}
+
+.pos-counter-readiness__mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--primary);
+  background: #fbf4ed;
+}
+
+.pos-counter-readiness.has-outstanding .pos-counter-readiness__mark {
+  color: #82551e;
+  background: #fff4dc;
+}
+
+.pos-counter-readiness__copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.pos-counter-readiness__copy strong {
+  color: #332923;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.pos-counter-readiness__copy small {
+  color: #857a73;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.pos-counter-readiness__chevron {
+  display: grid;
+  color: #857a73;
+  transition: transform 150ms ease;
+}
+
+.pos-counter-readiness[open] .pos-counter-readiness__chevron {
+  transform: rotate(90deg);
 }
 
 .pos-counter-score {
@@ -8730,9 +8798,9 @@
 
 .pos-counter-checks {
   display: grid;
-  gap: 6px;
-  margin: 14px 0 0;
-  padding: 0;
+  gap: 5px;
+  margin: 0;
+  padding: 0 16px 16px;
   list-style: none;
 }
 
@@ -8822,6 +8890,10 @@
   margin-top: 14px;
 }
 
+.pos-counter-tablet--featured {
+  margin-top: 0;
+}
+
 /* The tablet card is shared with the dashboard's setup dialog, where it reads
    the admin theme. The POS workspace is a fixed light design, so its tokens are
    pinned here instead of letting a dark dashboard theme bleed into it. */
@@ -8835,6 +8907,29 @@
   --text-subtle: #8b827c;
 
   border-color: #f0ece9;
+}
+
+.pos-settings-page .pos-counter-tablet--featured .cashier-tablet {
+  border-color: color-mix(in srgb, var(--primary) 36%, #f0ece9);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.pos-settings-page .pos-counter-tablet--featured .cashier-tablet__link-row {
+  border-color: color-mix(in srgb, var(--primary) 34%, #f0ece9);
+  background: #fbf6f1;
+}
+
+.pos-settings-page .pos-counter-tablet--featured .cashier-tablet__link-label {
+  color: var(--primary);
+}
+
+.pos-settings-page .pos-counter-tablet--featured .cashier-tablet__link code {
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.pos-settings-page .pos-counter-tablet--featured .cashier-tablet__button {
+  min-height: 36px;
 }
 
 .pos-duo--counter {
@@ -8979,4 +9074,32 @@
 .pos-counter-footnote strong {
   color: #332923;
   font-weight: 800;
+}
+
+@media (max-width: 640px) {
+  .pos-counter-readiness__summary {
+    grid-template-columns: 30px minmax(0, 1fr) auto 12px;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .pos-counter-checks {
+    padding: 0 12px 12px;
+  }
+
+  .pos-counter-checks li {
+    grid-template-columns: 20px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .pos-counter-checks__state,
+  .pos-counter-checks .pos-counter-link {
+    grid-column: 2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pos-counter-readiness__chevron {
+    transition: none;
+  }
 }
