@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/employee-auth";
+import type { createAdminClient } from "./employee-auth.ts";
 import {
   PLATFORM_MY_WORK_SEVERITIES,
   sortPlatformMyWorkItems,
@@ -6,7 +6,7 @@ import {
   type PlatformMyWorkRead,
   type PlatformMyWorkSeverity,
   type PlatformMyWorkSourceAvailability,
-} from "@/lib/platform-my-work";
+} from "./platform-my-work.ts";
 
 type PlatformAdminClient = NonNullable<ReturnType<typeof createAdminClient>>;
 

@@ -6,6 +6,7 @@ import { PlatformSectionHeading } from "./PlatformUI";
 export function PlatformMyWork({ work }: { work: PlatformMyWorkRead }) {
   const criticalCount = work.items.filter((item) => item.severity === "critical").length;
   const unavailableSources = Object.entries(work.sourceAvailability).filter(([, available]) => !available).map(([source]) => source);
+  const queueUnavailable = unavailableSources.length > 0;
   return <section className="mt-8 overflow-hidden rounded-[22px] border border-line bg-surface shadow-[var(--shadow-card)]" aria-label="My work queue">
     <div className="border-b border-line px-5 py-5 sm:px-6">
       <PlatformSectionHeading
@@ -18,7 +19,7 @@ export function PlatformMyWork({ work }: { work: PlatformMyWorkRead }) {
       {unavailableSources.length > 0 && <p role="status" className="mt-3 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2.5 text-xs font-semibold leading-5 text-ink-muted">Some assignment sources are unavailable right now; the queue does not treat unavailable data as empty.</p>}
     </div>
     {work.items.length === 0
-      ? <div className="px-6 py-12 text-center"><span className="mx-auto grid h-11 w-11 place-items-center rounded-2xl bg-success/10 text-success"><AdminIcon name="check" size={20} /></span><h3 className="mt-4 text-base font-extrabold">No active assignments</h3><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink-muted">New work appears here after an owner assigns a case, attention occurrence, or internal follow-up to this operator.</p></div>
+      ? <div className="px-6 py-12 text-center"><span className={`mx-auto grid h-11 w-11 place-items-center rounded-2xl ${queueUnavailable ? "bg-warning/10 text-warning" : "bg-success/10 text-success"}`}><AdminIcon name={queueUnavailable ? "alert" : "check"} size={20} /></span><h3 className="mt-4 text-base font-extrabold">{queueUnavailable ? "Assignment sources unavailable" : "No active assignments"}</h3><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink-muted">{queueUnavailable ? "This queue may be incomplete until the unavailable assignment sources recover." : "New work appears here after an owner assigns a case, attention occurrence, or internal follow-up to this operator."}</p></div>
       : <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-3">{work.items.map((item) => <MyWorkCard key={`${item.source}:${item.id}`} item={item} />)}</div>}
   </section>;
 }
