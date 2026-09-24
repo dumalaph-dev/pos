@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
 import {
   calculateNormalizedMrr,
@@ -147,6 +149,14 @@ test("temporary QRPH access is excluded from recurring MRR", () => {
 });
 
 test("missing variant or billed quantity is unsupported instead of priced with a default", () => {
+  const providerMapped = calculateOrganizationRevenueContribution({
+    organization: organization({ subscription_billing_variant_id: null, subscription_provider_plan_id: "pm_annual" }),
+    catalog: CATALOG,
+    asOf: AS_OF,
+  });
+  assert.equal(providerMapped.state, "contracted");
+  assert.equal(providerMapped.billingVariantId, "annual");
+
   const missingVariant = calculateOrganizationRevenueContribution({
     organization: organization({ subscription_billing_variant_id: "retired-variant", subscription_provider_plan_id: "retired-provider" }),
     catalog: CATALOG,
@@ -195,4 +205,26 @@ test("annual rounding is deferred until the platform total is displayed", () => 
 
   assert.equal(readout.contractedMrrCentavos, 17_998);
   assert.equal(readout.arrCentavos, 215_978);
+});
+
+test("hosted validation stays read-only, bounded, and explicit about contracted rather than collected revenue", () => {
+  const smoke = fs.readFileSync(path.resolve(process.cwd(), "scripts", "platform-revenue-hosted-smoke.sql"), "utf8");
+  const reader = fs.readFileSync(path.resolve(process.cwd(), "src", "app", "platform", "_lib", "platform-data.ts"), "utf8");
+  const page = fs.readFileSync(path.resolve(process.cwd(), "src", "app", "platform", "(console)", "revenue", "page.tsx"), "utf8");
+  const sql = smoke.replace(/--[^\r\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+
+  assert.doesNotMatch(sql, /\b(insert|update|delete|truncate|alter|drop|create|grant|revoke|begin|commit|rollback)\b/i);
+  assert.match(smoke, /'contracted_mrr_centavos'/);
+  assert.match(smoke, /'arr_centavos'/);
+  assert.match(smoke, /'past_due_mrr_centavos'/);
+  assert.match(smoke, /'current_complimentary_organization_count'/);
+  assert.match(smoke, /'paid_with_current_grant_organization_count'/);
+  assert.match(smoke, /'unsupported_organization_count'/);
+  assert.match(smoke, /'organization_read_limit', 1000/);
+  assert.match(smoke, /'read_is_read_only', true/);
+  assert.match(reader, /\.limit\(1000\)/);
+  assert.match(reader, /readAllPlatformAccessGrants\(admin, organizationIds\)/);
+  assert.match(page, /Contracted, not collected/);
+  assert.match(page, /not cash collected/);
+  assert.match(page, /This readout is bounded/);
 });

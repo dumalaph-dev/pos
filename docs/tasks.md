@@ -7,7 +7,7 @@
 
 ## Current project status
 
-**Last updated:** 2026-09-23
+**Last updated:** 2026-09-24
 
 This section is the current source of truth for delivered work and the next gate. Keep it updated in the same change as every feature, migration, QA pass, commit, or deployment.
 
@@ -50,6 +50,12 @@ This section is the current source of truth for delivered work and the next gate
 - **2026-09-23 - Platform console H1 My work merge:** PR #47 merged to `main`. The Home queue uses only active assignments for the signed-in managed operator, keeps support/attention/follow-up source boundaries, and shows unavailable sources separately from an empty queue. CI typecheck, lint, build, production preflight, and legal configuration pass; no hosted migration or fixture write was needed. Role-specific authenticated Home QA remains the enablement gate.
 
 - **2026-09-23 - Platform console A1a contracted revenue readout (local implementation):** Added pure contracted-MRR normalization and reconciliation tests, the Home contracted-MRR metric, and `/platform/revenue` with normalized MRR, ARR run-rate, plan mix, unbilled access, past-due separation, unsupported-contract visibility, and top contributing organizations. The readout uses current catalog terms and is explicitly labeled contracted rather than collected revenue; it does not infer payment history or cash collection. `npm run test:platform-revenue` (8/8), typecheck, changed-file lint, and diff checks pass. Hosted/authenticated coverage and later historical cash reporting remain separate gates.
+
+- **2026-09-24 - Platform console A1a hosted read-only validation:** Added `scripts/platform-revenue-hosted-smoke.sql` and `npm run platform:revenue:validate`. The linked smoke performs aggregate reads only and creates no fixtures: hosted catalog pricing is ₱599 base plus ₱299 per extra branch, 4/4 organizations fit within the 1,000-row bound, and the current sample reports 0 recognized recurring MRR/ARR, 0 past-due MRR, 1 prepaid account, 2 current trials, 0 current complimentary-only accounts, and 0 unsupported mappings. It also confirms the grant table is service-role-readable while authenticated SELECT is denied, and labels the result as current-catalog contracted run-rate, not collected cash. `npm run test:platform-revenue` (9/9), hosted smoke, typecheck, focused lint, and `git diff --check` pass. Historical cash reporting remains a separate gate.
+
+- **2026-09-24 - Platform console A1a authenticated revenue QA:** In a signed-in owner session, `https://www.dumala.store/platform/revenue` rendered the current-catalog readout with the 4-organization/as-of context, normalized MRR/ARR cards, past-due separation, prepaid/unsupported plan mix, trial/complimentary unbilled breakdown, calculation boundary, and explicit `Contracted, not collected` / `not cash collected` labeling. The live sample matched the read-only smoke (₱0.00 MRR/ARR, ₱0.00 past-due MRR, 1 prepaid, 2 trials, 0 complimentary-only, 0 unsupported); the narrow captured viewport had no horizontal overflow, and no hosted data was changed.
+
+- **2026-09-24 - Platform console H1/I3 authenticated owner QA:** The signed-in bootstrap Owner Home rendered summary, readiness, attention, recent-workspace, and My work sections. My work correctly reported assignment sources unavailable rather than treating the zero active managed-operator mapping as an empty queue. Read-only organization-detail checks passed for a live trial and the active paid multi-branch account: subscription/trial/grant states stayed separate, the I3 follow-up form loaded with no configured owner and zero existing tasks, and no mutation form was submitted. `npm run test:platform-my-work` (4/4) and `npm run test:platform-follow-ups` (3/3) pass. Role-specific Home/My work and I3 lifecycle QA remain gated on an owner-approved managed-operator identity; no hosted data was changed.
 
 - **2026-09-14 - Production deployment unblocked:** Every Vercel build from
   `2c5e77f` through `1727b8e` failed because the production legal assertion in
