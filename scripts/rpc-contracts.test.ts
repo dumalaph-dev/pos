@@ -21,6 +21,7 @@ const RPC_CONTRACTS = new Map<string, RpcContract>([
   ["inventory_item_expected_stock", [["p_org_id", "p_store_id", "p_until"]]],
   ["expire_trialing_organization", [["p_org_id"]]],
   ["extend_organization_trial", [["p_org_id", "p_days", "p_reason", "p_actor_id", "p_actor_email"]]],
+  ["redeem_platform_trial_coupon", [["p_org_id", "p_code", "p_actor_id"]]],
   ["grant_platform_access", [["p_org_id", "p_days", "p_reason", "p_source", "p_start_mode", "p_actor_id", "p_actor_email"]]],
   ["adjust_platform_access_grant", [["p_grant_id", "p_delta_days", "p_reason", "p_actor_id", "p_actor_email"]]],
   ["inventory_expected_stock", [["p_org_id", "p_store_id", "p_until"]]],

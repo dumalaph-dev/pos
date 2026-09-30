@@ -36,7 +36,7 @@ export default async function PlatformOverviewPage() {
     readPlatformSyncHealth(admin),
     canViewSupport ? readPlatformSupportCases(admin) : Promise.resolve({ records: [], schemaAvailable: false, organizationsAvailable: true, hasMore: false, total: null, asOf: new Date().toISOString() }),
     readPlatformHomeSummary(admin),
-    readPlatformMyWork(admin, actor.email, canViewSupport),
+    readPlatformMyWork(admin, actor.email, canViewSupport, actor.isBootstrap),
   ]);
 
   const { organizations, profiles, stores, authEmailById, organizationsResult } = directory;

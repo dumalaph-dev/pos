@@ -235,6 +235,61 @@ export async function togglePlatformPromotion(_previousState: PlatformActionStat
   return { ok: true, message: !isActive ? "Promotion activated." : "Promotion paused." };
 }
 
+export async function createPlatformTrialCoupon(_previousState: PlatformActionState, formData: FormData): Promise<PlatformActionState> {
+  const actor = await requirePlatformOperator("billing_manage");
+  if (!actor.ok) return actor;
+
+  const code = normalizePromotionCode(readText(formData, "code"));
+  const name = readText(formData, "name");
+  const months = Number(readText(formData, "months"));
+  const startsInput = readText(formData, "starts_at");
+  const endsInput = readText(formData, "ends_at");
+  const startsAt = readDateTime(startsInput);
+  const endsAt = readDateTime(endsInput);
+  const limitText = readText(formData, "max_redemptions");
+  const maxRedemptions = limitText ? Number(limitText) : null;
+
+  if (!/^[A-Z0-9_-]{3,32}$/.test(code)) return { ok: false, message: "Use 3–32 letters, numbers, hyphens, or underscores for the code." };
+  if (!name || name.length > 80) return { ok: false, message: "Add a coupon name of 1–80 characters." };
+  if (!Number.isInteger(months) || months < 1 || months > 12) return { ok: false, message: "Trial coupons must add 1–12 whole months." };
+  if ((startsInput && !startsAt) || (endsInput && !endsAt)) return { ok: false, message: "Enter valid campaign dates using Singapore time." };
+  if (startsAt && endsAt && new Date(endsAt).getTime() <= new Date(startsAt).getTime()) return { ok: false, message: "The end date must be after the start date." };
+  if (maxRedemptions !== null && (!Number.isInteger(maxRedemptions) || maxRedemptions < 1 || maxRedemptions > 1_000_000)) return { ok: false, message: "Redemption limits must be whole numbers from 1 to 1,000,000." };
+
+  const [couponExists, promotionExists] = await Promise.all([
+    actor.admin.from("platform_trial_coupons").select("id").eq("code", code).maybeSingle(),
+    actor.admin.from("platform_promotions").select("id").eq("code", code).maybeSingle(),
+  ]);
+  if (couponExists.error || promotionExists.error) return { ok: false, message: "Coupon storage is unavailable. Apply migration 0094_platform_trial_coupons.sql and try again." };
+  if (couponExists.data || promotionExists.data) return { ok: false, message: "That code is already in use. Use a different code." };
+
+  const result = await actor.admin.from("platform_trial_coupons").insert({
+    code,
+    name,
+    months,
+    starts_at: startsAt,
+    ends_at: endsAt,
+    max_redemptions: maxRedemptions,
+    created_by: actor.userId,
+  });
+  if (result.error) return { ok: false, message: result.error.code === "23505" ? "That code already exists. Use a different code." : "The trial coupon could not be saved." };
+
+  revalidatePlatformPages();
+  return { ok: true, message: `${code} is ready to offer for ${months} free trial month${months === 1 ? "" : "s"}.` };
+}
+
+export async function togglePlatformTrialCoupon(_previousState: PlatformActionState, formData: FormData): Promise<PlatformActionState> {
+  const actor = await requirePlatformOperator("billing_manage");
+  if (!actor.ok) return actor;
+  const id = readText(formData, "coupon_id");
+  if (!isUuid(id)) return { ok: false, message: "That coupon could not be identified." };
+  const isActive = readText(formData, "is_active") === "true";
+  const result = await actor.admin.from("platform_trial_coupons").update({ is_active: !isActive }).eq("id", id);
+  if (result.error) return { ok: false, message: "The coupon status could not be changed." };
+  revalidatePlatformPages();
+  return { ok: true, message: !isActive ? "Coupon activated." : "Coupon paused." };
+}
+
 function readBillingPolicySettings(formData: FormData) {
   const trialDays = readBoundedInteger(formData, "trial_days", 0, 365);
   const paymentGraceDays = readBoundedInteger(formData, "payment_grace_days", 0, 90);

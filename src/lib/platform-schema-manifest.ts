@@ -101,4 +101,5 @@ export const PLATFORM_SCHEMA_MANIFEST: readonly PlatformSchemaMigration[] = [
   { version: "0091", name: "platform_attention_acl_hardening" },
   { version: "0092", name: "sync_health_legacy_device_keys" },
   { version: "0093", name: "platform_follow_up_tasks" },
+  { version: "0094", name: "platform_trial_coupons" },
 ];
