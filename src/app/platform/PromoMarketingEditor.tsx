@@ -93,19 +93,7 @@ export function PromoMarketingEditor({ schemaAvailable, promotions, performance,
           {!canManage && <p role="status" className="mt-3 rounded-xl border border-line bg-raised px-3 py-2.5 text-xs font-semibold leading-5 text-ink-muted">Promotion changes are limited to Billing and Owner operators. Your role can still review campaign performance.</p>}
         </form>
 
-        <aside className="rounded-[20px] border border-line bg-primary p-5 text-primary-fg shadow-[var(--shadow-pop)] sm:p-6" aria-labelledby="promotion-measurement-heading">
-          <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-primary-fg/65">Measurement model</p>
-          <h2 id="promotion-measurement-heading" className="mt-1 text-xl font-extrabold">Know which offers earn conversion.</h2>
-          <p className="mt-2 text-sm leading-5 text-primary-fg/72">Every code records an attempted checkout and a confirmed payment, so performance is based on paid outcomes rather than clicks alone.</p>
-          <div className="mt-5 space-y-2.5">
-            <MeasurementRow label="Started" detail="Code applied and checkout opened" />
-            <MeasurementRow label="Converted" detail="Payment confirmed by the provider" />
-            <MeasurementRow label="Revenue" detail="Final plan value after discount" />
-          </div>
-        </aside>
-      </section>
-
-      <section className="mt-5 overflow-hidden rounded-[20px] border border-line bg-surface shadow-[var(--shadow-card)]" aria-labelledby="promotion-performance-heading">
+        <section className="overflow-hidden rounded-[20px] border border-line bg-surface shadow-[var(--shadow-card)]" aria-labelledby="promotion-performance-heading">
         <div className="flex flex-col gap-3 border-b border-line px-5 py-5 sm:flex-row sm:items-end sm:justify-between sm:px-6">
           <div>
             <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-accent">Campaign performance</p>
@@ -129,6 +117,7 @@ export function PromoMarketingEditor({ schemaAvailable, promotions, performance,
             </table>
           </div>
         )}
+        </section>
       </section>
     </>
   );
@@ -151,10 +140,6 @@ function PromotionRow({ promotion, schemaAvailable, canManage }: { promotion: Pr
 function PromotionToggleButton({ promotion, schemaAvailable, canManage }: { promotion: PromotionSummary; schemaAvailable: boolean; canManage: boolean }) {
   const [state, formAction, pending] = useActionState(togglePlatformPromotion, INITIAL_STATE);
   return <form action={formAction} className="inline-flex flex-col items-end gap-1"><input type="hidden" name="promotion_id" value={promotion.id} readOnly /><input type="hidden" name="is_active" value={String(promotion.isActive)} readOnly /><button type="submit" disabled={!canManage || !schemaAvailable || pending} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line-strong bg-raised px-3 py-2 text-[10px] font-extrabold uppercase tracking-wide text-primary transition hover:border-primary hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50">{pending ? "Saving…" : promotion.isActive ? "Pause" : "Activate"}</button>{state.message && !state.ok && <span className="max-w-[170px] text-[10px] font-semibold text-danger">{state.message}</span>}</form>;
-}
-
-function MeasurementRow({ label, detail }: { label: string; detail: string }) {
-  return <div className="flex items-start gap-3 rounded-xl bg-primary-fg/10 px-3 py-2.5"><span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-accent text-accent-fg"><AdminIcon name="check" size={11} /></span><span><strong className="block text-xs font-extrabold">{label}</strong><span className="mt-0.5 block text-[11px] leading-4 text-primary-fg/65">{detail}</span></span></div>;
 }
 
 function summarizePromotions(promotions: PlatformPromotion[], performance: PlatformPromotionPerformance[]): PromotionSummary[] {
