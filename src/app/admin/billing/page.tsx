@@ -187,6 +187,9 @@ export default async function BillingPage({
     trialDays,
   });
   const trialAccessIsCurrent = status === "trialing" && trial.known && trial.isActive;
+  const canRedeemTrialCoupon = trialAccessIsCurrent
+    && !organization?.subscription_provider_subscription_id
+    && !organization?.subscription_provider_payment_intent_id;
   const currentAccessIsValid = (
     (status === "active" && (billingMode !== "temporary_qrph" || isBillingPeriodCurrent(currentPeriodEnd)))
     || trialAccessIsCurrent
@@ -250,7 +253,7 @@ export default async function BillingPage({
           complimentaryAccessUntil={complimentaryAccessIsCurrent ? complimentaryAccess?.until ?? null : null}
         />
 
-        {trialAccessIsCurrent && !organization?.subscription_provider_subscription_id && !organization?.subscription_provider_payment_intent_id && <TrialCouponRedeemer />}
+        <TrialCouponRedeemer canRedeem={canRedeemTrialCoupon} />
 
         {upgradeNoticeReason && <BillingUpgradeNotice reason={upgradeNoticeReason} source={billingSource} showCheckout={showCheckout} />}
         {trial.reminder && !complimentaryAccessIsCurrent && <TrialReminder trial={trial} monthlyPriceLabel={monthlyPriceLabel} />}
