@@ -82,6 +82,8 @@ const TABLES = [
   "platform_follow_up_tasks",
   "platform_follow_up_task_audit_logs",
   "platform_trial_extensions",
+  "platform_trial_coupons",
+  "platform_trial_coupon_redemptions",
   "platform_announcements",
   "platform_announcement_audit_logs",
   "platform_mutation_requests",

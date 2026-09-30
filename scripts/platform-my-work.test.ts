@@ -265,3 +265,28 @@ test("My work keeps an empty queue distinct from unavailable assignment sources"
   assert.deepEqual(billingUnavailable.items, []);
   assert.deepEqual(billingUnavailable.sourceAvailability, { follow_up: true, support_case: false, attention: true });
 });
+
+test("bootstrap Owner maps to its durable operator id even when managed membership is inactive", async () => {
+  const bootstrapEmail = "bootstrap@example.com";
+  const bootstrapId = "operator-bootstrap";
+  const rows = sharedMyWorkRows();
+  rows.platform_operators = [{ id: bootstrapId, email: bootstrapEmail, is_active: false }];
+  rows.platform_follow_up_tasks = [{ id: "bootstrap-follow-up", assignee_id: bootstrapId, org_id: "org-owner", title: "Owner follow-up", reason: "Bootstrap assignment", status: "open", next_step: "Review account", updated_at: "2026-09-23T00:01:00.000Z", due_at: null }];
+  rows.support_cases = [{ id: "bootstrap-case", assigned_to: bootstrapId, org_id: "org-owner", subject: "Owner case", priority: "normal", status: "open", first_response_due_at: null, updated_at: "2026-09-23T00:02:00.000Z" }];
+  rows.platform_attention_occurrences = [{ id: "bootstrap-attention", assigned_to: bootstrapId, title: "Owner attention", detail: "Review", organization_id: "org-owner", severity: "medium", state: "open", href: "/platform/attention?occurrence=bootstrap-attention", updated_at: "2026-09-23T00:03:00.000Z", snoozed_until: null }];
+  rows.organizations = [{ id: "org-owner", name: "Owner organization" }];
+
+  const { admin } = createMyWorkAdmin({ rows });
+  const work = await readPlatformMyWork(admin, bootstrapEmail, true, true);
+  assert.equal(work.operatorId, bootstrapId);
+  assert.deepEqual(itemIds(work, "follow_up"), ["bootstrap-follow-up"]);
+  assert.deepEqual(itemIds(work, "support_case"), ["bootstrap-case"]);
+  assert.deepEqual(itemIds(work, "attention"), ["bootstrap-attention"]);
+  assert.deepEqual(work.sourceAvailability, { follow_up: true, support_case: true, attention: true });
+  assert.equal(itemHref(work, "bootstrap-attention"), "/platform/attention?occurrence=bootstrap-attention");
+
+  const absent = createMyWorkAdmin({ rows: { platform_operators: [], platform_follow_up_tasks: [], support_cases: [], platform_attention_occurrences: [] } });
+  const unavailable = await readPlatformMyWork(absent.admin, bootstrapEmail, true, true);
+  assert.equal(unavailable.operatorId, null);
+  assert.deepEqual(unavailable.sourceAvailability, { follow_up: false, support_case: false, attention: false });
+});

@@ -18,6 +18,7 @@ import TrialCountdown from "./TrialCountdown";
 import TrialFeedbackForm from "./TrialFeedbackForm";
 import SubscriptionCheckout from "./SubscriptionCheckout";
 import TemporaryQrPhCheckout from "./TemporaryQrPhCheckout";
+import { TrialCouponRedeemer } from "./TrialCouponRedeemer";
 
 type OrganizationRecord = {
   id: string;
@@ -249,6 +250,8 @@ export default async function BillingPage({
           complimentaryAccessUntil={complimentaryAccessIsCurrent ? complimentaryAccess?.until ?? null : null}
         />
 
+        {trialAccessIsCurrent && !organization?.subscription_provider_subscription_id && !organization?.subscription_provider_payment_intent_id && <TrialCouponRedeemer />}
+
         {upgradeNoticeReason && <BillingUpgradeNotice reason={upgradeNoticeReason} source={billingSource} showCheckout={showCheckout} />}
         {trial.reminder && !complimentaryAccessIsCurrent && <TrialReminder trial={trial} monthlyPriceLabel={monthlyPriceLabel} />}
         {(trial.isLastDay || trial.isExpired) && <TrialFeedbackForm submitted={feedbackSubmitted} />}
@@ -323,9 +326,9 @@ function CurrentPlanCard({
     : isComplimentary
       ? `Platform-owned access is active through ${complimentaryAccessUntil ? formatBillingDate(complimentaryAccessUntil) : "the grant end date"}. You can subscribe at any time to continue without an entitlement gap.`
     : trialExpired
-      ? "Your 14-day trial has ended. Subscribe to keep the complete Premium workspace available."
+      ? "Your free trial has ended. Subscribe to keep the complete Premium workspace available."
     : isTrial
-      ? "Your 14-day trial includes Premium workspace access for the included branch. Additional active branches require a paid plan."
+      ? "Your trial includes Premium workspace access for the included branch. Additional active branches require a paid plan."
       : accessEnded
         ? "Your Premium access has ended. Choose a plan below to continue using every feature."
         : "Review your billing details and choose a plan when you are ready.";
@@ -335,7 +338,7 @@ function CurrentPlanCard({
   const timingValue = isComplimentary
     ? complimentaryAccessUntil ? formatBillingDate(complimentaryAccessUntil) : "Grant end date"
     : isTrialing
-    ? trial.endsAt ? formatBillingDate(trial.endsAt) : "14 days included"
+    ? trial.endsAt ? formatBillingDate(trial.endsAt) : "Trial end date unavailable"
     : currentPeriodEnd ? formatBillingDate(currentPeriodEnd) : "Not scheduled";
   const branchDirectoryTotal = Math.max(totalBranches, activeBranches, 1);
   const effectiveBranchEntitlement = Math.max(branchEntitlement, activeBranches, 1);

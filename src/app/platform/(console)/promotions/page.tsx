@@ -3,10 +3,12 @@ import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcon";
 import { formatPeso } from "@/lib/money";
 import { readPlatformPromotions } from "@/lib/platform-promotions-server";
+import { readPlatformTrialCoupons } from "@/lib/platform-trial-coupons-server";
 import { requirePlatformOperator } from "@/lib/platform-operators-server";
 import { hasPlatformOperatorPermission } from "@/lib/platform-operators";
 import { PlatformAccessDenied, PlatformMetric, PlatformPageHeader } from "../../PlatformUI";
 import { PromoMarketingEditor } from "../../PromoMarketingEditor";
+import { PlatformTrialCouponEditor } from "../../PlatformTrialCouponEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +20,10 @@ export default async function PlatformPromotionsPage() {
   }
   const admin = actor.admin;
 
-  const { schemaAvailable, promotions, performance } = await readPlatformPromotions(admin);
+  const [{ schemaAvailable, promotions, performance }, trialCoupons] = await Promise.all([
+    readPlatformPromotions(admin),
+    readPlatformTrialCoupons(admin),
+  ]);
   const activePromotions = promotions.filter((promotion) => promotion.isActive).length;
   const started = performance.reduce((total, promotion) => total + promotion.started, 0);
   const converted = performance.reduce((total, promotion) => total + promotion.converted, 0);
@@ -49,6 +54,7 @@ export default async function PlatformPromotionsPage() {
         </section>
 
         <PromoMarketingEditor schemaAvailable={schemaAvailable} promotions={promotions} performance={performance} canManage={hasPlatformOperatorPermission(actor.role, "billing_manage")} />
+        <PlatformTrialCouponEditor schemaAvailable={trialCoupons.schemaAvailable} coupons={trialCoupons.coupons} canManage={hasPlatformOperatorPermission(actor.role, "billing_manage")} />
       </div>
     </main>
   );

@@ -10,7 +10,7 @@ import {
 
 type PlatformAdminClient = NonNullable<ReturnType<typeof createAdminClient>>;
 
-export async function readPlatformMyWork(admin: PlatformAdminClient, email: string | null, canViewSupport: boolean): Promise<PlatformMyWorkRead> {
+export async function readPlatformMyWork(admin: PlatformAdminClient, email: string | null, canViewSupport: boolean, isBootstrap = false): Promise<PlatformMyWorkRead> {
   const asOf = new Date().toISOString();
   const sourceAvailability: PlatformMyWorkSourceAvailability = {
     follow_up: false,
@@ -19,7 +19,11 @@ export async function readPlatformMyWork(admin: PlatformAdminClient, email: stri
   };
   if (!email) return { items: [], operatorId: null, sourceAvailability, hasMore: false, asOf };
 
-  const operatorResult = await admin.from("platform_operators").select("id").eq("email", email).eq("is_active", true).maybeSingle();
+  let operatorQuery = admin.from("platform_operators").select("id").eq("email", email);
+  // Bootstrap access survives a managed membership being revoked. Keep reading
+  // assignments attached to that same durable operator id for the bootstrap Owner.
+  if (!isBootstrap) operatorQuery = operatorQuery.eq("is_active", true);
+  const operatorResult = await operatorQuery.maybeSingle();
   if (operatorResult.error || !isRecord(operatorResult.data) || typeof operatorResult.data.id !== "string") {
     return { items: [], operatorId: null, sourceAvailability, hasMore: false, asOf };
   }

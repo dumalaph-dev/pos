@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getAdminProfile } from "@/lib/admin/profile";
+import { createAdminClient } from "@/lib/employee-auth";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { normalizeTrialFeedbackStatus, readTrialLifecycle } from "@/lib/trial";
 
@@ -9,6 +10,8 @@ export type TrialFeedbackState = {
   ok: boolean;
   message: string;
 };
+
+export type TrialCouponState = { ok: boolean; message: string };
 
 const FEEDBACK_REASONS = new Set([
   "too_expensive",
@@ -98,6 +101,40 @@ export async function submitTrialFeedback(_previousState: TrialFeedbackState, fo
   revalidatePath("/admin/billing");
   revalidatePath("/platform/operations");
   return { ok: true, message: "Thanks — your feedback has been sent." };
+}
+
+export async function redeemTrialCoupon(_previousState: TrialCouponState, formData: FormData): Promise<TrialCouponState> {
+  const user = await getAuthenticatedUser();
+  if (!user) return { ok: false, message: "Your session has expired. Sign in again before redeeming a coupon." };
+  const profile = await getAdminProfile(user.id);
+  if (!profile || profile.role !== "admin") return { ok: false, message: "Only the business owner can redeem a trial coupon." };
+  const code = readText(formData, "coupon_code").toUpperCase();
+  if (!/^[A-Z0-9_-]{3,32}$/.test(code)) return { ok: false, message: "Enter a valid coupon code." };
+  const admin = createAdminClient();
+  if (!admin) return { ok: false, message: "Trial coupons are temporarily unavailable. Please try again later." };
+  const result = await admin.rpc("redeem_platform_trial_coupon", {
+    p_org_id: profile.org_id,
+    p_code: code,
+    p_actor_id: user.id,
+  });
+  if (result.error) return { ok: false, message: trialCouponError(result.error.message) };
+  const newEndsAt = isRecord(result.data) && typeof result.data.new_ends_at === "string" ? result.data.new_ends_at : null;
+  revalidatePath("/admin/billing");
+  revalidatePath("/admin");
+  return { ok: true, message: `Coupon applied. Your trial now ends ${newEndsAt ? new Intl.DateTimeFormat("en-PH", { dateStyle: "long", timeZone: "Asia/Singapore" }).format(new Date(newEndsAt)) : "later"}.` };
+}
+
+function trialCouponError(message: string) {
+  const normalized = message.toLowerCase();
+  if (normalized.includes("already_redeemed")) return "This account has already redeemed that coupon.";
+  if (normalized.includes("not_found")) return "That coupon code was not recognized.";
+  if (normalized.includes("not_started")) return "That coupon is not available yet.";
+  if (normalized.includes("expired")) return "That coupon has expired.";
+  if (normalized.includes("inactive")) return "That coupon is no longer active.";
+  if (normalized.includes("limit_reached")) return "That coupon has reached its claim limit.";
+  if (normalized.includes("trial_only")) return "Trial coupons are for accounts with an active, unpaid trial.";
+  if (normalized.includes("account_inactive")) return "This account is suspended and cannot redeem a trial coupon.";
+  return "The coupon could not be applied. Please try again or contact support.";
 }
 
 async function saveFeedbackInOrganizationSettings(
