@@ -102,4 +102,5 @@ export const PLATFORM_SCHEMA_MANIFEST: readonly PlatformSchemaMigration[] = [
   { version: "0092", name: "sync_health_legacy_device_keys" },
   { version: "0093", name: "platform_follow_up_tasks" },
   { version: "0094", name: "platform_trial_coupons" },
+  { version: "0095", name: "expired_trial_coupon_claims" },
 ];
