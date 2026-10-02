@@ -38,10 +38,10 @@ const FOREST = "#15382a";
 const GOLD = "#b18448";
 const MUTED = "#526157";
 
-const HEADLINE = "POS for cafes, restaurants";
-const HEADLINE_2 = "and food businesses.";
-const SUBLINE = "Fast checkout for your team. Clear records for you.";
-const FOOTNOTE = "Works offline · Syncs to the cloud · 14-day free trial";
+const HEADLINE = "Every sale. Every channel.";
+const HEADLINE_2 = "One workspace.";
+const SUBLINE = "POS, inventory, and your online storefront.";
+const FOOTNOTE = "Retail · Print · Apparel · 14-day free trial";
 
 // Explicit stack rather than a single family: this runs on whatever machine
 // builds the asset, and librsvg silently substitutes a default when a family is

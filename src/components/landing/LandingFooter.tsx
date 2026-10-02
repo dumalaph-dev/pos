@@ -28,8 +28,7 @@ export default function LandingFooter({
               <Image src="/brand-lockup.png" alt="Dumala POS" width={1535} height={451} sizes="160px" className="h-11 w-auto" />
             </Link>
             <p className="mt-4 text-xs leading-5 text-[#708076]">
-              A practical POS and owner workspace for Philippine cafes, restaurants, coffee shops, bakeshops, and other food
-              businesses. Free for 14 days, then
+              Sales, inventory, and online orders in one practical workspace for Philippine shops, studios, and growing businesses. Free for 14 days, then{" "}
               {hasAnnualOptions ? "choose monthly or annual billing" : "continue with monthly billing"} for the same complete product.
             </p>
           </div>
@@ -39,10 +38,10 @@ export default function LandingFooter({
               <p className="font-black uppercase tracking-[0.16em] text-[#173a2b]">Product</p>
               <ul className="mt-3 grid gap-2 text-[#708076]">
                 <li><SectionLink section="features" onLandingPage={onLandingPage} className="lp-navlink hover:text-[#b18448]">Features</SectionLink></li>
-                <li><SectionLink section="online-menu" onLandingPage={onLandingPage} className="lp-navlink hover:text-[#b18448]">Online Menu</SectionLink></li>
+                <li><SectionLink section="online-menu" onLandingPage={onLandingPage} className="lp-navlink hover:text-[#b18448]">Online Store</SectionLink></li>
                 <li><SectionLink section="playground" onLandingPage={onLandingPage} className="lp-navlink hover:text-[#b18448]">Try the POS</SectionLink></li>
                 <li><SectionLink section="interfaces" onLandingPage={onLandingPage} className="lp-navlink hover:text-[#b18448]">Counter POS &amp; dashboard</SectionLink></li>
-                <li><SectionLink section="offline" onLandingPage={onLandingPage} className="lp-navlink hover:text-[#b18448]">Offline first</SectionLink></li>
+                <li><SectionLink section="offline" onLandingPage={onLandingPage} className="lp-navlink hover:text-[#b18448]">Reliable checkout</SectionLink></li>
                 <li><SectionLink section="details" onLandingPage={onLandingPage} className="lp-navlink hover:text-[#b18448]">In detail</SectionLink></li>
                 <li><SectionLink section="workspace" onLandingPage={onLandingPage} className="lp-navlink hover:text-[#b18448]">Workspace</SectionLink></li>
               </ul>

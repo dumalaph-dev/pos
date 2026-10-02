@@ -11,7 +11,7 @@ import SectionLink from "./SectionLink";
 // and a section link that works on one breaks on the other. See SectionLink.
 const NAV_LINKS: Array<{ section?: string; href?: string; label: string }> = [
   { section: "features", label: "Features" },
-  { section: "online-menu", label: "Online Menu" },
+  { section: "online-menu", label: "Online Store" },
   { section: "playground", label: "Try the POS" },
   { section: "workspace", label: "Workspace" },
   { section: "pricing", label: "Pricing" },
