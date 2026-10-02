@@ -19,6 +19,7 @@ import TrialFeedbackForm from "./TrialFeedbackForm";
 import SubscriptionCheckout from "./SubscriptionCheckout";
 import TemporaryQrPhCheckout from "./TemporaryQrPhCheckout";
 import { TrialCouponRedeemer } from "./TrialCouponRedeemer";
+import { canClaimTrialCoupon } from "@/lib/trial-coupon";
 
 type OrganizationRecord = {
   id: string;
@@ -187,9 +188,13 @@ export default async function BillingPage({
     trialDays,
   });
   const trialAccessIsCurrent = status === "trialing" && trial.known && trial.isActive;
-  const canRedeemTrialCoupon = trialAccessIsCurrent
-    && !organization?.subscription_provider_subscription_id
-    && !organization?.subscription_provider_payment_intent_id;
+  const canRedeemTrialCoupon = canClaimTrialCoupon({
+    accountStatus: profile.organizations?.account_status,
+    status,
+    trialEndsAt: organization?.subscription_trial_ends_at,
+    providerSubscriptionId: organization?.subscription_provider_subscription_id,
+    providerPaymentIntentId: organization?.subscription_provider_payment_intent_id,
+  });
   const currentAccessIsValid = (
     (status === "active" && (billingMode !== "temporary_qrph" || isBillingPeriodCurrent(currentPeriodEnd)))
     || trialAccessIsCurrent

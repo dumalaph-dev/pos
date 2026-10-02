@@ -1,10 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getAdminProfile } from "@/lib/admin/profile";
+import { getAdminProfile, invalidateAdminProfilesForOrganization } from "@/lib/admin/profile";
 import { createAdminClient } from "@/lib/employee-auth";
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { normalizeTrialFeedbackStatus, readTrialLifecycle } from "@/lib/trial";
+import { trialCouponError } from "@/lib/trial-coupon";
 
 export type TrialFeedbackState = {
   ok: boolean;
@@ -119,22 +120,10 @@ export async function redeemTrialCoupon(_previousState: TrialCouponState, formDa
   });
   if (result.error) return { ok: false, message: trialCouponError(result.error.message) };
   const newEndsAt = isRecord(result.data) && typeof result.data.new_ends_at === "string" ? result.data.new_ends_at : null;
+  await invalidateAdminProfilesForOrganization(profile.org_id);
   revalidatePath("/admin/billing");
   revalidatePath("/admin");
   return { ok: true, message: `Coupon applied. Your trial now ends ${newEndsAt ? new Intl.DateTimeFormat("en-PH", { dateStyle: "long", timeZone: "Asia/Singapore" }).format(new Date(newEndsAt)) : "later"}.` };
-}
-
-function trialCouponError(message: string) {
-  const normalized = message.toLowerCase();
-  if (normalized.includes("already_redeemed")) return "This account has already redeemed that coupon.";
-  if (normalized.includes("not_found")) return "That coupon code was not recognized.";
-  if (normalized.includes("not_started")) return "That coupon is not available yet.";
-  if (normalized.includes("expired")) return "That coupon has expired.";
-  if (normalized.includes("inactive")) return "That coupon is no longer active.";
-  if (normalized.includes("limit_reached")) return "That coupon has reached its claim limit.";
-  if (normalized.includes("trial_only")) return "Trial coupons are for accounts with an active, unpaid trial.";
-  if (normalized.includes("account_inactive")) return "This account is suspended and cannot redeem a trial coupon.";
-  return "The coupon could not be applied. Please try again or contact support.";
 }
 
 async function saveFeedbackInOrganizationSettings(
