@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   description: DESCRIPTION,
   applicationName: "Dumala POS",
   ...socialMetadata({
-    title: "Dumala POS — POS for cafes, restaurants & food businesses",
+    title: "Dumala POS — POS, inventory & online storefront",
     description: DESCRIPTION,
     path: "/",
   }),

@@ -1,4 +1,5 @@
 import "./LandingPage.css";
+import "./LandingVisibility.css";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Image from "next/image";
@@ -17,9 +18,9 @@ import { absoluteUrl, siteUrl } from "@/lib/site-url";
 import { POS_THEME_OPTIONS } from "@/lib/pos-theme";
 import { buildBranchPricingCopy, PRICING_INCLUDES } from "@/lib/pricing-content";
 
-const LANDING_TITLE = "POS for Cafes, Restaurants & Food Businesses | Dumala POS";
+const LANDING_TITLE = "POS, Inventory & Online Store for Your Business | Dumala POS";
 const LANDING_DESCRIPTION =
-  "An offline-first POS, online menu, and owner workspace for Philippine cafes, restaurants, coffee shops, bakeshops, and other counter-service businesses.";
+  "Manage sales, inventory, your team, and online orders in one workspace. Dumala POS is built for Philippine retail, printing, apparel, and food businesses.";
 
 export const metadata: Metadata = {
   // `absolute` opts out of the root layout's "%s | Dumala POS" template, which
@@ -61,7 +62,7 @@ const featureCards: Array<{
   },
   {
     icon: "bolt",
-    title: "Offline-first, cloud-ready",
+    title: "Ready for your working day",
     description: "The counter keeps working without internet, then syncs to the cloud whenever a connection is available.",
     points: ["Sale saves on the device first", "Background cloud sync", "Install on tablet or desktop"],
   },
@@ -70,10 +71,10 @@ const featureCards: Array<{
 const onlineMenuFeatures = [
   {
     number: "01",
-    title: "A menu customers can use anywhere",
+    title: "A catalog customers can browse anywhere",
     description:
-      "Give customers a fast, mobile-first way to browse categories, search products, build a cart, and see the menu your branch is actually serving.",
-    detail: "Public mobile menu",
+      "Give customers a fast, mobile-first way to browse categories, search products, build a cart, and see the products available at your branch.",
+    detail: "Mobile product catalog",
   },
   {
     number: "02",
@@ -86,7 +87,7 @@ const onlineMenuFeatures = [
     number: "03",
     title: "A shareable address for every branch",
     description:
-      "Publish a public menu link, share it as a QR code, or give each branch a custom address that is easy to say, print, and remember.",
+      "Publish an online storefront link, share it as a QR code, or give each branch a custom address that is easy to say, print, and remember.",
     detail: "Links and custom subdomains",
   },
 ];
@@ -101,7 +102,7 @@ const detailPanels: Array<{
     mark: "01",
     title: "A counter that keeps service moving",
     description:
-      "The sell screen puts your most-used menu items first, with large targets for quick taps. Weight items open a keypad; everything else stays easy to reach when the line is moving.",
+      "The sell screen puts your most-used products first, with large targets for quick taps. Weight items open a keypad; everything else stays easy to reach when the line is moving.",
     specs: [
       "Fixed-price and by-weight items on one ticket",
       "Senior and PWD discounts with ID capture",
@@ -156,9 +157,9 @@ const workspaceModules: Array<{
   title: string;
   description: string;
 }> = [
-  { icon: "counter", title: "POS counter", description: "Ring up coffee, meals, pastries, and other orders." },
+  { icon: "counter", title: "POS counter", description: "Sell retail products, printed goods, apparel, and more." },
   { icon: "receipt", title: "Orders", description: "Keep one searchable record of every sale." },
-  { icon: "box", title: "Products", description: "Keep menu items, prices, categories, units, and visibility together." },
+  { icon: "box", title: "Products", description: "Keep products, prices, categories, units, and visibility together." },
   { icon: "layers", title: "Inventory", description: "Track movement and catch low counts earlier." },
   { icon: "user", title: "Customers", description: "Keep a live directory for the people you serve." },
   { icon: "truck", title: "Suppliers", description: "Keep purchasing contacts close to the products they provide." },
@@ -240,7 +241,7 @@ function buildFaqs(premiumPrice: string, annualVariants: BillingVariant[], billi
   {
     question: "What kinds of businesses is Dumala built for?",
     answer:
-      "Dumala is designed for owner-led cafes, restaurants, coffee shops, bakeshops, takeout counters, and other food businesses. It is especially well suited to counter-service teams that need fast checkout, clear stock and cash records, and a practical view of the business behind each sale.",
+      "Dumala brings checkout, inventory, and online ordering together for businesses that sell products: retail shops, print shops, shirt and heat-press sellers, and food businesses. Print and apparel businesses can list their finished products and services in the catalog; dedicated artwork approval, production scheduling, and manufacturing workflows are not currently included.",
   },
   {
     question: "What does it cost after the trial?",
@@ -255,7 +256,7 @@ function buildFaqs(premiumPrice: string, annualVariants: BillingVariant[], billi
   {
     question: "Does it keep working when the internet drops?",
     answer:
-      "Yes, within clear limits. Cached products and sales stay usable on the device, and queued sales sync when the connection returns. Shift controls, cloud reports, catalog refreshes, online menu orders, and live customer tracking need a connection.",
+      "Yes, within clear limits. Cached products and sales stay usable on the device, and queued sales sync when the connection returns. Shift controls, cloud reports, catalog refreshes, online orders, and live customer tracking need a connection.",
   },
   {
     question: "Can I run more than one branch?",
@@ -263,9 +264,9 @@ function buildFaqs(premiumPrice: string, annualVariants: BillingVariant[], billi
       `Yes. ${branchPricing.summary} ${branchPricing.example} Each branch keeps its own catalog, settings, printer, and staff, and owners get a consolidated view across all of them.`,
   },
   {
-    question: "Can customers order from the menu online?",
+    question: "Can customers browse and order online?",
     answer:
-      "Yes. Each branch can publish a mobile-first menu at a shareable link or custom address such as morning-ritual.dumala.store. Customers can browse the available menu, choose pickup or an enabled delivery option, schedule an order ahead, and receive an order number with queue and ETA updates.",
+      "Yes. Each branch can publish a mobile-first storefront at a shareable link or custom address such as studio-supply.dumala.store. Customers can browse the available products, choose pickup or an enabled delivery option, schedule an order ahead, and receive an order number with queue and ETA updates.",
   },
   {
     question: "Which receipt printers are supported?",
@@ -280,7 +281,7 @@ function buildFaqs(premiumPrice: string, annualVariants: BillingVariant[], billi
   {
     question: "What do I need to get started?",
     answer:
-      "An owner account and your first branch. Most businesses can create the account, add their first location, and start setting up the menu in a few minutes. Your team gets their own logins through a branch access link later.",
+      "An owner account and your first branch. Most businesses can create the account, add their first location, and start setting up the catalog in a few minutes. Your team gets their own logins through a branch access link later.",
   },
   {
     question: "Do I have to install anything?",
@@ -329,7 +330,7 @@ function buildStructuredData(faqs: Array<{ question: string; answer: string }>, 
         url: origin,
         logo: absoluteUrl("/logo.png"),
         description:
-          "Dumala POS builds point-of-sale, online menu, and back-office software for Philippine cafes, restaurants, bakeshops, and other counter-service food businesses.",
+          "Dumala POS builds point-of-sale, inventory, online storefront, and back-office software for Philippine retail, printing, apparel, and food businesses.",
         areaServed: { "@type": "Country", name: "Philippines" },
       },
       {
@@ -342,7 +343,7 @@ function buildStructuredData(faqs: Array<{ question: string; answer: string }>, 
         operatingSystem: "Web browser (Android, iOS, Windows, macOS)",
         url: origin,
         description:
-          "An offline-first point-of-sale, online menu, and owner workspace for Philippine cafes, restaurants, coffee shops, and bakeshops. Sales are written to the device first and sync to the cloud when a connection is available.",
+          "A connected point-of-sale, inventory, online storefront, and business workspace for Philippine retailers, print shops, apparel sellers, and food businesses.",
         publisher: { "@id": organizationId },
         offers: {
           "@type": "Offer",
@@ -369,7 +370,7 @@ const marqueeItems = [
   `${POS_THEME_OPTIONS.length} themes today`,
   "More themes on the way",
   "Regular updates & support",
-  "Offline-first by default",
+  "POS, inventory & online storefront",
   "Cloud sync when online",
   "Setup in a few minutes",
   "Easy tablet install",
@@ -709,17 +710,17 @@ export default async function LandingPage() {
               style={{ "--lp-delay": "60ms" } as React.CSSProperties}
             >
               <span className="lp-dot-pulse h-1.5 w-1.5 rounded-full bg-[#d1a05b]" />
-              Offline-first POS for Philippine food businesses
+              POS, inventory & online selling for your business
             </p>
 
             <h1
               className="lp-in mt-7 max-w-[560px] text-[clamp(3.1rem,6vw,5.9rem)] font-black leading-[0.94] tracking-[-0.065em] text-[#102d21]"
               style={{ "--lp-delay": "160ms" } as React.CSSProperties}
             >
-              Offline-first POS
+              One POS.
               <br />
               <span className="relative inline-block text-[#b18448]">
-                for Philippine food businesses.
+                More possibilities.
                 <svg
                   aria-hidden="true"
                   viewBox="0 0 300 14"
@@ -737,8 +738,7 @@ export default async function LandingPage() {
               className="lp-in mt-7 max-w-[490px] text-base leading-7 text-[#526157] sm:text-lg sm:leading-8"
               style={{ "--lp-delay": "260ms" } as React.CSSProperties}
             >
-              Fast checkout for your team. Clear records for you. Dumala brings the counter POS, owner workspace, and online
-              menu together in one practical system for Philippine cafes, restaurants, and other food businesses.
+              Fast checkout for your team. Clear records for you. Bring sales, inventory, and an online storefront together for retail shops, print businesses, shirt and heat-press sellers, and more.
             </p>
 
             <div className="lp-in mt-8 flex flex-wrap items-center gap-5" style={{ "--lp-delay": "340ms" } as React.CSSProperties}>
@@ -783,12 +783,12 @@ export default async function LandingPage() {
       <section id="features" className="lp-sec--features scroll-mt-24 py-14 sm:py-20">
         <div className="mx-auto max-w-[1380px] px-6 sm:px-10 lg:px-16">
           <div className="mx-auto max-w-2xl text-center" data-lp-reveal>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">Built for food &amp; beverage owners</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">Built for businesses that sell</p>
             <h2 className="mt-3 text-3xl font-black tracking-[-0.05em] text-[#173a2b] sm:text-[2.6rem] sm:leading-[1.05]">
               Run the counter. See the business behind it.
             </h2>
             <p className="mt-4 text-sm leading-6 text-[#657168] sm:text-base">
-              Whether you serve coffee, meals, pastries, or takeout, Dumala brings sales, stock, cash, and team access into one
+              Whether you sell retail goods, printed shirts, custom merchandise, or food, Dumala brings sales, stock, cash, and team access into one
               place without asking the counter to learn a backoffice.
             </p>
           </div>
@@ -829,12 +829,12 @@ export default async function LandingPage() {
         <div className="mx-auto max-w-[1380px] px-6 sm:px-10 lg:px-16">
           <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)] lg:gap-16">
             <div data-lp-reveal="left">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">Online menu · built into Dumala</p>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b18448]">Online storefront · built into Dumala</p>
               <h2 className="mt-3 max-w-xl text-3xl font-black tracking-[-0.05em] text-[#173a2b] sm:text-[2.6rem] sm:leading-[1.05]">
                 Let customers order before they arrive.
               </h2>
               <p className="mt-5 max-w-xl text-sm leading-7 text-[#657168] sm:text-base">
-                Give every branch a mobile-first menu that feels like your storefront. Customers browse, choose a pickup time, and order ahead from a link you can share anywhere.
+                Give every branch a mobile-first storefront. Customers browse your products, choose pickup or enabled delivery, and order from a link you can share anywhere.
               </p>
 
               <div className="mt-6 flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-[0.12em] text-[#657168]">
@@ -847,7 +847,7 @@ export default async function LandingPage() {
                 href="/signup"
                 className="lp-btn mt-7 inline-flex items-center gap-2.5 rounded-xl bg-[#15382a] px-5 py-3.5 text-sm font-bold text-[#fffaf1] shadow-[0_12px_24px_rgba(21,56,42,0.16)] hover:bg-[#0e2a20] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#bc9657]"
               >
-                Set up your public menu <ArrowIcon />
+                Set up your online storefront <ArrowIcon />
               </Link>
             </div>
 
@@ -1044,7 +1044,7 @@ export default async function LandingPage() {
                 </div>
                 <h3 className="mt-5 text-xl font-black tracking-[-0.03em] text-[#173a2b]">The owner workspace</h3>
                 <p className="mt-3 text-sm leading-6 text-[#68736a]">
-                  Whether you run one location or several café, restaurant, or bakeshop branches, watch the day across every location,
+                  Whether you run one location or several shops, studios, or branches, watch the day across every location,
                   manage the catalog and stock, and review the numbers without standing at the till.
                 </p>
                 <div className="mt-6">
@@ -1163,7 +1163,7 @@ export default async function LandingPage() {
             <p className="mt-5 max-w-xl text-sm leading-7 text-[#cad6ca] sm:text-base">
               A cloud-only POS can make a weak connection the cashier&apos;s problem. Dumala saves the sale on the device first,
               then syncs it when the connection returns. A dead router or slow mobile signal does not have to stop the queue
-              at your cafe, restaurant, coffee shop, or bakeshop.
+              at your shop, studio, or counter.
             </p>
           </div>
 
@@ -1221,7 +1221,7 @@ export default async function LandingPage() {
               </h2>
             </div>
             <p className="max-w-sm text-sm leading-6 text-[#657168]">
-              From a morning coffee rush to weekend takeout, we focus on the work between the first order and the end-of-day
+              From a busy shop counter to online pickups, we focus on the work between the first order and the end-of-day
               count: peso pricing, weighed goods, discounts, printers, and a network that comes and goes.
             </p>
           </div>
@@ -1332,7 +1332,7 @@ export default async function LandingPage() {
               Clear access. Less clutter.
             </h2>
             <p className="mt-4 text-sm leading-6 text-[#657168] sm:text-base">
-              Whether your team is serving coffee, meals, pastries, or takeout, access follows the role and the branch. Cashiers
+              Whether your team sells retail goods, printed products, apparel, or food, access follows the role and the branch. Cashiers
               can focus on customers while managers review their day without asking the owner for every number.
             </p>
           </div>
@@ -1369,7 +1369,7 @@ export default async function LandingPage() {
               Try the full workspace. Choose how you pay.
             </h2>
             <p className="mt-4 text-sm leading-6 text-[#657168] sm:text-base">
-              No tier maze and no feature guessing. Every cafe, restaurant, coffee shop, bakeshop, and other food business gets
+              No tier maze and no feature guessing. Every retail shop, print business, apparel seller, and food business gets
               the same complete product. {annualVariants.length > 0 ? "Choose monthly billing or the annual terms currently enabled in Plans & Pricing." : "Monthly billing is the current public option."}
             </p>
           </div>
@@ -1431,10 +1431,10 @@ export default async function LandingPage() {
               <div className="max-w-2xl">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b18448]">Ready when you are</p>
                 <h2 className="mt-3 text-3xl font-black tracking-[-0.045em] text-[#173a2b] sm:text-4xl">
-                  Give your food business a POS that fits.
+                  Give your business a POS that fits.
                 </h2>
                 <p className="mt-3 max-w-xl text-sm leading-6 text-[#657168] sm:text-base">
-                  Start free for 14 days, set up your business in a few minutes, and personalize the POS before your first rush. After that, {annualVariants.length > 0 ? "choose monthly or an available annual term" : "continue with monthly billing"} for the same complete counter POS and owner workspace.
+                  Start free for 14 days, set up your business in a few minutes, and personalize the POS before your first sale. After that, {annualVariants.length > 0 ? "choose monthly or an available annual term" : "continue with monthly billing"} for the same complete counter POS and owner workspace.
                 </p>
               </div>
               <div className="shrink-0">

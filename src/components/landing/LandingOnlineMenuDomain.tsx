@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 
 const STORE_NAMES = [
-  "morning-ritual",
-  "kusina-norte",
-  "bean-and-batch",
-  "crumb-and-kettle",
-  "the-green-table",
+  "studio-supply",
+  "everyday-goods",
+  "press-and-print",
+  "thread-studio",
+  "corner-market",
   "harbor-house",
 ];
 
@@ -30,7 +30,7 @@ export default function LandingOnlineMenuDomain() {
   return (
     <div aria-hidden="true" className="rounded-[22px] border border-[#d9d2c1] bg-[#fffdf8] p-4 shadow-[0_16px_34px_rgba(23,58,43,0.10)] sm:p-5">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[#173a2b]">Public menu link</span>
+        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[#173a2b]">Your storefront address</span>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e7efe4] px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-[#42704d]">
           <span className="h-1.5 w-1.5 rounded-full bg-[#4e7f57]" /> Live
         </span>

@@ -1,0 +1,19 @@
+/* Content must remain visible even if hydration or scroll observation is delayed. */
+.lp [data-lp-reveal],
+.lp [data-lp-reveal="left"],
+.lp [data-lp-reveal="right"],
+.lp [data-lp-reveal="scale"] {
+  opacity: 1;
+  transform: none;
+}
+/* Preserve the original hierarchy when a cached utility chunk lacks these rules. */
+.lp .lp-sec--hero h1 {
+  font-size: clamp(3.1rem, 6vw, 5.9rem);
+  line-height: .94;
+  letter-spacing: -.065em;
+}
+.lp .lp-header nav[aria-label="Primary"] { gap: 28px; }
+.lp .lp-header nav[aria-label="Primary"] { gap: clamp(12px, 1.8vw, 28px); }
+.lp .lp-header nav a,
+.lp .lp-header a[href="/signup"],
+.lp .lp-header a[href="/login"] { white-space: nowrap; }

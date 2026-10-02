@@ -14,7 +14,7 @@ export const SHARE_IMAGE = {
   url: "/share-card.png",
   width: 1200,
   height: 630,
-  alt: 'The Dumala POS owner dashboard on a counter terminal beside a card reader, with the headline "POS for cafes, restaurants and food businesses."',
+  alt: 'The Dumala POS owner dashboard on a counter terminal beside a card reader, with the headline "Every sale. Every channel. One workspace."',
 } as const;
 
 /**
